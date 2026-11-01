@@ -1,11 +1,13 @@
-Lumen 0.0.3 (01 Nov 2026) - test build
+Lumen 0.0.4 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
-This test build has importing, browsing, rating, flagging and albums,
-and the first adjustments: white balance, exposure, levels, contrast,
-saturation and vibrancy. Your photos are never changed: each edit is a
-recipe kept in the library, and can be undone or reset at any time.
+This test build has importing, browsing, rating, flagging and albums;
+adjustments (white balance with an eyedropper, exposure, levels,
+contrast, saturation, vibrancy); Auto; crop, quarter turns, straighten
+and perspective; grids; presets; and copying adjustments between photos.
+Your photos are never changed: each edit is a recipe kept in the
+library, and can be undone or reset at any time.
 
 Getting started
 ---------------
@@ -27,6 +29,8 @@ Keys (with the library window focused)
   Cursor keys   move to the next photo; Page Up/Down, Home, End too
   Ctrl-A        select all
   Escape        clear the selection
+  Ctrl-C        copy the adjustments of the (first) selected photo
+  Ctrl-V        paste them onto the selected photos
 
   Return        open the focused photo in the viewer (or double-click)
 
@@ -37,12 +41,39 @@ photo follows (at half resolution while you drag, then in full). Click
 Adjust on a slider to put it back to its default; "Reset" beside a group
 resets the group. Every change is saved as you make it.
 
+The tools above the sliders:
+  Auto          sets white balance, exposure, levels, contrast and
+                vibrancy from the photo itself (one undo step; it leaves
+                any crop or straightening alone)
+  Crop          shows the whole photo with the crop over it. Drag a
+                corner or an edge, drag inside to move it, or drag
+                outside to draw a new one. Return (or Done) crops, Escape
+                puts the old crop back. Photo > Crop shape fixes the
+                shape: Original, Square, 3:2, 4:3, 16:9 (it follows the
+                crop's way round, so a tall crop is 2:3)
+  Grid          None, Thirds, Quarters, Fine; while you straighten, a
+                fine grid shows anyway
+  Presets       apply a saved look, save the current one by name, or
+                delete one. A preset keeps the look, not the crop
+
+White Balance: "Pick" then click something that should be grey or white
+(a cloud, a wall, a shirt); "Auto" works it out from the whole photo.
+Geometry: -90 and +90 turn the photo; Straighten (up to 15 degrees
+either way), Vertical and Horizontal (perspective) zoom in just enough
+that no empty corners show.
+
   Left, Right   previous and next photo
+  A             Auto
+  C             crop (Return to crop, Escape to cancel)
+  [ ]           turn 90 degrees anticlockwise, clockwise
+  G             next grid
+  W             pick white balance
   M             before and after (the original, and back)
   Ctrl-Z        undo          Ctrl-Y   redo
+  Ctrl-C        copy the adjustments   Ctrl-V   paste them here
   0 to 5, 9, /  rating, reject, flag, as in the library
   Escape, V     back to the library
-  Menu          Before and after, Undo, Redo, Reset all, Back
+  Menu          all of the above, plus Crop shape, Grid and Presets
 
 Edited photos are marked "Edited" in the library, and their thumbnails
 are made again with the edit.
@@ -60,7 +91,8 @@ The Lumen menu
 --------------
   Show            All photos, Flagged, Rejected, Last import, a project
                   (one per imported folder), an album, or a rating filter
-  Selection       rating, flag, reject, select all, clear
+  Selection       rating, flag, reject, select all, clear, copy and
+                  paste adjustments, apply a preset
   Album           make a new album from the selection, add to one,
                   or remove from the album shown
   Thumbnail size  Small, Medium, Large

@@ -2,7 +2,9 @@
    the per-pixel work is integer. */
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
 #include "develop.h"
+#include "geometry.h"
 
 static uint16_t s2l[256];
 static uint8_t l2s[65536];
@@ -93,7 +95,13 @@ void develop_prepare (develop *d, const recipe *r)
   d->sat = (int) lround (65536 * (1 + r->v[P_SATURATION] / 100.0));
   d->vib = (int) lround (65536 * (r->v[P_VIBRANCE] / 100.0));
   /* Identity: every table entry maps its bin to its own middle. */
-  d->identity = recipe_is_default (r);
+  {
+    recipe look = *r;
+    int p;
+    for (p = P_FIRST_GEOMETRY; p < P_COUNT; p++)   /* geometry is not develop's business */
+      look.v[p] = recipe_params[p].def;
+    d->identity = recipe_is_default (&look);
+  }
 }
 
 /* One pixel: tone tables, then saturation and vibrancy around luminance.
@@ -159,6 +167,53 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
               hist[(r * 54 + g * 183 + b * 19) >> 10]++;
           }
     }
+}
+
+int develop_image (const recipe *r, rgb_image *img)
+{
+  develop *d = malloc (sizeof *d);
+  geom_plan g;
+  uint16_t *lin = NULL, *out = NULL;
+  unsigned char *rgb = NULL;
+  size_t i, n;
+  if (!d)
+    return -1;
+  develop_prepare (d, r);
+  if (recipe_geometry_is_default (r))
+    {
+      develop_rgb8 (d, img);
+      free (d);
+      return 0;
+    }
+  geom_plan_make (&g, r, img->w, img->h, 1, 0, 0);
+  n = (size_t) g.ow * g.oh;
+  lin = malloc ((size_t) img->w * img->h * 6);
+  out = malloc (n * 6);
+  rgb = malloc (n * 3);
+  if (!lin || !out || !rgb)
+    {
+      free (d); free (lin); free (out); free (rgb);
+      return -1;
+    }
+  dev_to_linear (img->rgb, lin, (size_t) img->w * img->h);
+  geom_rows (&g, lin, out, 0, g.oh);
+  for (i = 0; i < n; i++)
+    {
+      int R, G, B;
+      if (d->identity)
+        {
+          R = out[3 * i]; G = out[3 * i + 1]; B = out[3 * i + 2];
+        }
+      else
+        pixel (d, out + 3 * i, &R, &G, &B);
+      rgb[3 * i] = l2s[R]; rgb[3 * i + 1] = l2s[G]; rgb[3 * i + 2] = l2s[B];
+    }
+  free (img->rgb);
+  img->rgb = rgb;
+  img->w = g.ow;
+  img->h = g.oh;
+  free (lin); free (out); free (d);
+  return 0;
 }
 
 void develop_rgb8 (const develop *d, rgb_image *img)

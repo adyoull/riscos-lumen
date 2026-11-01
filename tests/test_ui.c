@@ -1,3 +1,4 @@
+#include <math.h>
 /* Lumen's desktop front end against the Fake RISC OS. Every SWI it uses is
    faked here; the test plays what a user does: drops a folder from the
    Filer, waits for thumbnails, rates and flags with the keyboard, uses the
@@ -460,7 +461,7 @@ int main (int argc, char **argv)
     /* Drag Exposure from 0 to +1 EV. Layout as viewer.c's. */
     px = (vopened[3] - vopened[1]) - 640;
     tx0 = px + 232; tx1 = px + 640 - 132;
-    ev_mid = -24 - 150 - 16 - 52 - (52 + 2 * 56 + 8) - 52 - 28;
+    ev_mid = -24 - 150 - 16 - 52 - 84 - (52 + 2 * 56 + 8) - 52 - 28;
     sx = vopened[1] + (tx0 + tx1) / 2;
     sy = vopened[4] + ev_mid;
     memset (b, 0, sizeof b);
@@ -501,7 +502,7 @@ int main (int argc, char **argv)
     CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "undo brings +1 back");
     /* Reset all, then undo it. */
     memset (b, 0, sizeof b);
-    b[0] = vopened[1] + px + 24 + 2 * 202 + 93; b[1] = vopened[4] - 24 - 150 - 16 - 52 - 744 - 16 - 30;
+    b[0] = vopened[1] + px + 24 + 2 * 202 + 93; b[1] = vopened[4] - 24 - 150 - 16 - 52 - 84 - 972 - 16 - 30;
     b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
     app_event (Mouse_Click, b, 0);
     CHECK (recipe_is_default (viewer_recipe ()), "Reset all");
@@ -521,9 +522,165 @@ int main (int argc, char **argv)
     CHECK (strstr (vtitle, "IMG_0001.jpg (1 of 6)") != NULL, "left: back");
     CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "with its edit");
     nulls_until_idle ();
+
+    /* ---- Tools: auto, crop, rotate, grid, white balance, presets ---- */
+    {
+      int pr[4], gw2, gh2, vw = vopened[3] - vopened[1], vh = vopened[4] - vopened[2];
+      const int *pm, *save;
+      recipe kept;
+      /* Where the photo sits (as viewer.c's photo_rect), in screen coordinates. */
+#define PHOTO_RECT()                                                          \
+      do {                                                                    \
+        int bw = vw - 640 - 48, bh = vh - 48, mul, div, dw, dh;               \
+        viewer_shown_size (&gw2, &gh2);                                       \
+        if ((long long) bw * gh2 <= (long long) bh * gw2) { mul = bw; div = gw2; } \
+        else { mul = bh; div = gh2; }                                         \
+        dw = gw2 * mul / div; dh = gh2 * mul / div;                           \
+        pr[0] = vopened[1] + 24 + (bw - dw) / 2;                              \
+        pr[1] = vopened[4] - vh + 24 + (bh - dh) / 2;                         \
+        pr[2] = pr[0] + dw; pr[3] = pr[1] + dh;                               \
+      } while (0)
+
+      key ('a');
+      CHECK (viewer_recipe ()->v[P_EV] != 1 || viewer_recipe ()->v[P_CONTRAST] != 0, "A: auto adjust changes the look");
+      cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+      CHECK (strstr (text, "enhance") != NULL || strstr (text, "levels") != NULL, "and it is saved");
+      key (0x1A);
+      CHECK (fabsf (viewer_recipe ()->v[P_EV] - 1) < 0.01f && viewer_recipe ()->v[P_CONTRAST] == 0, "undo: auto is one step");
+
+      /* Crop: drag the top left corner to the middle, Return. */
+      key ('c');
+      CHECK (viewer_crop_mode () && strstr (vtitle, "cropping") != NULL, "C: the crop tool");
+      CHECK (viewer_shown_size (&gw2, &gh2) && gw2 == 640 && gh2 == 480, "it shows the whole picture");
+      PHOTO_RECT ();
+      memset (b, 0, sizeof b);
+      b[0] = pr[0] + 2; b[1] = pr[3] - 2; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      k = drag_calls;
+      app_event (Mouse_Click, b, 0);
+      CHECK (drag_calls == k + 1 && drag_block[6] == pr[0] && drag_block[8] == pr[2], "the corner drags, kept on the photo");
+      ptr_x = (pr[0] + pr[2]) / 2; ptr_y = (pr[1] + pr[3]) / 2;
+      app_event (Null_Reason, b, 0);
+      CHECK (fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5f) < 0.01f && fabsf (viewer_recipe ()->v[P_CROP_Y0] - 0.5f) < 0.01f
+             && viewer_recipe ()->v[P_CROP_X1] == 1, "the top left corner follows the pointer");
+      app_event (User_Drag_Box, b, 0);
+      cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+      CHECK (strstr (text, "crop") == NULL, "nothing saved until Return");
+      key (KEY_RETURN);
+      cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+      CHECK (!viewer_crop_mode () && strstr (text, "crop x0=0.5") != NULL, "Return: cropped, and saved");
+      CHECK (viewer_shown_size (&gw2, &gh2) && gw2 == 320 && gh2 == 240, "the viewer shows the crop");
+
+      /* Again, but Escape: the crop stays as it was. */
+      key ('C');
+      PHOTO_RECT ();
+      b[0] = (pr[0] + 3 * pr[2]) / 4; b[1] = pr[1] + (pr[3] - pr[1]) / 4;   /* inside the crop: moves it */
+      app_event (Mouse_Click, b, 0);
+      ptr_x = b[0] - (pr[2] - pr[0]) / 4; ptr_y = b[1];
+      app_event (Null_Reason, b, 0);
+      CHECK (fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.25f) < 0.01f && fabsf (viewer_recipe ()->v[P_CROP_X1] - 0.75f) < 0.01f,
+             "inside the crop: it moves");
+      app_event (User_Drag_Box, b, 0);
+      key (KEY_ESCAPE);
+      CHECK (!viewer_crop_mode () && vclosed == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5f) < 0.01f,
+             "Escape: the old crop back, the viewer still open");
+
+      /* Crop shape: Square, from the menu. */
+      memset (b, 0, sizeof b);
+      b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
+      app_event (Mouse_Click, b, 0);
+      CHECK (strstr (item_text (menu_open, 7), "Crop shape") != NULL, "Photo > Crop shape");
+      choose (7, 2, -1);
+      CHECK (viewer_crop_mode () && fabsf ((viewer_recipe ()->v[P_CROP_X1] - viewer_recipe ()->v[P_CROP_X0]) * 640
+                                           - (viewer_recipe ()->v[P_CROP_Y1] - viewer_recipe ()->v[P_CROP_Y0]) * 480) < 2,
+             "Square: the crop becomes square");
+      key (KEY_RETURN);
+      CHECK (viewer_shown_size (&gw2, &gh2) && abs (gw2 - gh2) <= 1 && abs (gw2 - 240) <= 1, "a 240 pixel square");
+      viewer_set_crop_shape (0);
+      viewer_crop_finish (1);
+
+      /* Turns: the picture and its crop. */
+      key (']');
+      CHECK (viewer_recipe ()->v[P_ROTATE] == 1, "]: a quarter turn clockwise");
+      key ('[');
+      key ('[');
+      CHECK (viewer_recipe ()->v[P_ROTATE] == 3, "[ twice: anticlockwise");
+      key (']');
+      CHECK (viewer_recipe ()->v[P_ROTATE] == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5625f) < 0.01f,
+             "and back, with the crop where it was");
+
+      /* Grid. */
+      key ('g');
+      CHECK (viewer_grid () == 1, "G: thirds");
+      key ('G'); key ('G'); key ('G');
+      CHECK (viewer_grid () == 0, "round to none");
+
+      /* White balance eyedropper. */
+      key ('w');
+      CHECK (viewer_picking (), "W: pick white balance");
+      PHOTO_RECT ();
+      memset (b, 0, sizeof b);
+      b[0] = (pr[0] + pr[2]) / 2; b[1] = (pr[1] + pr[3]) / 2; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      k = drag_calls;
+      app_event (Mouse_Click, b, 0);
+      CHECK (!viewer_picking () && drag_calls == k, "a click picks (no drag), and the eyedropper goes");
+
+      /* Presets: save the look by name, then apply it after a reset. */
+      kept = *viewer_recipe ();
+      memset (b, 0, sizeof b);
+      b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
+      app_event (Mouse_Click, b, 0);
+      pm = submenu (menu_open, 9);
+      CHECK (pm && strstr (item_text (pm, 0), "No presets") != NULL, "Presets: none yet");
+      save = submenu (pm, 1);
+      strcpy ((char *) item (save, 0)[3], "Bright");
+      choose (9, 1, 0);
+      {
+        cat_preset *ps;
+        int np;
+        cat_presets (lib_cat (app_library ()), &ps, &np);
+        CHECK (np == 1 && strcmp (ps[0].name, "Bright") == 0 && strstr (ps[0].recipe, "crop") == NULL,
+               "saved as Bright: the look, no crop");
+        free (ps);
+      }
+      viewer_reset_all ();
+      app_event (Mouse_Click, b, 0);
+      pm = submenu (menu_open, 9);
+      CHECK (strcmp (item_text (pm, 0), "Bright") == 0, "Presets lists it");
+      choose (9, 0, -1);
+      CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f && viewer_recipe ()->v[P_CROP_X0] == 0,
+             "applying it brings the look back (not the crop)");
+
+      /* Copy here, paste on photo 2 from the library. */
+      key (0x03);
+      CHECK (looks_clip () && strstr (looks_clip (), "exposure") != NULL, "Ctrl-C copies the look");
+      nulls_until_idle ();
+#undef PHOTO_RECT
+    }
     key (KEY_ESCAPE);
     CHECK (vclosed == 1 && caret_window == BROWSER && browser_focus () == 0, "Escape: back to the library, on the photo");
     CHECK (!app_busy (), "nothing left running");
+
+    /* Paste the copied look on photo 2, from the library. */
+    {
+      cat_item it2;
+      browser_focus_on (1);
+      key (0x16);
+      browser_item (1, &it2);
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "exposure") != NULL && strstr (text, "crop") == NULL, "Ctrl-V in the library: photo 2 gets the look");
+      /* Selection > Apply preset > Bright, on photo 3. */
+      browser_focus_on (2);
+      click (16 + 352 + 60, -16 - 60, Button_Menu);
+      CHECK (strstr (item_text (submenu (menu_open, 1), 7), "Apply preset") != NULL, "Selection > Apply preset");
+      choose (1, 7, 0);
+      browser_item (2, &it2);
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "exposure") != NULL, "photo 3 gets Bright");
+      nulls_until_idle ();
+      browser_item (2, &it2);
+      CHECK (it2.edited && it2.thumb_state == THUMB_READY, "and a new thumbnail");
+      browser_focus_on (0);
+    }
 
     /* A double click opens the viewer; its menu takes us back. */
     for (k = 0; k < 2; k++)
@@ -533,8 +690,8 @@ int main (int argc, char **argv)
     b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
-    CHECK (strstr (item_text (menu_open, 4), "Back to the library") != NULL, "Back to the library");
-    choose (4, -1, -1);
+    CHECK (strstr (item_text (menu_open, 12), "Back to the library") != NULL, "Back to the library");
+    choose (12, -1, -1);
     CHECK (vclosed == 2, "Back to the library closes the viewer");
   }
 

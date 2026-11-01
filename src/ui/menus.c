@@ -20,12 +20,16 @@
 #define WRITABLE_ICON 0x0700F12Du      /* text, border, filled, indirected, writable */
 #define MAX_LIST 48                    /* projects or albums shown in a submenu */
 
-static char pool[24 * 1024];
+static char pool[32 * 1024];
 static size_t used;
-static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu */
+static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu, 4 presets */
 static int open_x, open_y;
 static int info_window = -1;
-static char album_name[40];
+static char album_name[40], preset_name[40];
+
+/* The presets the open menu was built from. */
+static cat_preset *presets;
+static int npresets;
 
 /* The lists the open menu was built from, to decode selections. */
 static cat_group *projects, *albums;
@@ -82,6 +86,75 @@ static void set_item (menu *m, int i, int last, const char *text, int flags, int
     m->width = w;
 }
 
+static menu *writable_menu (const char *title, char *buf, int size)
+{
+  menu *m = new_menu (title, 1);
+  if (m)
+    {
+      item *it = &m->it[0];
+      it->flags = MF_WRITABLE | MF_LAST;
+      it->submenu = -1;
+      it->icon_flags = (int) WRITABLE_ICON;
+      it->data[0] = (int) buf;
+      it->data[1] = -1;
+      it->data[2] = size;
+      m->width = 320;
+    }
+  return m;
+}
+
+/* The presets' names; none: a shaded line. */
+static menu *preset_list (const char *title, int shaded)
+{
+  int k, count = npresets > MAX_LIST ? MAX_LIST : npresets;
+  menu *m = new_menu (title, count ? count : 1);
+  if (!m)
+    return NULL;
+  if (!count)
+    set_item (m, 0, 1, "No presets yet", 0, -1, 1);
+  for (k = 0; k < count; k++)
+    set_item (m, k, k == count - 1, presets[k].name, 0, -1, shaded);
+  return m;
+}
+
+/* Presets: the list, then Save current as > and Delete >. */
+static menu *build_presets (void)
+{
+  int k, count;
+  menu *m, *save, *del;
+  npresets = looks_presets (&presets);
+  count = npresets > MAX_LIST ? MAX_LIST : npresets;
+  save = writable_menu ("Name", preset_name, sizeof preset_name);
+  del = preset_list ("Delete", 0);
+  m = new_menu ("Presets", (count ? count : 1) + 2);
+  if (!m)
+    return NULL;
+  if (!count)
+    set_item (m, 0, 0, "No presets yet", MF_DOTTED, -1, 1);
+  for (k = 0; k < count; k++)
+    set_item (m, k, 0, presets[k].name, k == count - 1 ? MF_DOTTED : 0, -1, 0);
+  k = count ? count : 1;
+  set_item (m, k, 0, "Save current as", 0, (int) save, 0);
+  set_item (m, k + 1, 1, "Delete", 0, (int) del, count == 0);
+  return m;
+}
+
+/* Presets menu choice c (from its own level). */
+static void presets_choice (const int *c)
+{
+  int slot = npresets > MAX_LIST ? MAX_LIST : npresets;
+  int first = slot ? slot : 1;
+  if (slot && c[0] >= 0 && c[0] < slot)
+    viewer_apply_look (presets[c[0]].recipe);
+  else if (c[0] == first && c[1] == 0)
+    {
+      if (looks_save_preset (preset_name) == 0)
+        preset_name[0] = '\0';
+    }
+  else if (c[0] == first + 1 && c[1] >= 0 && c[1] < slot)
+    looks_delete_preset (presets[c[1]].id);
+}
+
 static menu *group_menu (const char *title, const cat_group *g, int ng, int kind, const char *none)
 {
   int k, count = ng > MAX_LIST ? MAX_LIST : ng;
@@ -116,7 +189,7 @@ static menu *build_window_menu (void)
   const cat_source *s = browser_source ();
   cat_id *ids;
   int nsel = browser_selection (&ids), k;
-  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb;
+  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb, *apply;
   static const char *const rating_names[6] = { "No stars", "1 star", "2 stars", "3 stars", "4 stars", "5 stars" };
   static const char *const filter_names[6] = { "Any rating", "1 star and up", "2 stars and up", "3 stars and up", "4 stars and up", "5 stars" };
   free (ids);
@@ -143,28 +216,22 @@ static menu *build_window_menu (void)
   rating = new_menu ("Rating", 6);
   for (k = 0; k < 6 && rating; k++)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
-  selm = new_menu ("Selection", 5);
+  npresets = looks_presets (&presets);
+  apply = preset_list ("Apply preset", nsel == 0);
+  selm = new_menu ("Selection", 8);
   if (selm)
     {
       set_item (selm, 0, 0, "Rating", 0, (int) rating, nsel == 0);
       set_item (selm, 1, 0, "Flag / unflag      /", 0, -1, nsel == 0);
       set_item (selm, 2, 0, "Reject      9", MF_DOTTED, -1, nsel == 0);
       set_item (selm, 3, 0, "Select all      ^A", 0, -1, browser_count () == 0);
-      set_item (selm, 4, 1, "Clear selection      Esc", 0, -1, nsel == 0);
+      set_item (selm, 4, 0, "Clear selection      Esc", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, 5, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
+      set_item (selm, 6, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
+      set_item (selm, 7, 1, "Apply preset", 0, (int) apply, nsel == 0 || npresets == 0);
     }
 
-  newalbum = new_menu ("Name", 1);
-  if (newalbum)
-    {
-      item *it = &newalbum->it[0];
-      it->flags = MF_WRITABLE | MF_LAST;
-      it->submenu = -1;
-      it->icon_flags = (int) WRITABLE_ICON;
-      it->data[0] = (int) album_name;
-      it->data[1] = -1;
-      it->data[2] = sizeof album_name;
-      newalbum->width = 320;
-    }
+  newalbum = writable_menu ("Name", album_name, sizeof album_name);
   addto = group_menu ("Add to", albums, nalbums, -1, "No albums yet");
   album = new_menu ("Album", 3);
   if (album)
@@ -194,20 +261,52 @@ static menu *build_window_menu (void)
   return m;
 }
 
+/* Photo > ... (the order menus_selection decodes) */
+enum { VM_BEFORE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_BACK, VM_COUNT };
+
 static menu *build_viewer_menu (void)
+{
+  menu *m, *shape, *grid, *pre;
+  int k, crop = viewer_crop_mode ();
+  used = 0;
+  shape = new_menu ("Crop shape", 6);
+  for (k = 0; k < 6 && shape; k++)
+    set_item (shape, k, k == 5, viewer_shape_name (k), viewer_crop_shape () == k ? MF_TICK : 0, -1, 0);
+  grid = new_menu ("Grid", 4);
+  for (k = 0; k < 4 && grid; k++)
+    set_item (grid, k, k == 3, viewer_grid_name (k), viewer_grid () == k ? MF_TICK : 0, -1, 0);
+  pre = build_presets ();
+  m = new_menu ("Photo", VM_COUNT);
+  if (m)
+    {
+      set_item (m, VM_BEFORE, 0, "Before and after      M", viewer_before () ? MF_TICK : 0, -1, crop);
+      set_item (m, VM_UNDO, 0, "Undo      ^Z", 0, -1, !viewer_can_undo ());
+      set_item (m, VM_REDO, 0, "Redo      ^Y", 0, -1, !viewer_can_redo ());
+      set_item (m, VM_RESET, 0, "Reset all adjustments", MF_DOTTED, -1, 0);
+      set_item (m, VM_AUTO, 0, "Auto adjust      A", 0, -1, crop);
+      set_item (m, VM_PICK, 0, "Pick white balance      W", viewer_picking () ? MF_TICK : 0, -1, crop);
+      set_item (m, VM_CROP, 0, "Crop      C", crop ? MF_TICK : 0, -1, 0);
+      set_item (m, VM_SHAPE, 0, "Crop shape", 0, (int) shape, 0);
+      set_item (m, VM_GRID, 0, "Grid      G", MF_DOTTED, (int) grid, 0);
+      set_item (m, VM_PRESETS, 0, "Presets", 0, (int) pre, 0);
+      set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
+      set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
+      set_item (m, VM_BACK, 1, "Back to the library      Esc", 0, -1, 0);
+    }
+  return m;
+}
+
+void menus_open_presets_menu (int x, int y)
 {
   menu *m;
   used = 0;
-  m = new_menu ("Photo", 5);
+  m = build_presets ();
+  which = 4;
+  open_x = x - 64;
+  open_y = y;
   if (m)
-    {
-      set_item (m, 0, 0, "Before and after      M", viewer_before () ? MF_TICK : 0, -1, 0);
-      set_item (m, 1, 0, "Undo      ^Z", 0, -1, !viewer_can_undo ());
-      set_item (m, 2, 0, "Redo      ^Y", 0, -1, !viewer_can_redo ());
-      set_item (m, 3, 0, "Reset all adjustments", MF_DOTTED, -1, 0);
-      set_item (m, 4, 1, "Back to the library      Esc", 0, -1, 0);
-    }
-  return m;
+    _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
 
 void menus_open_viewer_menu (int x, int y)
@@ -371,6 +470,12 @@ static int window_choice (const int *c)
         browser_select_all (1);
       else if (c[1] == 4)
         browser_select_all (0);
+      else if (c[1] == 5)
+        looks_copy_selection ();
+      else if (c[1] == 6 && looks_clip ())
+        looks_apply_selection (looks_clip ());
+      else if (c[1] == 7 && c[2] >= 0 && c[2] < npresets && c[2] < MAX_LIST)
+        looks_apply_selection (presets[c[2]].recipe);
       break;
     case 2:                            /* Album */
       if (c[1] == 0 && c[2] == 0)
@@ -399,12 +504,22 @@ int menus_selection (const int *choice)
   else if (which == 3)
     switch (choice[0])
       {
-      case 0: viewer_toggle_before (); break;
-      case 1: viewer_undo (); break;
-      case 2: viewer_redo (); break;
-      case 3: viewer_reset_all (); break;
-      case 4: viewer_close (); return 0;
+      case VM_BEFORE: viewer_toggle_before (); break;
+      case VM_UNDO: viewer_undo (); break;
+      case VM_REDO: viewer_redo (); break;
+      case VM_RESET: viewer_reset_all (); break;
+      case VM_AUTO: viewer_auto (); break;
+      case VM_PICK: viewer_pick_white (); break;
+      case VM_CROP: viewer_toggle_crop (); break;
+      case VM_SHAPE: if (choice[1] >= 0) viewer_set_crop_shape (choice[1]); break;
+      case VM_GRID: if (choice[1] >= 0) viewer_set_grid (choice[1]); break;
+      case VM_PRESETS: if (choice[1] >= 0) presets_choice (choice + 1); break;
+      case VM_COPY: looks_copy_viewer (); break;
+      case VM_PASTE: if (looks_clip ()) viewer_apply_look (looks_clip ()); break;
+      case VM_BACK: viewer_close (); return 0;
       }
+  else if (which == 4)
+    presets_choice (choice);
   else if (which == 2)
     {
       if (choice[0] == 1)
@@ -417,7 +532,14 @@ int menus_selection (const int *choice)
   /* Adjust keeps the menu open, rebuilt with fresh ticks. */
   if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL && (ptr[2] & Button_Adjust))
     {
-      menu *m = which == 1 ? build_window_menu () : which == 3 ? build_viewer_menu () : build_iconbar_menu ();
+      menu *m;
+      if (which == 4)
+        {
+          used = 0;
+          m = build_presets ();
+        }
+      else
+        m = which == 1 ? build_window_menu () : which == 3 ? build_viewer_menu () : build_iconbar_menu ();
       if (m)
         _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
     }

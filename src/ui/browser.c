@@ -628,6 +628,13 @@ int browser_key (int key)
     }
   else if (key == KEY_CTRL_A)
     browser_select_all (1);
+  else if (key == 0x03)                /* Ctrl-C: copy the adjustments */
+    looks_copy_selection ();
+  else if (key == 0x16)                /* Ctrl-V: paste them */
+    {
+      if (looks_clip ())
+        looks_apply_selection (looks_clip ());
+    }
   else if (key == KEY_ESCAPE)
     browser_select_all (0);
   else

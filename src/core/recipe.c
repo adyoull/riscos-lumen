@@ -6,22 +6,32 @@
 #include "recipe.h"
 
 const recipe_param recipe_params[P_COUNT] = {
-  { "wb",       "temp",       "Temperature", -100, 100, 0, 1, 0 },
-  { "wb",       "tint",       "Tint",        -100, 100, 0, 1, 0 },
-  { "exposure", "ev",         "Exposure",      -4,   4, 0, 0.05f, 2 },
-  { "levels",   "black",      "Black point",    0,  25, 0, 0.5f, 1 },
-  { "levels",   "white",      "White point",   75, 100, 100, 0.5f, 1 },
-  { "levels",   "mid",        "Midtones",    -100, 100, 0, 1, 0 },
-  { "enhance",  "contrast",   "Contrast",    -100, 100, 0, 1, 0 },
-  { "enhance",  "saturation", "Saturation",  -100, 100, 0, 1, 0 },
-  { "enhance",  "vibrance",   "Vibrancy",    -100, 100, 0, 1, 0 },
+  { "wb",       "temp",       "Temperature", -100, 100, 0, 1, 0, 0 },
+  { "wb",       "tint",       "Tint",        -100, 100, 0, 1, 0, 0 },
+  { "exposure", "ev",         "Exposure",      -4,   4, 0, 0.05f, 2, 0 },
+  { "levels",   "black",      "Black point",    0,  25, 0, 0.5f, 1, 0 },
+  { "levels",   "white",      "White point",   75, 100, 100, 0.5f, 1, 0 },
+  { "levels",   "mid",        "Midtones",    -100, 100, 0, 1, 0, 0 },
+  { "enhance",  "contrast",   "Contrast",    -100, 100, 0, 1, 0, 0 },
+  { "enhance",  "saturation", "Saturation",  -100, 100, 0, 1, 0, 0 },
+  { "enhance",  "vibrance",   "Vibrancy",    -100, 100, 0, 1, 0, 0 },
+  { "geometry", "rotate",     "Rotate",         0,   3, 0, 1, 0, 1 },
+  { "geometry", "angle",      "Straighten",   -15,  15, 0, 0.1f, 1, 0 },
+  { "geometry", "vertical",   "Vertical",    -100, 100, 0, 1, 0, 0 },
+  { "geometry", "horizontal", "Horizontal",  -100, 100, 0, 1, 0, 0 },
+  { "crop",     "x0",         "Left",           0,   1, 0, 0.001f, 3, 1 },
+  { "crop",     "y0",         "Top",            0,   1, 0, 0.001f, 3, 1 },
+  { "crop",     "x1",         "Right",          0,   1, 1, 0.001f, 3, 1 },
+  { "crop",     "y1",         "Bottom",         0,   1, 1, 0.001f, 3, 1 },
 };
 
 const recipe_group recipe_groups[] = {
-  { "White Balance", P_TEMP, P_TINT },
-  { "Exposure", P_EV, P_EV },
-  { "Levels", P_BLACK, P_MID },
-  { "Enhance", P_CONTRAST, P_VIBRANCE },
+  { "White Balance", P_TEMP, P_TINT, 1 },
+  { "Exposure", P_EV, P_EV, 1 },
+  { "Levels", P_BLACK, P_MID, 1 },
+  { "Enhance", P_CONTRAST, P_VIBRANCE, 1 },
+  { "Geometry", P_ROTATE, P_PERSP_H, 1 },
+  { "Crop", P_CROP_X0, P_CROP_Y1, 0 },
 };
 const int recipe_ngroups = (int) (sizeof recipe_groups / sizeof recipe_groups[0]);
 
@@ -103,6 +113,30 @@ int recipe_parse (recipe *r, const char *text)
       }
     }
   return 0;
+}
+
+int recipe_geometry_is_default (const recipe *r)
+{
+  int i;
+  for (i = P_FIRST_GEOMETRY; i < P_COUNT; i++)
+    if (!same (r->v[i], recipe_params[i].def))
+      return 0;
+  return 1;
+}
+
+void recipe_copy_look (recipe *dst, const recipe *src)
+{
+  int i;
+  for (i = 0; i < P_FIRST_GEOMETRY; i++)
+    dst->v[i] = src->v[i];
+}
+
+int recipe_format_look (const recipe *r, char *out, size_t n)
+{
+  recipe look;
+  recipe_default (&look);
+  recipe_copy_look (&look, r);
+  return recipe_format (&look, out, n);
 }
 
 int recipe_format (const recipe *r, char *out, size_t n)

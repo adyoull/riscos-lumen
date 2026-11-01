@@ -6,7 +6,9 @@
 #include <string.h>
 #include <time.h>
 #include <jpeglib.h>
+#include "../src/core/autoadj.h"
 #include "../src/core/develop.h"
+#include "../src/core/geometry.h"
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
 #include "../src/core/recipe.h"
@@ -276,6 +278,325 @@ static void test_edited_thumbnail (const char *work)
   lib_close (l);
 }
 
+
+/* ---- geometry ---- */
+
+/* A test card: each pixel's channels say where it came from (x, y), so a
+   transform can be checked by reading back the coordinates. */
+static uint16_t *card (int w, int h)
+{
+  uint16_t *p = malloc ((size_t) w * h * 6);
+  int x, y;
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++)
+      {
+        uint16_t *q = p + ((size_t) y * w + x) * 3;
+        q[0] = (uint16_t) (x * 65535 / (w - 1));
+        q[1] = (uint16_t) (y * 65535 / (h - 1));
+        q[2] = 30000;
+      }
+  return p;
+}
+
+static void at (const uint16_t *img, int w, int x, int y, double *fx, double *fy)
+{
+  const uint16_t *q = img + ((size_t) y * w + x) * 3;
+  *fx = q[0] / 65535.0;
+  *fy = q[1] / 65535.0;
+}
+
+static void test_geometry (void)
+{
+  int w = 120, h = 80;
+  uint16_t *src = card (w, h), *dst = malloc ((size_t) w * h * 6 * 2);
+  recipe r;
+  geom_plan g;
+  double fx, fy;
+  int x, y, worst = 0;
+
+  recipe_default (&r);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (g.ow == w && g.oh == h && fabs (g.zoom - 1) < 0.01, "identity: same size, no zoom");
+  geom_rows (&g, src, dst, 0, g.oh);
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++)
+      {
+        int c;
+        for (c = 0; c < 3; c++)
+          {
+            int d = abs ((int) dst[((size_t) y * w + x) * 3 + c] - (int) src[((size_t) y * w + x) * 3 + c]);
+            if (d > worst) worst = d;
+          }
+      }
+  CHECK (worst <= 64, "identity: every pixel back where it was");
+
+  recipe_set (&r, P_ROTATE, 1);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (g.ow == h && g.oh == w, "a quarter turn swaps width and height");
+  geom_rows (&g, src, dst, 0, g.oh);
+  at (dst, g.ow, g.ow - 1, 0, &fx, &fy);
+  CHECK (fx < 0.03 && fy < 0.03, "90 clockwise: the top left goes to the top right");
+  at (dst, g.ow, 0, g.oh - 1, &fx, &fy);
+  CHECK (fx > 0.97 && fy > 0.97, "and the bottom right to the bottom left");
+  recipe_set (&r, P_ROTATE, 2);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  geom_rows (&g, src, dst, 0, g.oh);
+  at (dst, g.ow, 0, 0, &fx, &fy);
+  CHECK (g.ow == w && fx > 0.97 && fy > 0.97, "180: the bottom right comes to the top left");
+  recipe_set (&r, P_ROTATE, 3);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  geom_rows (&g, src, dst, 0, g.oh);
+  at (dst, g.ow, 0, 0, &fx, &fy);
+  CHECK (fx > 0.97 && fy < 0.03, "90 anticlockwise: the top right comes to the top left");
+
+  recipe_default (&r);
+  recipe_set (&r, P_CROP_X0, 0.25f); recipe_set (&r, P_CROP_X1, 0.75f);
+  recipe_set (&r, P_CROP_Y0, 0.5f);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (g.ow == 60 && g.oh == 40, "crop: half the width, the bottom half");
+  geom_rows (&g, src, dst, 0, g.oh);
+  at (dst, g.ow, 0, 0, &fx, &fy);
+  CHECK (fabs (fx - 0.25) < 0.02 && fabs (fy - 0.5) < 0.02, "crop: starts at a quarter across, half down");
+  geom_plan_make (&g, &r, w, h, 0, 0, 0);
+  CHECK (g.ow == w && g.oh == h, "the crop tool sees the whole picture");
+
+  /* Straightening: zooms in so that no corner reaches outside the picture. */
+  recipe_default (&r);
+  recipe_set (&r, P_ANGLE, 5);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (g.zoom > 1.05 && g.zoom < 1.3, "5 degrees: zooms in a little");
+  {
+    double corners[4][2] = { { 0, 0 }, { w, 0 }, { 0, h }, { w, h } }, sx, sy;
+    int k, inside = 1;
+    for (k = 0; k < 4; k++)
+      {
+        geom_to_source (&g, corners[k][0], corners[k][1], &sx, &sy);
+        if (sx < -0.01 || sy < -0.01 || sx > w + 0.01 || sy > h + 0.01)
+          inside = 0;
+      }
+    CHECK (inside, "every corner comes from inside the picture");
+    geom_to_source (&g, w / 2.0, h / 2.0, &sx, &sy);
+    CHECK (fabs (sx - w / 2.0) < 0.01 && fabs (sy - h / 2.0) < 0.01, "the centre stays put");
+    /* Clockwise: a point right of centre moves down. */
+    geom_to_source (&g, w / 2.0, h / 2.0 + 10, &sx, &sy);
+    CHECK (sx > w / 2.0, "turned clockwise (output below centre came from the right of it)");
+  }
+  recipe_set (&r, P_ANGLE, -15);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  {
+    double sx, sy;
+    int k, inside = 1;
+    for (k = 0; k <= 10; k++)
+      {
+        geom_to_source (&g, k * w / 10.0, 0, &sx, &sy);
+        if (sx < -0.01 || sy < -0.01 || sx > w + 0.01 || sy > h + 0.01) inside = 0;
+        geom_to_source (&g, k * w / 10.0, h, &sx, &sy);
+        if (sx < -0.01 || sy < -0.01 || sx > w + 0.01 || sy > h + 0.01) inside = 0;
+      }
+    CHECK (inside, "-15 degrees: the whole edge comes from inside the picture");
+  }
+
+  /* Perspective: +vertical widens the top, so a point near the top edge
+     samples nearer the centre than it would otherwise. */
+  recipe_default (&r);
+  recipe_set (&r, P_PERSP_V, 60);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  {
+    double tx, ty, bx, by, sx2, sy2;
+    geom_to_source (&g, w * 0.9, 1, &tx, &ty);
+    geom_to_source (&g, w * 0.9, h - 1, &bx, &by);
+    CHECK (fabs (tx - w / 2.0) < fabs (bx - w / 2.0), "vertical +: the top is spread wider than the bottom");
+    geom_to_source (&g, 0, 0, &sx2, &sy2);
+    CHECK (sx2 >= -0.01 && sy2 >= -0.01, "and the corners still come from inside");
+  }
+  recipe_default (&r);
+  recipe_set (&r, P_PERSP_H, 60);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  {
+    double lx, ly, rx, ry;
+    geom_to_source (&g, 1, h * 0.9, &lx, &ly);
+    geom_to_source (&g, w - 1, h * 0.9, &rx, &ry);
+    CHECK (fabs (ly - h / 2.0) > fabs (ry - h / 2.0), "horizontal +: the right is spread wider than the left");
+  }
+
+  /* Aspect ratios for the crop tool. */
+  {
+    double x0 = 0, y0 = 0, x1 = 1, y1 = 1;
+    geom_crop_aspect (&x0, &y0, &x1, &y1, 1.0, 300, 200);
+    CHECK (fabs ((x1 - x0) * 300 - (y1 - y0) * 200) < 0.5 && fabs (y1 - y0 - 1) < 1e-9, "1:1 on 3:2: full height, centred square");
+    CHECK (fabs ((x0 + x1) / 2 - 0.5) < 1e-9, "centred");
+    x0 = 0.8; x1 = 1; y0 = 0; y1 = 1;
+    geom_crop_aspect (&x0, &y0, &x1, &y1, 16.0 / 9, 300, 200);
+    CHECK (x1 <= 1 + 1e-9 && x0 >= -1e-9 && fabs ((x1 - x0) * 300 / ((y1 - y0) * 200) - 16.0 / 9) < 0.01, "16:9 stays inside");
+  }
+  free (src);
+  free (dst);
+}
+
+/* Develops a whole 8-bit image through a recipe with geometry. */
+static void test_develop_image (void)
+{
+  rgb_image img;
+  recipe r;
+  int x;
+  img.w = 40; img.h = 20;
+  img.rgb = malloc (40 * 20 * 3);
+  for (x = 0; x < 40 * 20; x++)
+    {
+      img.rgb[3 * x] = (unsigned char) (x % 40 < 20 ? 200 : 30);
+      img.rgb[3 * x + 1] = 60;
+      img.rgb[3 * x + 2] = 60;
+    }
+  recipe_default (&r);
+  recipe_set (&r, P_ROTATE, 1);
+  recipe_set (&r, P_EV, 1);
+  CHECK (develop_image (&r, &img) == 0 && img.w == 20 && img.h == 40, "develop_image: turned, and the size follows");
+  CHECK (img.rgb[0] > 220 && img.rgb[(19 * 20 + 19) * 3] > 220, "the red left half is now the top half, brighter");
+  CHECK (img.rgb[(20 * 20) * 3] < 120 && img.rgb[(39 * 20 + 19) * 3] < 120, "and the dark half the bottom");
+  free (img.rgb);
+}
+
+/* ---- auto adjust and white balance ---- */
+
+static uint16_t *scene (int w, int h, double cast_r, double cast_g, double cast_b, double light)
+{
+  uint16_t *p = malloc ((size_t) w * h * 6);
+  int x, y;
+  const uint16_t *s2l = dev_srgb_to_linear ();
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++)
+      {
+        /* Grey ramps (half of it neutral), some colour patches. */
+        double v = (double) x / w, r, g, b;
+        if (y < h / 2)
+          r = g = b = v;
+        else
+          {
+            r = 0.5 + 0.4 * sin (x * 0.1); g = 0.45; b = 0.4 + 0.3 * cos (y * 0.07);
+            r *= v + 0.2; g *= v + 0.2; b *= v + 0.2;
+          }
+        r = s2l[(int) (fmin (r, 1) * 255)] / 65535.0 * cast_r * light;
+        g = s2l[(int) (fmin (g, 1) * 255)] / 65535.0 * cast_g * light;
+        b = s2l[(int) (fmin (b, 1) * 255)] / 65535.0 * cast_b * light;
+        p[((size_t) y * w + x) * 3] = (uint16_t) (fmin (r, 1) * 65535);
+        p[((size_t) y * w + x) * 3 + 1] = (uint16_t) (fmin (g, 1) * 65535);
+        p[((size_t) y * w + x) * 3 + 2] = (uint16_t) (fmin (b, 1) * 65535);
+      }
+  return p;
+}
+
+static double cast_of (const recipe *r, double R, double G, double B)
+{
+  /* How far from neutral a grey with this cast is after r's white balance. */
+  static develop d;
+  uint16_t in[3];
+  uint32_t px;
+  int o[3];
+  in[0] = (uint16_t) (R * 65535); in[1] = (uint16_t) (G * 65535); in[2] = (uint16_t) (B * 65535);
+  develop_prepare (&d, r);
+  develop_rows (&d, in, 1, 0, 1, &px, NULL);
+  o[0] = (int) (px & 255); o[1] = (int) (px >> 8 & 255); o[2] = (int) (px >> 16 & 255);
+  return abs (o[0] - o[1]) + abs (o[2] - o[1]);
+}
+
+static void test_auto (void)
+{
+  int w = 400, h = 300;
+  recipe r;
+  float t, n;
+  double rgb[3];
+  uint16_t *warm = scene (w, h, 1.0, 0.85, 0.62, 1.0);
+  uint16_t *dark = scene (w, h, 1, 1, 1, 0.18);
+  uint16_t *fine = scene (w, h, 1, 1, 1, 1.0);
+
+  /* The eyedropper: a picked grey becomes exactly neutral. */
+  CHECK (wb_neutral (0.30, 0.25, 0.18, &t, &n) == 0, "wb_neutral solves");
+  recipe_default (&r);
+  recipe_set (&r, P_TEMP, t); recipe_set (&r, P_TINT, n);
+  CHECK (t < -10, "a warm grey needs a cooler temperature");
+  CHECK (cast_of (&r, 0.30, 0.25, 0.18) <= 3, "the picked grey comes out neutral (within 3 levels)");
+  wb_sample (warm, w, h, 50, 10, 2, rgb);
+  CHECK (rgb[0] > rgb[1] && rgb[1] > rgb[2], "sampling the warm card's grey: red > green > blue");
+  CHECK (wb_neutral (1, 1, 1, &t, &n) == 0 && fabsf (t) < 0.01f && fabsf (n) < 0.01f, "a neutral grey needs nothing");
+  CHECK (wb_neutral (0, 0.5, 0.5, &t, &n) == -1, "black can't be balanced");
+
+  /* Auto white balance takes most of a cast away. */
+  recipe_default (&r);
+  auto_white_balance (warm, w, h, &t, &n);
+  recipe_set (&r, P_TEMP, t); recipe_set (&r, P_TINT, n);
+  {
+    double before, after;
+    recipe z;
+    recipe_default (&z);
+    before = cast_of (&z, 0.40, 0.34, 0.25);
+    after = cast_of (&r, 0.40, 0.34, 0.25);
+    CHECK (t < 0 && after < before * 0.45, "auto white balance: the warm cast mostly goes");
+  }
+  auto_white_balance (fine, w, h, &t, &n);
+  CHECK (fabsf (t) <= 2 && fabsf (n) <= 2, "a neutral picture's white balance is left alone");
+
+  /* Auto adjust: a dark picture is brightened; a good one barely changes. */
+  recipe_default (&r);
+  recipe_set (&r, P_ROTATE, 1);
+  recipe_set (&r, P_CROP_X0, 0.1f);
+  auto_adjust (dark, w, h, &r);
+  CHECK (r.v[P_EV] > 0.7f, "auto: a dark picture gets more exposure");
+  CHECK (r.v[P_ROTATE] == 1 && fabsf (r.v[P_CROP_X0] - 0.1f) < 1e-4f, "auto leaves the geometry alone");
+  recipe_default (&r);
+  auto_adjust (fine, w, h, &r);
+  CHECK (fabsf (r.v[P_EV]) < 0.8f, "auto: a well-exposed picture keeps its exposure, near enough");
+  CHECK (r.v[P_CONTRAST] >= 0 && r.v[P_CONTRAST] <= 35 && r.v[P_BLACK] <= 6 && r.v[P_WHITE] >= 92, "auto stays in sensible ranges");
+  recipe_default (&r);
+  auto_adjust (warm, w, h, &r);
+  CHECK (r.v[P_TEMP] < -5, "auto adjust includes the white balance");
+  free (warm); free (dark); free (fine);
+}
+
+static void test_presets (const char *work)
+{
+  char libdir[700], err[256], text[1024];
+  library *l;
+  cat_preset *ps;
+  int np;
+  recipe a;
+  snprintf (libdir, sizeof libdir, "%s/Library", work);
+  lib_open (&l, libdir, err, sizeof err);
+  recipe_default (&a);
+  recipe_set (&a, P_TEMP, 15); recipe_set (&a, P_CONTRAST, 20); recipe_set (&a, P_ROTATE, 1);
+  recipe_format_look (&a, text, sizeof text);
+  CHECK (strstr (text, "geometry") == NULL && strstr (text, "temp=15") != NULL, "a preset holds the look, not the geometry");
+  CHECK (cat_preset_save (lib_cat (l), "Warm punch", text) > 0, "preset saved");
+  CHECK (cat_preset_save (lib_cat (l), "Cool", "wb temp=-20 tint=0\n") > 0, "a second preset");
+  recipe_set (&a, P_CONTRAST, 30);
+  recipe_format_look (&a, text, sizeof text);
+  cat_preset_save (lib_cat (l), "Warm punch", text);
+  cat_presets (lib_cat (l), &ps, &np);
+  CHECK (np == 2 && strcmp (ps[0].name, "Cool") == 0 && strstr (ps[1].recipe, "contrast=30") != NULL,
+         "saving under the same name replaces it; sorted by name");
+  {
+    cat_item *items;
+    int n;
+    cat_source all = { SRC_ALL, 0, 0 };
+    recipe got;
+    cat_list (lib_cat (l), &all, &items, &n);
+    CHECK (n == 1, "the library from the thumbnail test");
+    /* The photo has its own crop; the preset must keep it. */
+    cat_set_recipe (lib_cat (l), items[0].id, "crop x0=0.100 y0=0.000 x1=1.000 y1=1.000\n");
+    CHECK (cat_apply_look (lib_cat (l), &items[0].id, 1, ps[1].recipe) == 0, "preset applied");
+    cat_get_recipe (lib_cat (l), items[0].id, text, sizeof text);
+    recipe_parse (&got, text);
+    CHECK (got.v[P_TEMP] == 15 && got.v[P_CONTRAST] == 30 && fabsf (got.v[P_CROP_X0] - 0.1f) < 1e-4f,
+           "the look arrives, the photo's own crop stays");
+    CHECK (cat_preset_delete (lib_cat (l), ps[0].id) == 0, "preset deleted");
+    free (items);
+  }
+  free (ps);
+  cat_presets (lib_cat (l), &ps, &np);
+  CHECK (np == 1, "one left");
+  free (ps);
+  lib_close (l);
+}
+
 int main (int argc, char **argv)
 {
   if (argc < 2)
@@ -285,6 +606,10 @@ int main (int argc, char **argv)
   test_pixels ();
   test_histogram_and_speed ();
   test_edited_thumbnail (argv[1]);
+  test_geometry ();
+  test_develop_image ();
+  test_auto ();
+  test_presets (argv[1]);
   printf ("test_develop: %d checks, %d failed\n", checks, fails);
   return fails != 0;
 }

@@ -1,8 +1,8 @@
 # Lumen
 
 A photo library and non-destructive editor for RISC OS 5, in the spirit of
-Apple's Aperture. Milestone 0 (import, browse, rate, flag, albums) and the
-first part of milestone 1 (the viewer and the first adjustments).
+Apple's Aperture. Milestone 0 (import, browse, rate, flag, albums) and most
+of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
 
 - Design spec: https://claude.ai/artifact/ELstfvAAkFbZGNj7wbhYTs
 - Target: RISC OS 5.30+ on a Raspberry Pi 4, 400 or CM4.
@@ -37,6 +37,28 @@ first part of milestone 1 (the viewer and the first adjustments).
   change, with undo/redo, Reset all, before/after (M).
 - Edited thumbnails are made again with the recipe; "Edited" marks them.
 - `!Lumen.Bench` times decoding and developing on the machine it runs on.
+
+## Milestone 1, second part (0.0.4)
+
+- Geometry (geometry.c): quarter turns, straighten (±15°), vertical and
+  horizontal perspective, and crop, in that order, run before the tone
+  stages into a second linear image that is only remade when the geometry
+  changes. Turning or keystoning zooms in just enough (checked at 33 points
+  per edge) that no empty corners show. Bilinear sampling.
+- The crop tool: the whole picture with the crop drawn over it, outside
+  darkened; corners, edges, move, draw new; fixed shapes (Original, 1:1,
+  3:2, 4:3, 16:9, either way round). Return applies, Escape cancels.
+- Grids: thirds, quarters, fine; a fine grid while straightening.
+- Auto (autoadj.c): white balance from near-neutral pixels (brighter ones
+  weighted more; grey world when there are too few), damped and limited;
+  exposure towards a mid-grey median; levels half way to the 0.5%/99.5%
+  ends; contrast for flat pictures; vibrancy for dull ones. Geometry kept.
+- White balance eyedropper: the picked colour (mapped back through the
+  geometry to the original) is made exactly neutral by solving the
+  develop pipeline's own gain model.
+- Presets (a `preset` table: name and look) and copy/paste of adjustments,
+  in the viewer and on a library selection. A look is the recipe without
+  its geometry, so a preset never moves anyone's crop.
 - Still to come in milestone 1: the loupe, a curves editor, several
   versions of one original, full-resolution rendering.
 
@@ -44,10 +66,12 @@ first part of milestone 1 (the viewer and the first adjustments).
 
 ```
 src/core/   portable C: catalogue (SQLite), EXIF, thumbnails, importer,
-            recipe.c (adjustments as text), develop.c (the pipeline)
+            recipe.c (adjustments as text), develop.c (the pipeline),
+            geometry.c (turn, straighten, perspective, crop), autoadj.c
   fsys_riscos.c / fsys_posix.c   the filing system, RISC OS or Linux
   sqlite_vfs.c                   SQLite on plain POSIX calls, native paths
-src/ui/     the Wimp front end: app, browser window, menus, sprites
+src/ui/     the Wimp front end: app, browser window, viewer, menus, looks
+            (copy/paste and presets), sprites
 tests/      test_core and test_develop (Linux and ARM/QEMU), test_ui and test_fsys
             (Fake RISC OS), bench.c (LumenBench), shots/ (make shots)
 app/        !Run, !Boot, !Help, icons (make-icons.py draws them)
@@ -74,4 +98,5 @@ riscos-crossdev's checks on the RISC OS binary. `make` builds
 
 ## Status
 
-Tested on Linux only so far. Not yet run on RISC OS.
+Tested on Linux, and in the desktop of riscos-linux-testbed (RISC OS 5.31-5
+under QEMU). Not yet run on a Pi.

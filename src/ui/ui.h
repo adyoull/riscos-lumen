@@ -149,12 +149,44 @@ int viewer_before (void);
 void viewer_mode_changed (void);
 int viewer_proxy_size (int *w, int *h);
 const recipe *viewer_recipe (void);
+int viewer_shown_size (int *w, int *h);   /* after geometry */
+cat_id viewer_item (void);             /* the photo shown, 0 if closed */
+void viewer_reload (cat_id version);   /* its recipe changed from outside */
+void viewer_apply_look (const char *look);
+void viewer_look (char *out, size_t n);
+void viewer_auto (void);
+void viewer_set (int p, float v);      /* one adjustment, saved */
+void viewer_pick_white (void);         /* the white balance eyedropper, on or off */
+int viewer_picking (void);
+void viewer_rotate (int clockwise);
+void viewer_crop_start (void);
+void viewer_crop_finish (int apply);
+void viewer_toggle_crop (void);
+int viewer_crop_mode (void);
+void viewer_set_crop_shape (int k);    /* Free, Original, Square, 3:2, 4:3, 16:9 */
+int viewer_crop_shape (void);
+const char *viewer_shape_name (int k);
+void viewer_set_grid (int k);          /* None, Thirds, Quarters, Fine */
+int viewer_grid (void);
+const char *viewer_grid_name (int k);
+
+/* --- looks.c: copying adjustments between photos, and presets */
+void looks_copy_viewer (void);         /* the viewer's look */
+void looks_copy_selection (void);      /* the first selected photo's */
+const char *looks_clip (void);         /* NULL if nothing copied */
+/* Gives the selected photos a look (the viewer follows if it shows one). */
+void looks_apply_selection (const char *look);
+/* The presets, read again (freed by the next call). */
+int looks_presets (cat_preset **out);
+int looks_save_preset (const char *name);   /* the viewer's look */
+void looks_delete_preset (cat_id id);
 
 /* --- menus.c */
 void menus_init (void);
 void menus_open_window_menu (int x, int y);
 void menus_open_iconbar_menu (int x);
 void menus_open_viewer_menu (int x, int y);
+void menus_open_presets_menu (int x, int y);
 int menus_selection (const int *choice);   /* 1: quit */
 
 #endif

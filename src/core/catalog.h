@@ -79,6 +79,16 @@ int cat_set_recipe (cat *c, cat_id version, const char *recipe);
 int cat_set_thumb (cat *c, cat_id version, int state);
 int cat_count_thumbs_pending (cat *c);
 
+/* Presets: named looks (recipes without geometry), for the whole library. */
+typedef struct { cat_id id; char name[48]; char recipe[1024]; } cat_preset;
+/* Saves (or replaces, by name) a preset. Its id, or -1. */
+cat_id cat_preset_save (cat *c, const char *name, const char *look);
+int cat_presets (cat *c, cat_preset **out, int *count);   /* sorted by name; free it */
+int cat_preset_delete (cat *c, cat_id id);
+/* Gives each version the look in text (a preset or copied adjustments),
+   keeping its own geometry; thumbnails are made again. */
+int cat_apply_look (cat *c, const cat_id *versions, int n, const char *look);
+
 typedef struct { cat_id id; char name[64]; int count; } cat_group;
 /* Projects (kind SRC_PROJECT) or albums (SRC_ALBUM), sorted by name. */
 int cat_groups (cat *c, int kind, cat_group **out, int *count);

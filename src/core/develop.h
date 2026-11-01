@@ -42,7 +42,11 @@ void dev_to_linear (const unsigned char *rgb, uint16_t *lin, size_t pixels);
 void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
                    uint32_t *dst, unsigned hist[64]);
 
-/* In place, on an 8-bit sRGB image (thumbnails). */
+/* In place, on an 8-bit sRGB image (thumbnails): tone only. */
 void develop_rgb8 (const develop *d, rgb_image *img);
+
+/* The whole recipe, geometry included, on an 8-bit sRGB image; may change
+   its size (img->rgb is replaced). 0 on success. */
+int develop_image (const recipe *r, rgb_image *img);
 
 #endif

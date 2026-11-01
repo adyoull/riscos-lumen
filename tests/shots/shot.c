@@ -272,9 +272,25 @@ static int menu_choose (int a, int b2, int c)
   return app_event (Menu_Selection, blk, 0);
 }
 
+static char opsname[700];
+
+static void viewer_shot (const char *name)
+{
+  int vb[64] = { 0 };
+  ops = fopen (opsname, "a");
+  fprintf (ops, "SHOT %s\n", name);
+  fprintf (ops, "WINDOW %d %d %d %d 0 0 1 0\n", vopened[1], vopened[2], vopened[3], vopened[4]);
+  fprintf (ops, "TITLE %s\n", vtitle);
+  fprintf (ops, "EXTENT 0 -1800 3200 0\n");
+  vb[0] = VIEWER;
+  app_event (Redraw_Window_Request, vb, 0);
+  fclose (ops);
+  ops = NULL;
+}
+
 int main (int argc, char **argv)
 {
-  char lib[700], opsname[700];
+  char lib[700];
   int b[64];
   cat_item *items;
   int n, i;
@@ -401,19 +417,29 @@ int main (int argc, char **argv)
     browser_set_size (2);
     viewer_open (4);
     run (100000);
-    ops = fopen (opsname, "a");
-    fprintf (ops, "SHOT viewer\n");
-    fprintf (ops, "WINDOW %d %d %d %d 0 0 1 0\n", vopened[1], vopened[2], vopened[3], vopened[4]);
-    fprintf (ops, "TITLE %s\n", vtitle);
-    fprintf (ops, "EXTENT 0 -1800 3200 0\n");
-    {
-      int vb[64] = { 0 };
-      vb[0] = VIEWER;
-      app_event (Redraw_Window_Request, vb, 0);
-    }
-    fclose (ops);
-    ops = NULL;
+    viewer_shot ("viewer");
   }
+
+  /* 6. The crop tool, square, over the whole picture. */
+  viewer_crop_start ();
+  viewer_set_crop_shape (2);
+  run (100000);
+  viewer_shot ("crop");
+
+  /* 7. Cropped, auto adjusted, with the thirds grid. */
+  viewer_crop_finish (1);
+  viewer_auto ();
+  viewer_set_grid (1);
+  run (100000);
+  viewer_shot ("auto");
+
+  /* 8. Straightened and keystoned, with the fine grid. */
+  viewer_reset_all ();
+  viewer_set (P_ANGLE, 6);
+  viewer_set (P_PERSP_V, 40);
+  viewer_set_grid (3);
+  run (100000);
+  viewer_shot ("straighten");
 
   app_quit ();
   printf ("shot: %d sprites recorded in %s\n", sprites, outdir);

@@ -6,6 +6,7 @@
 #include "sqlite3.h"
 #include "catalog.h"
 #include "fsys.h"
+#include "recipe.h"
 
 struct cat
 {
@@ -14,6 +15,8 @@ struct cat
 };
 
 #define SCHEMA_VERSION 1
+
+static void col_text (sqlite3_stmt *s, int i, char *out, size_t n);
 
 static const char schema[] =
   "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value);"
@@ -34,7 +37,8 @@ static const char schema[] =
   "CREATE INDEX IF NOT EXISTS version_thumb ON version (thumb);"
   "CREATE TABLE IF NOT EXISTS album (id INTEGER PRIMARY KEY, name TEXT NOT NULL, created INTEGER);"
   "CREATE TABLE IF NOT EXISTS album_item (album INTEGER NOT NULL, version INTEGER NOT NULL,"
-  "  pos INTEGER, PRIMARY KEY (album, version));";
+  "  pos INTEGER, PRIMARY KEY (album, version));"
+  "CREATE TABLE IF NOT EXISTS preset (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, recipe TEXT NOT NULL);";
 
 static int fail (cat *c, const char *what)
 {
@@ -398,6 +402,95 @@ int cat_set_recipe (cat *c, cat_id version, const char *recipe)
   r = sqlite3_step (s) == SQLITE_DONE ? 0 : fail (c, "save the adjustments");
   sqlite3_finalize (s);
   return r;
+}
+
+cat_id cat_preset_save (cat *c, const char *name, const char *look)
+{
+  sqlite3_stmt *s = prep (c, "INSERT INTO preset (name, recipe) VALUES (?1, ?2)"
+                             " ON CONFLICT (name) DO UPDATE SET recipe = excluded.recipe");
+  cat_id id = -1;
+  if (!s)
+    return -1;
+  sqlite3_bind_text (s, 1, name, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text (s, 2, look, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    {
+      fail (c, "save the preset");
+      sqlite3_finalize (s);
+      return -1;
+    }
+  sqlite3_finalize (s);
+  s = prep (c, "SELECT id FROM preset WHERE name = ?1");
+  if (!s)
+    return -1;
+  sqlite3_bind_text (s, 1, name, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    id = sqlite3_column_int64 (s, 0);
+  sqlite3_finalize (s);
+  return id;
+}
+
+int cat_presets (cat *c, cat_preset **out, int *count)
+{
+  sqlite3_stmt *s = prep (c, "SELECT id, name, recipe FROM preset ORDER BY name COLLATE NOCASE");
+  int n = 0, cap = 16;
+  cat_preset *a;
+  *out = NULL;
+  *count = 0;
+  if (!s)
+    return -1;
+  a = malloc (sizeof *a * cap);
+  while (a && sqlite3_step (s) == SQLITE_ROW)
+    {
+      if (n == cap)
+        {
+          cat_preset *b = realloc (a, sizeof *a * cap * 2);
+          if (!b)
+            break;
+          a = b;
+          cap *= 2;
+        }
+      a[n].id = sqlite3_column_int64 (s, 0);
+      col_text (s, 1, a[n].name, sizeof a[n].name);
+      col_text (s, 2, a[n].recipe, sizeof a[n].recipe);
+      n++;
+    }
+  sqlite3_finalize (s);
+  *out = a;
+  *count = n;
+  return a ? 0 : -1;
+}
+
+int cat_preset_delete (cat *c, cat_id id)
+{
+  sqlite3_stmt *s = prep (c, "DELETE FROM preset WHERE id = ?1");
+  int r;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, id);
+  r = sqlite3_step (s) == SQLITE_DONE ? 0 : fail (c, "delete the preset");
+  sqlite3_finalize (s);
+  return r;
+}
+
+int cat_apply_look (cat *c, const cat_id *versions, int n, const char *look)
+{
+  recipe from, to;
+  int i, rc = 0;
+  recipe_parse (&from, look);
+  exec (c, "SAVEPOINT look");
+  for (i = 0; i < n && rc == 0; i++)
+    {
+      char text[1024];
+      if (cat_get_recipe (c, versions[i], text, sizeof text))
+        continue;
+      recipe_parse (&to, text);
+      recipe_copy_look (&to, &from);
+      recipe_format (&to, text, sizeof text);
+      rc = cat_set_recipe (c, versions[i], text);
+    }
+  exec (c, rc ? "ROLLBACK TO look; RELEASE look" : "RELEASE look");
+  return rc;
 }
 
 int cat_count_thumbs_pending (cat *c)

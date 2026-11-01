@@ -396,14 +396,14 @@ static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
       rgb_image img;
       recipe rc;
       develop *d = malloc (sizeof *d);
-      char e[200];
+      char e[200] = "Not enough memory";
       r = -1;
       if (d && thumbgen_take (l->tg, &img) == 0)
         {
           recipe_parse (&rc, l->tg_recipe);
-          develop_prepare (d, &rc);
-          develop_rgb8 (d, &img);
-          r = img_save_jpeg (&img, l->tg_dst, 85, e, sizeof e) == 0 ? 1 : -1;
+          r = develop_image (&rc, &img);
+          if (r == 0)
+            r = img_save_jpeg (&img, l->tg_dst, 85, e, sizeof e) == 0 ? 1 : -1;
           if (r < 0)
             snprintf (l->err, sizeof l->err, "Thumbnail: %s", e);
           free (img.rgb);
