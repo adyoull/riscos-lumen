@@ -1,8 +1,12 @@
 Licences of the code built into Lumen
 =====================================
 
-Lumen is (C) Andrew Youll, 2026. It is built with these, whose licences
-are in this directory:
+Lumen is (C) Andrew Youll, 2026, and is free software under the MIT
+licence (the file Lumen in this directory). Its source code is published
+with each release, so Lumen can be rebuilt, or relinked with a changed
+UnixLib as the LGPL allows.
+
+It is built with these, whose licences are in this directory:
 
   SQLite 3.49.2          the library's catalogue    public domain
   libjpeg-turbo 3.0.4    JPEG files                 IJG, BSD (3-clause) and zlib licences
@@ -15,4 +19,5 @@ Not built in, but needed (from PackMan): SharedUnixLibrary and
 ARMEABISupport, each with its own licence.
 
 The LibRaw plug-in (LumenRaw, a separate package) has its own Licence
-file in !Lumen.Plugins.LibRaw: LibRaw is under the LGPL 2.1 (or CDDL).
+file in !Lumen.Plugins.LibRaw: LumenRaw's own code is under the MIT
+licence, and LibRaw under the LGPL 2.1 (or CDDL).

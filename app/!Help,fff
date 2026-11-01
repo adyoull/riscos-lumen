@@ -352,7 +352,10 @@ modules from PackMan.
 
 Licences
 --------
-Lumen is (C) Andrew Youll, 2026. It is built with SQLite (public
+Lumen is (C) Andrew Youll, 2026, and is free software under the MIT
+licence: use it, change it and pass it on as you like, keeping the
+copyright notice. Its source code is published with each release. It is
+built with SQLite (public
 domain), libjpeg-turbo (IJG, BSD and zlib licences), libpng (PNG
 Reference Library License v2), zlib (zlib licence), UnixLib (revised
 BSD, with parts under the LGPL) and GCC's runtime library (GPL 3 with

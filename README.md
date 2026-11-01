@@ -194,3 +194,14 @@ riscos-crossdev's checks on the RISC OS binary. `make` builds
 
 Tested on Linux, and in the desktop of riscos-linux-testbed (RISC OS 5.31-5
 under QEMU). Not yet run on a Pi.
+
+## Licence
+
+Lumen is copyright (c) 2026 Andrew Youll and is released under the MIT
+licence: see `LICENSE`. The LumenRaw plug-in's own code is MIT too; the
+LibRaw library it is built with is under the LGPL 2.1 (or CDDL), and its
+source ships with each release (`LibRaw-0.21.4-source.zip`). The
+libraries built into Lumen keep their own licences, collected in
+`app/Licences` (installed as `!Lumen.Licences`): SQLite (public domain),
+libjpeg-turbo, libpng, zlib and UnixLib (BSD-style, with LGPL parts:
+Lumen's source is published so it can be relinked).
