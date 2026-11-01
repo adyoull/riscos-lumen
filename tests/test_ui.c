@@ -15,6 +15,7 @@
 #include "swis.h"
 #include "fsys.h"
 #include "rawjob.h"
+#include "styles.h"
 #include "ui.h"
 
 #define BROWSER 0x2a000
@@ -43,7 +44,7 @@ static int caret_window, caret_icon = -1;
 static int force_redraws, title_redraws;
 static int sprite_plots, smooth_plots, masked_plots, last_scale[4];
 static int stars;
-static char texts[64][80];
+static char texts[256][80];
 static int ntexts;
 static int sent_reason, sent_block[64], sent_to;
 static const int *menu_open;
@@ -238,7 +239,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
     case Wimp_TextOp:
       if ((r[0] & 0xFF) == 1)
         r[0] = (int) strlen ((const char *) r[1]) * 16;
-      else if ((r[0] & 0xFF) == 2 && ntexts < 64)
+      else if ((r[0] & 0xFF) == 2 && ntexts < 256)
         snprintf (texts[ntexts++], sizeof texts[0], "%s", (const char *) r[1]);
       return NULL;
     case Wimp_SendMessage:
@@ -446,6 +447,25 @@ static int history_has (const char *text)
     if (strstr (activity_history (k, NULL, NULL), text))
       return 1;
   return 0;
+}
+
+static int choose4 (int a, int b, int c, int d)
+{
+  int blk[64];
+  blk[0] = a; blk[1] = b; blk[2] = c; blk[3] = d; blk[4] = -1;
+  return app_event (Menu_Selection, blk, 0);
+}
+
+/* A click on toolbar button k (as mainwin.c numbers them). */
+static void toolbar (int k)
+{
+  int b[64], tr[4];
+  memset (b, 0, sizeof b);
+  mainwin_toolbar_button (k, tr);
+  b[0] = mopened[1] + (tr[0] + tr[2]) / 2;
+  b[1] = mopened[4] - 60;
+  b[2] = Button_Select; b[3] = MAINW; b[4] = -1;
+  app_event (Mouse_Click, b, 0);
 }
 
 static int choose (int a, int b, int c)
@@ -680,7 +700,7 @@ int main (int argc, char **argv)
     b[0] = INSP;
     ntexts = 0;
     app_event (Redraw_Window_Request, b, 0);
-    CHECK (text_drawn ("Exposure") && text_drawn ("White Balance") && text_drawn ("Reset all"), "the panel: groups, sliders, buttons");
+    CHECK (text_drawn ("Exposure") && text_drawn ("White Balance") && text_drawn ("Reset all") && text_drawn ("Split Toning"), "the panel: groups, sliders, buttons");
 
     /* Drag Exposure from 0 to +1 EV. Layout as viewer.c's, in the inspector. */
     px = 0;
@@ -908,10 +928,14 @@ int main (int argc, char **argv)
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
       pm = submenu (menu_open, 11);
-      CHECK (pm && strstr (item_text (pm, 0), "No presets") != NULL, "Presets: none yet");
-      save = submenu (pm, 1);
+      CHECK (pm && strcmp (item_text (pm, 0), "Styles") == 0 && strstr (item_text (pm, 1), "No presets") != NULL,
+             "Presets: Styles, then none of your own yet");
+      CHECK (submenu (pm, 0) && strcmp (item_text (submenu (pm, 0), 0), "Faded Film") == 0
+             && strcmp (item_text (submenu (pm, 0), styles_count () - 1), "Platinum Tone") == 0
+             && (item (submenu (pm, 0), styles_count () - 1)[0] & 0x80), "Styles: Faded Film ... Platinum Tone");
+      save = submenu (pm, 2);
       strcpy ((char *) item (save, 0)[3], "Bright");
-      choose (11, 1, 0);
+      choose (11, 2, 0);
       {
         cat_preset *ps;
         int np;
@@ -923,10 +947,29 @@ int main (int argc, char **argv)
       viewer_reset_all ();
       app_event (Mouse_Click, b, 0);
       pm = submenu (menu_open, 11);
-      CHECK (strcmp (item_text (pm, 0), "Bright") == 0, "Presets lists it");
-      choose (11, 0, -1);
+      CHECK (strcmp (item_text (pm, 1), "Bright") == 0, "Presets lists it");
+      choose (11, 1, -1);
       CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f && viewer_recipe ()->v[P_CROP_X0] == 0,
              "applying it brings the look back (not the crop)");
+      {
+        /* A style, then Undo and Redo from the toolbar. */
+        int sepia = -1, k;
+        for (k = 0; k < styles_count (); k++)
+          if (!strcmp (styles_get (k)->name, "Sepia"))
+            sepia = k;
+        CHECK (mainwin_mode () != LAYOUT_BROWSER, "(the photo is being adjusted)");
+        choose (11, 0, sepia);
+        CHECK (viewer_recipe ()->v[P_SATURATION] == -100 && viewer_recipe ()->v[P_TONE_SH] > 0
+               && viewer_recipe ()->v[P_EV] == 0, "Styles > Sepia: black and white, toned (Bright's exposure replaced)");
+        CHECK (viewer_can_undo (), "it can be undone");
+        toolbar (3);                     /* Undo */
+        CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f && viewer_recipe ()->v[P_TONE_SH] == 0,
+               "toolbar Undo: back to Bright");
+        toolbar (4);                     /* Redo */
+        CHECK (viewer_recipe ()->v[P_TONE_SH] > 0, "toolbar Redo: Sepia again");
+        toolbar (3);
+        CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f, "and Undo again: Bright");
+      }
 
       /* 100%: Z reads the full-size original, then shows it a pixel a pixel. */
       key ('z');
@@ -999,10 +1042,17 @@ int main (int argc, char **argv)
       browser_focus_on (2);
       click (16 + 352 + 60, -16 - 60, Button_Menu);
       CHECK (strstr (item_text (submenu (menu_open, 1), 7), "Apply preset") != NULL, "Selection > Apply preset");
-      choose (1, 7, 0);
+      choose (1, 7, 1);
       browser_item (2, &it2);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "exposure") != NULL, "photo 3 gets Bright");
+      browser_focus_on (3);
+      click (16 + 352 + 60, -16 - 60, Button_Menu);
+      choose4 (1, 7, 0, 12);             /* Apply preset > Styles > Cyanotype */
+      browser_item (3, &it2);
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "tone shadow_hue=212") != NULL && strstr (text, "saturation=-100") != NULL,
+             "Selection > Apply preset > Styles > Cyanotype: photo 4 gets it");
       redraw ();
       nulls_until_idle ();
       browser_item (2, &it2);
@@ -1113,15 +1163,28 @@ int main (int argc, char **argv)
     CHECK (strstr (item_text (menu_open, 15), "Back to the Browser") != NULL, "Back to the Browser");
     choose (15, -1, -1);
     CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
+    {
+      /* Undo and Redo shaded in the Browser: the toolbar draws them grey and a click does nothing. */
+      int tr[4], kc = vclosed;
+      memset (b, 0, sizeof b);
+      b[0] = MAINW;
+      ntexts = 0;
+      app_event (Redraw_Window_Request, b, 0);
+      CHECK (text_drawn ("Undo") && text_drawn ("Redo"), "the toolbar: Undo and Redo");
+      mainwin_toolbar_button (3, tr);
+      toolbar (3);
+      CHECK (vclosed == kc && mainwin_mode () == LAYOUT_BROWSER && !app_busy (), "Undo in the Browser: nothing happens");
+    }
   }
 
   /* ---- Aperture's layout: the toolbar, the inspector's tabs, the keys ---- */
   {
     int vb = vopen_calls;
     cat_item it;
-#define TOOL(k) do { int mw = mopened[3] - mopened[1]; memset (b, 0, sizeof b); \
-                     b[0] = mopened[1] + 60 + ((k) < 3 ? 16 + (k) * 140 : (k) < 6 ? mw / 2 - 210 + ((k) - 3) * 140 \
-                                                : mw - 16 - (9 - (k)) * 140); \
+/* k: the toolbar as it was (Inspector, Import, New, the layouts, Loupe, Export, Full Screen); Undo and Redo are 3 and 4 now. */
+#define TOOL(k) do { int tr[4]; memset (b, 0, sizeof b); \
+                     mainwin_toolbar_button ((k) < 3 ? (k) : (k) + 2, tr); \
+                     b[0] = mopened[1] + (tr[0] + tr[2]) / 2; \
                      b[1] = mopened[4] - 60; \
                      b[2] = Button_Select; b[3] = MAINW; b[4] = -1; app_event (Mouse_Click, b, 0); } while (0)
 #define LIBROW(i) do { memset (b, 0, sizeof b); b[0] = iopened[1] + 200; \
@@ -1474,7 +1537,7 @@ int main (int argc, char **argv)
     /* Over the toolbar's Export button: the main window's top right is at (st[3], st[4]). */
     st[0] = MAINW;
     memcpy (&st[1], &state_of (MAINW)[1], 6 * sizeof (int));
-    t = help_text (MAINW, -1, st[3] - 16 - 2 * 140 + 60, st[4] - 50);
+    { int tr[4]; mainwin_toolbar_button (9, tr); t = help_text (MAINW, -1, st[1] + (tr[0] + tr[2]) / 2, st[4] - 50); }
     CHECK (strstr (t, "Exports the photos") != NULL, "help: the toolbar's Export button");
     t = help_text (MAINW, -1, st[1] + 30, st[4] - 50);
     CHECK (strstr (t, "inspector") != NULL, "help: the toolbar's Inspector button");

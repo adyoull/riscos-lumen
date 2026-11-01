@@ -9,6 +9,7 @@
 #include <kernel.h>
 #include <swis.h>
 #include "ui.h"
+#include "styles.h"
 
 #define MF_TICK 0x01
 #define MF_DOTTED 0x02
@@ -124,23 +125,36 @@ static menu *preset_list (const char *title, int shaded)
   return m;
 }
 
-/* Presets: the list, then Save current as > and Delete >. */
+/* Lumen's built-in styles (styles.c), shaded if there is nothing to apply them to. */
+static menu *styles_menu (int shaded)
+{
+  int k, n = styles_count ();
+  menu *m = new_menu ("Styles", n);
+  for (k = 0; m && k < n; k++)
+    set_item (m, k, k == n - 1, styles_get (k)->name,
+              k == 4 || k == 8 ? MF_DOTTED : 0, -1, shaded);   /* colour; strong colour; black and white */
+  return m;
+}
+
+/* Presets: Styles >, the user's presets, then Save current as > and Delete >. */
 static menu *build_presets (void)
 {
   int k, count;
-  menu *m, *save, *del;
+  menu *m, *save, *del, *sty;
   npresets = looks_presets (&presets);
   count = npresets > MAX_LIST ? MAX_LIST : npresets;
+  sty = styles_menu (0);
   save = writable_menu ("Name", preset_name, sizeof preset_name);
   del = preset_list ("Delete", 0);
-  m = new_menu ("Presets", (count ? count : 1) + 2);
+  m = new_menu ("Presets", 1 + (count ? count : 1) + 2);
   if (!m)
     return NULL;
+  set_item (m, 0, 0, "Styles", MF_DOTTED, (int) sty, 0);
   if (!count)
-    set_item (m, 0, 0, "No presets yet", MF_DOTTED, -1, 1);
+    set_item (m, 1, 0, "No presets yet", MF_DOTTED, -1, 1);
   for (k = 0; k < count; k++)
-    set_item (m, k, 0, presets[k].name, k == count - 1 ? MF_DOTTED : 0, -1, 0);
-  k = count ? count : 1;
+    set_item (m, 1 + k, 0, presets[k].name, k == count - 1 ? MF_DOTTED : 0, -1, 0);
+  k = 1 + (count ? count : 1);
   set_item (m, k, 0, "Save current as", 0, (int) save, 0);
   set_item (m, k + 1, 1, "Delete", 0, (int) del, count == 0);
   return m;
@@ -150,9 +164,14 @@ static menu *build_presets (void)
 static void presets_choice (const int *c)
 {
   int slot = npresets > MAX_LIST ? MAX_LIST : npresets;
-  int first = slot ? slot : 1;
-  if (slot && c[0] >= 0 && c[0] < slot)
-    viewer_apply_look (presets[c[0]].recipe);
+  int first = 1 + (slot ? slot : 1);
+  if (c[0] == 0)
+    {
+      if (styles_get (c[1]))
+        viewer_apply_look (styles_get (c[1])->recipe);
+    }
+  else if (slot && c[0] >= 1 && c[0] <= slot)
+    viewer_apply_look (presets[c[0] - 1].recipe);
   else if (c[0] == first && c[1] == 0)
     {
       if (looks_save_preset (preset_name) == 0)
@@ -160,6 +179,40 @@ static void presets_choice (const int *c)
     }
   else if (c[0] == first + 1 && c[1] >= 0 && c[1] < slot)
     looks_delete_preset (presets[c[1]].id);
+}
+
+/* Selection > Apply preset: Styles >, then the user's presets. */
+static menu *apply_menu (int shaded)
+{
+  int k, count = npresets > MAX_LIST ? MAX_LIST : npresets;
+  menu *sty = styles_menu (shaded), *m = new_menu ("Apply preset", 1 + (count ? count : 1));
+  if (!m)
+    return NULL;
+  set_item (m, 0, 0, "Styles", MF_DOTTED, (int) sty, shaded);
+  if (!count)
+    set_item (m, 1, 1, "No presets yet", 0, -1, 1);
+  for (k = 0; k < count; k++)
+    set_item (m, 1 + k, k == count - 1, presets[k].name, 0, -1, shaded);
+  return m;
+}
+
+/* Interactive help for a Presets menu (or Apply preset), from its own level. */
+static const char *presets_help (const int *c, int apply)
+{
+  if (c[0] == 0)
+    {
+      const style *st = styles_get (c[1]);
+      if (st)
+        {
+          static char t[200];
+          snprintf (t, sizeof t, "%s. Replaces the photo's look; its crop and straightening stay.", st->about);
+          return t;
+        }
+      return "Lumen's own styles: film, toned prints and black and white looks, to start from.";
+    }
+  if (apply || c[0] <= (npresets > MAX_LIST ? MAX_LIST : npresets))
+    return "A look you saved: it replaces the photo's look; its crop and straightening stay.";
+  return "Save the photo's look as a preset, or delete one.";
 }
 
 static menu *group_menu (const char *title, const cat_group *g, int ng, int kind, const char *none)
@@ -273,7 +326,7 @@ static menu *build_window_menu (void)
   for (k = 0; k < 6 && rating; k++)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
   npresets = looks_presets (&presets);
-  apply = preset_list ("Apply preset", nsel == 0);
+  apply = apply_menu (nsel == 0);
   selm = new_menu ("Selection", 10);
   if (selm)
     {
@@ -284,7 +337,7 @@ static menu *build_window_menu (void)
       set_item (selm, 4, 0, "Clear selection      Esc", MF_DOTTED, -1, nsel == 0);
       set_item (selm, 5, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
       set_item (selm, 6, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
-      set_item (selm, 7, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0 || npresets == 0);
+      set_item (selm, 7, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0);
       set_item (selm, 8, 0, "Export...      ^E", MF_DOTTED, -1, nsel == 0);
       set_item (selm, 9, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
     }
@@ -728,8 +781,10 @@ static int window_choice (const int *c)
         looks_copy_selection ();
       else if (c[1] == 6 && looks_clip ())
         looks_apply_selection (looks_clip ());
-      else if (c[1] == 7 && c[2] >= 0 && c[2] < npresets && c[2] < MAX_LIST)
-        looks_apply_selection (presets[c[2]].recipe);
+      else if (c[1] == 7 && c[2] == 0 && styles_get (c[3]))
+        looks_apply_selection (styles_get (c[3])->recipe);
+      else if (c[1] == 7 && c[2] >= 1 && c[2] <= npresets && c[2] <= MAX_LIST)
+        looks_apply_selection (presets[c[2] - 1].recipe);
       else if (c[1] == 9)
         remove_after_menu = 1;
       else if (c[1] == 8)
@@ -939,13 +994,18 @@ const char *menus_help (int window, int icon)
           return "Takes the selected photos out of the library, after asking. Their files are not deleted.";
         if (c[1] == 8)
           return "Exports the selected photos as new JPEG or PNG files.";
+        if (c[1] == 7 && c[2] >= 0)
+          return presets_help (c + 2, 1);
         return "Rate, flag, reject, select, copy and paste adjustments, export or remove the selected photos.";
       case 2: return "Make albums from the selection, add the selection to one, or take it out of this one.";
       case 3: return "Thumbnail size: Small, Medium or Large.";
       case 5: return "Leaves Lumen. Everything is saved as you go.";
       }
+  if (which == 4)
+    return presets_help (c, 0);
   if (which == 3)
-    return "What can be done to this photo. Many have keys, shown beside them.";
+    return c[0] == VM_PRESETS && c[1] >= 0 ? presets_help (c + 1, 0)
+                                           : "What can be done to this photo. Many have keys, shown beside them.";
   if (which == 7)
     switch (c[0])
       {

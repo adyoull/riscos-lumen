@@ -48,7 +48,7 @@
 #define COL_PANEL 0xE2E2E200u
 #define COL_ICON 0x40404000u
 
-enum { TB_INSPECTOR, TB_IMPORT, TB_NEW, TB_BROWSER, TB_SPLIT, TB_VIEWER, TB_LOUPE, TB_EXPORT, TB_FULL, TB_COUNT };
+enum { TB_INSPECTOR, TB_IMPORT, TB_NEW, TB_UNDO, TB_REDO, TB_BROWSER, TB_SPLIT, TB_VIEWER, TB_LOUPE, TB_EXPORT, TB_FULL, TB_COUNT };
 
 static int win = -1, insp = -1, is_open, full_screen;
 static int mode = LAYOUT_BROWSER, insp_on = 1, tab = TAB_LIBRARY;
@@ -149,15 +149,23 @@ int mainwin_create (void)
 /* --- layout */
 static void toolbar_button (int k, int r[4])
 {
-  /* Left group: Inspector, Import, New; middle: the three layouts; right:
-     Loupe, Export, Full Screen. Each 140 wide, work area coordinates. */
-  static const int group_of[TB_COUNT] = { 0, 0, 0, 1, 1, 1, 2, 2, 2 };
-  int w = 140, x;
+  /* Left group: Inspector, Import, New, Undo, Redo; middle: the three
+     layouts; right: Loupe, Export, Full Screen. Each 140 wide (narrower
+     in a narrow window, down to 90), work area coordinates; the middle
+     group is centred unless that would run into the others. */
+  static const int group_of[TB_COUNT] = { 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2 };
+  int w = (vis_w - 32 - 80) / TB_COUNT, x;
   int g = group_of[k], i = k - (g == 0 ? 0 : g == 1 ? TB_BROWSER : TB_LOUPE);
+  w = w > 140 ? 140 : w < 90 ? 90 : w;
   if (g == 0)
     x = 16 + i * w;
   else if (g == 1)
-    x = vis_w / 2 - 3 * w / 2 + i * w;
+    {
+      int lo = 16 + TB_BROWSER * w + 40, hi = vis_w - 16 - 3 * w - 40 - 3 * w;
+      x = vis_w / 2 - 3 * w / 2;
+      x = x < lo ? lo : x > hi && hi >= lo ? hi : x;
+      x += i * w;
+    }
   else
     x = vis_w - 16 - (3 - i) * w;
   r[0] = x; r[2] = x + w - 8;
@@ -953,6 +961,18 @@ static void draw_icon (int k, int cx, int cy, unsigned col)
       draw_rect (cx - 4, cy - 18, cx + 4, cy + 18, col);
       draw_rect (cx - 18, cy - 4, cx + 18, cy + 4, col);
       break;
+    case TB_UNDO:                      /* an arrow turning back to the left */
+    case TB_REDO:                      /* and its mirror */
+      {
+        int s = k == TB_UNDO ? 1 : -1;
+#define MX(v) (cx + s * (v))
+        draw_triangle (MX (-24), cy + 8, MX (-8), cy + 22, MX (-8), cy - 6, col);
+        draw_rect (MX (-9), cy + 4, MX (10), cy + 12, col);      /* along the top */
+        draw_rect (MX (2), cy - 20, MX (10), cy + 12, col);      /* down the side */
+        draw_rect (MX (-8), cy - 20, MX (10), cy - 12, col);     /* back along the bottom */
+#undef MX
+      }
+      break;
     case TB_BROWSER:                   /* a grid */
       {
         int i, j;
@@ -1004,17 +1024,48 @@ static int tool_on (int k)
   return 0;
 }
 
+/* Undo and Redo work on the photo being adjusted (in the Viewer or Split
+   View); shaded when there is nothing to take back or do again. */
+static int tool_enabled (int k)
+{
+  if (k == TB_UNDO)
+    return mode != LAYOUT_BROWSER && viewer_has_photo () && viewer_can_undo ();
+  if (k == TB_REDO)
+    return mode != LAYOUT_BROWSER && viewer_has_photo () && viewer_can_redo ();
+  return 1;
+}
+
+/* After every event: redraws Undo and Redo when they change. */
+void mainwin_tick (void)
+{
+  static int was = -1;
+  int now = tool_enabled (TB_UNDO) | tool_enabled (TB_REDO) << 1;
+  if (now != was && win != -1 && is_open)
+    {
+      int r0[4], r1[4];
+      toolbar_button (TB_UNDO, r0);
+      toolbar_button (TB_REDO, r1);
+      _swix (Wimp_ForceRedraw, _INR (0, 4), win, r0[0], -TB_H, r1[2], 0);
+    }
+  was = now;
+}
+
+void mainwin_toolbar_button (int k, int r[4])
+{
+  toolbar_button (k, r);
+}
+
 static void draw_toolbar (int ox, int oy)
 {
-  static const char *const labels[TB_COUNT] = { "Inspector", "Import", "New", "Browser", "Split View", "Viewer",
-                                                "Loupe", "Export", "Full Screen" };
+  static const char *const labels[TB_COUNT] = { "Inspector", "Import", "New", "Undo", "Redo", "Browser", "Split View",
+                                                "Viewer", "Loupe", "Export", "Full Screen" };
   int k;
   draw_rect (ox, oy - TB_H, ox + vis_w, oy, COL_TOOLBAR);
   draw_rect (ox, oy - TB_H, ox + vis_w, oy - TB_H + 2, COL_TOOLBAR_EDGE);
   for (k = 0; k < TB_COUNT; k++)
     {
       int r[4], cx;
-      unsigned col = COL_ICON, bg = COL_TOOLBAR;
+      unsigned col = tool_enabled (k) ? COL_ICON : 0xB0B0B000u, bg = COL_TOOLBAR;
       toolbar_button (k, r);
       cx = (r[0] + r[2]) / 2;
       if (tool_on (k))
@@ -1024,7 +1075,8 @@ static void draw_toolbar (int ox, int oy)
           col = COL_ACCENT;
         }
       draw_icon (k, ox + cx, oy - 46, col);
-      draw_text (ox + cx - draw_text_width (labels[k]) / 2, oy - TB_H + 18, labels[k], COL_TEXT, bg);
+      draw_text (ox + cx - draw_text_width (labels[k]) / 2, oy - TB_H + 18, labels[k],
+                 tool_enabled (k) ? COL_TEXT : 0x90909000u, bg);
     }
 }
 
@@ -1290,6 +1342,8 @@ static void toolbar_click (int k)
       app_report ("To import, drag photos or a folder of photos from a directory display into the Lumen window, or onto its icon on the icon bar.");
       break;
     case TB_NEW: menus_open_new_menu (ptr[0], ptr[1]); break;
+    case TB_UNDO: if (tool_enabled (k)) viewer_undo (); break;
+    case TB_REDO: if (tool_enabled (k)) viewer_redo (); break;
     case TB_BROWSER: mainwin_set_mode (LAYOUT_BROWSER); break;
     case TB_SPLIT: mainwin_set_mode (LAYOUT_SPLIT); break;
     case TB_VIEWER: mainwin_set_mode (LAYOUT_VIEWER); break;

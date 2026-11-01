@@ -42,6 +42,8 @@ typedef struct
   uint16_t gain[HS_GRID * HS_GRID];    /* 4096 = unchanged */
   int fw, fh, rx, ry;                  /* the rows' place in the whole output (develop_region) */
   int sat;                             /* saturation, 65536 = unchanged */
+  int toning;                          /* split toning on */
+  uint16_t tint[3][256];               /* its gain per channel by luminance (top 8 bits), 4096 = none */
   int vib;                             /* vibrancy, 65536 = unchanged */
   int identity;                        /* nothing to do between the two conversions */
 } develop;

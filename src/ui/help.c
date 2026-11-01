@@ -9,11 +9,13 @@
 #include <swis.h>
 #include "ui.h"
 
-static const char *const toolbar[9] = {
+static const char *const toolbar[11] = {
   "Shows or hides the inspector, with its Library, Info and Adjustments tabs.|MKey: I",
   "To import photos, drag them, or a directory of them, from a Filer window into Lumen's window. "
   "A directory becomes a project.",
   "Makes a new album: from the photos selected, or empty.",
+  "Takes back the last change to the photo's adjustments (in the Viewer or Split View).|MKey: Ctrl-Z",
+  "Does again the change Undo took back.|MKey: Ctrl-Y",
   "The Browser: every photo of what the Library tab has chosen, as thumbnails.|MKey: V goes round the layouts.",
   "Split View: the photo in focus above, the Browser's thumbnails below.|MKey: V",
   "The Viewer: one photo, as big as the window. Its adjustments are in the inspector.|MKey: V",
@@ -65,7 +67,7 @@ static const char *main_part (int part)
       return "What Lumen is doing: the ring fills as the job goes on (it turns when Lumen can't tell how far "
              "it has got). Click to see everything running and what Lumen has done.";
     default:
-      if (part >= MW_TOOLBAR && part < MW_TOOLBAR + 9)
+      if (part >= MW_TOOLBAR && part < MW_TOOLBAR + 11)
         return toolbar[part - MW_TOOLBAR];
       if (part >= MW_TAB && part < MW_TAB + 3)
         return tabs[part - MW_TAB];

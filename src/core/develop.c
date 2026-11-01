@@ -129,6 +129,45 @@ void develop_prepare (develop *d, const recipe *r)
   d->rx = d->ry = 0;
   d->sat = (int) lround (65536 * (1 + r->v[P_SATURATION] / 100.0));
   d->vib = (int) lround (65536 * (r->v[P_VIBRANCE] / 100.0));
+  /* Split toning: a colour for the shadows and one for the highlights,
+     each a hue at half saturation scaled to keep luminance, blended in by
+     lightness (as seen) and by its strength. */
+  d->toning = r->v[P_TONE_SH] > 0 || r->v[P_TONE_HI] > 0;
+  if (d->toning)
+    {
+      double tc[2][3];
+      int w;
+      for (w = 0; w < 2; w++)
+        {
+          double h = (w ? r->v[P_TONE_HI_HUE] : r->v[P_TONE_SH_HUE]) / 60.0, f, rgb[3], y;
+          int sec = (int) floor (h) % 6;
+          f = h - floor (h);
+          switch (sec)
+            {
+            case 0: rgb[0] = 1; rgb[1] = f; rgb[2] = 0; break;
+            case 1: rgb[0] = 1 - f; rgb[1] = 1; rgb[2] = 0; break;
+            case 2: rgb[0] = 0; rgb[1] = 1; rgb[2] = f; break;
+            case 3: rgb[0] = 0; rgb[1] = 1 - f; rgb[2] = 1; break;
+            case 4: rgb[0] = f; rgb[1] = 0; rgb[2] = 1; break;
+            default: rgb[0] = 1; rgb[1] = 0; rgb[2] = 1 - f; break;
+            }
+          for (c = 0; c < 3; c++)
+            rgb[c] = srgb_decode (0.5 + 0.5 * rgb[c]);   /* half saturation, in linear light */
+          y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+          for (c = 0; c < 3; c++)
+            tc[w][c] = rgb[c] / y;
+        }
+      for (i = 0; i < 256; i++)
+        {
+          double l = srgb_encode ((i + 0.5) / 256.0);
+          double ws = (1 - l) * (1 - l) * r->v[P_TONE_SH] / 100.0, wh = l * l * r->v[P_TONE_HI] / 100.0;
+          for (c = 0; c < 3; c++)
+            {
+              double g = 1 + ws * (tc[0][c] - 1) + wh * (tc[1][c] - 1);
+              d->tint[c][i] = (uint16_t) lround (g < 0 ? 0 : g > 15 ? 15 * 4096 : g * 4096);
+            }
+        }
+    }
   /* Identity: every table entry maps its bin to its own middle. */
   {
     recipe look = *r;
@@ -169,6 +208,16 @@ static inline void pixel (const develop *d, const uint16_t *s, int *r, int *g, i
       R = R < 0 ? 0 : R > 65535 ? 65535 : R;
       G = G < 0 ? 0 : G > 65535 ? 65535 : G;
       B = B < 0 ? 0 : B > 65535 ? 65535 : B;
+    }
+  if (d->toning)
+    {
+      int Y = (int) (((unsigned) R * 13933u + (unsigned) G * 46871u + (unsigned) B * 4732u) >> 24);
+      R = (int) (((unsigned) R * d->tint[0][Y]) >> 12);
+      G = (int) (((unsigned) G * d->tint[1][Y]) >> 12);
+      B = (int) (((unsigned) B * d->tint[2][Y]) >> 12);
+      R = R > 65535 ? 65535 : R;
+      G = G > 65535 ? 65535 : G;
+      B = B > 65535 ? 65535 : B;
     }
   *r = R; *g = G; *b = B;
 }

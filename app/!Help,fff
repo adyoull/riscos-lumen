@@ -25,9 +25,12 @@ The window
 ----------
 Lumen has one window, laid out as Aperture 3's:
 
-  Toolbar       across the top: Inspector, Import, New (an album) on the
-                left; Browser, Split View and Viewer in the middle; Loupe,
-                Export and Full Screen on the right
+  Toolbar       across the top: Inspector, Import, New (an album), Undo
+                and Redo on the left; Browser, Split View and Viewer in
+                the middle; Loupe, Export and Full Screen on the right.
+                Undo and Redo work on the photo being adjusted (Viewer
+                or Split View); they are grey when there is nothing to
+                take back or do again
   Inspector     on the left, with three tabs:
                   Library      Photos, Flagged, Rejected, Last Import,
                                your projects (one per imported folder)
@@ -138,8 +141,21 @@ The tools above the sliders:
                 crop's way round, so a tall crop is 2:3)
   Grid          None, Thirds, Quarters, Fine; while you straighten, a
                 fine grid shows anyway
-  Presets       apply a saved look, save the current one by name, or
-                delete one. A preset keeps the look, not the crop
+  Presets       Styles, Lumen's own looks; then your presets: apply one,
+                save the current look by name, or delete one. A preset
+                or style keeps the look, not the crop
+
+Styles (Presets > Styles, or Selection > Apply preset > Styles for many
+photos at once): Faded Film, Warm Vintage, Golden Hour, Soft Portrait,
+Vivid Landscape; Teal & Orange, Cross Process, Bleach Bypass, Nordic
+Matte; Classic Black & White, High-Contrast Noir, Sepia, Cyanotype and
+Platinum Tone. A style is a starting point: every slider it sets can be
+changed afterwards, and Undo takes it off again.
+
+Split Toning colours the shadows and the highlights: a hue (0 red, 30
+orange, 60 yellow, 120 green, 180 cyan, 210 blue, 300 magenta) and how
+strong for each. It comes after Saturation, so it tones black and white
+photos too (that is how Sepia and Cyanotype are made).
 
 Highlights & Shadows: Shadows brightens the dark parts of the picture and
 Highlights darkens the bright parts, judged by their surroundings rather

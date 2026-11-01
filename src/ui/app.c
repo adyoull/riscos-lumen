@@ -676,7 +676,10 @@ int app_event (int reason, int *b, int sender)
 {
   int r = app_event_1 (reason, b, sender);
   if (!r && reason != Redraw_Window_Request)
-    activity_tick ();
+    {
+      activity_tick ();
+      mainwin_tick ();
+    }
   return r;
 }
 

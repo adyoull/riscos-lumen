@@ -7,6 +7,7 @@
      hs highlights=30 shadows=45
      levels black=2 white=98 mid=10
      enhance contrast=12 saturation=0 vibrance=18
+     tone shadow_hue=210 shadows=30 highlight_hue=40 highlights=25
      sharpen amount=40 radius=1.0
      geometry rotate=1 angle=-1.5 vertical=0 horizontal=0
      crop x0=0.050 y0=0.000 x1=0.950 y1=1.000
@@ -25,6 +26,7 @@ enum
   P_HIGHLIGHTS, P_SHADOWS,             /* highlights & shadows (local, see develop.h) */
   P_BLACK, P_WHITE, P_MID,             /* levels */
   P_CONTRAST, P_SATURATION, P_VIBRANCE,/* enhance */
+  P_TONE_SH_HUE, P_TONE_SH, P_TONE_HI_HUE, P_TONE_HI,   /* split toning: after saturation, so it tints black and white too */
   P_SHARPEN, P_SHARP_RADIUS,           /* sharpen (applied after develop, at the output's size) */
   P_ROTATE, P_ANGLE, P_PERSP_V, P_PERSP_H,  /* geometry: quarter turns, straighten, perspective */
   P_CROP_X0, P_CROP_Y0, P_CROP_X1, P_CROP_Y1, /* crop, as fractions of the straightened picture */

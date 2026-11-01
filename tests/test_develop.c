@@ -19,6 +19,7 @@
 #include "../src/core/library.h"
 #include "../src/core/recipe.h"
 #include "../src/core/thumbgen.h"
+#include "../src/core/styles.h"
 
 static int checks, fails;
 #define CHECK(c, what) do { checks++; if (!(c)) { fails++; fprintf (stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, what); } } while (0)
@@ -1307,6 +1308,52 @@ static void test_curves (void)
   CHECK (recipe_equal (&back, &r), "copy_look takes the curves");
 }
 
+/* Split toning and the built-in styles. */
+static void test_toning (void)
+{
+  rgb_image img;
+  recipe r;
+  int k, x;
+  unsigned char grey[3 * 3] = { 40, 40, 40, 128, 128, 128, 220, 220, 220 };
+  img.w = 3; img.h = 1;
+  img.rgb = malloc (9);
+  /* Black and white, shadows toned warm (hue 30), highlights cool (210). */
+  memcpy (img.rgb, grey, 9);
+  recipe_default (&r);
+  recipe_parse (&r, "enhance saturation=-100\ntone shadow_hue=30 shadows=80 highlight_hue=210 highlights=80\n");
+  CHECK (r.v[P_TONE_SH_HUE] == 30 && r.v[P_TONE_SH] == 80 && r.v[P_TONE_HI_HUE] == 210, "tone line parsed");
+  develop_image (&r, &img);
+  CHECK (img.rgb[0] > img.rgb[2] + 4, "a dark grey toned warm: more red than blue");
+  CHECK (img.rgb[8] > img.rgb[6] + 2, "a light grey toned cool: more blue than red");
+  for (x = 0; x < 3; x++)
+    {
+      double y0 = grey[3 * x], y = 0.2126 * img.rgb[3 * x] + 0.7152 * img.rgb[3 * x + 1] + 0.0722 * img.rgb[3 * x + 2];
+      CHECK (fabs (y - y0) < 12, "toning keeps the brightness");
+    }
+  /* None: unchanged. */
+  memcpy (img.rgb, grey, 9);
+  recipe_default (&r);
+  recipe_parse (&r, "tone shadow_hue=30 highlight_hue=210\n");
+  develop_image (&r, &img);
+  CHECK (memcmp (img.rgb, grey, 9) == 0, "hues without strength: no change");
+  free (img.rgb);
+  /* Every style parses, says something, and comes back the same from its text. */
+  CHECK (styles_count () >= 12, "a dozen or more styles");
+  for (k = 0; k < styles_count (); k++)
+    {
+      const style *st = styles_get (k);
+      recipe a, b;
+      char t[2048];
+      recipe_default (&a);
+      recipe_parse (&a, st->recipe);
+      recipe_format_look (&a, t, sizeof t);
+      recipe_default (&b);
+      recipe_parse (&b, t);
+      CHECK (!recipe_is_default (&a) && recipe_equal (&a, &b) && recipe_geometry_is_default (&a) && st->about[0],
+             st->name);
+    }
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -1314,6 +1361,7 @@ int main (int argc, char **argv)
     return 2;
   fsys_mkdirs (argv[1]);
   test_recipe ();
+  test_toning ();
   test_pixels ();
   test_histogram_and_speed ();
   test_edited_thumbnail (argv[1]);
