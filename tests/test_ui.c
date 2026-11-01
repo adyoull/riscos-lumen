@@ -19,6 +19,8 @@
 #define INFO 0x2b000
 #define VIEWER 0x2c000
 #define EXPORTW 0x2d000
+#define MAINW 0x2e000
+#define INSP 0x2f000
 #define FILER 0x9000
 #define TASK 0x1234
 
@@ -29,7 +31,7 @@ static char *vtitle;
 static int last_plot_w, last_plot_h;
 static char *title_buf;
 static int iconbar[9];
-static int opened[8], open_calls;
+static int opened[8], open_calls, mopened[8], iopened[8], nested_opens;
 static int extent[4];
 static int caret_window;
 static int force_redraws, title_redraws;
@@ -43,6 +45,11 @@ static char reported[256];
 static int scroll_y;
 static int closedown;
 static int processed_key;
+
+static const int *state_of (int w)
+{
+  return w == VIEWER ? vopened : w == MAINW ? mopened : w == INSP ? iopened : opened;
+}
 
 static const _kernel_oserror *wimp (int swi, int r[10])
 {
@@ -72,11 +79,27 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         }
       else if (nwindows == 3)
         r[0] = EXPORTW;
+      else if (nwindows == 4)
+        {
+          title_buf = vtitle = (char *) b[18];   /* one title, the main window's */
+          r[0] = MAINW;
+        }
+      else if (nwindows == 5)
+        r[0] = INSP;
       else
         r[0] = INFO;
       return NULL;
     case Wimp_OpenWindow:
-      if (b[0] == BROWSER)
+      if (b[0] == BROWSER || b[0] == VIEWER || b[0] == INSP)
+        {
+          CHECK (r[2] == 0x4B534154 && r[3] == MAINW && r[4] == 0, "a child: nested in the main window");
+          nested_opens++;
+        }
+      if (b[0] == MAINW)
+        memcpy (mopened, b, sizeof mopened);
+      else if (b[0] == INSP)
+        memcpy (iopened, b, sizeof iopened);
+      else if (b[0] == BROWSER)
         {
           memcpy (opened, b, sizeof opened);
           scroll_y = b[6];
@@ -89,13 +112,14 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         }
       return NULL;
     case Wimp_GetWindowState:
-      CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW, "window state: one of ours");
+      CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP,
+             "window state: one of ours");
       if (b[0] == EXPORTW)
         {
           b[1] = 600; b[2] = 400; b[3] = 1320; b[4] = 860; b[5] = 0; b[6] = 0;
         }
       else
-        memcpy (&b[1], b[0] == VIEWER ? &vopened[1] : &opened[1], 6 * sizeof (int));
+        memcpy (&b[1], &state_of (b[0])[1], 6 * sizeof (int));
       b[7] = -1; b[8] = 0;
       return NULL;
     case Wimp_DragBox:
@@ -103,7 +127,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       drag_calls++;
       return NULL;
     case Wimp_SetExtent:
-      memcpy (extent, b, sizeof extent);
+      if (r[0] == BROWSER)
+        memcpy (extent, b, sizeof extent);
       return NULL;
     case Wimp_ForceRedraw:
       if (r[1] == 0x4B534154)
@@ -117,7 +142,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
     case Wimp_RedrawWindow:
       /* The whole visible area, one rectangle. */
       {
-        const int *o = b[0] == VIEWER ? vopened : opened;
+        const int *o = state_of (b[0]);
         memcpy (&b[1], &o[1], 6 * sizeof (int));
         b[7] = o[1]; b[8] = o[2]; b[9] = o[3]; b[10] = o[4];
       }
@@ -348,10 +373,14 @@ int main (int argc, char **argv)
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 4, "the library, viewer, Export and Info windows");
+  CHECK (nwindows == 6, "the browser, viewer, Export, main, inspector and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
-  CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0xBF000002u, "browser: title, close, back, toggle, scroll, resize");
-  CHECK (open_calls == 1 && caret_window == BROWSER, "the library window opens with the input focus");
+  CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
+  CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
+  CHECK (mainwin_mode () == LAYOUT_BROWSER && mainwin_tab () == TAB_LIBRARY && mainwin_inspector_on (),
+         "Aperture's start: the Browser, the inspector on its Library tab");
+  CHECK (iopened[3] - iopened[1] == 640 && opened[1] > iopened[3] && mopened[4] - opened[4] == 120,
+         "the inspector on the left, the browser beside it, under the toolbar");
   CHECK (title_buf && strstr (title_buf, "All photos (0)") != NULL, "title: an empty library");
   CHECK (!app_busy (), "nothing to do yet: no null events wanted");
   redraw ();
@@ -465,7 +494,12 @@ int main (int argc, char **argv)
     browser_focus_on (0);
     browser_item (0, &it);
     key (KEY_RETURN);
-    CHECK (vopen_calls == 1 && caret_window == VIEWER, "Return opens the viewer, with the input focus");
+    CHECK (vopen_calls >= 1 && mainwin_mode () == LAYOUT_VIEWER && caret_window == MAINW,
+           "Return: the Viewer layout");
+    CHECK (vopened[1] == opened[1] && vopened[3] == mopened[3], "the viewer where the browser was");
+    key ('w');
+    key ('W');
+    CHECK (mainwin_tab () == TAB_ADJUST, "W twice: the inspector's Adjustments tab");
     CHECK (strstr (vtitle, "IMG_0001.jpg (1 of 6)") != NULL, "viewer title: the photo, 1 of 6");
     CHECK (app_busy (), "the proxy is decoded in idle time");
     memset (b, 0, sizeof b);
@@ -482,26 +516,34 @@ int main (int argc, char **argv)
     sprite_plots = 0; ntexts = 0;
     app_event (Redraw_Window_Request, b, 0);
     {
-      int box_w = (vopened[3] - vopened[1]) - 640 - 48;
-      CHECK (sprite_plots == 1 && last_plot_w > 640 && abs (last_plot_w - box_w / 2) <= 1,
+      int box_w = (vopened[3] - vopened[1]) - 48, box_h = (vopened[4] - vopened[2]) - 48;
+      int want = box_w * 480 <= box_h * 640 ? box_w / 2 : box_h * 640 / 480 / 2;
+      CHECK (sprite_plots == 1 && last_plot_w > 640 && abs (last_plot_w - want) <= 1,
              "then the developed proxy, smoothed to the pixels it fills");
     }
+    b[0] = INSP;
+    ntexts = 0;
+    app_event (Redraw_Window_Request, b, 0);
     CHECK (text_drawn ("Exposure") && text_drawn ("White Balance") && text_drawn ("Reset all"), "the panel: groups, sliders, buttons");
 
-    /* Drag Exposure from 0 to +1 EV. Layout as viewer.c's. */
-    px = (vopened[3] - vopened[1]) - 640;
+    /* Drag Exposure from 0 to +1 EV. Layout as viewer.c's, in the inspector. */
+    px = 0;
+    {
+      int iox = iopened[1] - iopened[5], ioy = iopened[4] - iopened[6];
+#define PX(x) (iox + (x))
+#define PY(y) (ioy + (y))
     tx0 = px + 232; tx1 = px + 640 - 132;
     ev_mid = -24 - 150 - 16 - 52 - 84 - (52 + 2 * 56 + 8) - 52 - 28;
-    sx = vopened[1] + (tx0 + tx1) / 2;
-    sy = vopened[4] + ev_mid;
+    sx = PX ((tx0 + tx1) / 2);
+    sy = PY (ev_mid);
     memset (b, 0, sizeof b);
-    b[0] = sx; b[1] = sy; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+    b[0] = sx; b[1] = sy; b[2] = Button_Select; b[3] = INSP; b[4] = -1;
     app_event (Mouse_Click, b, 0);
-    CHECK (drag_calls == 1 && drag_block[0] == VIEWER && drag_block[1] == 7, "a drag starts: Wimp_DragBox type 7");
-    CHECK (drag_block[6] <= vopened[1] + tx0 && drag_block[8] >= vopened[1] + tx1
+    CHECK (drag_calls == 1 && drag_block[0] == INSP && drag_block[1] == 7, "a drag starts: Wimp_DragBox type 7");
+    CHECK (drag_block[6] <= PX (tx0) && drag_block[8] >= PX (tx1)
            && drag_block[7] < sy && drag_block[9] > sy, "the pointer is kept on the track's row");
     CHECK (app_busy (), "null events while dragging");
-    ptr_x = vopened[1] + tx0 + (int) ((1.0 + 4) / 8 * (tx1 - tx0));
+    ptr_x = PX (tx0) + (int) ((1.0 + 4) / 8 * (tx1 - tx0));
     ptr_y = sy;
     memset (b, 0, sizeof b);
     app_event (Null_Reason, b, 0);
@@ -525,7 +567,7 @@ int main (int argc, char **argv)
     CHECK (strncmp (text, "exposure ev=", 12) == 0, "Ctrl-Y: redone");
     /* Adjust on a slider: back to its default. */
     memset (b, 0, sizeof b);
-    b[0] = sx; b[1] = sy; b[2] = Button_Adjust; b[3] = VIEWER; b[4] = -1;
+    b[0] = sx; b[1] = sy; b[2] = Button_Adjust; b[3] = INSP; b[4] = -1;
     app_event (Mouse_Click, b, 0);
     CHECK (viewer_recipe ()->v[P_EV] == 0 && drag_calls == 1, "Adjust: back to 0, no drag");
     key (0x1A);
@@ -535,26 +577,26 @@ int main (int argc, char **argv)
     {
       int bx, by;
       viewer_button_centre (2, &bx, &by);
-      b[0] = vopened[1] + bx; b[1] = vopened[4] + by;
+      b[0] = PX (bx); b[1] = PY (by);
     }
-    b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+    b[2] = Button_Select; b[3] = INSP; b[4] = -1;
     app_event (Mouse_Click, b, 0);
     CHECK (recipe_is_default (viewer_recipe ()), "Reset all");
     key (0x1A);
     CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and undo it");
     /* Fold the White Balance group by clicking its name: Exposure moves up. */
     {
-      int wb_top = vopened[4] - 24 - 150 - 16 - 52 - 84;
+      int wb_top = PY (-24 - 150 - 16 - 52 - 84);
       memset (b, 0, sizeof b);
-      b[0] = vopened[1] + px + 24 + 60; b[1] = wb_top - 26; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      b[0] = PX (px + 24 + 60); b[1] = wb_top - 26; b[2] = Button_Select; b[3] = INSP; b[4] = -1;
       app_event (Mouse_Click, b, 0);
       memset (b, 0, sizeof b);
-      b[0] = sx; b[1] = sy + 2 * 56; b[2] = Button_Adjust; b[3] = VIEWER; b[4] = -1;
+      b[0] = sx; b[1] = sy + 2 * 56; b[2] = Button_Adjust; b[3] = INSP; b[4] = -1;
       app_event (Mouse_Click, b, 0);
       CHECK (viewer_recipe ()->v[P_EV] == 0, "White Balance folded: Exposure's slider is two rows higher");
       key (0x1A);
       memset (b, 0, sizeof b);
-      b[0] = vopened[1] + px + 24 + 60; b[1] = wb_top - 26; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      b[0] = PX (px + 24 + 60); b[1] = wb_top - 26; b[2] = Button_Select; b[3] = INSP; b[4] = -1;
       app_event (Mouse_Click, b, 0);
       CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and unfolded again");
     }
@@ -563,11 +605,11 @@ int main (int argc, char **argv)
       int cr[4], k0 = drag_calls;
       CHECK (viewer_curve_rect (cr), "the curves editor is open");
       memset (b, 0, sizeof b);
-      b[0] = vopened[1] + (cr[0] + cr[2]) / 2; b[1] = vopened[4] + (cr[1] + cr[3]) / 2;
-      b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      b[0] = PX ((cr[0] + cr[2]) / 2); b[1] = PY ((cr[1] + cr[3]) / 2);
+      b[2] = Button_Select; b[3] = INSP; b[4] = -1;
       app_event (Mouse_Click, b, 0);
       CHECK (drag_calls == k0 + 1 && viewer_recipe ()->curve[CURVE_RGB].n == 3, "a click adds a point and drags it");
-      ptr_x = b[0]; ptr_y = vopened[4] + cr[1] + (cr[3] - cr[1]) * 3 / 4;
+      ptr_x = b[0]; ptr_y = PY (cr[1] + (cr[3] - cr[1]) * 3 / 4);
       memset (b, 0, sizeof b);
       app_event (Null_Reason, b, 0);
       CHECK (fabsf (viewer_recipe ()->curve[CURVE_RGB].y[1] - 0.75f) < 0.01f, "the point follows the pointer up");
@@ -575,13 +617,16 @@ int main (int argc, char **argv)
       cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
       CHECK (strstr (text, "curves rgb=0.000:0.000,0.500:0.750,1.000:1.000") != NULL, "let go: saved");
       memset (b, 0, sizeof b);
-      b[0] = ptr_x; b[1] = ptr_y; b[2] = Button_Adjust; b[3] = VIEWER; b[4] = -1;
+      b[0] = ptr_x; b[1] = ptr_y; b[2] = Button_Adjust; b[3] = INSP; b[4] = -1;
       app_event (Mouse_Click, b, 0);
       CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 0, "Adjust on the point: gone, a straight line again");
       key (0x1A);
       CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 3, "and undo brings it back");
       key (0x1A);
       CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 0 && viewer_recipe ()->v[P_EV] > 0.9f, "undo again: as before the curve");
+    }
+#undef PX
+#undef PY
     }
 
     /* Rate it from the viewer. */
@@ -607,7 +652,7 @@ int main (int argc, char **argv)
       /* Where the photo sits (as viewer.c's photo_rect), in screen coordinates. */
 #define PHOTO_RECT()                                                          \
       do {                                                                    \
-        int bw = vw - 640 - 48, bh = vh - 48, mul, div, dw, dh;               \
+        int bw = vw - 48, bh = vh - 48, mul, div, dw, dh;               \
         viewer_shown_size (&gw2, &gh2);                                       \
         if ((long long) bw * gh2 <= (long long) bh * gw2) { mul = bw; div = gw2; } \
         else { mul = bh; div = gh2; }                                         \
@@ -691,8 +736,8 @@ int main (int argc, char **argv)
       CHECK (viewer_grid () == 0, "round to none");
 
       /* White balance eyedropper. */
-      key ('w');
-      CHECK (viewer_picking (), "W: pick white balance");
+      viewer_pick_white ();
+      CHECK (viewer_picking (), "the white balance eyedropper");
       PHOTO_RECT ();
       memset (b, 0, sizeof b);
       b[0] = (pr[0] + pr[2]) / 2; b[1] = (pr[1] + pr[3]) / 2; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
@@ -782,7 +827,7 @@ int main (int argc, char **argv)
 #undef PHOTO_RECT
     }
     key (KEY_ESCAPE);
-    CHECK (vclosed == 1 && caret_window == BROWSER && browser_focus () == 0, "Escape: back to the library, on the photo");
+    CHECK (vclosed == 1 && mainwin_mode () == LAYOUT_BROWSER && browser_focus () == 0, "Escape: back to the Browser, on the photo");
     CHECK (!app_busy (), "nothing left running");
 
     /* Paste the copied look on photo 2, from the library. */
@@ -902,14 +947,100 @@ int main (int argc, char **argv)
     /* A double click opens the viewer; its menu takes us back. */
     for (k = 0; k < 2; k++)
       click (16 + 352 + 60, -16 - 60, Button_Select);
-    CHECK (vopen_calls == 2 && strstr (vtitle, "(2 of 6)") != NULL, "a double click opens the photo clicked");
+    CHECK (mainwin_mode () == LAYOUT_VIEWER && strstr (vtitle, "(2 of 6)") != NULL, "a double click opens the photo clicked");
     memset (b, 0, sizeof b);
     b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
-    CHECK (strstr (item_text (menu_open, 15), "Back to the library") != NULL, "Back to the library");
+    CHECK (strstr (item_text (menu_open, 15), "Back to the Browser") != NULL, "Back to the Browser");
     choose (15, -1, -1);
-    CHECK (vclosed == 2, "Back to the library closes the viewer");
+    CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
+  }
+
+  /* ---- Aperture's layout: the toolbar, the inspector's tabs, the keys ---- */
+  {
+    int vb = vopen_calls;
+    cat_item it;
+#define TOOL(k) do { int mw = mopened[3] - mopened[1]; memset (b, 0, sizeof b); \
+                     b[0] = mopened[1] + 60 + ((k) < 3 ? 16 + (k) * 140 : (k) < 6 ? mw / 2 - 210 + ((k) - 3) * 140 \
+                                                : mw - 16 - (9 - (k)) * 140); \
+                     b[1] = mopened[4] - 60; \
+                     b[2] = Button_Select; b[3] = MAINW; b[4] = -1; app_event (Mouse_Click, b, 0); } while (0)
+#define LIBROW(i) do { memset (b, 0, sizeof b); b[0] = iopened[1] + 200; \
+                       b[1] = iopened[4] - iopened[6] - 16 - (i) * 52 - 26; b[2] = Button_Select; b[3] = INSP; \
+                       b[4] = -1; app_event (Mouse_Click, b, 0); } while (0)
+    mainwin_set_tab (TAB_LIBRARY);
+    memset (b, 0, sizeof b);
+    b[0] = INSP;
+    ntexts = 0;
+    app_event (Redraw_Window_Request, b, 0);
+    CHECK (text_drawn ("Photos") && text_drawn ("Holiday (6)") && text_drawn ("Trip (6)"),
+           "the Library tab: Photos, the projects, the albums");
+    LIBROW (8);
+    CHECK (browser_source ()->kind == SRC_ALBUM && strstr (title_buf, "Trip (6)") != NULL, "a click on Trip shows the album");
+    LIBROW (2);
+    CHECK (browser_source ()->kind == SRC_FLAGGED, "and on Flagged");
+    LIBROW (1);
+    CHECK (browser_source ()->kind == SRC_ALL && browser_count () == 6, "and Photos: all six");
+    browser_focus_on (2);
+    key ('v');
+    CHECK (mainwin_mode () == LAYOUT_SPLIT && vopen_calls > vb && vopened[2] > opened[4],
+           "V: Split View, the viewer above the browser");
+    CHECK (strstr (vtitle, "IMG_0003.jpg (3 of 6)") != NULL, "showing the focused photo");
+    key (KEY_RIGHT);
+    CHECK (strstr (vtitle, "(4 of 6)") != NULL && browser_focus () == 3, "right moves the browser's focus; the viewer follows");
+    key ('4');
+    browser_item (3, &it);
+    CHECK (it.rating == 4, "and rates in the browser");
+    key ('w');
+    CHECK (mainwin_tab () == TAB_INFO, "W: the Info tab");
+    memset (b, 0, sizeof b);
+    b[0] = INSP;
+    ntexts = 0;
+    app_event (Redraw_Window_Request, b, 0);
+    CHECK (text_drawn ("IMG_0004.jpg") && text_drawn ("760 x 480"), "Info: the photo's name and size");
+    key ('v');
+    CHECK (mainwin_mode () == LAYOUT_VIEWER, "V again: the Viewer");
+    key ('v');
+    CHECK (mainwin_mode () == LAYOUT_BROWSER && vclosed == 3, "and the Browser");
+    key ('i');
+    CHECK (!mainwin_inspector_on () && opened[1] < mopened[1] + 100, "I: the inspector goes, the browser takes its room");
+    TOOL (0);
+    CHECK (mainwin_inspector_on () && opened[1] > iopened[3], "the Inspector button brings it back");
+    TOOL (4);
+    CHECK (mainwin_mode () == LAYOUT_SPLIT, "the Split View button");
+    TOOL (3);
+    CHECK (mainwin_mode () == LAYOUT_BROWSER, "the Browser button");
+    mainwin_set_tab (TAB_ADJUST);
+    CHECK (mainwin_mode () == LAYOUT_SPLIT, "the Adjustments tab from the Browser: Split View, to see the photo");
+    TOOL (3);
+    TOOL (2);
+    CHECK (menu_open && strncmp ((const char *) menu_open, "New", 3) == 0, "New: a menu");
+    {
+      const int *name = submenu (menu_open, 1);
+      snprintf ((char *) item (name, 0)[3], 32, "Empty");
+    }
+    choose (1, 0, -1);
+    {
+      cat_group *g;
+      int ng;
+      cat_groups (lib_cat (app_library ()), SRC_ALBUM, &g, &ng);
+      CHECK (ng == 2, "New > Empty album makes one");
+      free (g);
+    }
+    mainwin_set_tab (TAB_LIBRARY);
+    key ('v');
+    CHECK (mainwin_mode () == LAYOUT_SPLIT, "Split View again");
+    memset (b, 0, sizeof b);
+    b[0] = MAINW;
+    app_event (Close_Window_Request, b, 0);
+    CHECK (mainwin_mode () == LAYOUT_BROWSER && viewer_item () == 0, "closed: the photo let go, Browser next time");
+    memset (b, 0, sizeof b);
+    b[0] = 1000; b[2] = Button_Select; b[3] = -2;
+    app_event (Mouse_Click, b, 0);
+    CHECK (mainwin_is_open () && strstr (title_buf, "All photos") != NULL, "the icon bar icon opens it again, on the Browser");
+#undef TOOL
+#undef LIBROW
   }
 
   /* The icon bar menu: Quit. */

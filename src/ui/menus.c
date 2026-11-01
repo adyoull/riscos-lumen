@@ -22,7 +22,7 @@
 
 static char pool[32 * 1024];
 static size_t used;
-static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu, 4 presets */
+static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu, 4 presets, 5 New */
 static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40];
@@ -303,7 +303,7 @@ static menu *build_viewer_menu (void)
       set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
       set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
       set_item (m, VM_EXPORT, 0, "Export...      ^E", MF_DOTTED, -1, 0);
-      set_item (m, VM_BACK, 1, "Back to the library      Esc", 0, -1, 0);
+      set_item (m, VM_BACK, 1, "Back to the Browser      Esc", 0, -1, 0);
     }
   return m;
 }
@@ -392,6 +392,35 @@ void menus_open_window_menu (int x, int y)
 {
   menu *m = build_window_menu ();
   which = 1;
+  open_x = x - 64;
+  open_y = y;
+  if (m)
+    _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
+}
+
+/* The toolbar's New: an album, from the selection or empty. */
+static menu *build_new_menu (void)
+{
+  cat_id *ids;
+  int nsel = browser_selection (&ids);
+  menu *m, *from, *empty;
+  free (ids);
+  used = 0;
+  from = writable_menu ("Name", album_name, sizeof album_name);
+  empty = writable_menu ("Name", album_name, sizeof album_name);
+  m = new_menu ("New", 2);
+  if (m)
+    {
+      set_item (m, 0, 0, "Album from selection", 0, (int) from, nsel == 0);
+      set_item (m, 1, 1, "Empty album", 0, (int) empty, 0);
+    }
+  return m;
+}
+
+void menus_open_new_menu (int x, int y)
+{
+  menu *m = build_new_menu ();
+  which = 5;
   open_x = x - 64;
   open_y = y;
   if (m)
@@ -545,10 +574,21 @@ int menus_selection (const int *choice)
       }
   else if (which == 4)
     presets_choice (choice);
+  else if (which == 5)
+    {
+      if (choice[0] == 0 && choice[1] == 0)
+        with_selection (4, 0);
+      else if (choice[0] == 1 && choice[1] == 0 && album_name[0])
+        {
+          cat_album_create (lib_cat (app_library ()), album_name);
+          album_name[0] = '\0';
+          browser_after_change ();
+        }
+    }
   else if (which == 2)
     {
       if (choice[0] == 1)
-        browser_open (NULL);
+        mainwin_open (NULL);
       else if (choice[0] == 2)
         quit_requested = 1;
     }
@@ -573,7 +613,8 @@ int menus_selection (const int *choice)
           m = build_presets ();
         }
       else
-        m = which == 1 ? build_window_menu () : which == 3 ? build_viewer_menu () : build_iconbar_menu ();
+        m = which == 1 ? build_window_menu () : which == 3 ? build_viewer_menu ()
+          : which == 5 ? build_new_menu () : build_iconbar_menu ();
       if (m)
         _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
     }

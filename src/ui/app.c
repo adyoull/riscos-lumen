@@ -111,14 +111,14 @@ int app_init (const char *library_path)
       close_down ();
       return 1;
     }
-  if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create ())
+  if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       close_down ();
       return 1;
     }
   menus_init ();
-  browser_open (NULL);
+  mainwin_open (NULL);
   return 0;
 }
 
@@ -188,7 +188,8 @@ static void data_load (int *b)
 {
   const char *path = (const char *) &b[11];
   int type = b[10];
-  if (b[5] != browser_window () && b[5] != -2)
+  if (b[5] != browser_window () && b[5] != mainwin_window () && b[5] != viewer_window ()
+      && b[5] != mainwin_inspector () && b[5] != -2)
     return;
   if (lib_import (lib, path))
     {
@@ -205,8 +206,27 @@ static void data_load (int *b)
     cat_source s = { SRC_LAST_IMPORT, 0, 0 };
     if (browser_source ()->kind != SRC_LAST_IMPORT)
       browser_set_source (&s);
-    browser_open (NULL);
+    mainwin_set_mode (LAYOUT_BROWSER);
+    mainwin_open (NULL);
   }
+}
+
+/* A key in the main window (it has the caret): the layouts first, as
+   Aperture's (V, I, W, F); then what is showing. In Split View the
+   Browser takes the keys that move about and rate, the Viewer the rest. */
+static int app_key (int key)
+{
+  int mode = mainwin_mode ();
+  int browsing = key == KEY_LEFT || key == KEY_RIGHT || key == KEY_UP || key == KEY_DOWN || key == KEY_HOME
+                 || key == KEY_END || key == KEY_PAGEUP || key == KEY_PAGEDOWN || (key >= '0' && key <= '5')
+                 || key == '9' || key == '/' || key == KEY_RETURN || key == KEY_CTRL_A;
+  if (mainwin_key (key))
+    return 1;
+  if (mode == LAYOUT_BROWSER)
+    return browser_key (key);
+  if (mode == LAYOUT_SPLIT && browsing && browser_key (key))
+    return 1;
+  return viewer_key (key) || browser_key (key);
 }
 
 int app_event (int reason, int *b, int sender)
@@ -220,6 +240,10 @@ int app_event (int reason, int *b, int sender)
     case Redraw_Window_Request:
       if (b[0] == browser_window ())
         browser_redraw (b);
+      else if (b[0] == mainwin_window ())
+        mainwin_redraw (b);
+      else if (b[0] == mainwin_inspector ())
+        mainwin_inspector_redraw (b);
       else if (b[0] == viewer_window ())
         viewer_redraw (b);
       else
@@ -231,18 +255,20 @@ int app_event (int reason, int *b, int sender)
         }
       break;
     case Open_Window_Request:
-      if (b[0] == browser_window ())
+      if (b[0] == mainwin_window ())
+        mainwin_open (b);
+      else if (b[0] == browser_window ())
         browser_open (b);
       else if (b[0] == viewer_window ())
         viewer_open_window (b);
+      else if (b[0] == mainwin_inspector ())
+        mainwin_open_child (b);
       else
         _swix (Wimp_OpenWindow, _IN (1), b);
       break;
     case Close_Window_Request:
-      if (b[0] == browser_window ())
-        browser_close ();
-      else if (b[0] == viewer_window ())
-        viewer_close ();
+      if (b[0] == mainwin_window ())
+        mainwin_close ();
       else
         _swix (Wimp_CloseWindow, _IN (1), b);
       break;
@@ -252,8 +278,12 @@ int app_event (int reason, int *b, int sender)
           if (b[2] == Button_Menu)
             menus_open_iconbar_menu (b[0]);
           else
-            browser_open (NULL);
+            mainwin_open (NULL);
         }
+      else if (b[3] == mainwin_window ())
+        mainwin_click (b);
+      else if (b[3] == mainwin_inspector ())
+        mainwin_inspector_click (b);
       else if (b[3] == browser_window ())
         browser_click (b);
       else if (b[3] == viewer_window ())
@@ -268,9 +298,7 @@ int app_event (int reason, int *b, int sender)
         viewer_drag_end ();
       break;
     case Key_Pressed:
-      if (b[0] == exportbox_window () ? !exportbox_key (b[6])
-          : b[0] == viewer_window () ? !viewer_key (b[6])
-          : (b[0] != browser_window () || !browser_key (b[6])))
+      if (b[0] == exportbox_window () ? !exportbox_key (b[6]) : !app_key (b[6]))
         _swix (Wimp_ProcessKey, _IN (0), b[6]);
       break;
     case Menu_Selection:
@@ -291,6 +319,7 @@ int app_event (int reason, int *b, int sender)
           draw_init_mode ();
           browser_mode_changed ();
           viewer_mode_changed ();
+          mainwin_mode_changed ();
           break;
         }
       break;

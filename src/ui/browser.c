@@ -38,6 +38,7 @@ static int layout_w = 256;            /* a cell's width: the window's width shar
 static int vis_w = 1200, vis_h = 800;
 static int screen_w = 1920, screen_h = 1080;
 
+static void open_nested (int *b);
 static int box (void) { return box_sizes[size]; }
 static int min_cell_w (void) { return box () + 32; }
 static int cell_w (void) { return layout_w; }
@@ -64,8 +65,8 @@ int browser_create (void)
   memset (b, 0, sizeof b);
   b[0] = 96; b[1] = 160; b[2] = 96 + vis_w; b[3] = 160 + vis_h;
   b[6] = -1;
-  /* moveable; back, close, title, toggle size, vertical scroll, adjust size; new format */
-  b[7] = (int) 0xBF000002;
+  /* A child of the main window (mainwin.c) with a vertical scroll bar. */
+  b[7] = (int) 0x90000002;
   ((unsigned char *) b)[32] = 7;  ((unsigned char *) b)[33] = 2;   /* title fg, bg */
   ((unsigned char *) b)[34] = 7;  ((unsigned char *) b)[35] = 1;   /* work area fg, bg */
   ((unsigned char *) b)[36] = 3;  ((unsigned char *) b)[37] = 1;   /* scroll bar outer, inner */
@@ -74,7 +75,7 @@ int browser_create (void)
   b[14] = 0x13D;              /* title: text, border, centred, filled, indirected */
   b[15] = 3 << 12;            /* work area: click */
   b[16] = 1;                  /* Wimp sprite area */
-  b[17] = (320 << 16) | 400;  /* minimum height, width */
+  b[17] = (64 << 16) | 64;    /* minimum height, width */
   snprintf (title, sizeof title, "%s", APP_NAME);
   b[18] = (int) title; b[19] = -1; b[20] = sizeof title;
   b[21] = 0;
@@ -164,10 +165,10 @@ static int relayout (int width)
 }
 
 /* --- title */
-void browser_update_title (void)
+/* The source and how many photos: for the main window's title. */
+void browser_title (char *out, size_t size)
 {
-  char name[80], status[100], t[200];
-  lib_progress p;
+  char name[80];
   switch (src.kind)
     {
     case SRC_FLAGGED: snprintf (name, sizeof name, "Flagged"); break;
@@ -177,26 +178,31 @@ void browser_update_title (void)
     case SRC_ALBUM: cat_group_name (lib_cat (app_library ()), src.kind, src.id, name, sizeof name); break;
     default: snprintf (name, sizeof name, "All photos"); break;
     }
+  snprintf (out, size, "%s (%d)%s", name, n,
+            src.min_rating > 0 ? (src.min_rating == 5 ? "  \xB7  5 stars" : "  \xB7  rated") : "");
+}
+
+/* Importing, thumbnails, exports: what's going on in the background. */
+void browser_status (char *status, size_t size)
+{
+  lib_progress p;
   lib_get_progress (app_library (), &p);
   status[0] = '\0';
   if (p.importing)
-    snprintf (status, sizeof status, "  \xB7  Importing: %d found", p.found);
+    snprintf (status, size, "  \xB7  Importing: %d found", p.found);
   else if (p.thumbs_pending > 0)
-    snprintf (status, sizeof status, "  \xB7  Making thumbnails: %d to go", p.thumbs_pending);
+    snprintf (status, size, "  \xB7  Making thumbnails: %d to go", p.thumbs_pending);
   if (exports_busy ())
     {
       char e[60];
       exports_status (e, sizeof e);
-      snprintf (status + strlen (status), sizeof status - strlen (status), "  \xB7  %s", e);
+      snprintf (status + strlen (status), size - strlen (status), "  \xB7  %s", e);
     }
-  snprintf (t, sizeof t, "%s - %s (%d)%s%s", APP_NAME, name, n,
-            src.min_rating > 0 ? (src.min_rating == 5 ? "  \xB7  5 stars" : "  \xB7  rated") : "", status);
-  if (strcmp (t, title) != 0)
-    {
-      snprintf (title, sizeof title, "%s", t);
-      if (win != -1)
-        _swix (Wimp_ForceRedraw, _INR (0, 2), win, TASK_WORD, 3);
-    }
+}
+
+void browser_update_title (void)
+{
+  mainwin_update_title ();
 }
 
 /* --- the list */
@@ -240,6 +246,8 @@ void browser_reload (void)
     set_extent ();
   redraw_all ();
   browser_update_title ();
+  mainwin_library_changed ();
+  mainwin_status_changed ();
 }
 
 void browser_after_change (void)
@@ -264,8 +272,9 @@ void browser_set_source (const cat_source *s)
   if (is_open && _swix (Wimp_GetWindowState, _IN (1), b) == NULL)
     {
       b[6] = 0;
-      _swix (Wimp_OpenWindow, _IN (1), b);
+      open_nested (b);
     }
+  mainwin_info_changed ();
 }
 
 void browser_set_size (int s)
@@ -287,7 +296,7 @@ void browser_set_size (int s)
           cell_rect (focus, &x0, &y0, &x1, &y1);
           b[6] = y1 + MARGIN;
         }
-      _swix (Wimp_OpenWindow, _IN (1), b);
+      open_nested (b);
     }
 }
 
@@ -314,27 +323,19 @@ void browser_select_all (int on)
         sel[i] = (unsigned char) on;
         redraw_cell (i);
       }
+  mainwin_status_changed ();
 }
 
-/* --- opening */
-void browser_open (int *block)
+/* --- opening: always inside the main window (mainwin.c) */
+static void open_nested (int *b)
 {
-  int b[9];
-  if (!block)
-    {
-      b[0] = win;
-      if (is_open && _swix (Wimp_GetWindowState, _IN (1), b) == NULL)
-        b[7] = -1;
-      else
-        {
-          int w = screen_w - 192 < 2400 ? screen_w - 192 : 2400;
-          int h = screen_h - 320;
-          b[1] = (screen_w - w) / 2; b[2] = 160;
-          b[3] = b[1] + w; b[4] = 160 + h;
-          b[5] = 0; b[6] = 0; b[7] = -1;
-        }
-      block = b;
-    }
+  b[7] = -1;
+  _swix (Wimp_OpenWindow, _INR (1, 4), b, TASK_WORD, mainwin_window (), 0);
+}
+
+/* At block's place: mainwin.c's layout, or our own Open_Window_Request (scrolling). */
+void browser_place (int *block)
+{
   vis_w = block[3] - block[1];
   vis_h = block[4] - block[2];
   if (relayout (vis_w))
@@ -342,21 +343,31 @@ void browser_open (int *block)
       set_extent ();
       redraw_all ();
     }
-  _swix (Wimp_OpenWindow, _IN (1), block);
+  open_nested (block);
+  is_open = 1;
+}
+
+void browser_open (int *block)
+{
+  if (block)
+    browser_place (block);
+  else
+    mainwin_open (NULL);
+}
+
+void browser_unplace (void)
+{
+  int b[1];
   if (!is_open)
-    {
-      is_open = 1;
-      /* Input focus, so the rating keys work at once. */
-      _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
-    }
+    return;
+  b[0] = win;
+  _swix (Wimp_CloseWindow, _IN (1), b);
+  is_open = 0;
 }
 
 void browser_close (void)
 {
-  int b[1];
-  b[0] = win;
-  _swix (Wimp_CloseWindow, _IN (1), b);
-  is_open = 0;
+  browser_unplace ();
   thumbcache_clear_queue ();
 }
 
@@ -500,7 +511,7 @@ void browser_focus_on (int i)
   if (i >= 0 && i < n)
     set_focus (i, 0);
   if (is_open)
-    _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
+    _swix (Wimp_SetCaretPosition, _INR (0, 5), mainwin_window (), -1, 0, 0, 1 << 25, -1);
 }
 
 static void set_focus (int i, int extend)
@@ -519,6 +530,9 @@ static void set_focus (int i, int extend)
   focus = i;
   redraw_cell (old);
   redraw_cell (i);
+  if (mainwin_mode () == LAYOUT_SPLIT && viewer_index () != i)
+    viewer_show (i);                   /* Split View: the Viewer follows */
+  mainwin_info_changed ();
   /* Scroll it into view. */
   {
     int b[9], x0, y0, x1, y1;
@@ -530,7 +544,7 @@ static void set_focus (int i, int extend)
         if (y1 > top || y0 < bottom)
           {
             b[6] = y1 > top ? y1 + MARGIN : y0 + (b[4] - b[2]) - MARGIN;
-            _swix (Wimp_OpenWindow, _IN (1), b);
+            open_nested (b);
           }
       }
   }
@@ -547,7 +561,7 @@ void browser_click (int *block)
       menus_open_window_menu (block[0], block[1]);
       return;
     }
-  _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
+  _swix (Wimp_SetCaretPosition, _INR (0, 5), mainwin_window (), -1, 0, 0, 1 << 25, -1);
   i = index_at (block[0] - (b[1] - b[5]), block[1] - (b[4] - b[6]));
   if (buttons == Button_Select)
     {
@@ -573,6 +587,7 @@ void browser_click (int *block)
       focus = i;
       redraw_cell (old);               /* its focus frame goes (found in the ROL 5.31-5 test) */
       redraw_cell (i);
+      mainwin_status_changed ();
     }
 }
 

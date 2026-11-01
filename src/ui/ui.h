@@ -122,6 +122,10 @@ void browser_reload (void);            /* the list from the catalogue */
 void browser_thumb_ready (cat_id version);
 void browser_thumb_loaded (cat_id version);
 void browser_update_title (void);
+void browser_title (char *out, size_t n);
+void browser_status (char *out, size_t n);
+void browser_place (int *block);       /* inside the main window */
+void browser_unplace (void);
 void browser_mode_changed (void);
 
 void browser_set_source (const cat_source *src);
@@ -144,7 +148,16 @@ int viewer_is_open (void);
 void viewer_open (int index);          /* the browser's item index */
 void viewer_show (int index);
 void viewer_open_window (int *block);
-void viewer_close (void);
+void viewer_place (int *block);        /* inside the main window */
+void viewer_unplace (void);
+void viewer_close (void);              /* back to the Browser */
+void viewer_shutdown (void);           /* the main window closed */
+int viewer_has_photo (void);
+int viewer_index (void);               /* the browser index shown, -1 */
+void viewer_title (char *out, size_t n);
+void viewer_panel_draw (int ox, int oy);   /* the Adjustments tab */
+void viewer_panel_click (int *block);
+int viewer_panel_height (void);
 void viewer_redraw (int *block);
 void viewer_click (int *block);
 void viewer_drag_end (void);
@@ -189,6 +202,40 @@ void viewer_set_grid (int k);          /* None, Thirds, Quarters, Fine */
 int viewer_grid (void);
 const char *viewer_grid_name (int k);
 
+/* --- mainwin.c: the one main window, Aperture's layout */
+enum { LAYOUT_BROWSER, LAYOUT_SPLIT, LAYOUT_VIEWER };
+enum { TAB_LIBRARY, TAB_INFO, TAB_ADJUST };
+int mainwin_create (void);
+int mainwin_window (void);
+int mainwin_inspector (void);
+void mainwin_open (int *block);        /* Open_Window_Request, or NULL */
+void mainwin_open_child (int *block);  /* the inspector's own */
+void mainwin_close (void);
+int mainwin_is_open (void);
+void mainwin_redraw (int *block);
+void mainwin_inspector_redraw (int *block);
+void mainwin_click (int *block);
+void mainwin_inspector_click (int *block);
+int mainwin_key (int key);
+void mainwin_mode_changed (void);
+int mainwin_mode (void);
+void mainwin_set_mode (int m);
+void mainwin_cycle_mode (void);
+int mainwin_tab (void);
+void mainwin_set_tab (int t);
+int mainwin_inspector_on (void);
+void mainwin_toggle_inspector (void);
+void mainwin_toggle_full_screen (void);
+void mainwin_update_title (void);
+void mainwin_set_title (const char *t);
+const char *mainwin_title (void);
+void mainwin_inspector_changed (void);
+void mainwin_inspector_extent (int h);
+void mainwin_force_inspector (int x0, int y0, int x1, int y1);
+void mainwin_library_changed (void);
+void mainwin_info_changed (void);
+void mainwin_status_changed (void);   /* the bottom bar: counts */
+
 /* --- looks.c: copying adjustments between photos, and presets */
 void looks_copy_viewer (void);         /* the viewer's look */
 void looks_copy_selection (void);      /* the first selected photo's */
@@ -222,6 +269,7 @@ void menus_open_window_menu (int x, int y);
 void menus_open_iconbar_menu (int x);
 void menus_open_viewer_menu (int x, int y);
 void menus_open_presets_menu (int x, int y);
+void menus_open_new_menu (int x, int y);
 int menus_selection (const int *choice);   /* 1: quit */
 
 #endif

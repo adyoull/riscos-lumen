@@ -232,13 +232,16 @@ static void free_photo (void)
 }
 
 /* --- layout: everything in work area coordinates */
-static int panel_x0 (void) { return vis_w - PANEL_W; }
+/* The panel is drawn in the inspector (mainwin.c), a window of its own:
+   its coordinates are that window's work area, x from 0 to PANEL_W. */
+static int panel_x0 (void) { return 0; }
+static int drag_win = -1;              /* the window a drag started in */
 static int track_x0 (void) { return panel_x0 () + 232; }
 static int track_x1 (void) { return panel_x0 () + PANEL_W - 132; }
 
 static void image_rect (int r[4])
 {
-  r[0] = 0; r[1] = -vis_h; r[2] = panel_x0 (); r[3] = 0;
+  r[0] = 0; r[1] = -vis_h; r[2] = vis_w; r[3] = 0;
 }
 
 /* Top of each part of the panel. */
@@ -347,7 +350,7 @@ static int curve_graph (int r[4])
     return 0;
   top = group_top (g) - GROUP_H - CURVE_SEL_H;
   r[0] = panel_x0 () + PAD + 10;
-  r[2] = vis_w - PAD - 10;
+  r[2] = PANEL_W - PAD - 10;
   r[3] = top - 10;
   r[1] = top - CURVE_BOX_H + 10;
   return 1;
@@ -362,21 +365,19 @@ static void curve_tab_rect (int k, int r[4])
   r[1] = top - CURVE_SEL_H + 12;
 }
 
-/* Folds groups (not ones set by hand) from the bottom until the panel fits. */
+/* The panel's height (it scrolls in the inspector). */
+static int panel_height (void)
+{
+  return -(buttons_top () - BUTTON_H - PAD);
+}
+
+int viewer_panel_height (void) { return panel_height (); }
+
+/* The panel's height may have changed. */
 static void fit_panel (void)
 {
-  int g;
-  for (g = 0; g < recipe_ngroups && g < MAX_GROUPS; g++)
-    if (!folded_by_hand[g])
-      folded[g] = 0;
-  /* Unchanged groups go first, then any. */
-  {
-    int pass;
-    for (pass = 0; pass < 2; pass++)
-      for (g = recipe_ngroups - 1; g >= 0 && buttons_top () - BUTTON_H - PAD < -vis_h; g--)
-        if (g < MAX_GROUPS && group_shown (g) && !folded_by_hand[g] && (pass || !group_changed (g)))
-          folded[g] = 1;
-  }
+  if (mainwin_tab () == TAB_ADJUST)
+    mainwin_inspector_extent (panel_height ());
 }
 
 /* Button k of n across the panel, its top at top. */
@@ -413,7 +414,7 @@ static int group_links (int g, int ids[3], const char *names[3])
 /* Link k of group g: its x range. */
 static void link_x (int g, int k, int *x0, int *x1)
 {
-  int ids[3], i, x = vis_w - PAD;
+  int ids[3], i, x = PANEL_W - PAD;
   const char *names[3];
   group_links (g, ids, names);
   for (i = 0; i <= k; i++)
@@ -462,10 +463,10 @@ static int photo_rect (int out[4])
   return 1;
 }
 
-static int hit (int wx, int wy, int *what)
+static int hit (int wx, int wy, int *what, int panel)
 {
   int p, g, k, r[4];
-  if (wx < panel_x0 ())
+  if (!panel)
     return HIT_IMAGE;
   if (curve_graph (r))
     {
@@ -548,8 +549,8 @@ int viewer_create (void)
   memset (b, 0, sizeof b);
   b[0] = 120; b[1] = 180; b[2] = 120 + vis_w; b[3] = 180 + vis_h;
   b[6] = -1;
-  /* moveable; back, close, title, toggle size, adjust size; new format */
-  b[7] = (int) 0xAF000002;
+  /* A child of the main window (mainwin.c): no frame of its own. */
+  b[7] = (int) 0x80000002;
   ((unsigned char *) b)[32] = 7;  ((unsigned char *) b)[33] = 2;
   ((unsigned char *) b)[34] = 7;  ((unsigned char *) b)[35] = 255;  /* we draw the background */
   ((unsigned char *) b)[36] = 3;  ((unsigned char *) b)[37] = 1;
@@ -558,7 +559,7 @@ int viewer_create (void)
   b[14] = 0x13D;
   b[15] = 3 << 12;                     /* work area: click */
   b[16] = 1;
-  b[17] = (1300 << 16) | 1200;         /* minimum height, width */
+  b[17] = (64 << 16) | 64;             /* minimum height, width */
   snprintf (title, sizeof title, "%s", APP_NAME);
   b[18] = (int) title; b[19] = -1; b[20] = sizeof title;
   b[21] = 0;
@@ -581,72 +582,97 @@ static void force_image (void)
   force (r[0], r[1], r[2], r[3]);
 }
 
+/* The panel, if the inspector shows it. */
+static void pforce (int x0, int y0, int x1, int y1)
+{
+  if (mainwin_tab () == TAB_ADJUST)
+    mainwin_force_inspector (x0, y0, x1, y1);
+}
+
 static void force_panel (void)
 {
-  force (panel_x0 (), -vis_h, vis_w, 0);
+  pforce (0, -0x10000000, 0x10000000, 0);
+}
+
+/* The photo and the panel. */
+static void force_all (void)
+{
+  force (0, -0x10000000, 0x10000000, 0);
+  force_panel ();
+  mainwin_info_changed ();
 }
 
 static void force_row (int p)
 {
   if (row_top (p))
-    force (panel_x0 (), row_top (p) - ROW_H, vis_w, row_top (p));
+    pforce (0, row_top (p) - ROW_H, PANEL_W, row_top (p));
 }
 
 static void force_hist (void)
 {
-  force (panel_x0 (), hist_top () - HIST_H, vis_w, hist_top ());
+  pforce (0, hist_top () - HIST_H, PANEL_W, hist_top ());
+}
+
+/* For the main window's title: the photo, its place in the list. */
+void viewer_title (char *out, size_t n)
+{
+  snprintf (out, n, "%s (%d of %d)%s%s", item.name, index_in_list + 1,
+            browser_count (), recipe_is_default (&current) ? "" : "  \xB7  edited",
+            crop_mode ? "  \xB7  cropping" : "");
 }
 
 static void update_title (void)
 {
-  char t[200];
-  snprintf (t, sizeof t, "%s - %s (%d of %d)%s%s", APP_NAME, item.name, index_in_list + 1,
-            browser_count (), recipe_is_default (&current) ? "" : "  \xB7  edited",
-            crop_mode ? "  \xB7  cropping" : "");
-  if (strcmp (t, title))
-    {
-      snprintf (title, sizeof title, "%s", t);
-      if (is_open)
-        _swix (Wimp_ForceRedraw, _INR (0, 2), win, TASK_WORD, 3);
-    }
+  if (state != V_CLOSED)
+    mainwin_update_title ();
 }
 
-void viewer_open_window (int *block)
+/* Opens the window at block's place, inside the main window (mainwin.c
+   decides where). */
+void viewer_place (int *block)
 {
-  int b[9];
-  if (!block)
-    {
-      b[0] = win;
-      if (is_open && _swix (Wimp_GetWindowState, _IN (1), b) == NULL)
-        b[7] = -1;
-      else
-        {
-          int w = screen_w - 160 < 3000 ? screen_w - 160 : 3000;
-          int h = screen_h - 300;
-          b[1] = (screen_w - w) / 2; b[2] = 160;
-          b[3] = b[1] + w; b[4] = 160 + h;
-          b[5] = 0; b[6] = 0; b[7] = -1;
-        }
-      block = b;
-    }
   if (block[3] - block[1] != vis_w || block[4] - block[2] != vis_h)
     {
       vis_w = block[3] - block[1];
       vis_h = block[4] - block[2];
-      fit_panel ();
       force (0, -0x10000000, 0x10000000, 0);
       if (zoom == 2)
         zoom_layout (0);
     }
   block[5] = 0;                        /* never scrolled */
   block[6] = 0;
-  _swix (Wimp_OpenWindow, _IN (1), block);
-  if (!is_open)
-    {
-      is_open = 1;
-      _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
-    }
+  block[7] = -1;
+  _swix (Wimp_OpenWindow, _INR (1, 4), block, TASK_WORD, mainwin_window (), 0);
+  is_open = 1;
 }
+
+/* Taken out of the main window (the Browser layout): the photo stays. */
+void viewer_unplace (void)
+{
+  int b[1];
+  if (!is_open)
+    return;
+  if (crop_mode)
+    viewer_crop_finish (1);
+  b[0] = win;
+  _swix (Wimp_CloseWindow, _IN (1), b);
+  is_open = 0;
+  dragging = -1;
+  picking = 0;
+  loupe_shown = 0;
+}
+
+/* Its own Open_Window_Request. */
+void viewer_open_window (int *block)
+{
+  if (block)
+    viewer_place (block);
+  else
+    mainwin_set_mode (LAYOUT_VIEWER);
+}
+
+int viewer_has_photo (void) { return state != V_CLOSED; }
+int viewer_index (void) { return state != V_CLOSED ? index_in_list : -1; }
 
 /* --- rendering */
 static void effective (recipe *r)
@@ -972,7 +998,9 @@ static int loupe_os_h (void) { return LOUPE_PX << draw_yeig (); }
 
 static void loupe_force (void)
 {
-  int hw = loupe_os_w () / 2 + 8, hh = loupe_os_h () / 2 + 8;
+  /* The bezel rings reach 7 pixels beyond the lens: redraw all of them,
+     or the outer rings are clipped flat at the four sides. */
+  int hw = loupe_os_w () / 2 + (10 << draw_xeig ()), hh = loupe_os_h () / 2 + (10 << draw_yeig ());
   force (loupe_wx - hw, loupe_wy - hh, loupe_wx + hw, loupe_wy + hh);
 }
 
@@ -1258,30 +1286,36 @@ void viewer_show (int i)
       snprintf (err, sizeof err, "%s", e);
     }
   update_title ();
-  force (0, -0x10000000, 0x10000000, 0);
+  force_all ();
+  fit_panel ();
 }
 
+/* A photo opened from the Browser: the Viewer layout. */
 void viewer_open (int i)
 {
   viewer_show (i);
-  viewer_open_window (NULL);
+  if (state != V_CLOSED)
+    mainwin_set_mode (LAYOUT_VIEWER);
 }
 
+/* Back to the Browser, the photo shown focused there. */
 void viewer_close (void)
 {
-  int b[1];
-  if (!is_open)
-    return;
+  int i = index_in_list;
   if (crop_mode)
     viewer_crop_finish (1);
-  b[0] = win;
-  _swix (Wimp_CloseWindow, _IN (1), b);
-  is_open = 0;
-  dragging = -1;
-  picking = 0;
+  mainwin_set_mode (LAYOUT_BROWSER);
+  if (i >= 0)
+    browser_focus_on (i);
+}
+
+/* The main window closed: let the photo go. */
+void viewer_shutdown (void)
+{
+  viewer_unplace ();
   free_photo ();
   state = V_CLOSED;
-  browser_focus_on (index_in_list);
+  force_panel ();
 }
 
 int viewer_busy (void)
@@ -1302,10 +1336,12 @@ void viewer_idle (void)
   if (dragging != -1)
     {
       int ptr[5], b[9];
-      b[0] = win;
+      b[0] = drag_win;
       if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL && (ptr[0] != drag_x || ptr[1] != drag_y)
           && _swix (Wimp_GetWindowState, _IN (1), b) == NULL)
         {
+          b[1] -= b[5];                /* the work area origin (the inspector scrolls) */
+          b[4] -= b[6];
           drag_x = ptr[0];
           drag_y = ptr[1];
           if (dragging == DRAG_CURVE)
@@ -1450,7 +1486,7 @@ const recipe *viewer_recipe (void) { return &current; }
 /* A new recipe from outside (a preset, pasting, the library's menu). */
 void viewer_reload (cat_id id)
 {
-  if (!is_open || id != item.id || crop_mode)
+  if (state == V_CLOSED || id != item.id || crop_mode)
     return;
   {
     char text[2048];
@@ -1475,7 +1511,7 @@ void viewer_reload (cat_id id)
 void viewer_apply_look (const char *look)
 {
   recipe r;
-  if (!is_open || state == V_CLOSED)
+  if (state == V_CLOSED)
     return;
   recipe_parse (&r, look);
   recipe_copy_look (&current, &r);
@@ -1489,7 +1525,7 @@ void viewer_look (char *out, size_t n)
   recipe_format_look (&current, out, n);
 }
 
-cat_id viewer_item (void) { return is_open ? item.id : 0; }
+cat_id viewer_item (void) { return state != V_CLOSED ? item.id : 0; }
 
 /* One adjustment, as if its slider were moved (scripts and the screenshot harness). */
 void viewer_set (int p, float v)
@@ -1780,7 +1816,7 @@ static void start_drag (int x, int y, int x0, int y0, int x1, int y1, int what)
      type 7 (drag point, nothing drawn), the start box, and the box the
      pointer is kept in. */
   int db[10];
-  db[0] = win;
+  db[0] = drag_win;
   db[1] = 7;
   db[2] = x; db[3] = y; db[4] = x; db[5] = y;
   db[6] = x0; db[7] = y0; db[8] = x1; db[9] = y1;
@@ -1838,7 +1874,7 @@ static void force_curves (void)
 {
   int r[4];
   if (curve_graph (r))
-    force (r[0] - 12, r[1] - 12, r[2] + 12, r[3] + 12);
+    pforce (r[0] - 12, r[1] - 12, r[2] + 12, r[3] + 12);
 }
 
 /* Select: drag the point there, or add one; Adjust: remove the point. */
@@ -1906,21 +1942,25 @@ static void curve_follow (int wx, int wy)
   force_curves ();
 }
 
-void viewer_click (int *b)
+/* A click on the photo (panel 0) or on the panel in the inspector (1). */
+static void click_in (int *b, int w, int panel)
 {
   int st[9], wx, wy, what = -1, h;
-  st[0] = win;
-  if (_swix (Wimp_GetWindowState, _IN (1), st))
+  st[0] = w;
+  if (state == V_CLOSED || !is_open || _swix (Wimp_GetWindowState, _IN (1), st))
     return;
   if (b[2] == Button_Menu)
     {
       menus_open_viewer_menu (b[0], b[1]);
       return;
     }
-  _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
+  _swix (Wimp_SetCaretPosition, _INR (0, 5), mainwin_window (), -1, 0, 0, 1 << 25, -1);
+  st[1] -= st[5];                      /* the work area origin, on the screen */
+  st[4] -= st[6];
+  drag_win = w;
   wx = b[0] - st[1];
   wy = b[1] - st[4];
-  h = hit (wx, wy, &what);
+  h = hit (wx, wy, &what, panel);
   if (h == HIT_SLIDER)
     {
       if (b[2] == Button_Adjust)       /* Adjust: back to the default */
@@ -2003,6 +2043,7 @@ void viewer_click (int *b)
     {
       folded[what] = !folded[what];
       folded_by_hand[what] = 1;
+      fit_panel ();
       force_panel ();
     }
   else if (h == HIT_TOOL && b[2] == Button_Select)
@@ -2014,6 +2055,9 @@ void viewer_click (int *b)
   else if (h == HIT_RESET_ALL && b[2] == Button_Select)
     viewer_reset_all ();
 }
+
+void viewer_click (int *b) { click_in (b, win, 0); }
+void viewer_panel_click (int *b) { click_in (b, mainwin_inspector (), 1); }
 
 /* User_Drag_Box: the button was let go. */
 void viewer_drag_end (void)
@@ -2086,12 +2130,14 @@ int viewer_key (int key)
         if (crop_mode)
           viewer_crop_finish (1);
         if (i >= 0 && i < browser_count ())
-          viewer_show (i);
+          {
+            browser_focus_on (i);      /* in Split View that shows it here too */
+            if (index_in_list != i)
+              viewer_show (i);
+          }
         return 1;
       }
     case KEY_ESCAPE:
-    case 'v':
-    case 'V':
       viewer_close ();
       return 1;
     case 'm':
@@ -2161,7 +2207,8 @@ int viewer_key (int key)
         cat_set_rating (c, &item.id, 1, key == '9' ? RATING_REJECT : key - '0');
       browser_after_change ();
       browser_item (index_in_list, &item);
-      force (panel_x0 (), info_top () - INFO_H, vis_w, info_top ());
+      pforce (0, info_top () - INFO_H, PANEL_W, info_top ());
+      mainwin_info_changed ();
       return 1;
     }
   return 0;
@@ -2200,7 +2247,7 @@ static void draw_slider (int p, int ox, int oy)
   draw_rect (kx - 7, mid - 15, kx + 7, mid + 15, p == dragging ? COL_ACCENT : COL_KNOB);
   snprintf (value, sizeof value, "%s%.*f", current.v[p] > 0 && d->min < 0 ? "+" : "",
             d->decimals, (double) current.v[p]);
-  draw_text (ox + vis_w - PAD - draw_text_width (value), mid - 9, value, COL_TEXT, COL_PANEL);
+  draw_text (ox + PANEL_W - PAD - draw_text_width (value), mid - 9, value, COL_TEXT, COL_PANEL);
 }
 
 static void draw_button_rect (const int r[4], const char *text, int enabled, int on, int ox, int oy)
@@ -2404,9 +2451,7 @@ static void draw_curves (int ox, int oy)
 static void draw_panel (int ox, int oy)
 {
   int px = ox + panel_x0 (), g, k;
-  draw_rect (px, oy - vis_h, ox + vis_w, oy, COL_PANEL);
-  draw_rect (px, oy - vis_h, px + 2, oy, COL_FRAME);
-  draw_histogram (px + PAD, oy + hist_top () - HIST_H, ox + vis_w - PAD, oy + hist_top ());
+  draw_histogram (px + PAD, oy + hist_top () - HIST_H, ox + PANEL_W - PAD, oy + hist_top ());
   /* Place in the list, rating */
   {
     char t[64];
@@ -2414,10 +2459,10 @@ static void draw_panel (int ox, int oy)
     snprintf (t, sizeof t, "%d of %d", index_in_list + 1, browser_count ());
     draw_text (px + PAD, y, t, COL_QUIET, COL_PANEL);
     if (item.rating == RATING_REJECT)
-      draw_text (ox + vis_w - PAD - draw_text_width ("Rejected"), y, "Rejected", COL_QUIET, COL_PANEL);
+      draw_text (ox + PANEL_W - PAD - draw_text_width ("Rejected"), y, "Rejected", COL_QUIET, COL_PANEL);
     else
       for (k = 0; k < 5; k++)
-        draw_star (ox + vis_w - PAD - 15 - (4 - k) * 34, y + 10, 15, k < item.rating ? COL_ACCENT : COL_STAR_OFF);
+        draw_star (ox + PANEL_W - PAD - 15 - (4 - k) * 34, y + 10, 15, k < item.rating ? COL_ACCENT : COL_STAR_OFF);
     if (item.flag)
       {
         draw_rect (px + 200, y - 4, px + 228, y + 24, COL_FRAME);
@@ -2448,7 +2493,7 @@ static void draw_panel (int ox, int oy)
         for (p = P_CROP_X0; p <= P_CROP_Y1; p++)   /* its Reset takes the crop away too */
           if (current.v[p] != recipe_params[p].def)
             changed = 1;
-      draw_rect (px + PAD, top - 2, ox + vis_w - PAD, top, COL_TRACK);
+      draw_rect (px + PAD, top - 2, ox + PANEL_W - PAD, top, COL_TRACK);
       draw_disclosure (px + PAD + 12, top - 26, g < MAX_GROUPS && folded[g]);
       draw_text (px + PAD + 36, top - 36, recipe_groups[g].name, COL_TEXT, COL_PANEL);
       n = group_links (g, ids, names);
@@ -2583,11 +2628,7 @@ void viewer_redraw (int *b)
   while (more)
     {
       int ox = b[1] - b[5], oy = b[4] - b[6];
-      int cx0 = b[7] - ox;             /* the rectangle in work area x */
-      if (cx0 < panel_x0 ())
-        draw_image (ox, oy);
-      if (b[9] - ox > panel_x0 ())
-        draw_panel (ox, oy);
+      draw_image (ox, oy);
       _swix (Wimp_GetRectangle, _IN (1) | _OUT (0), b, &more);
     }
 }
@@ -2595,7 +2636,19 @@ void viewer_redraw (int *b)
 void viewer_mode_changed (void)
 {
   read_screen ();
-  force (0, -0x10000000, 0x10000000, 0);
+  force_all ();
+}
+
+/* The Adjustments tab of the inspector (its work area origin at ox, oy). */
+void viewer_panel_draw (int ox, int oy)
+{
+  if (state == V_CLOSED || !is_open)
+    {
+      draw_text (ox + PAD, oy - 60, "Choose a photo in Split View or", COL_QUIET, COL_PANEL);
+      draw_text (ox + PAD, oy - 104, "the Viewer to adjust it.", COL_QUIET, COL_PANEL);
+      return;
+    }
+  draw_panel (ox, oy);
 }
 
 /* For the screenshot harness and tests. */
