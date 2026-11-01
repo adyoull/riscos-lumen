@@ -13,7 +13,7 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.19
+VERSION := 0.0.20
 DATE := 01 Nov 2026
 OUT := out
 
