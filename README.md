@@ -118,6 +118,18 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
   result is identical to sharpening the whole picture at once).
 - The panel's groups fold (click the name; disclosure triangles); when
   the window is too short, untouched groups fold from the bottom.
+
+## 0.0.10
+
+- No dead task: if Lumen couldn't start (its library couldn't be opened or
+  created, or its windows made), it left a Wimp task with no icon bar
+  icon behind. Every way out now calls Wimp_CloseDown (also from atexit).
+- The library error says where the library is; with no <Choices$Write>
+  (desktop not fully started) !Run puts it beside !Lumen instead of at
+  ".Lumen.Library".
+- If the icon sprites aren't in the Wimp's pool when Lumen starts, it
+  loads <Lumen$Dir>.!Sprites itself; if there is still no picture, the
+  icon bar icon is the word "Lumen", so there is always something to click.
 - Still to come in milestone 1: the loupe, a curves editor, several
   versions of one original, full-resolution rendering.
 

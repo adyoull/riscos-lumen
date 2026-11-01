@@ -36,15 +36,60 @@ void app_report (const char *msg)
   _swix (Wimp_ReportError, _INR (0, 2), &e, 1, APP_NAME);
 }
 
+static int have_sprite (const char *name)
+{
+  /* Wimp_SpriteOp 40 (read sprite information): an error if it isn't there. */
+  int w, h;
+  return _swix (Wimp_SpriteOp, _INR (0, 2) | _OUT (3) | _OUT (4), 40, 0, name, &w, &h) == NULL;
+}
+
+/* The !Sprites are normally loaded by !Boot (when the Filer first shows
+   the application) and by !Run. If neither did - !RunImage started some
+   other way, or the files lost their types on the way here - load them
+   now, so the icon bar icon has its picture. */
+static void ensure_sprites (void)
+{
+  const char *dir = getenv ("Lumen$Dir");
+  char cmd[300];
+  if (have_sprite ("!lumen") || !dir || !*dir)
+    return;
+  snprintf (cmd, sizeof cmd, "IconSprites %s.!Sprites", dir);
+  _swix (OS_CLI, _IN (0), cmd);
+}
+
 static int create_iconbar_icon (void)
 {
   int b[9];
   memset (b, 0, sizeof b);
   b[0] = -1;                           /* the right of the icon bar */
-  b[1] = 0; b[2] = 0; b[3] = 68; b[4] = 68;
-  b[5] = 0x301A;                       /* sprite, centred, click */
-  memcpy (&b[6], "!lumen", 7);
+  if (have_sprite ("!lumen"))
+    {
+      b[1] = 0; b[2] = 0; b[3] = 68; b[4] = 68;
+      b[5] = 0x301A;                   /* sprite, centred, click */
+      memcpy (&b[6], "!lumen", 7);
+    }
+  else
+    {
+      /* No picture to be had: the name, so there is always something to click. */
+      b[1] = 0; b[2] = 0; b[3] = 120; b[4] = 68;
+      b[5] = (int) 0x17003019;         /* text, centred, click; black on grey */
+      memcpy (&b[6], "Lumen", 6);
+    }
   return _swix (Wimp_CreateIcon, _INR (0, 1), 0, b) ? -1 : 0;
+}
+
+static int closed_down;
+
+/* However Lumen ends - Quit, an error, an exit from deep inside a
+   library - it leaves the Wimp properly, so no dead task is left behind
+   in the Task Manager. */
+static void close_down (void)
+{
+  if (task && !closed_down)
+    {
+      closed_down = 1;
+      _swix (Wimp_CloseDown, _INR (0, 1), task, TASK_WORD);
+    }
 }
 
 int app_init (const char *library_path)
@@ -53,16 +98,20 @@ int app_init (const char *library_path)
   char err[300];
   if (_swix (Wimp_Initialise, _INR (0, 3) | _OUT (1), 380, TASK_WORD, APP_NAME, messages, &task))
     return 1;
+  atexit (close_down);
+  ensure_sprites ();
   draw_init_mode ();
   thumbcache_init (64u << 20);
   if (lib_open (&lib, library_path, err, sizeof err))
     {
       app_report (err);
+      close_down ();
       return 1;
     }
   if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create ())
     {
       app_report ("Lumen couldn't create its windows.");
+      close_down ();
       return 1;
     }
   menus_init ();
@@ -74,7 +123,7 @@ void app_quit (void)
 {
   lib_close (lib);
   lib = NULL;
-  _swix (Wimp_CloseDown, _INR (0, 1), task, TASK_WORD);
+  close_down ();
 }
 
 int app_busy (void)

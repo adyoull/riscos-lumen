@@ -54,8 +54,14 @@ int lib_open (library **out, const char *root, char *err, size_t errlen)
       snprintf (err, errlen, "Not enough memory");
       return -1;
     }
-  if (fsys_canonical (root, l->root, sizeof l->root))
+  if (fsys_canonical (root, l->root, sizeof l->root) || !l->root[0])
     snprintf (l->root, sizeof l->root, "%s", root);
+  if (!l->root[0] || l->root[0] == '.')
+    {
+      snprintf (err, errlen, "Lumen doesn't know where to keep its library (\"%s\"). Set Lumen$Library to a directory, e.g. *Set Lumen$Library SDFS::RISCOSpi.$.Photos.Library", root);
+      lib_close (l);
+      return -1;
+    }
   fsys_join (path, sizeof path, l->root, "Thumbs");
   if (fsys_mkdirs (path))
     {
@@ -66,6 +72,9 @@ int lib_open (library **out, const char *root, char *err, size_t errlen)
   fsys_join (path, sizeof path, l->root, "Catalogue");
   if (cat_open (&l->db, path, err, errlen))
     {
+      char e2[300];
+      snprintf (e2, sizeof e2, "%s (the library is %s)", err, l->root);
+      snprintf (err, errlen, "%s", e2);
       lib_close (l);
       return -1;
     }

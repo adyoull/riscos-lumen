@@ -7,7 +7,9 @@ RMEnsure SharedUnixLibrary 1.16 IfThere System:Modules.SharedULib Then RMLoad Sy
 RMEnsure SharedUnixLibrary 1.16 Error Lumen needs SharedUnixLibrary 1.16 or later. Install it with PackMan.
 RMEnsure ARMEABISupport 0 IfThere System:Modules.ARMEABISupport Then RMLoad System:Modules.ARMEABISupport
 RMEnsure ARMEABISupport 0 Error Lumen needs the ARMEABISupport module. Install it with PackMan.
-| The library: set Lumen$Library before running to use another one.
-If "<Lumen$Library>"="" Then Set Lumen$Library <Choices$Write>.Lumen.Library
+| The library: set Lumen$Library before running to use another one. It
+| goes in the user's Choices, or (no Choices yet, e.g. before the desktop
+| has finished starting) beside !Lumen.
+If "<Lumen$Library>"="" Then If "<Choices$Write>"="" Then Set Lumen$Library <Lumen$Dir>.^.LumenLibrary Else Set Lumen$Library <Choices$Write>.Lumen.Library
 WimpSlot -min 5120K -max 5120K
 Run <Lumen$Dir>.!RunImage

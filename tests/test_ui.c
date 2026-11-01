@@ -141,6 +141,9 @@ static const _kernel_oserror *wimp (int swi, int r[10])
     case Wimp_CreateMenu:
       menu_open = b;
       return NULL;
+    case Wimp_SpriteOp:                /* 40, read sprite information: the icon is there */
+      CHECK (r[0] == 40 && strcmp ((const char *) r[2], "!lumen") == 0, "Wimp_SpriteOp 40 on !lumen");
+      return NULL;
     case Wimp_GetPointerInfo:
       b[0] = ptr_x; b[1] = ptr_y; b[2] = ptr_buttons; b[3] = ptr_window; b[4] = ptr_icon;
       return NULL;
@@ -226,7 +229,8 @@ static void fakes (void)
     { OS_ReadModeVariable, "OS_ReadModeVariable", 0 }, { ColourTrans_SetGCOL, "ColourTrans_SetGCOL", 0 },
     { ColourTrans_SelectTable, "ColourTrans_SelectTable", 0 }, { OS_Plot, "OS_Plot", 0 },
     { OS_SpriteOp, "OS_SpriteOp", 0 }, { OS_ReadMonotonicTime, "OS_ReadMonotonicTime", 0 },
-    { Wimp_DragBox, "Wimp_DragBox", 1 }, { Wimp_SetIconState, "Wimp_SetIconState", 1 } };
+    { Wimp_DragBox, "Wimp_DragBox", 1 }, { Wimp_SetIconState, "Wimp_SetIconState", 1 },
+    { Wimp_SpriteOp, "Wimp_SpriteOp", 1 } };
   size_t i;
   fake_reset ();
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
