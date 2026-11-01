@@ -27,6 +27,7 @@
 #include <swis.h>
 #include "ui.h"
 #include "exif.h"
+#include "colour.h"
 
 #define TB_H 120                       /* the toolbar */
 #define TAB_H 72                       /* the inspector's tabs */
@@ -52,7 +53,14 @@ static int win = -1, insp = -1, is_open, full_screen;
 static int mode = LAYOUT_BROWSER, insp_on = 1, tab = TAB_LIBRARY;
 static int vis_w = 2800, vis_h = 1700, screen_w = 3840, screen_h = 2160;
 static int normal_box[4];              /* where the window was before full screen */
+static int normal_mode;                /* and its layout */
+static int frame_change;               /* the next open sets the window flags (full screen on or off) */
+#define FLAGS_FRAMED 0xAF000002u       /* moveable; back, close, title, toggle size; new format */
+#define FLAGS_BARE 0x80000002u         /* full screen: no frame at all */
 static char title[220];
+static int search_icon = -1;           /* the bottom bar's writable icon */
+static char search_text[64];
+static char search_valid[] = "Pptr_write;KN";
 static int insp_extent = 2000, insp_content = 400, insp_vis = 400;
 
 /* The Library tab's rows: what each shows. */
@@ -60,6 +68,7 @@ typedef struct { int kind; cat_id id; char text[80]; int heading; } lib_row;
 static lib_row *rows;
 static int nrows;
 static void build_rows (void);
+static void place_icons (void);
 static void info_load (int force);
 static int info_height;
 static void apply_extent (void);
@@ -105,7 +114,7 @@ int mainwin_create (void)
   snprintf (title, sizeof title, "%s", APP_NAME);
   /* The main window: moveable; back, close, title, toggle size, adjust
      size; no scroll bars; we draw the background (colour 255). */
-  window_block (b, (int) 0xAF000002, 255, title, sizeof title, 0x13D);
+  window_block (b, (int) FLAGS_FRAMED, 255, title, sizeof title, 0x13D);
   if (_swix (Wimp_CreateWindow, _IN (1) | _OUT (0), b, &win))
     return -1;
   build_rows ();
@@ -120,6 +129,19 @@ int mainwin_create (void)
   insp_extent = 0;
   mainwin_inspector_changed ();
   mainwin_update_title ();
+  /* The search field (Wimp_CreateIcon, PRM p746's neighbour): text, border,
+     centred vertically, filled, indirected, writable; black on white. */
+  {
+    int ib[9];
+    ib[0] = win;
+    ib[1] = 0; ib[2] = -400; ib[3] = 400; ib[4] = -352;   /* placed by place_icons */
+    ib[5] = (int) (0x07000000u | 0xF000u | 0x100u | 0x20u | 0x10u | 0x04u | 0x01u);
+    ib[6] = (int) search_text;
+    ib[7] = (int) search_valid;
+    ib[8] = sizeof search_text;
+    if (_swix (Wimp_CreateIcon, _IN (1) | _OUT (0), ib, &search_icon))
+      search_icon = -1;
+  }
   return 0;
 }
 
@@ -185,6 +207,17 @@ static void place_children (int mx0, int my0, int mx1, int my1)
 {
   int ax0 = mx0, ay1 = my1 - TB_H, ax1 = mx1, ay0 = my0 + BB_H, b[9];
   int show_browser = mode != LAYOUT_VIEWER, show_viewer = mode != LAYOUT_BROWSER;
+  if (full_screen)
+    {
+      /* Only the photo: the viewer over everything. */
+      close_child (insp);
+      browser_unplace ();
+      b[0] = viewer_window ();
+      b[1] = mx0; b[2] = my0; b[3] = mx1; b[4] = my1;
+      b[5] = 0; b[6] = 0; b[7] = -1;
+      viewer_place (b);
+      return;
+    }
   if (insp_on && !full_screen)
     {
       insp_vis = ay1 - TAB_H - ay0;
@@ -219,10 +252,20 @@ static void open_main (int *b)
 {
   b[5] = 0;
   b[6] = 0;
-  _swix (Wimp_OpenWindow, _IN (1), b);
+  if (frame_change)
+    {
+      /* Extended syntax (PRM p738): a top-level window (R3 -1), nesting
+         flags bit 0: new window flags at +32 - the frame off or on. */
+      b[8] = (int) (full_screen ? FLAGS_BARE : FLAGS_FRAMED);
+      _swix (Wimp_OpenWindow, _INR (1, 4), b, TASK_WORD, -1, 1);
+      frame_change = 0;
+    }
+  else
+    _swix (Wimp_OpenWindow, _IN (1), b);
   _swix (Wimp_GetWindowState, _IN (1), b);   /* where the Wimp put it */
   vis_w = b[3] - b[1];
   vis_h = b[4] - b[2];
+  place_icons ();
   place_children (b[1], b[2], b[3], b[4]);
   if (!is_open)
     {
@@ -255,6 +298,8 @@ void mainwin_open (int *block)
   open_main (block);
 }
 
+int mainwin_full_screen (void) { return full_screen; }
+
 void mainwin_close (void)
 {
   int b[1];
@@ -262,6 +307,8 @@ void mainwin_close (void)
     return;
   viewer_shutdown ();
   mode = LAYOUT_BROWSER;               /* it opens again on the Browser */
+  if (full_screen)
+    frame_change = 1;                  /* with its frame back */
   full_screen = 0;
   close_child (insp);
   browser_close ();
@@ -303,6 +350,8 @@ void mainwin_set_mode (int m)
   mode = m;
   relayout ();
   mainwin_update_title ();
+  if (tab != TAB_LIBRARY)
+    mainwin_inspector_changed ();      /* Adjustments and Info follow the layout's photo */
 }
 
 void mainwin_cycle_mode (void)
@@ -338,21 +387,29 @@ void mainwin_toggle_full_screen (void)
     return;
   if (!full_screen)
     {
-      memcpy (normal_box, &b[1], sizeof normal_box);
-      full_screen = 1;
+      /* The photo needs to be there: the Viewer's, or the Browser's focus. */
+      normal_mode = mode;
       if (mode == LAYOUT_BROWSER)
         mainwin_set_mode (LAYOUT_VIEWER);
-      /* The whole screen: the title bar just above the top edge. */
+      if (mode == LAYOUT_BROWSER)      /* no photos at all */
+        return;
+      memcpy (normal_box, &b[1], sizeof normal_box);
+      full_screen = 1;
+      mode = LAYOUT_VIEWER;
+      /* The whole screen, without a frame. */
       b[1] = 0; b[2] = 0; b[3] = screen_w; b[4] = screen_h;
     }
   else
     {
       full_screen = 0;
       memcpy (&b[1], normal_box, sizeof normal_box);
+      mode = normal_mode;
     }
+  frame_change = 1;
   b[7] = -1;
   open_main (b);
   relayout ();
+  mainwin_update_title ();
 }
 
 /* The inspector's contents changed (tab, photo, panel height). */
@@ -747,6 +804,19 @@ static void info_load (int force)
       got = fread (buf, 1, 256 * 1024, f);
     if (f)
       fclose (f);
+    if (buf && got && img_probe (buf, got) == IMG_JPEG)
+      {
+        /* The colour space: Adobe RGB and Display P3 are converted (colour.h). */
+        char prof[64], cv[120];
+        int cs = colour_from_jpeg (buf, got, prof, sizeof prof);
+        if (cs == CS_ADOBE || cs == CS_P3)
+          snprintf (cv, sizeof cv, "%s, converted to sRGB", prof[0] ? prof : colour_name (cs));
+        else if (cs == CS_OTHER)
+          snprintf (cv, sizeof cv, "%s, shown as sRGB", prof[0] ? prof : "Unknown");
+        else
+          snprintf (cv, sizeof cv, "%s", prof[0] ? prof : "sRGB");
+        info_add ("Colour", cv, 0);
+      }
     if (buf && got)
       info_has_exif = exif_list (buf, got, info_exif_tag, NULL) > 0;
     free (buf);
@@ -897,6 +967,95 @@ static void size_rect (int k, int r[4])
   r[3] = -vis_h + BB_H - 8;
 }
 
+/* The rating filter's button and the search field, left of the sizes. */
+#define SEARCH_W 420
+#define RATING_W 250
+static void search_rect (int r[4])
+{
+  int sr[4];
+  size_rect (0, sr);
+  r[2] = sr[0] - 24;
+  r[0] = r[2] - SEARCH_W;
+  r[1] = -vis_h + 8;
+  r[3] = -vis_h + BB_H - 8;
+}
+
+static void rating_rect (int r[4])
+{
+  int q[4];
+  search_rect (q);
+  r[2] = q[0] - 24 - draw_text_width ("Search") - 12;
+  r[0] = r[2] - RATING_W;
+  r[1] = q[1];
+  r[3] = q[3];
+}
+
+/* Moves the search field with the bottom bar. */
+static void place_icons (void)
+{
+  int r[4];
+  if (search_icon < 0)
+    return;
+  search_rect (r);
+  _swix (Wimp_ResizeIcon, _INR (0, 5), win, search_icon, r[0], r[1], r[2], r[3]);
+}
+
+int mainwin_search_icon (void) { return search_icon; }
+
+static const char *rating_label (void)
+{
+  static const char *const names[6] = { "Any rating", "1 star +", "2 stars +", "3 stars +", "4 stars +", "5 stars" };
+  int m = browser_source ()->min_rating;
+  return names[m >= 0 && m <= 5 ? m : 0];
+}
+
+/* Searches for what is in the field now. */
+static void search_apply (void)
+{
+  cat_source s = *browser_source ();
+  if (strcmp (s.search, search_text) == 0)
+    return;
+  snprintf (s.search, sizeof s.search, "%s", search_text);
+  browser_set_source (&s);
+  if (mode != LAYOUT_BROWSER && browser_count () > 0)
+    browser_focus_on (0);
+  else if (browser_count () == 0 && mode != LAYOUT_BROWSER)
+    mainwin_set_mode (LAYOUT_BROWSER);
+  mainwin_status_changed ();
+}
+
+void mainwin_set_search (const char *text)
+{
+  snprintf (search_text, sizeof search_text, "%s", text);
+  if (search_icon >= 0)
+    _swix (Wimp_SetIconState, _INR (1, 1), (int[]) { win, search_icon, 0, 0 });
+  search_apply ();
+}
+
+/* A key in the search field: Return or any typing searches (the KN
+   validation tells us of every key); Escape clears it. 1 if used. */
+int mainwin_search_key (int key)
+{
+  if (key == KEY_ESCAPE)
+    {
+      search_text[0] = '\0';
+      if (search_icon >= 0)
+        {
+          _swix (Wimp_SetIconState, _INR (1, 1), (int[]) { win, search_icon, 0, 0 });
+          _swix (Wimp_SetCaretPosition, _INR (0, 5), win, search_icon, 0, 0, -1, 0);
+        }
+      search_apply ();
+      return 1;
+    }
+  if (key == KEY_RETURN || (key >= 0x20 && key < 0x7F) || key == 8 || key == 0x7F || (key >= 0xA0 && key < 0x100)
+      || key == KEY_LEFT || key == KEY_RIGHT || key == 0x18B || key == KEY_END || key == KEY_HOME)
+    {
+      search_apply ();
+      return 1;
+    }
+  return 0;
+}
+
 static void draw_bottom (int ox, int oy)
 {
   static const char *const sizes[3] = { "Small", "Medium", "Large" };
@@ -910,9 +1069,32 @@ static void draw_bottom (int ox, int oy)
     snprintf (t, sizeof t, "1 photo");
   else
     snprintf (t, sizeof t, "%d photos", browser_count ());
-  if (nsel)
-    snprintf (t + strlen (t), sizeof t - strlen (t), "  \xB7  %d selected", nsel);
-  draw_text (ox + 24, y0 + 16, t, COL_TEXT, COL_TOOLBAR);
+  {
+    /* As much as fits left of the rating button: then without the
+       selection, then nothing (a narrow window). */
+    int r[4], room;
+    char full[140];
+    rating_rect (r);
+    room = r[0] - 24 - 24;
+    snprintf (full, sizeof full, "%s", t);
+    if (nsel)
+      snprintf (full + strlen (full), sizeof full - strlen (full), "  \xB7  %d selected", nsel);
+    if (draw_text_width (full) <= room)
+      draw_text (ox + 24, y0 + 16, full, COL_TEXT, COL_TOOLBAR);
+    else if (draw_text_width (t) <= room)
+      draw_text (ox + 24, y0 + 16, t, COL_TEXT, COL_TOOLBAR);
+  }
+  {
+    int r[4], q[4];
+    const char *rl = rating_label ();
+    rating_rect (r);
+    search_rect (q);
+    draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + r[3], COL_WHITE);
+    draw_frame (ox + r[0], oy + r[1], ox + r[2], oy + r[3], COL_TOOLBAR_EDGE);
+    draw_text (ox + r[0] + 14, oy + r[1] + 8, rl, browser_source ()->min_rating ? COL_ACCENT : COL_TEXT, COL_WHITE);
+    draw_triangle (ox + r[2] - 34, oy + r[1] + 26, ox + r[2] - 14, oy + r[1] + 26, ox + r[2] - 24, oy + r[1] + 14, COL_ICON);
+    draw_text (ox + q[0] - 12 - draw_text_width ("Search"), y0 + 16, "Search", COL_TEXT, COL_TOOLBAR);
+  }
   for (k = 0; k < 3; k++)
     {
       int r[4], on = browser_size () == k;
@@ -1007,6 +1189,8 @@ void mainwin_click (int *b)
       menus_open_window_menu (b[0], b[1]);
       return;
     }
+  if (search_icon >= 0 && b[4] == search_icon)
+    return;                            /* the Wimp puts the caret in the field */
   _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
   wx = b[0] - (st[1] - st[5]);
   wy = b[1] - (st[4] - st[6]);
@@ -1041,6 +1225,12 @@ void mainwin_click (int *b)
               mainwin_status_changed ();
             }
         }
+      {
+        int r[4];
+        rating_rect (r);
+        if (wx >= r[0] && wx <= r[2])
+          menus_open_rating_menu (b[0] - 64, st[4] - st[6] + r[3] + 4);
+      }
       return;
     }
   if (insp_on && !full_screen)

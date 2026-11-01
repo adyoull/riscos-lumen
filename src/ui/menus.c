@@ -22,7 +22,7 @@
 
 static char pool[32 * 1024];
 static size_t used;
-static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu, 4 presets, 5 New */
+static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu, 4 presets, 5 New, 6 rating filter */
 static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40];
@@ -427,6 +427,31 @@ void menus_open_new_menu (int x, int y)
     _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
 
+/* The bottom bar's rating filter. */
+static menu *build_rating_menu (void)
+{
+  static const char *const names[6] = { "Any rating", "1 star and up", "2 stars and up", "3 stars and up",
+                                        "4 stars and up", "5 stars" };
+  const cat_source *s = browser_source ();
+  menu *m;
+  int k;
+  used = 0;
+  m = new_menu ("Show", 6);
+  for (k = 0; k < 6 && m; k++)
+    set_item (m, k, k == 5, names[k], s->min_rating == k ? MF_TICK : 0, -1, s->kind == SRC_REJECTED);
+  return m;
+}
+
+void menus_open_rating_menu (int x, int y)
+{
+  menu *m = build_rating_menu ();
+  which = 6;
+  open_x = x;
+  open_y = y + 6 * 44;                 /* opens upwards from the bar */
+  if (m)
+    _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
+}
+
 void menus_open_iconbar_menu (int x)
 {
   menu *m = build_iconbar_menu ();
@@ -574,6 +599,16 @@ int menus_selection (const int *choice)
       }
   else if (which == 4)
     presets_choice (choice);
+  else if (which == 6)
+    {
+      if (choice[0] >= 0 && choice[0] <= 5)
+        {
+          cat_source s = *browser_source ();
+          s.min_rating = choice[0];
+          browser_set_source (&s);
+          mainwin_status_changed ();
+        }
+    }
   else if (which == 5)
     {
       if (choice[0] == 0 && choice[1] == 0)
@@ -614,7 +649,7 @@ int menus_selection (const int *choice)
         }
       else
         m = which == 1 ? build_window_menu () : which == 3 ? build_viewer_menu ()
-          : which == 5 ? build_new_menu () : build_iconbar_menu ();
+          : which == 5 ? build_new_menu () : which == 6 ? build_rating_menu () : build_iconbar_menu ();
       if (m)
         _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
     }

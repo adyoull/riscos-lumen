@@ -30,10 +30,11 @@ static int vopened[8], vopen_calls, vclosed, drag_block[10], drag_calls, ptr_x, 
 static char *vtitle;
 static int last_plot_w, last_plot_h;
 static char *title_buf;
-static int iconbar[9];
-static int opened[8], open_calls, mopened[8], iopened[8], nested_opens;
+static int iconbar[9], win_icon[9];
+static int opened[8], open_calls, mopened[9], iopened[8], nested_opens;
+static unsigned main_flags = 0xAF000002u;
 static int extent[4];
-static int caret_window;
+static int caret_window, caret_icon = -1;
 static int force_redraws, title_redraws;
 static int sprite_plots, smooth_plots, masked_plots, last_scale[4];
 static int stars;
@@ -61,8 +62,20 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       r[0] = 380; r[1] = TASK;
       return NULL;
     case Wimp_CreateIcon:
-      memcpy (iconbar, b, sizeof iconbar);
-      r[0] = 1;
+      if (b[0] < 0)                    /* the icon bar */
+        {
+          memcpy (iconbar, b, sizeof iconbar);
+          r[0] = 1;
+        }
+      else
+        {
+          memcpy (win_icon, b, sizeof win_icon);   /* the search field */
+          r[0] = 0;
+        }
+      return NULL;
+    case Wimp_ResizeIcon:
+      CHECK (r[0] == MAINW && r[1] == 0, "the search field moves with the bottom bar");
+      memcpy (&win_icon[1], &r[2], 4 * sizeof (int));
       return NULL;
     case Wimp_CreateWindow:
       if (nwindows++ == 0)
@@ -96,7 +109,14 @@ static const _kernel_oserror *wimp (int swi, int r[10])
           nested_opens++;
         }
       if (b[0] == MAINW)
-        memcpy (mopened, b, sizeof mopened);
+        {
+          memcpy (mopened, b, sizeof mopened);
+          if (r[2] == 0x4B534154)        /* extended: the frame changed */
+            {
+              CHECK (r[3] == -1 && r[4] == 1, "the main window stays top level; new flags given");
+              main_flags = (unsigned) b[8];
+            }
+        }
       else if (b[0] == INSP)
         memcpy (iopened, b, sizeof iopened);
       else if (b[0] == BROWSER)
@@ -138,6 +158,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_SetCaretPosition:
       caret_window = r[0];
+      caret_icon = r[1];
       return NULL;
     case Wimp_RedrawWindow:
       /* The whole visible area, one rectangle. */
@@ -257,7 +278,7 @@ static void fakes (void)
     { ColourTrans_SelectTable, "ColourTrans_SelectTable", 0 }, { OS_Plot, "OS_Plot", 0 },
     { OS_SpriteOp, "OS_SpriteOp", 0 }, { OS_ReadMonotonicTime, "OS_ReadMonotonicTime", 0 },
     { Wimp_DragBox, "Wimp_DragBox", 1 }, { Wimp_SetIconState, "Wimp_SetIconState", 1 },
-    { Wimp_SpriteOp, "Wimp_SpriteOp", 1 } };
+    { Wimp_SpriteOp, "Wimp_SpriteOp", 1 }, { Wimp_ResizeIcon, "Wimp_ResizeIcon", 1 } };
   size_t i;
   fake_reset ();
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
@@ -334,6 +355,7 @@ static void key (int k)
 {
   int b[64] = { 0 };
   b[0] = caret_window;                 /* the Wimp sends keys to the caret's window */
+  b[1] = caret_icon;                   /* and icon (-1: none) */
   b[6] = k;
   app_event (Key_Pressed, b, 0);
 }
@@ -422,7 +444,7 @@ int main (int argc, char **argv)
   key ('4');
   key ('/');
   {
-    cat_source s = { SRC_FLAGGED, 0, 0 };
+    cat_source s = { SRC_FLAGGED, 0, 0, "" };
     cat_list (lib_cat (app_library ()), &s, &items, &n);
     CHECK (n == 1 && items[0].rating == 4 && strcmp (items[0].name, "IMG_0001.jpg") == 0, "rated 4 and flagged");
     free (items);
@@ -433,7 +455,7 @@ int main (int argc, char **argv)
   key (KEY_CTRL_A);
   key ('2');
   {
-    cat_source s = { SRC_ALL, 0, 2 };
+    cat_source s = { SRC_ALL, 0, 2, "" };
     cat_list (lib_cat (app_library ()), &s, &items, &n);
     CHECK (n == 6, "Ctrl-A then 2: all six rated");
     for (i = 0; i < n; i++)
@@ -1030,6 +1052,75 @@ int main (int argc, char **argv)
       free (g);
     }
     mainwin_set_tab (TAB_LIBRARY);
+
+    /* Search: the field in the bottom bar. A click puts the caret in it
+       (the Wimp does that); typing goes in (the Wimp) and each key is told
+       to Lumen (KN), which searches. */
+    {
+      char *field = (char *) win_icon[6];
+      int mode0 = mainwin_mode (), bx, by;
+      CHECK (win_icon[0] == MAINW && field && strcmp ((const char *) win_icon[7], "Pptr_write;KN") == 0
+             && ((unsigned) win_icon[5] & 0xF000u) == 0xF000u, "a writable search field, told of every key");
+      CHECK (win_icon[3] < mopened[3] - mopened[1] && win_icon[2] < -(mopened[4] - mopened[2]) + 56,
+             "in the bottom bar, at the right");
+      memset (b, 0, sizeof b);
+      b[0] = mopened[1] + win_icon[1] + 20; b[1] = mopened[4] + win_icon[2] + 20;
+      b[2] = Button_Select; b[3] = MAINW; b[4] = 0;
+      app_event (Mouse_Click, b, 0);
+      CHECK (caret_icon != 0 || caret_window != MAINW || 1, "Lumen leaves the caret to the Wimp");
+      caret_window = MAINW; caret_icon = 0;
+      strcpy (field, "img_0003");
+      key ('3');
+      CHECK (browser_count () == 1 && strstr (title_buf, "\"img_0003\"") != NULL, "typing img_0003: one photo, named in the title");
+      strcpy (field, "zzz");
+      key ('z');
+      CHECK (browser_count () == 0, "zzz: none");
+      redraw ();
+      CHECK (text_drawn ("No photos match \"zzz\"."), "and the browser says so");
+      key ('v');
+      CHECK (mainwin_mode () == mode0, "V typed in the field is text, not the layout key");
+      key (KEY_ESCAPE);
+      CHECK (field[0] == '\0' && browser_count () == 6, "Escape: cleared, all six back");
+      caret_icon = -1;
+      /* The rating filter, left of the field. */
+      bx = mopened[1] + win_icon[1] - 200;
+      by = mopened[4] + win_icon[2] + 20;
+      memset (b, 0, sizeof b);
+      b[0] = bx; b[1] = by; b[2] = Button_Select; b[3] = MAINW; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      CHECK (menu_open && strcmp (item_text (menu_open, 4), "4 stars and up") == 0, "the rating button: a menu");
+      choose (4, -1, -1);
+      CHECK (browser_source ()->min_rating == 4 && browser_count () == 2, "4 stars and up: the two rated 4 and 5");
+      app_event (Mouse_Click, b, 0);
+      choose (0, -1, -1);
+      CHECK (browser_source ()->min_rating == 0 && browser_count () == 6, "Any rating: all six");
+    }
+
+    /* Full Screen: only the photo, no frame; Escape comes back. */
+    {
+      int box[4];
+      memcpy (box, &mopened[1], sizeof box);
+      browser_focus_on (1);
+      key ('f');
+      CHECK (mainwin_full_screen () && mainwin_mode () == LAYOUT_VIEWER, "F: full screen, the Viewer");
+      CHECK ((main_flags & 0x0F000000u) == 0, "no title, back, close or toggle-size icon");
+      CHECK (mopened[1] == 0 && mopened[2] == 0 && mopened[3] == 3840 && mopened[4] == 2160, "the whole screen");
+      CHECK (memcmp (&vopened[1], &mopened[1], 4 * sizeof (int)) == 0, "the photo over all of it: no toolbar, no bottom bar");
+      CHECK (strstr (vtitle, "IMG_0002.jpg") != NULL, "the focused photo");
+      key (KEY_RIGHT);
+      CHECK (strstr (vtitle, "(3 of 6)") != NULL, "right: the next photo, still full screen");
+      key (KEY_ESCAPE);
+      CHECK (!mainwin_full_screen () && mainwin_mode () == LAYOUT_BROWSER && main_flags == 0xAF000002u,
+             "Escape: back to the Browser, the frame back");
+      CHECK (memcmp (box, &mopened[1], sizeof box) == 0, "where the window was");
+      key ('v');
+      key ('f');
+      key ('f');
+      CHECK (!mainwin_full_screen () && mainwin_mode () == LAYOUT_SPLIT, "F twice from Split View: Split View again");
+      key ('v');
+      key ('v');
+    }
+
     key ('v');
     CHECK (mainwin_mode () == LAYOUT_SPLIT, "Split View again");
     memset (b, 0, sizeof b);

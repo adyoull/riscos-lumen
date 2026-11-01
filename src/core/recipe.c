@@ -9,6 +9,8 @@ const recipe_param recipe_params[P_COUNT] = {
   { "wb",       "temp",       "Temperature", -100, 100, 0, 1, 0, 0 },
   { "wb",       "tint",       "Tint",        -100, 100, 0, 1, 0, 0 },
   { "exposure", "ev",         "Exposure",      -4,   4, 0, 0.05f, 2, 0 },
+  { "hs",       "highlights", "Highlights",     0, 100, 0, 1, 0, 0 },
+  { "hs",       "shadows",    "Shadows",        0, 100, 0, 1, 0, 0 },
   { "levels",   "black",      "Black point",    0,  25, 0, 0.5f, 1, 0 },
   { "levels",   "white",      "White point",   75, 100, 100, 0.5f, 1, 0 },
   { "levels",   "mid",        "Midtones",    -100, 100, 0, 1, 0, 0 },
@@ -30,6 +32,7 @@ const recipe_param recipe_params[P_COUNT] = {
 const recipe_group recipe_groups[] = {
   { "White Balance", P_TEMP, P_TINT, 1, 0 },
   { "Exposure", P_EV, P_EV, 1, 0 },
+  { "Highlights & Shadows", P_HIGHLIGHTS, P_SHADOWS, 1, 0 },
   { "Levels", P_BLACK, P_MID, 1, 0 },
   { "Curves", 1, 0, 1, 1 },            /* no sliders: the curves editor */
   { "Enhance", P_CONTRAST, P_VIBRANCE, 1, 0 },

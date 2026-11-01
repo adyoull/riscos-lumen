@@ -1,10 +1,10 @@
-Lumen 0.0.14 (01 Nov 2026) - test build
+Lumen 0.0.15 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
 This test build has importing, browsing, rating, flagging and albums;
-adjustments (white balance with an eyedropper, exposure, levels,
-contrast, saturation, vibrancy); Auto; crop, quarter turns, straighten
+adjustments (white balance with an eyedropper, exposure, highlights &
+shadows, levels, curves, contrast, saturation, vibrancy, sharpening); Auto; crop, quarter turns, straighten
 and perspective; grids; presets; and copying adjustments between photos.
 Your photos are never changed: each edit is a recipe kept in the
 library, and can be undone or reset at any time.
@@ -42,13 +42,22 @@ Lumen has one window, laid out as Aperture 3's:
   Viewer        one photo, as large as it fits
   Split View    the Viewer above the Browser: move about the Browser and
                 the Viewer follows
-  Bottom bar    how many photos, how many selected, the thumbnail size;
-                drag the grip in the corner to resize the window
+  Bottom bar    how many photos, how many selected; the rating filter
+                (Any rating, 1 star and up ... 5 stars); Search; the
+                thumbnail size; drag the grip in the corner to resize the
+                window
+
+Search: click in the field and type. The Browser shows the photos whose
+name, camera (make or model), date taken (2026-06-16 or 2026:06) or
+project match every word typed. Escape clears it. The search and the
+rating filter stay as you choose other projects and albums.
 
   V             Browser, Split View, Viewer in turn
   I             show or hide the Inspector
   W             the Inspector's next tab
-  F             Full Screen (F again to come back)
+  F             Full Screen: only the photo, nothing else on the screen
+                (F or Escape to come back; Left and Right still move
+                through the photos)
 
 Keys in the Browser
 -------------------
@@ -95,6 +104,11 @@ The tools above the sliders:
                 fine grid shows anyway
   Presets       apply a saved look, save the current one by name, or
                 delete one. A preset keeps the look, not the crop
+
+Highlights & Shadows: Shadows brightens the dark parts of the picture and
+Highlights darkens the bright parts, judged by their surroundings rather
+than pixel by pixel, so detail and contrast within them stay (as
+Aperture's do). Good for a dark foreground under a bright sky.
 
 Click a group's name (or its triangle) to fold it away or open it again.
 The tab scrolls when it doesn't all fit.
@@ -179,6 +193,15 @@ The Lumen menu
   Album           make a new album from the selection, add to one,
                   or remove from the album shown
   Thumbnail size  Small, Medium, Large
+
+Colour
+------
+Lumen shows and exports photos in sRGB, the desktop's colours. Photos in
+Adobe RGB (1998) or Display P3 (iPhones') are converted as they are
+read, so they look as they should rather than dull; the Info tab's
+"Colour" line says what a photo is. Lumen knows them from the photo's
+ICC profile or, without one, from the camera's EXIF. Other profiles are
+shown as sRGB.
 
 Needs
 -----

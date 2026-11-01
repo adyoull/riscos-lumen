@@ -203,7 +203,7 @@ static void data_load (int *b)
   (void) type;
   /* Show what arrives. */
   {
-    cat_source s = { SRC_LAST_IMPORT, 0, 0 };
+    cat_source s = { SRC_LAST_IMPORT, 0, 0, "" };
     if (browser_source ()->kind != SRC_LAST_IMPORT)
       browser_set_source (&s);
     mainwin_set_mode (LAYOUT_BROWSER);
@@ -298,7 +298,9 @@ int app_event (int reason, int *b, int sender)
         viewer_drag_end ();
       break;
     case Key_Pressed:
-      if (b[0] == exportbox_window () ? !exportbox_key (b[6]) : !app_key (b[6]))
+      if (b[0] == exportbox_window () ? !exportbox_key (b[6])
+          : b[0] == mainwin_window () && b[1] >= 0 && b[1] == mainwin_search_icon () ? !mainwin_search_key (b[6])
+          : !app_key (b[6]))
         _swix (Wimp_ProcessKey, _IN (0), b[6]);
       break;
     case Menu_Selection:

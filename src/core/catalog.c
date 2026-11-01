@@ -284,7 +284,7 @@ cat_id cat_add_original (cat *c, cat_id project, const cat_original *o, cat_id *
 
 int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
 {
-  char sql[640];
+  char sql[1800];
   const char *where;
   sqlite3_stmt *s;
   int n = 0, cap = 256;
@@ -298,15 +298,50 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
     case SRC_ALBUM:       where = "v.id IN (SELECT version FROM album_item WHERE album = ?1) AND v.rating >= ?2"; break;
     default:              where = "v.rating >= ?2"; break;
     }
+  /* Search: up to four words, each as a pattern ?3.. that the name, the
+     camera, the date (as stored, or with - for :) or the project matches. */
+  char words[4][70], match[900];
+  int nw = 0, k;
+  {
+    const char *q = src->search;
+    match[0] = '\0';
+    while (*q && nw < 4)
+      {
+        size_t len = 0;
+        while (*q == ' ')
+          q++;
+        if (!*q)
+          break;
+        words[nw][0] = '%';
+        while (*q && *q != ' ' && len < 64)
+          {
+            char ch = *q++;
+            if (ch == '%' || ch == '_' || ch == '\\')
+              words[nw][1 + len++] = '\\';   /* LIKE's own characters, taken literally */
+            words[nw][1 + len++] = ch;
+          }
+        words[nw][1 + len] = '%';
+        words[nw][2 + len] = '\0';
+        snprintf (match + strlen (match), sizeof match - strlen (match),
+                  " AND (v.name LIKE ?%d ESCAPE '\\' OR IFNULL(o.make, '') LIKE ?%d ESCAPE '\\'"
+                  " OR IFNULL(o.model, '') LIKE ?%d ESCAPE '\\' OR REPLACE(IFNULL(o.taken, ''), ':', '-') LIKE ?%d ESCAPE '\\'"
+                  " OR IFNULL(o.taken, '') LIKE ?%d ESCAPE '\\'"
+                  " OR (SELECT name FROM project WHERE id = v.project) LIKE ?%d ESCAPE '\\')",
+                  3 + nw, 3 + nw, 3 + nw, 3 + nw, 3 + nw, 3 + nw);
+        nw++;
+      }
+  }
   snprintf (sql, sizeof sql,
             "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '' FROM version v"
-            " JOIN original o ON o.id = v.original WHERE %s"
-            " ORDER BY IFNULL(o.taken, '9999'), v.name, v.id", where);
+            " JOIN original o ON o.id = v.original WHERE %s%s"
+            " ORDER BY IFNULL(o.taken, '9999'), v.name, v.id", where, match);
   s = prep (c, sql);
   if (!s)
     return -1;
   sqlite3_bind_int64 (s, 1, src->id);
   sqlite3_bind_int (s, 2, src->min_rating);
+  for (k = 0; k < nw; k++)
+    sqlite3_bind_text (s, 3 + k, words[k], -1, SQLITE_TRANSIENT);
   a = malloc (sizeof *a * cap);
   if (!a)
     {

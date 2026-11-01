@@ -4,6 +4,7 @@
 
      wb temp=12 tint=-3
      exposure ev=0.35
+     hs highlights=30 shadows=45
      levels black=2 white=98 mid=10
      enhance contrast=12 saturation=0 vibrance=18
      sharpen amount=40 radius=1.0
@@ -21,6 +22,7 @@ enum
 {
   P_TEMP, P_TINT,                      /* white balance */
   P_EV,                                /* exposure */
+  P_HIGHLIGHTS, P_SHADOWS,             /* highlights & shadows (local, see develop.h) */
   P_BLACK, P_WHITE, P_MID,             /* levels */
   P_CONTRAST, P_SATURATION, P_VIBRANCE,/* enhance */
   P_SHARPEN, P_SHARP_RADIUS,           /* sharpen (applied after develop, at the output's size) */

@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include "../src/core/catalog.h"
 #include "../src/core/exif.h"
+#include "../src/core/colour.h"
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
 #include "../src/core/thumbgen.h"
@@ -109,6 +110,202 @@ static void make_jpeg (const char *path, int w, int h, int orientation, const ch
   jpeg_destroy_compress (&c);
   fclose (f);
   free (row);
+}
+
+static void p (char *out, const char *rel);
+
+/* --- colour spaces */
+
+static void put32be (unsigned char *p, unsigned long v)
+{
+  p[0] = (unsigned char) (v >> 24); p[1] = (unsigned char) (v >> 16);
+  p[2] = (unsigned char) (v >> 8); p[3] = (unsigned char) v;
+}
+
+/* A minimal ICC profile: the header and one 'desc' tag (v2 text, or v4
+   'mluc' UTF-16), which is all Lumen reads. Returns its length. */
+static size_t make_icc (unsigned char *p, const char *desc, int v4)
+{
+  size_t n = strlen (desc), tag = 144, len, i;
+  memset (p, 0, 600);
+  memcpy (p + 36, "acsp", 4);
+  put32be (p + 128, 1);
+  memcpy (p + 132, "desc", 4);
+  put32be (p + 136, (unsigned long) tag);
+  if (!v4)
+    {
+      memcpy (p + tag, "desc", 4);
+      put32be (p + tag + 8, (unsigned long) n + 1);
+      memcpy (p + tag + 12, desc, n + 1);
+      len = tag + 12 + n + 1 + 79;     /* the Unicode and Script parts, empty */
+    }
+  else
+    {
+      memcpy (p + tag, "mluc", 4);
+      put32be (p + tag + 8, 1);
+      put32be (p + tag + 12, 12);
+      memcpy (p + tag + 16, "enUS", 4);
+      put32be (p + tag + 20, (unsigned long) (2 * n));
+      put32be (p + tag + 24, 28);
+      for (i = 0; i < n; i++)
+        {
+          p[tag + 28 + 2 * i] = 0;
+          p[tag + 28 + 2 * i + 1] = (unsigned char) desc[i];
+        }
+      len = tag + 28 + 2 * n;
+    }
+  put32be (p + 140, (unsigned long) (len - tag));
+  put32be (p, (unsigned long) len);
+  return len;
+}
+
+/* A flat w x h JPEG of one colour, with an ICC profile (icc_len > 0) or
+   an EXIF block (exif_len > 0). */
+static void make_flat_jpeg (const char *path, int w, int h, const unsigned char rgb[3],
+                            const unsigned char *icc, size_t icc_len, const unsigned char *exif, size_t exif_len)
+{
+  struct jpeg_compress_struct c;
+  struct jpeg_error_mgr e;
+  FILE *f = fopen (path, "wb");
+  unsigned char *row = malloc ((size_t) w * 3);
+  int x;
+  c.err = jpeg_std_error (&e);
+  jpeg_create_compress (&c);
+  jpeg_stdio_dest (&c, f);
+  c.image_width = (JDIMENSION) w; c.image_height = (JDIMENSION) h;
+  c.input_components = 3; c.in_color_space = JCS_RGB;
+  jpeg_set_defaults (&c);
+  jpeg_set_quality (&c, 100, TRUE);
+  jpeg_start_compress (&c, TRUE);
+  if (icc_len)
+    jpeg_write_icc_profile (&c, icc, (unsigned) icc_len);
+  if (exif_len)
+    jpeg_write_marker (&c, JPEG_APP0 + 1, exif, (unsigned) exif_len);
+  for (x = 0; x < w; x++)
+    memcpy (row + 3 * x, rgb, 3);
+  while (c.next_scanline < c.image_height)
+    {
+      JSAMPROW r = row;
+      jpeg_write_scanlines (&c, &r, 1);
+    }
+  jpeg_finish_compress (&c);
+  jpeg_destroy_compress (&c);
+  fclose (f);
+  free (row);
+}
+
+/* Decodes path whole; the middle pixel and the colour space found. */
+static int decode_middle (const char *path, unsigned char out[3])
+{
+  char err[200];
+  thumbgen *t = thumbgen_start (path, NULL, 1 << 30, 1, err, sizeof err);
+  rgb_image img;
+  int r, cs;
+  if (!t)
+    return -1;
+  while ((r = thumbgen_step (t, 64)) == 0)
+    ;
+  cs = thumbgen_colour (t);
+  if (r < 0 || thumbgen_take (t, &img))
+    {
+      thumbgen_free (t);
+      return -1;
+    }
+  thumbgen_free (t);
+  memcpy (out, img.rgb + ((size_t) (img.h / 2) * img.w + img.w / 2) * 3, 3);
+  free (img.rgb);
+  return cs;
+}
+
+static int near3 (const unsigned char a[3], int r, int g, int b, int tol)
+{
+  return abs (a[0] - r) <= tol && abs (a[1] - g) <= tol && abs (a[2] - b) <= tol;
+}
+
+static void test_colour (void)
+{
+  static unsigned char icc[600], buf[4096];
+  char path[700], name[64];
+  unsigned char px[3];
+  static const unsigned char green[3] = { 60, 140, 60 }, orange[3] = { 200, 80, 60 }, grey[3] = { 128, 128, 128 };
+  size_t n;
+  FILE *f;
+
+  /* Profiles by their descriptions, v2 and v4. */
+  n = make_icc (icc, "Adobe RGB (1998)", 0);
+  CHECK (colour_from_icc (icc, n, name, sizeof name) == CS_ADOBE && strcmp (name, "Adobe RGB (1998)") == 0,
+         "ICC v2 desc: Adobe RGB (1998)");
+  n = make_icc (icc, "Display P3", 1);
+  CHECK (colour_from_icc (icc, n, name, sizeof name) == CS_P3 && strcmp (name, "Display P3") == 0, "ICC v4 mluc: Display P3");
+  n = make_icc (icc, "sRGB IEC61966-2.1", 0);
+  CHECK (colour_from_icc (icc, n, NULL, 0) == CS_SRGB, "sRGB IEC61966-2.1");
+  n = make_icc (icc, "Some printer's profile", 0);
+  CHECK (colour_from_icc (icc, n, NULL, 0) == CS_OTHER, "anything else: other (shown as sRGB)");
+  CHECK (colour_from_icc (icc, 100, NULL, 0) == CS_OTHER && colour_from_icc (buf, 300, NULL, 0) == CS_OTHER,
+         "short or not a profile: other");
+  for (n = 0; n < 300; n++)
+    colour_from_icc (icc, n, name, sizeof name);
+  CHECK (1, "cut-off profiles read safely");
+
+  /* Adobe RGB: decoded, converted; grey stays grey. */
+  n = make_icc (icc, "Adobe RGB (1998)", 0);
+  p (path, "adobe-green.jpg");
+  make_flat_jpeg (path, 48, 32, green, icc, n, NULL, 0);
+  CHECK (decode_middle (path, px) == CS_ADOBE, "a JPEG with an Adobe RGB profile is found to be one");
+  CHECK (near3 (px, 0, 141, 50, 3), "Adobe RGB (60,140,60) shows as sRGB (0,141,50)");
+  p (path, "adobe-orange.jpg");
+  make_flat_jpeg (path, 48, 32, orange, icc, n, NULL, 0);
+  decode_middle (path, px);
+  CHECK (near3 (px, 230, 79, 56, 3), "(200,80,60) as (230,79,56): richer, as it should be");
+  p (path, "adobe-grey.jpg");
+  make_flat_jpeg (path, 48, 32, grey, icc, n, NULL, 0);
+  decode_middle (path, px);
+  CHECK (near3 (px, 129, 129, 129, 2), "grey stays grey");
+  /* The Info tab's reader finds it from the file's first bytes. */
+  f = fopen (path, "rb");
+  n = fread (buf, 1, sizeof buf, f);
+  fclose (f);
+  CHECK (colour_from_jpeg (buf, n, name, sizeof name) == CS_ADOBE && strcmp (name, "Adobe RGB (1998)") == 0,
+         "colour_from_jpeg: Adobe RGB, by name");
+
+  /* Display P3 (an iPhone's), as a v4 profile. */
+  n = make_icc (icc, "Display P3", 1);
+  p (path, "p3-orange.jpg");
+  make_flat_jpeg (path, 48, 32, orange, icc, n, NULL, 0);
+  CHECK (decode_middle (path, px) == CS_P3 && near3 (px, 216, 69, 50, 3), "Display P3 (200,80,60) as sRGB (216,69,50)");
+
+  /* No profile, but the camera's EXIF says Adobe RGB (uncalibrated + R03). */
+  {
+    unsigned char ex[200], *t = ex + 6;
+    memset (ex, 0, sizeof ex);
+    memcpy (ex, "Exif\0\0", 6);
+    memcpy (t, "II", 2); put16 (t + 2, 42); put32 (t + 4, 8);
+    /* IFD0: the EXIF IFD at 26 */
+    put16 (t + 8, 1);
+    put16 (t + 10, 0x8769); put16 (t + 12, 4); put32 (t + 14, 1); put32 (t + 18, 26);
+    put32 (t + 22, 0);
+    /* EXIF IFD: ColorSpace 0xFFFF, the interoperability IFD at 56 */
+    put16 (t + 26, 2);
+    put16 (t + 28, 0xA001); put16 (t + 30, 3); put32 (t + 32, 1); put16 (t + 36, 0xFFFF);
+    put16 (t + 40, 0xA005); put16 (t + 42, 4); put32 (t + 44, 1); put32 (t + 48, 56);
+    put32 (t + 52, 0);
+    /* Interoperability: index "R03" */
+    put16 (t + 56, 1);
+    put16 (t + 58, 0x0001); put16 (t + 60, 2); put32 (t + 62, 4); memcpy (t + 66, "R03", 4);
+    put32 (t + 70, 0);
+    p (path, "exif-adobe.jpg");
+    make_flat_jpeg (path, 48, 32, green, NULL, 0, ex, 6 + 74);
+    CHECK (decode_middle (path, px) == CS_ADOBE && near3 (px, 0, 141, 50, 3), "EXIF uncalibrated + R03: Adobe RGB");
+    /* ColorSpace sRGB (1): left alone. */
+    put16 (t + 36, 1);
+    p (path, "exif-srgb.jpg");
+    make_flat_jpeg (path, 48, 32, green, NULL, 0, ex, 6 + 74);
+    CHECK (decode_middle (path, px) == CS_SRGB && near3 (px, 60, 140, 60, 3), "EXIF sRGB: unchanged");
+  }
+  /* Nothing at all: sRGB, unchanged. */
+  p (path, "plain.jpg");
+  make_flat_jpeg (path, 48, 32, green, NULL, 0, NULL, 0);
+  CHECK (decode_middle (path, px) == CS_SRGB && near3 (px, 60, 140, 60, 3), "no profile, no EXIF: sRGB, unchanged");
 }
 
 static void make_png (const char *path, int w, int h, int interlace, int alpha)
@@ -252,7 +449,7 @@ static void test_library (void)
   char err[256], path[1024], libdir[1024];
   cat_item *items;
   int n, i, steps;
-  cat_source all = { SRC_ALL, 0, 0 };
+  cat_source all = { SRC_ALL, 0, 0, "" };
   lib_progress pr;
 
   p (libdir, "Library");
@@ -317,10 +514,42 @@ static void test_library (void)
     CHECK (strcmp (d.model, "HQ Camera") == 0, "details: camera");
   }
 
+  /* Search: words that all match the name, the camera, the date or the project. */
+  {
+    cat_source q = { SRC_ALL, 0, 0, "" };
+    cat_item *found;
+    int nf;
+    static const struct { const char *text; int count; const char *first; } cases[] = {
+      { "catbells", 1, "catbells.jpg" },     /* the name */
+      { "CATBELLS", 1, "catbells.jpg" },     /* in any case */
+      { "hq camera", 2, "catbells.jpg" },    /* the camera: both words */
+      { "pi 05:00", 1, "portrait.jpg" },     /* camera and time together */
+      { "2026-06-16", 2, "catbells.jpg" },   /* the date written with dashes */
+      { "2026:06", 2, "catbells.jpg" },      /* or as EXIF writes it */
+      { "lakes", 5, NULL },                  /* the project */
+      { "png", 2, NULL },
+      { "zebra", 0, NULL },
+      { "50%", 0, NULL },                    /* LIKE's own characters, literally */
+      { "c_t", 0, NULL },
+      { "   ", 5, NULL },                    /* only spaces: everything */
+    };
+    size_t k;
+    for (k = 0; k < sizeof cases / sizeof cases[0]; k++)
+      {
+        char what[120];
+        snprintf (q.search, sizeof q.search, "%s", cases[k].text);
+        nf = -1;
+        cat_list (lib_cat (l), &q, &found, &nf);
+        snprintf (what, sizeof what, "search \"%s\": %d found", cases[k].text, cases[k].count);
+        CHECK (nf == cases[k].count && (!cases[k].first || (nf > 0 && strcmp (found[0].name, cases[k].first) == 0)), what);
+        free (found);
+      }
+  }
+
   /* Ratings, flags, rejects, albums. */
   {
     cat_id ids[2];
-    cat_source flagged = { SRC_FLAGGED, 0, 0 }, rejected = { SRC_REJECTED, 0, 0 }, three = { SRC_ALL, 0, 3 };
+    cat_source flagged = { SRC_FLAGGED, 0, 0, "" }, rejected = { SRC_REJECTED, 0, 0, "" }, three = { SRC_ALL, 0, 3, "" };
     cat_item *it2;
     int n2;
     cat_id album;
@@ -346,7 +575,7 @@ static void test_library (void)
     CHECK (cat_album_add (lib_cat (l), album, ids, 2) == 0 && cat_album_add (lib_cat (l), album, ids, 1) == 0,
            "add to album (twice is harmless)");
     {
-      cat_source a = { SRC_ALBUM, album, 0 };
+      cat_source a = { SRC_ALBUM, album, 0, "" };
       cat_list (lib_cat (l), &a, &it2, &n2);
       CHECK (n2 == 2, "the album holds 2");
       free (it2);
@@ -378,7 +607,7 @@ static void test_library (void)
   lib_get_progress (l, &pr);
   CHECK (pr.added == 1 && pr.skipped == 6, "re-import: 1 new, 5 already there + the fake JPEG");
   {
-    cat_source last = { SRC_LAST_IMPORT, 0, 0 };
+    cat_source last = { SRC_LAST_IMPORT, 0, 0, "" };
     cat_list (lib_cat (l), &last, &items, &n);
     CHECK (n == 1 && strcmp (items[0].name, "single.jpg") == 0, "Last import shows the new one");
     free (items);
@@ -429,6 +658,7 @@ int main (int argc, char **argv)
   snprintf (work, sizeof work, "%s", argv[1]);
   fsys_mkdirs (work);
   test_exif ();
+  test_colour ();
   make_fixtures ();
   test_library ();
   test_time_slicing ();

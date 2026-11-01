@@ -8,6 +8,7 @@
 #include <png.h>
 #include "exif.h"
 #include "thumbgen.h"
+#include "colour.h"
 
 /* --- Box-filter downscaler: rows in at the source size, out at the target. */
 typedef struct
@@ -121,6 +122,7 @@ struct thumbgen
   scaler sc;
   int y;                               /* next source row */
   unsigned char *row;                  /* one decoded row */
+  int cs;                              /* the file's colour space (colour.h): converted to sRGB */
   int done;
   int out_w, out_h;
   /* JPEG */
@@ -152,7 +154,25 @@ static int start_jpeg (thumbgen *t)
   jpeg_create_decompress (&t->jd);
   t->jd_live = 1;
   jpeg_stdio_src (&t->jd, t->f);
+  /* Keep the ICC profile (APP2) and EXIF (APP1): the colour space. */
+  jpeg_save_markers (&t->jd, JPEG_APP0 + 2, 0xFFFF);
+  jpeg_save_markers (&t->jd, JPEG_APP0 + 1, 0xFFFF);
   jpeg_read_header (&t->jd, TRUE);
+  {
+    JOCTET *icc = NULL;
+    unsigned int icc_len = 0;
+    jpeg_saved_marker_ptr m;
+    t->cs = CS_SRGB;
+    if (jpeg_read_icc_profile (&t->jd, &icc, &icc_len) && icc)
+      {
+        t->cs = colour_from_icc (icc, icc_len, NULL, 0);
+        free (icc);
+      }
+    else
+      for (m = t->jd.marker_list; m; m = m->next)
+        if (m->marker == JPEG_APP0 + 1 && m->data_length > 6 && memcmp (m->data, "Exif\0\0", 6) == 0)
+          t->cs = colour_from_exif (m->data + 6, m->data_length - 6);
+  }
   /* The largest DCT reduction that still leaves the longer side >= max_side. */
   for (denom = 8; denom > 1; denom /= 2)
     {
@@ -205,6 +225,8 @@ static int step_jpeg (thumbgen *t, int rows_in)
               t->row[3 * x + 2] = (unsigned char) (ye * k / 255);
             }
         }
+      else
+        colour_row_to_srgb (t->cs, t->row, (int) t->jd.output_width);
       scaler_row (&t->sc, t->y++, t->row);
     }
   if (t->jd.output_scanline < t->jd.output_height)
@@ -240,6 +262,17 @@ static int start_png (thumbgen *t)
   png_init_io (t->png, t->f);
   png_read_info (t->png, t->pinfo);
   png_get_IHDR (t->png, t->pinfo, &w, &h, &depth, &ctype, &ilace, NULL, NULL);
+  t->cs = CS_SRGB;
+#ifdef PNG_iCCP_SUPPORTED
+  {
+    png_charp name;
+    int comp;
+    png_bytep prof;
+    png_uint_32 plen;
+    if (png_get_iCCP (t->png, t->pinfo, &name, &comp, &prof, &plen) == PNG_INFO_iCCP)
+      t->cs = colour_from_icc (prof, plen, NULL, 0);
+  }
+#endif
   png_set_expand (t->png);
   png_set_strip_16 (t->png);
   png_set_gray_to_rgb (t->png);
@@ -258,13 +291,13 @@ static int start_png (thumbgen *t)
   return 0;
 }
 
-/* RGBA to RGB over the light grey Lumen draws behind thumbnails. */
+/* RGBA to RGB over the dark grey Lumen's browser draws behind thumbnails. */
 static void flatten (unsigned char *row, int w)
 {
   int x;
   for (x = 0; x < w; x++)
     {
-      unsigned a = row[4 * x + 3], bg = 0xDC;
+      unsigned a = row[4 * x + 3], bg = 0x3C;
       row[3 * x] = (unsigned char) ((row[4 * x] * a + bg * (255 - a) + 127) / 255);
       row[3 * x + 1] = (unsigned char) ((row[4 * x + 1] * a + bg * (255 - a) + 127) / 255);
       row[3 * x + 2] = (unsigned char) ((row[4 * x + 2] * a + bg * (255 - a) + 127) / 255);
@@ -295,6 +328,7 @@ static int step_png (thumbgen *t, int rows_in)
       for (y = 0; y < t->sc.sh; y++)
         {
           flatten (ptrs[y], t->sc.sw);
+          colour_row_to_srgb (t->cs, ptrs[y], t->sc.sw);
           scaler_row (&t->sc, y, ptrs[y]);
         }
       free (all);
@@ -306,6 +340,7 @@ static int step_png (thumbgen *t, int rows_in)
       {
         png_read_row (t->png, t->row, NULL);
         flatten (t->row, t->sc.sw);
+        colour_row_to_srgb (t->cs, t->row, t->sc.sw);
         scaler_row (&t->sc, t->y++, t->row);
       }
   return t->y >= t->sc.sh;
@@ -371,6 +406,8 @@ int thumbgen_step (thumbgen *t, int rows)
     return t->done = -1;
   return t->done = 1;
 }
+
+int thumbgen_colour (const thumbgen *t) { return t->cs; }
 
 const char *thumbgen_error (const thumbgen *t)
 {

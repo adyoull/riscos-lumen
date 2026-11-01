@@ -290,6 +290,19 @@ int export_step (exporter *e, int rows)
         int ow, oh, fw, fh;
         export_plan_size (e->img.w, e->img.h, &e->r, e->o.max_side, &ow, &oh);
         geom_plan_make (&e->g, &e->r, e->img.w, e->img.h, 1, ow, oh);
+        /* Highlights & Shadows: the lightness map of the whole picture. */
+        if (develop_needs_mask (e->dev))
+          {
+            dev_lummap *m = malloc (sizeof *m);
+            if (!m)
+              {
+                snprintf (e->err, sizeof e->err, "Not enough memory");
+                return e->done = -1;
+              }
+            dev_lummap_rgb8 (m, e->img.rgb, e->img.w, e->img.h);
+            develop_mask (e->dev, m, &e->g, e->img.w, e->img.h);
+            free (m);
+          }
         /* Sharpening: its radius is in full-size pixels; the output's
            scale is its size over the full-size output's. */
         e->sharp = (int) e->r.v[P_SHARPEN];
@@ -323,6 +336,7 @@ int export_step (exporter *e, int rows)
       int a = e->y - e->margin < 0 ? 0 : e->y - e->margin;
       int b = y1 + e->margin > e->g.oh ? e->g.oh : y1 + e->margin;
       geom_rows_rgb8 (&e->g, e->img.rgb, dev_srgb_to_linear (), e->lin, a, b, a);
+      develop_region (e->dev, e->g.ow, e->g.oh, 0, a);
       develop_rows (e->dev, e->lin, e->g.ow, 0, b - a, e->px, NULL);
       if (e->sharp > 0)
         sharpen32 (e->px, e->g.ow, b - a, e->sharp, e->sigma);

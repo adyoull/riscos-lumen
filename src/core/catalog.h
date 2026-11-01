@@ -50,6 +50,7 @@ typedef struct
   int kind;                   /* SRC_* */
   cat_id id;                  /* project or album */
   int min_rating;             /* 0: everything but rejects (except SRC_REJECTED) */
+  char search[64];            /* words that must all match the name, camera, date or project ("" none) */
 } cat_source;
 
 typedef struct

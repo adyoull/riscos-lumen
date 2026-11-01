@@ -262,7 +262,7 @@ static void test_edited_thumbnail (const char *work)
   library *l;
   cat_item *items;
   int n, before, after;
-  cat_source all = { SRC_ALL, 0, 0 };
+  cat_source all = { SRC_ALL, 0, 0, "" };
   recipe r;
   snprintf (path, sizeof path, "%s/grey.jpg", work);
   make_jpeg (path, 400, 300, 128);
@@ -595,7 +595,7 @@ static void test_presets (const char *work)
   {
     cat_item *items;
     int n;
-    cat_source all = { SRC_ALL, 0, 0 };
+    cat_source all = { SRC_ALL, 0, 0, "" };
     recipe got;
     cat_list (lib_cat (l), &all, &items, &n);
     CHECK (n == 1, "the library from the thumbnail test");
@@ -780,6 +780,42 @@ static void test_export (const char *work)
   CHECK (back.rgb[0] < 120 && back.rgb[(5 * 150 + 5) * 3] < 120, "the red corner went with the turn");
   free (back.rgb);
 
+  /* Highlights & Shadows, turned and cropped as PNG: the same as the whole
+     recipe on the decoded picture (edited thumbnails' way), though export
+     works in bands. */
+  {
+    rgb_image dec;
+    char e2[200];
+    thumbgen *t = thumbgen_start (src, NULL, 1 << 30, 1, e2, sizeof e2);
+    int r2, diff = 0;
+    while (t && (r2 = thumbgen_step (t, 64)) == 0)
+      ;
+    CHECK (t && thumbgen_take (t, &dec) == 0, "the source decoded");
+    thumbgen_free (t);
+    recipe_default (&r);
+    recipe_set (&r, P_SHADOWS, 70);
+    recipe_set (&r, P_HIGHLIGHTS, 40);
+    recipe_set (&r, P_ROTATE, 1);
+    recipe_set (&r, P_CROP_X1, 0.5f);
+    o.format = EXPORT_PNG;
+    o.max_side = 0;
+    snprintf (dst, sizeof dst, "%s/out-hs.png", work);
+    e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+    CHECK (run_export (e) >= 0, "export with Highlights & Shadows");
+    export_free (e);
+    CHECK (develop_image (&r, &dec) == 0, "developed whole");
+    CHECK (read_back (dst, &back) == 0 && back.w == dec.w && back.h == dec.h, "the same size");
+    for (y = 0; y < back.h; y++)
+      for (x = 0; x < back.w * 3; x++)
+        {
+          int d = abs (back.rgb[y * back.w * 3 + x] - dec.rgb[y * dec.w * 3 + x]);
+          if (d > diff) diff = d;
+        }
+    CHECK (diff <= 1, "export and thumbnail agree, pixel for pixel");
+    free (back.rgb);
+    free (dec.rgb);
+  }
+
   /* Failures. */
   o.format = EXPORT_JPEG;
   CHECK (export_start ("/nonexistent/x.jpg", 400, 300, 1, &r, dst, &o, err, sizeof err) == NULL && err[0],
@@ -890,6 +926,126 @@ static void test_sharpen (void)
   }
 }
 
+/* Highlights & Shadows: local, and the same however the picture is cut up. */
+static void test_highlights_shadows (void)
+{
+  enum { W = 256, H = 128 };
+  static uint16_t lin[W * H * 3];
+  static uint32_t a[W * H], b[W * H];
+  static develop d;
+  static dev_lummap m;
+  recipe r;
+  char text[512];
+  int x, y;
+  /* Left half dark (sRGB 30), right half light (sRGB 220), a little texture. */
+  {
+    const uint16_t *s2l = dev_srgb_to_linear ();
+    for (y = 0; y < H; y++)
+      for (x = 0; x < W; x++)
+        {
+          int v = (x < W / 2 ? 30 : 220) + ((x ^ y) & 3);
+          uint16_t *p = lin + ((size_t) y * W + x) * 3;
+          p[0] = p[1] = p[2] = s2l[v];
+        }
+  }
+  dev_lummap_lin (&m, lin, W, H);
+  CHECK (m.w == HS_MAP && m.h == HS_MAP / 2, "the map: 64 x 32 cells for a 2:1 picture");
+  CHECK (m.l[0] < 0.2f && m.l[m.w - 1] > 0.8f, "dark on the left, light on the right");
+
+  /* None: unchanged, and no map needed. */
+  recipe_default (&r);
+  develop_prepare (&d, &r);
+  CHECK (!develop_needs_mask (&d), "no Highlights & Shadows: no map wanted");
+  develop_rows (&d, lin, W, 0, H, a, NULL);
+
+  /* Shadows: the dark side lifts a lot, the light side hardly. */
+  recipe_set (&r, P_SHADOWS, 80);
+  develop_prepare (&d, &r);
+  CHECK (develop_needs_mask (&d), "Shadows wants the map");
+  develop_mask (&d, &m, NULL, W, H);
+  develop_rows (&d, lin, W, 0, H, b, NULL);
+  {
+    int dark0 = (int) (a[64 * W + 20] & 255), dark1 = (int) (b[64 * W + 20] & 255);
+    int lite0 = (int) (a[64 * W + 230] & 255), lite1 = (int) (b[64 * W + 230] & 255);
+    CHECK (dark1 > dark0 + 18, "Shadows 80: the dark side is lifted");
+    CHECK (abs (lite1 - lite0) <= 2, "the light side stays");
+    CHECK ((b[64 * W + 21] & 255) != (b[64 * W + 20] & 255) || ((21 ^ 64) & 3) == ((20 ^ 64) & 3),
+           "texture inside the dark side survives (the gain is smooth, not per pixel)");
+  }
+
+  /* Highlights: the light side comes down, the dark side stays. */
+  recipe_default (&r);
+  recipe_set (&r, P_HIGHLIGHTS, 80);
+  develop_prepare (&d, &r);
+  develop_mask (&d, &m, NULL, W, H);
+  develop_rows (&d, lin, W, 0, H, b, NULL);
+  CHECK ((int) (b[64 * W + 230] & 255) < (int) (a[64 * W + 230] & 255) - 15, "Highlights 80: the light side comes down");
+  CHECK (abs ((int) (b[64 * W + 20] & 255) - (int) (a[64 * W + 20] & 255)) <= 2, "the dark side stays");
+
+  /* In bands, or as a region, the result is the same as all at once
+     (export renders bands, 100% and the loupe render regions). */
+  recipe_set (&r, P_SHADOWS, 60);
+  develop_prepare (&d, &r);
+  develop_mask (&d, &m, NULL, W, H);
+  develop_region (&d, W, H, 0, 0);
+  develop_rows (&d, lin, W, 0, H, a, NULL);
+  develop_region (&d, W, H, 0, 50);
+  develop_rows (&d, lin + (size_t) 50 * W * 3, W, 0, H - 50, b + (size_t) 50 * W, NULL);
+  CHECK (memcmp (a + 50 * W, b + 50 * W, sizeof (uint32_t) * W * (H - 50)) == 0, "a band from row 50: identical");
+  {
+    static uint16_t reg[40 * 30 * 3];
+    static uint32_t out[40 * 30];
+    int ok = 1;
+    for (y = 0; y < 30; y++)
+      memcpy (reg + (size_t) y * 40 * 3, lin + ((size_t) (y + 70) * W + 100) * 3, 40 * 3 * sizeof (uint16_t));
+    develop_region (&d, W, H, 100, 70);
+    develop_rows (&d, reg, 40, 0, 30, out, NULL);
+    for (y = 0; y < 30; y++)
+      for (x = 0; x < 40; x++)
+        if (out[y * 40 + x] != a[(y + 70) * W + x + 100])
+          ok = 0;
+    CHECK (ok, "a 40 x 30 region at (100, 70): identical");
+  }
+  /* At half the size, the same look (the map is in fractions of the picture). */
+  {
+    static uint16_t half[(W / 2) * (H / 2) * 3];
+    static uint32_t hout[(W / 2) * (H / 2)];
+    for (y = 0; y < H / 2; y++)
+      for (x = 0; x < W / 2; x++)
+        memcpy (half + ((size_t) y * (W / 2) + x) * 3, lin + ((size_t) (2 * y) * W + 2 * x) * 3, 6);
+    develop_region (&d, W / 2, H / 2, 0, 0);
+    develop_rows (&d, half, W / 2, 0, H / 2, hout, NULL);
+    CHECK (abs ((int) (hout[32 * (W / 2) + 10] & 255) - (int) (a[64 * W + 20] & 255)) <= 3
+           && abs ((int) (hout[32 * (W / 2) + 115] & 255) - (int) (a[64 * W + 230] & 255)) <= 3,
+           "half size: the same brightness either side");
+  }
+  /* The recipe's text. */
+  recipe_default (&r);
+  recipe_set (&r, P_HIGHLIGHTS, 30);
+  recipe_set (&r, P_SHADOWS, 45);
+  recipe_format (&r, text, sizeof text);
+  CHECK (strstr (text, "hs highlights=30 shadows=45") != NULL, "saved as: hs highlights=30 shadows=45");
+  {
+    recipe q;
+    recipe_parse (&q, text);
+    CHECK (recipe_equal (&q, &r), "and read back");
+  }
+  /* The whole recipe on an 8-bit image (edited thumbnails) uses it too. */
+  {
+    rgb_image img;
+    img.w = W; img.h = H;
+    img.rgb = malloc ((size_t) W * H * 3);
+    for (y = 0; y < H; y++)
+      for (x = 0; x < W; x++)
+        memset (img.rgb + ((size_t) y * W + x) * 3, x < W / 2 ? 30 : 220, 3);
+    recipe_default (&r);
+    recipe_set (&r, P_SHADOWS, 80);
+    CHECK (develop_image (&r, &img) == 0 && img.rgb[(64 * W + 20) * 3] > 48 && img.rgb[(64 * W + 230) * 3] >= 218,
+           "thumbnails: shadows lifted, highlights kept");
+    free (img.rgb);
+  }
+}
+
 static void test_curves (void)
 {
   recipe r, back;
@@ -966,6 +1122,7 @@ int main (int argc, char **argv)
   test_resample ();
   test_sharpen ();
   test_curves ();
+  test_highlights_shadows ();
   test_develop_image ();
   test_auto ();
   test_presets (argv[1]);

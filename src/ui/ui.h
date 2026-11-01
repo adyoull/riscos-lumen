@@ -226,6 +226,7 @@ void mainwin_set_tab (int t);
 int mainwin_inspector_on (void);
 void mainwin_toggle_inspector (void);
 void mainwin_toggle_full_screen (void);
+int mainwin_full_screen (void);
 void mainwin_update_title (void);
 void mainwin_set_title (const char *t);
 const char *mainwin_title (void);
@@ -235,6 +236,9 @@ void mainwin_force_inspector (int x0, int y0, int x1, int y1);
 void mainwin_library_changed (void);
 void mainwin_info_changed (void);
 void mainwin_status_changed (void);   /* the bottom bar: counts */
+int mainwin_search_icon (void);        /* the search field's icon handle, -1 */
+int mainwin_search_key (int key);      /* a key in the search field; 1 if used */
+void mainwin_set_search (const char *text);
 
 /* --- looks.c: copying adjustments between photos, and presets */
 void looks_copy_viewer (void);         /* the viewer's look */
@@ -270,6 +274,7 @@ void menus_open_iconbar_menu (int x);
 void menus_open_viewer_menu (int x, int y);
 void menus_open_presets_menu (int x, int y);
 void menus_open_new_menu (int x, int y);
+void menus_open_rating_menu (int x, int y);
 int menus_selection (const int *choice);   /* 1: quit */
 
 #endif

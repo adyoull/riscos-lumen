@@ -13,24 +13,27 @@
 #define TEXT_H 36
 #define STARS_H 40
 
-#define COL_SELECTED 0x2F2F2F00u       /* &BBGGRR00 */
-#define COL_PLACEHOLDER 0xC4C4C400u
-#define COL_FAILED 0xA8A8C800u
-#define COL_TEXT 0x1A1A1A00u
+/* Aperture's dark grey browser, with RISC OS's light blue (Wimp colour
+   15, #00BBFF) for what is rated and focused. &BBGGRR00. */
+#define COL_BG 0x3C3C3C00u
+#define COL_SELECTED 0x60606000u
+#define COL_PLACEHOLDER 0x55555500u
+#define COL_FAILED 0x40407800u
+#define COL_TEXT 0xDCDCDC00u
 #define COL_TEXT_SEL 0xFFFFFF00u
-#define COL_BG 0xDDDDDD00u             /* close to Wimp colour 1 */
-#define COL_ACCENT 0x99440000u         /* #004499, the Wimp's dark blue (colour 8) */
-#define COL_ACCENT_ON_DARK 0xFFBB0000u /* #00BBFF, the Wimp's light blue (colour 15), on a selected cell */
-#define COL_STAR_OFF 0x9A9A9A00u
-#define COL_STAR_OFF_SEL 0x70707000u
+#define COL_BADGE_TEXT 0x1A1A1A00u
+#define COL_ACCENT 0xFFBB0000u         /* #00BBFF */
+#define COL_ACCENT_ON_DARK 0xFFBB0000u
+#define COL_STAR_OFF 0x6A6A6A00u
+#define COL_STAR_OFF_SEL 0x8A8A8A00u
 #define COL_FLAG 0xB0E6F200u           /* #F2E6B0 */
-#define COL_REJECT 0x2020B000u
+#define COL_REJECT 0x7070F000u
 
 static const int box_sizes[3] = { 160, 224, 320 };
 
 static int win = -1;
 static char title[200];
-static cat_source src = { SRC_ALL, 0, 0 };
+static cat_source src = { SRC_ALL, 0, 0, "" };
 static cat_item *items;
 static unsigned char *sel;
 static int n, cols = 1, size = 1, focus = -1, is_open;
@@ -68,7 +71,7 @@ int browser_create (void)
   /* A child of the main window (mainwin.c) with a vertical scroll bar. */
   b[7] = (int) 0x90000002;
   ((unsigned char *) b)[32] = 7;  ((unsigned char *) b)[33] = 2;   /* title fg, bg */
-  ((unsigned char *) b)[34] = 7;  ((unsigned char *) b)[35] = 1;   /* work area fg, bg */
+  ((unsigned char *) b)[34] = 7;  ((unsigned char *) b)[35] = 255; /* work area fg; we draw the background */
   ((unsigned char *) b)[36] = 3;  ((unsigned char *) b)[37] = 1;   /* scroll bar outer, inner */
   ((unsigned char *) b)[38] = 12;                                  /* title bg with input focus */
   b[10] = 0; b[11] = -screen_h; b[12] = screen_w; b[13] = 0;      /* work area extent */
@@ -180,6 +183,8 @@ void browser_title (char *out, size_t size)
     }
   snprintf (out, size, "%s (%d)%s", name, n,
             src.min_rating > 0 ? (src.min_rating == 5 ? "  \xB7  5 stars" : "  \xB7  rated") : "");
+  if (src.search[0] && strlen (out) + strlen (src.search) + 12 < size)
+    snprintf (out + strlen (out), size - strlen (out), "  \xB7  \"%s\"", src.search);
 }
 
 /* Importing, thumbnails, exports: what's going on in the background. */
@@ -446,7 +451,7 @@ static void draw_cell (int i, int ox, int oy)
       int tw = draw_text_width ("Edited");
       draw_rect (pic[2] - tw - 24, pic[1] + 8, pic[2] - 8, pic[1] + 48, 0x30303000u);
       draw_rect (pic[2] - tw - 21, pic[1] + 11, pic[2] - 11, pic[1] + 45, 0xFFFFFF00u);
-      draw_text (pic[2] - tw - 16, pic[1] + 18, "Edited", COL_TEXT, 0xFFFFFF00u);
+      draw_text (pic[2] - tw - 16, pic[1] + 18, "Edited", COL_BADGE_TEXT, 0xFFFFFF00u);
     }
   if (it->flag)                        /* a flag on the photo's top left corner */
     {
@@ -473,6 +478,7 @@ void browser_redraw (int *b)
       int wy0 = b[8] - oy, wy1 = b[10] - oy;
       int r0 = (-wy1 - MARGIN) / cell_h (), r1 = (-wy0 - MARGIN) / cell_h ();
       int r, c;
+      draw_rect (b[7], b[8], b[9], b[10], COL_BG);
       if (r0 < 0) r0 = 0;
       for (r = r0; r <= r1; r++)
         for (c = 0; c < cols; c++)
@@ -482,10 +488,17 @@ void browser_redraw (int *b)
               draw_cell (i, ox, oy);
           }
       if (n == 0)
-        draw_text (ox + MARGIN * 3, oy - MARGIN * 3 - 32,
-                   src.kind == SRC_ALL ? "Drag photos or a folder of photos here to import them."
-                                       : "Nothing here.",
-                   COL_TEXT, COL_BG);
+        {
+          char none[120];
+          if (src.search[0])
+            snprintf (none, sizeof none, "No photos match \"%s\".", src.search);
+          else if (src.min_rating > 0)
+            snprintf (none, sizeof none, "No photos rated that highly here.");
+          else
+            snprintf (none, sizeof none, "%s", src.kind == SRC_ALL ? "Drag photos or a folder of photos here to import them."
+                                                                : "Nothing here.");
+          draw_text (ox + MARGIN * 3, oy - MARGIN * 3 - 32, none, COL_TEXT, COL_BG);
+        }
       _swix (Wimp_GetRectangle, _IN (1) | _OUT (0), b, &more);
     }
 }

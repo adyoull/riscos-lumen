@@ -217,8 +217,14 @@ static void free_zoom (void)
   zoom = 0;
 }
 
+/* Highlights & Shadows: the proxy's lightness map (develop.h), made when
+   first needed after the proxy is read. */
+static dev_lummap *lummap;
+static int lummap_ok;
+
 static void free_photo (void)
 {
+  lummap_ok = 0;
   free_zoom ();
   thumbgen_free (tg);
   tg = NULL;
@@ -688,6 +694,18 @@ static void prepare (void)
   recipe r;
   effective (&r);
   develop_prepare (dev, &r);
+  if (develop_needs_mask (dev) && src)
+    {
+      if (!lummap)
+        lummap = malloc (sizeof *lummap);
+      if (lummap && !lummap_ok)
+        {
+          dev_lummap_lin (lummap, src, sw, sh);
+          lummap_ok = 1;
+        }
+      if (lummap)
+        develop_mask (dev, lummap, &plan_full, sw, sh);
+    }
 }
 
 static int plan_identity (const geom_plan *g)
@@ -797,6 +815,7 @@ static void render_half (void)
   if (!geo_half || !half_spr.area)
     return;
   memset (&hist, 0, sizeof hist);
+  develop_region (dev, ghw, ghh, 0, 0);
   develop_rows (dev, geo_half, ghw, 0, ghh, half_spr.pixels, &hist);
   sharpen_pixels (half_spr.pixels, ghw, ghh, longer_side (hw, hh));
   shade (half_spr.pixels, ghw, ghh, 0, ghh);
@@ -821,6 +840,7 @@ static void render_full_until (unsigned deadline)
       int y1 = full_y + BAND_ROWS < gh ? full_y + BAND_ROWS : gh;
       if (geo_pending)
         geom_rows (&plan_full, src, geo, full_y, y1);
+      develop_region (dev, gw, gh, 0, 0);
       develop_rows (dev, geo, gw, full_y, y1, full_spr.pixels, &hist_acc);
       shade (full_spr.pixels, gw, gh, full_y, y1);
       full_y = y1;
@@ -904,6 +924,7 @@ static void zoom_render_until (unsigned deadline)
     {
       int n = zspr.h - zy < BAND_ROWS ? zspr.h - zy : BAND_ROWS;
       geom_region_rgb8 (&zplan, zfull.rgb, s2l, zlin, zrx, zry + zy, zspr.w, n);
+      develop_region (dev, zplan.ow, zplan.oh, zrx, zry + zy);
       develop_rows (dev, zlin, zspr.w, 0, n, zspr.pixels + (size_t) zy * zspr.w, NULL);
       zy += n;
       if ((int) (app_now () - deadline) >= 0)
@@ -1071,6 +1092,7 @@ static void loupe_render (void)
   if (w > 0 && h > 0)
     {
       geom_region_rgb8 (&lplan, zfull.rgb, dev_srgb_to_linear (), loupe_lin, x0, y0, w, h);
+      develop_region (dev, lplan.ow, lplan.oh, x0, y0);
       develop_rows (dev, loupe_lin, w, 0, h, loupe_px, NULL);
       sharpen_pixels (loupe_px, w, h, photo_long);
     }
@@ -1302,6 +1324,11 @@ void viewer_open (int i)
 void viewer_close (void)
 {
   int i = index_in_list;
+  if (mainwin_full_screen ())
+    {
+      mainwin_toggle_full_screen ();   /* Escape in full screen: back to the layout before */
+      return;
+    }
   if (crop_mode)
     viewer_crop_finish (1);
   mainwin_set_mode (LAYOUT_BROWSER);

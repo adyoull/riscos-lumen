@@ -342,7 +342,7 @@ int main (int argc, char **argv)
     cat_groups (lib_cat (app_library ()), SRC_PROJECT, &g, &ng);
     if (ng)
       {
-        cat_source s = { SRC_PROJECT, g[0].id, 0 };
+        cat_source s = { SRC_PROJECT, g[0].id, 0, "" };
         browser_set_source (&s);
       }
     free (g);
@@ -413,7 +413,7 @@ int main (int argc, char **argv)
     cat_groups (lib_cat (app_library ()), SRC_PROJECT, &g, &ng);
     if (ng)
       {
-        cat_source s = { SRC_PROJECT, g[0].id, 0 };
+        cat_source s = { SRC_PROJECT, g[0].id, 0, "" };
         browser_set_source (&s);
       }
     free (g);

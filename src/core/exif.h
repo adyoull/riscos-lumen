@@ -38,5 +38,7 @@ int img_read_info (const unsigned char *buf, size_t len, img_info *info);
    buf has no EXIF block (a PNG, or a JPEG without one). */
 typedef void (*exif_tag_fn) (void *ctx, const char *group, const char *name, const char *value);
 int exif_list (const unsigned char *buf, size_t len, exif_tag_fn fn, void *ctx);
+/* The same from the EXIF block itself (the TIFF data after "Exif\0\0"). */
+int exif_list_tiff (const unsigned char *tiff, size_t len, exif_tag_fn fn, void *ctx);
 
 #endif

@@ -16,13 +16,31 @@
 #include <stdint.h>
 #include "recipe.h"
 #include "thumbgen.h"
+#include "geometry.h"
 
 #define DEV_LUT_BITS 12
 #define DEV_LUT_SIZE (1 << DEV_LUT_BITS)
 
+/* Highlights & Shadows are local, as Aperture's: each pixel is brightened
+   (shadows) or darkened (highlights) by how light its surroundings are,
+   not by its own value, so detail and local contrast stay. The
+   surroundings come from a small, blurred map of the source picture's
+   lightness (before geometry), made once per photo; develop_mask turns it
+   into a grid of gains over the output, through the geometry. Every
+   render of a photo (viewer, 100%, loupe, thumbnail, export) uses the same
+   map, so they agree. */
+#define HS_MAP 64                      /* the lightness map's longer side, in cells */
+#define HS_GRID 64                     /* the gain grid's longer side, over the output */
+typedef struct { int w, h; float l[HS_MAP * HS_MAP]; } dev_lummap;
+
 typedef struct
 {
   uint16_t tone[3][DEV_LUT_SIZE];      /* linear in (top 12 bits) to linear out, per channel */
+  int hs;                              /* highlights or shadows set */
+  float hs_hl, hs_sh;                  /* their amounts, 0-1 */
+  int gw, gh;                          /* the gain grid */
+  uint16_t gain[HS_GRID * HS_GRID];    /* 4096 = unchanged */
+  int fw, fh, rx, ry;                  /* the rows' place in the whole output (develop_region) */
   int sat;                             /* saturation, 65536 = unchanged */
   int vib;                             /* vibrancy, 65536 = unchanged */
   int identity;                        /* nothing to do between the two conversions */
@@ -33,6 +51,18 @@ const uint16_t *dev_srgb_to_linear (void);   /* 256 entries */
 const uint8_t *dev_linear_to_srgb (void);    /* 65536 entries */
 
 void develop_prepare (develop *d, const recipe *r);
+
+/* Highlights & Shadows. develop_prepare leaves the gains at 1; when
+   develop_needs_mask, make the source's map (8-bit sRGB or 16-bit linear,
+   before geometry) and give it with the geometry plan the output comes
+   from (NULL: none, the output is the source). develop_region says where
+   the rows develop_rows gets sit in the whole fw x fh output (default:
+   they are it). */
+int develop_needs_mask (const develop *d);
+void dev_lummap_rgb8 (dev_lummap *m, const unsigned char *rgb, int w, int h);
+void dev_lummap_lin (dev_lummap *m, const uint16_t *lin, int w, int h);
+void develop_mask (develop *d, const dev_lummap *m, const geom_plan *g, int src_w, int src_h);
+void develop_region (develop *d, int fw, int fh, int x0, int y0);
 
 /* 8-bit sRGB RGB (as decoded) to 16-bit linear RGB. */
 void dev_to_linear (const unsigned char *rgb, uint16_t *lin, size_t pixels);

@@ -7,7 +7,8 @@
 
    JPEGs are decoded with libjpeg's DCT scaling (1/2, 1/4, 1/8) as close to
    the thumbnail size as it allows, then box-filtered down; PNGs are read
-   row by row and box-filtered. The EXIF orientation is applied at the end. */
+   row by row and box-filtered. The EXIF orientation is applied at the end.
+   Photos in Adobe RGB or Display P3 are converted to sRGB (colour.h). */
 #ifndef LUMEN_THUMBGEN_H
 #define LUMEN_THUMBGEN_H
 #include <stddef.h>
@@ -22,6 +23,9 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
    -1: failed (message from thumbgen_error). */
 int thumbgen_step (thumbgen *t, int rows);
 const char *thumbgen_error (const thumbgen *t);
+/* The colour space found in the file (colour.h's CS_*); Adobe RGB and
+   Display P3 are converted to sRGB as they are decoded. */
+int thumbgen_colour (const thumbgen *t);
 /* The thumbnail's size, once finished (after orientation). */
 void thumbgen_size (const thumbgen *t, int *w, int *h);
 void thumbgen_free (thumbgen *t);

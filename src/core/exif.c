@@ -697,6 +697,15 @@ static int list_tiff (const unsigned char *p, size_t len, lister *ls)
   return 0;
 }
 
+int exif_list_tiff (const unsigned char *tiff, size_t len, exif_tag_fn fn, void *ctx)
+{
+  lister ls;
+  ls.fn = fn;
+  ls.ctx = ctx;
+  ls.count = 0;
+  return list_tiff (tiff, len, &ls) ? -1 : ls.count;
+}
+
 int exif_list (const unsigned char *buf, size_t len, exif_tag_fn fn, void *ctx)
 {
   size_t pos = 2;
