@@ -59,6 +59,21 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
 - Presets (a `preset` table: name and look) and copy/paste of adjustments,
   in the viewer and on a library selection. A look is the recipe without
   its geometry, so a preset never moves anyone's crop.
+
+## 0.0.5
+
+- Smooth scaling (resample.c): photos and thumbnails are no longer
+  scaled by OS_SpriteOp (nearest neighbour: jagged edges, sparkle when a
+  256-pixel thumbnail is shrunk to 112). draw.c keeps smoothed copies at
+  exactly the pixels shown (tent filter when shrinking, bilinear when
+  enlarging; 24 MB, least recently used first) and plots them 1:1. The
+  half-size render shown while dragging is still plotted directly.
+- Histogram as Aperture draws it: red, green and blue overlaid with
+  additive overlaps, one column per pixel, smoothed, quarter guides,
+  clipping marks. develop_rows now counts 256 bins per channel and
+  luminance (`dev_hist`).
+- The accent is the Wimp's dark blue (colour 8, #004499), light blue
+  (colour 15) on dark cells, instead of orange.
 - Still to come in milestone 1: the loupe, a curves editor, several
   versions of one original, full-resolution rendering.
 

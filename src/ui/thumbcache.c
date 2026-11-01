@@ -97,6 +97,7 @@ static void evict (void)
         entry *gone = *oldest;
         *oldest = gone->next;
         total -= gone->bytes;
+        draw_forget (gone->s.sprite);
         free (gone->s.area);
         free (gone);
       }
@@ -136,6 +137,7 @@ void thumbcache_drop (cat_id id)
     return;
   *s = e->next;
   total -= e->bytes;
+  draw_forget (e->s.sprite);
   free (e->s.area);
   free (e);
 }

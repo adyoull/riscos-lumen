@@ -169,8 +169,11 @@ static const _kernel_oserror *swi (int n, int r[10])
               fclose (f);
             }
           /* Destination size: pixels = source * mul / div; 2 OS units a pixel. */
-          fprintf (ops, "SPRITE spr%d.rgb %d %d %d %d %d %d\n", sprites, w, h, r[3], r[4],
-                   (w * sc[0] / sc[2]) * 2, (h * sc[1] / sc[3]) * 2);
+          if (sc)
+            fprintf (ops, "SPRITE spr%d.rgb %d %d %d %d %d %d\n", sprites, w, h, r[3], r[4],
+                     (w * sc[0] / sc[2]) * 2, (h * sc[1] / sc[3]) * 2);
+          else                         /* unscaled (Lumen's own smoothed copy) */
+            fprintf (ops, "SPRITE spr%d.rgb %d %d %d %d %d %d\n", sprites, w, h, r[3], r[4], w * 2, h * 2);
           sprites++;
         }
       return NULL;

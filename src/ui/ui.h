@@ -77,6 +77,12 @@ void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
 /* Any shape of box: fitted inside, centred both ways. */
 void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
                        int bx0, int by0, int bx1, int by1, int out[4]);
+/* Both plot a smoothed copy at the size shown (made on first use, kept
+   until draw_forget). Off: OS_SpriteOp's own (pixel-dropping) scaling,
+   for pictures that change on every frame, such as while dragging. */
+void draw_set_smoothing (int on);
+/* A sprite's pixels changed, or it is about to be freed. */
+void draw_forget (const void *sprite);
 
 /* --- thumbcache.c: thumbnails as 32bpp sprites, loaded in idle time */
 typedef struct

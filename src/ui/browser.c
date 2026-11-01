@@ -19,7 +19,8 @@
 #define COL_TEXT 0x1A1A1A00u
 #define COL_TEXT_SEL 0xFFFFFF00u
 #define COL_BG 0xDDDDDD00u             /* close to Wimp colour 1 */
-#define COL_ACCENT 0x166AC000u         /* #C06A16 */
+#define COL_ACCENT 0x99440000u         /* #004499, the Wimp's dark blue (colour 8) */
+#define COL_ACCENT_ON_DARK 0xFFBB0000u /* #00BBFF, the Wimp's light blue (colour 15), on a selected cell */
 #define COL_STAR_OFF 0x9A9A9A00u
 #define COL_STAR_OFF_SEL 0x70707000u
 #define COL_FLAG 0xB0E6F200u           /* #F2E6B0 */
@@ -441,7 +442,8 @@ static void draw_cell (int i, int ox, int oy)
   else
     for (k = 0; k < 5; k++)
       draw_star ((x0 + x1) / 2 + (k - 2) * 34, y0 + 26, 15,
-                 k < it->rating ? COL_ACCENT : (selected ? COL_STAR_OFF_SEL : COL_STAR_OFF));
+                 k < it->rating ? (selected ? COL_ACCENT_ON_DARK : COL_ACCENT)
+                 : (selected ? COL_STAR_OFF_SEL : COL_STAR_OFF));
 }
 
 void browser_redraw (int *b)

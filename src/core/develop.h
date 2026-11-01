@@ -37,10 +37,16 @@ void develop_prepare (develop *d, const recipe *r);
 /* 8-bit sRGB RGB (as decoded) to 16-bit linear RGB. */
 void dev_to_linear (const unsigned char *rgb, uint16_t *lin, size_t pixels);
 
+/* The output's histogram: red, green, blue and luminance, one bin per
+   8-bit level. */
+#define DEV_HIST_BINS 256
+enum { HIST_R, HIST_G, HIST_B, HIST_LUM };
+typedef struct { unsigned c[4][DEV_HIST_BINS]; } dev_hist;
+
 /* Rows y0 to y1-1 of a w-pixel-wide linear image to 32bpp sprite pixels
-   (&00BBGGRR), adding output luminance to hist (64 bins) if not NULL. */
+   (&00BBGGRR), counting them into hist if not NULL. */
 void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
-                   uint32_t *dst, unsigned hist[64]);
+                   uint32_t *dst, dev_hist *hist);
 
 /* In place, on an 8-bit sRGB image (thumbnails): tone only. */
 void develop_rgb8 (const develop *d, rgb_image *img);

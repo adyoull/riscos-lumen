@@ -9,6 +9,7 @@
 #include "../src/core/autoadj.h"
 #include "../src/core/develop.h"
 #include "../src/core/geometry.h"
+#include "../src/core/resample.h"
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
 #include "../src/core/recipe.h"
@@ -160,8 +161,8 @@ static void test_histogram_and_speed (void)
   int w = 1600, h = 1067, y, i;
   uint16_t *src = malloc ((size_t) w * h * 6);
   uint32_t *dst = malloc ((size_t) w * h * 4);
-  unsigned hist[64];
-  unsigned total = 0;
+  static dev_hist hist;
+  unsigned total = 0, totals[4] = { 0, 0, 0, 0 };
   develop *d = malloc (sizeof *d);
   recipe r;
   clock_t t0;
@@ -171,14 +172,29 @@ static void test_histogram_and_speed (void)
   recipe_default (&r);
   recipe_set (&r, P_TEMP, 12); recipe_set (&r, P_EV, 0.35f); recipe_set (&r, P_CONTRAST, 15);
   develop_prepare (d, &r);
-  memset (hist, 0, sizeof hist);
+  memset (&hist, 0, sizeof hist);
   t0 = clock ();
   for (y = 0; y < h; y += 64)
-    develop_rows (d, src, w, y, y + 64 < h ? y + 64 : h, dst, hist);
+    develop_rows (d, src, w, y, y + 64 < h ? y + 64 : h, dst, &hist);
   ms_plain = (double) (clock () - t0) * 1000 / CLOCKS_PER_SEC;
-  for (i = 0; i < 64; i++)
-    total += hist[i];
-  CHECK (total == (unsigned) (w * h), "the histogram counts every pixel");
+  for (i = 0; i < DEV_HIST_BINS; i++)
+    {
+      int c;
+      for (c = 0; c < 4; c++)
+        totals[c] += hist.c[c][i];
+    }
+  total = totals[0];
+  CHECK (total == (unsigned) (w * h) && totals[1] == total && totals[2] == total && totals[3] == total,
+         "the histogram counts every pixel, in each channel and luminance");
+  {
+    /* Each channel's bins match the pixels' own levels. */
+    unsigned want = 0;
+    int v = (int) (dst[12345] & 255);
+    for (i = 0; i < w * h; i++)
+      if ((int) (dst[i] & 255) == v)
+        want++;
+    CHECK (hist.c[HIST_R][v] == want, "red bin counts the pixels with that red");
+  }
   recipe_set (&r, P_SATURATION, 20); recipe_set (&r, P_VIBRANCE, 20);
   develop_prepare (d, &r);
   t0 = clock ();
@@ -597,6 +613,68 @@ static void test_presets (const char *work)
   lib_close (l);
 }
 
+/* ---- resampling for the screen ---- */
+static void test_resample (void)
+{
+  int sw = 300, sh = 200, x, y, worst, lo, hi;
+  uint32_t *src = malloc ((size_t) sw * sh * 4), *dst = malloc ((size_t) 600 * 400 * 4);
+  double ms = 0, md = 0;
+  /* A one-pixel black and white checkerboard: sampling would give black,
+     white or moire; averaging gives mid grey. */
+  for (y = 0; y < sh; y++)
+    for (x = 0; x < sw; x++)
+      src[y * sw + x] = (x + y) & 1 ? 0xFFFFFF : 0;
+  CHECK (resample32 (src, sw, sh, dst, 150, 100) == 0, "halve");
+  for (lo = 255, hi = 0, x = 0; x < 150 * 100; x++)
+    {
+      int v = (int) (dst[x] & 255);
+      if (x % 150 == 0 || x % 150 == 149 || x < 150 || x >= 150 * 99)
+        continue;                      /* the edges have only half a filter */
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+  CHECK (lo >= 127 && hi <= 128, "a checkerboard halved is flat mid grey");
+  resample32 (src, sw, sh, dst, 211, 137);
+  for (lo = 255, hi = 0, x = 0; x < 211 * 137; x++)
+    {
+      int v = (int) (dst[x] >> 8 & 255);
+      if (x % 211 == 0 || x % 211 == 210 || x < 211 || x >= 211 * 136)
+        continue;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    CHECK (lo >= 118 && hi <= 137, "and at an odd ratio (300x200 to 211x137) too: no moire");
+  /* Average brightness is kept, channels stay apart. */
+  for (y = 0; y < sh; y++)
+    for (x = 0; x < sw; x++)
+      {
+        unsigned r = (unsigned) ((x * 7 + y * 3) % 256), g = (unsigned) (x % 200), b = 40;
+        src[y * sw + x] = r | g << 8 | b << 16;
+        ms += r;
+      }
+  ms /= sw * sh;
+  resample32 (src, sw, sh, dst, 97, 61);
+  for (worst = 0, x = 0; x < 97 * 61; x++)
+    {
+      md += dst[x] & 255;
+      if (abs ((int) (dst[x] >> 16 & 255) - 40) > worst)
+        worst = abs ((int) (dst[x] >> 16 & 255) - 40);
+    }
+  md /= 97 * 61;
+  CHECK (fabs (md - ms) < 1.5 && worst == 0, "shrinking keeps the mean, and a flat channel exact");
+  /* Enlarging: bilinear, ends kept, smooth in between. */
+  src[0] = 0; src[1] = 200; 
+  CHECK (resample32 (src, 2, 1, dst, 8, 1) == 0, "enlarge 2 to 8");
+  CHECK ((dst[0] & 255) == 0 && (dst[7] & 255) == 200, "the ends stay");
+  for (worst = 1, x = 1; x < 8; x++)
+    if ((dst[x] & 255) < (dst[x - 1] & 255))
+      worst = 0;
+  CHECK (worst && (dst[3] & 255) > 50 && (dst[3] & 255) < 150, "and rise smoothly between");
+  CHECK (resample32 (src, 300, 200, dst, 300, 200) == 0 && memcmp (src, dst, 300 * 200 * 4) == 0, "same size: a copy");
+  free (src);
+  free (dst);
+}
+
 int main (int argc, char **argv)
 {
   if (argc < 2)
@@ -607,6 +685,7 @@ int main (int argc, char **argv)
   test_histogram_and_speed ();
   test_edited_thumbnail (argv[1]);
   test_geometry ();
+  test_resample ();
   test_develop_image ();
   test_auto ();
   test_presets (argv[1]);

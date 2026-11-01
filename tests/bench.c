@@ -12,6 +12,7 @@
 #include <string.h>
 #include <time.h>
 #include "develop.h"
+#include "resample.h"
 #include "recipe.h"
 #include "thumbgen.h"
 #ifdef __riscos
@@ -118,6 +119,21 @@ int main (void)
   printf ("Proxy, tone only:              %6.1f ms\n", tone);
   printf ("Proxy, with saturation:        %6.1f ms\n", full);
   printf ("Half size (while dragging):    %6.1f ms tone, %.1f ms with saturation\n", half_tone, half_full);
+  /* Smoothing the finished render to the size shown (a 1080p desktop). */
+  {
+    int dw = proxy.w * 1150 / (proxy.w > proxy.h ? proxy.w : proxy.h);
+    int dh = proxy.h * 1150 / (proxy.w > proxy.h ? proxy.w : proxy.h);
+    uint32_t *sm = malloc ((size_t) dw * dh * 4);
+    if (sm)
+      {
+        int k;
+        t0 = clock ();
+        for (k = 0; k < 5; k++)
+          resample32 (dst, proxy.w, proxy.h, sm, dw, dh);
+        printf ("Smoothing for the screen (%d x %d): %5.1f ms\n", dw, dh, ms_since (t0) / 5);
+        free (sm);
+      }
+  }
   printf ("Gate (slider redraw <= 50 ms while dragging): %s\n",
           half_full + 5 <= 50 ? "met" : "NOT met");
   return 0;

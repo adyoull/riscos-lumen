@@ -9,6 +9,7 @@
 #include <string.h>
 #include <kernel.h>
 #include <swis.h>
+#include "resample.h"
 #include "ui.h"
 
 #define SPRITE_MODE_32BPP 0x301680B5   /* type 6 (32bpp), 90 x 90 dpi */
@@ -17,6 +18,28 @@ static int xeig = 1, yeig = 1;
 static int plot_flags;                 /* OS_SpriteOp 52's R5: dither in modes of 256 colours or fewer */
 static void *table;                    /* translation table for 32bpp sprites, or NULL */
 static int table_known;
+
+/* Smoothed copies of sprites at the size they are shown, so photos are
+   never scaled by dropping or repeating pixels (OS_SpriteOp's scaling is
+   nearest-neighbour, which looks pixelated, and sparkles when shrinking
+   a thumbnail to a third). Kept by the sprite they came from, the least
+   recently used going first; draw_forget drops a sprite's copies when its
+   pixels change or it is freed. */
+#define SMOOTH_LIMIT (24u << 20)       /* bytes of smoothed copies */
+#define SMOOTH_BIGGEST (16u << 20)     /* larger than this: plot unsmoothed */
+typedef struct smooth
+{
+  const void *from;
+  int dw, dh;
+  unsigned *area;
+  size_t bytes;
+  unsigned used;
+  struct smooth *next;
+} smooth;
+static smooth *smooths;
+static size_t smooth_total;
+static unsigned smooth_tick;
+static int smooth_on = 1;
 
 void draw_init_mode (void)
 {
@@ -34,6 +57,105 @@ void draw_init_mode (void)
   free (table);
   table = NULL;
   table_known = 0;
+  while (smooths)                      /* sizes in pixels have changed */
+    draw_forget (smooths->from);
+}
+
+void draw_set_smoothing (int on)
+{
+  smooth_on = on;
+}
+
+void draw_forget (const void *sprite)
+{
+  smooth **p = &smooths;
+  while (*p)
+    if ((*p)->from == sprite)
+      {
+        smooth *gone = *p;
+        *p = gone->next;
+        smooth_total -= gone->bytes;
+        free (gone->area);
+        free (gone);
+      }
+    else
+      p = &(*p)->next;
+}
+
+/* A dw x dh smoothed copy of a w x h 32bpp sprite (its area, holding one
+   sprite at offset 16), or NULL to plot the original scaled. */
+static const unsigned *smoothed (const void *sprite, int w, int h, int dw, int dh)
+{
+  smooth *e, **p, **oldest;
+  size_t bytes = 16 + 44 + (size_t) dw * dh * 4;
+  const unsigned *sp = sprite;
+  unsigned *a;
+  if (!smooth_on || dw <= 0 || dh <= 0 || bytes > SMOOTH_BIGGEST || (dw == w && dh == h))
+    return NULL;
+  for (e = smooths; e; e = e->next)
+    if (e->from == sprite && e->dw == dw && e->dh == dh)
+      {
+        e->used = ++smooth_tick;
+        return e->area;
+      }
+  while (smooth_total + bytes > SMOOTH_LIMIT && smooths)
+    {
+      oldest = &smooths;
+      for (p = &smooths; *p; p = &(*p)->next)
+        if ((*p)->used < (*oldest)->used)
+          oldest = p;
+      e = *oldest;
+      *oldest = e->next;
+      smooth_total -= e->bytes;
+      free (e->area);
+      free (e);
+    }
+  e = malloc (sizeof *e);
+  a = malloc (bytes);
+  if (!e || !a)
+    {
+      free (e);
+      free (a);
+      return NULL;
+    }
+  memcpy (a + 4, sp, 44);              /* the sprite's header, then its new size */
+  a[0] = (unsigned) bytes; a[1] = 1; a[2] = 16; a[3] = (unsigned) bytes;
+  a[4] = (unsigned) (44 + (size_t) dw * dh * 4);
+  a[8] = (unsigned) (dw - 1);
+  a[9] = (unsigned) (dh - 1);
+  a[12] = 44; a[13] = 44;
+  if (resample32 ((const uint32_t *) sp + sp[8] / 4, w, h, (uint32_t *) (a + 15), dw, dh))
+    {
+      free (e);
+      free (a);
+      return NULL;
+    }
+  e->from = sprite;
+  e->dw = dw;
+  e->dh = dh;
+  e->area = a;
+  e->bytes = bytes;
+  e->used = ++smooth_tick;
+  e->next = smooths;
+  smooths = e;
+  smooth_total += bytes;
+  return a;
+}
+
+/* Plots w x h sprite at (x, y) filling dw_os x dh_os OS units: a smoothed
+   copy at exactly that many pixels, 1:1, when it can. */
+static void plot_scaled (const void *area, const void *sprite, int w, int h, int x, int y, int dw_os, int dh_os)
+{
+  int dw = dw_os >> xeig, dh = dh_os >> yeig, scale[4];
+  const unsigned *sm = smoothed (sprite, w, h, dw, dh);
+  if (sm)
+    {
+      _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, sm, sm + 4, x, y, plot_flags, 0, table);
+      return;
+    }
+  scale[0] = dw_os; scale[1] = dh_os;
+  scale[2] = w << xeig; scale[3] = h << yeig;
+  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, x, y, plot_flags, scale, table);
 }
 
 int draw_xeig (void) { return xeig; }
@@ -118,7 +240,7 @@ void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
 {
   /* Fit the sprite inside the box, keeping its shape, centred both ways.
      The scale is mul/div with mul in OS units and div in source pixels. */
-  int bw = bx1 - bx0, bh = by1 - by0, mul, div, dw, dh, scale[4];
+  int bw = bx1 - bx0, bh = by1 - by0, mul, div, dw, dh;
   out[0] = bx0; out[1] = by0; out[2] = bx1; out[3] = by1;
   if (w <= 0 || h <= 0 || bw <= 0 || bh <= 0)
     return;
@@ -133,13 +255,11 @@ void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
     }
   dw = (int) ((long long) w * mul / div);
   dh = (int) ((long long) h * mul / div);
-  scale[0] = mul; scale[1] = mul;
-  scale[2] = div << xeig; scale[3] = div << yeig;
   out[0] = bx0 + (bw - dw) / 2;
   out[1] = by0 + (bh - dh) / 2;
   out[2] = out[0] + dw;
   out[3] = out[1] + dh;
-  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, out[0], out[1], plot_flags, scale, table);
+  plot_scaled (area, sprite, w, h, out[0], out[1], dw, dh);
 }
 
 void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
@@ -147,16 +267,11 @@ void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
 {
   int box = (bx1 - bx0) < (by1 - by0) ? (bx1 - bx0) : (by1 - by0);
   int big = w > h ? w : h;
-  int dw, dh, scale[4];
+  int dw, dh;
   out[0] = bx0; out[1] = by0; out[2] = bx1; out[3] = by1;
   if (big <= 0 || box <= 0)
     return;
   ensure_table (area, sprite);
-  /* Scale factors multiply destination pixels: OS units = pixels << eig. */
-  scale[0] = box;
-  scale[1] = box;
-  scale[2] = big << xeig;
-  scale[3] = big << yeig;
   dw = w * box / big;
   dh = h * box / big;
   /* Centred across, sitting on the bottom of the box (on the photo's name). */
@@ -164,5 +279,5 @@ void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
   out[1] = by0;
   out[2] = out[0] + dw;
   out[3] = by0 + dh;
-  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, out[0], out[1], plot_flags, scale, table);
+  plot_scaled (area, sprite, w, h, out[0], out[1], dw, dh);
 }

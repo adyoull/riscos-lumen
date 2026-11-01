@@ -29,7 +29,7 @@ static int opened[8], open_calls;
 static int extent[4];
 static int caret_window;
 static int force_redraws, title_redraws;
-static int sprite_plots, last_scale[4];
+static int sprite_plots, smooth_plots, last_scale[4];
 static int stars;
 static char texts[64][80];
 static int ntexts;
@@ -179,7 +179,15 @@ static const _kernel_oserror *graphics (int swi, int r[10])
         CHECK (sp == area + 4 && area[1] == 1u && area[2] == 16u, "a valid one-sprite area");
         CHECK (sp[10] == 0x301680B5u && sp[8] == 44u && sp[6] == 0u && sp[7] == 31u, "a 32bpp new-format sprite header");
       }
-      memcpy (last_scale, (const int *) r[6], sizeof last_scale);
+      if (r[6])
+        memcpy (last_scale, (const int *) r[6], sizeof last_scale);
+      else                             /* unscaled: a smoothed copy at the size shown */
+        {
+          const unsigned *sp = (const unsigned *) r[2];
+          last_scale[0] = last_scale[1] = last_scale[2] = last_scale[3] = 1;
+          smooth_plots++;
+          (void) sp;
+        }
       {
         const unsigned *sp = (const unsigned *) r[2];
         last_plot_w = (int) sp[4] + 1;
@@ -360,7 +368,7 @@ int main (int argc, char **argv)
   CHECK (force_redraws >= 6, "each loaded thumbnail's cell redrawn");
   redraw ();
   CHECK (sprite_plots == 6, "second redraw: six thumbnails");
-  CHECK (last_scale[0] == 224 && last_scale[2] == (256 << 1), "scaled to the 224-unit box, eig 1");
+  CHECK (last_scale[0] == 1 && last_plot_w == 112, "a smoothed copy 112 pixels wide: the 224-unit box at eig 1, plotted 1:1");
 
   /* Click the first photo, rate it 4, flag it. */
   click (16 + 40, -16 - 40, Button_Select);
@@ -429,7 +437,7 @@ int main (int argc, char **argv)
   /* Thumbnail size: Large. */
   choose (3, 2, -1);
   redraw ();
-  CHECK (last_scale[0] == 320, "Large: a 320-unit box");
+  CHECK (last_plot_w == 160, "Large: a 320-unit box, 160 pixels");
 
   /* ---- The viewer ---- */
   {
@@ -444,9 +452,9 @@ int main (int argc, char **argv)
     CHECK (app_busy (), "the proxy is decoded in idle time");
     memset (b, 0, sizeof b);
     b[0] = VIEWER;
-    sprite_plots = 0;
+    sprite_plots = 0; smooth_plots = 0;
     app_event (Redraw_Window_Request, b, 0);
-    CHECK (sprite_plots == 1 && last_plot_w <= 256, "straight away: the thumbnail, enlarged");
+    CHECK (sprite_plots == 1 && smooth_plots == 1 && last_plot_w > 256, "straight away: the thumbnail, enlarged smoothly");
     i = nulls_until_idle ();
     CHECK (i > 1, "the proxy took several slices");
     {
@@ -455,7 +463,11 @@ int main (int argc, char **argv)
     }
     sprite_plots = 0; ntexts = 0;
     app_event (Redraw_Window_Request, b, 0);
-    CHECK (sprite_plots == 1 && last_plot_w == 640, "then the developed proxy");
+    {
+      int box_w = (vopened[3] - vopened[1]) - 640 - 48;
+      CHECK (sprite_plots == 1 && last_plot_w > 640 && abs (last_plot_w - box_w / 2) <= 1,
+             "then the developed proxy, smoothed to the pixels it fills");
+    }
     CHECK (text_drawn ("Exposure") && text_drawn ("White Balance") && text_drawn ("Reset all"), "the panel: groups, sliders, buttons");
 
     /* Drag Exposure from 0 to +1 EV. Layout as viewer.c's. */

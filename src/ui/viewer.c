@@ -58,9 +58,9 @@
 #define COL_QUIET 0x55555500u
 #define COL_LIGHT 0xDDDDDD00u
 #define COL_TRACK 0xA8A8A800u
-#define COL_ACCENT 0x166AC000u
-#define COL_HIST_BG 0x1F1F1F00u
-#define COL_HIST 0xC8C8C800u
+#define COL_ACCENT 0x99440000u          /* #004499, the Wimp's dark blue (colour 8) */
+#define COL_HIST_BG 0x1C1C1C00u
+#define COL_HIST_GUIDE 0x33333300u
 #define COL_KNOB 0xFFFFFF00u
 #define COL_FRAME 0x33333300u
 #define COL_BUTTON 0xF5F5F500u
@@ -96,7 +96,7 @@ static int geo_key_valid;
 static sprite32 full_spr, half_spr;
 static int show_half;                  /* displaying the half-size render */
 static int full_y = -1;                /* next band of the full render; -1 when done */
-static unsigned hist[64], hist_acc[64];
+static dev_hist hist, hist_acc;
 
 static develop *dev;
 static recipe current, undo_stack[UNDO_MAX];
@@ -137,6 +137,8 @@ static int sprite_make (sprite32 *s, int w, int h)
 
 static void sprite_free (sprite32 *s)
 {
+  if (s->area)
+    draw_forget ((unsigned *) s->area + 4);
   free (s->area);
   memset (s, 0, sizeof *s);
 }
@@ -591,8 +593,8 @@ static void render_half (void)
 {
   if (!geo_half || !half_spr.area)
     return;
-  memset (hist, 0, sizeof hist);
-  develop_rows (dev, geo_half, ghw, 0, ghh, half_spr.pixels, hist);
+  memset (&hist, 0, sizeof hist);
+  develop_rows (dev, geo_half, ghw, 0, ghh, half_spr.pixels, &hist);
   shade (half_spr.pixels, ghw, ghh, 0, ghh);
   show_half = 1;
   force_image ();
@@ -605,7 +607,7 @@ static void restart_full (void)
   if (!geo)
     return;
   full_y = 0;
-  memset (hist_acc, 0, sizeof hist_acc);
+  memset (&hist_acc, 0, sizeof hist_acc);
 }
 
 static void render_full_until (unsigned deadline)
@@ -615,7 +617,7 @@ static void render_full_until (unsigned deadline)
       int y1 = full_y + BAND_ROWS < gh ? full_y + BAND_ROWS : gh;
       if (geo_pending)
         geom_rows (&plan_full, src, geo, full_y, y1);
-      develop_rows (dev, geo, gw, full_y, y1, full_spr.pixels, hist_acc);
+      develop_rows (dev, geo, gw, full_y, y1, full_spr.pixels, &hist_acc);
       shade (full_spr.pixels, gw, gh, full_y, y1);
       full_y = y1;
       if ((int) (app_now () - deadline) >= 0)
@@ -623,10 +625,11 @@ static void render_full_until (unsigned deadline)
     }
   if (full_y >= gh)
     {
+      draw_forget ((unsigned *) full_spr.area + 4);   /* new pixels: smooth them again */
       full_y = -1;
       geo_pending = 0;
       show_half = 0;
-      memcpy (hist, hist_acc, sizeof hist);
+      hist = hist_acc;
       force_image ();
       force_hist ();
     }
@@ -1486,28 +1489,115 @@ static void draw_button (int k, const char *text, int enabled, int ox, int oy)
   draw_button_rect (r, text, enabled, 0, ox, oy);
 }
 
+/* The histogram, as Aperture draws it: red, green and blue laid over
+   each other on a dark ground, where they overlap the colours add (red
+   and green make yellow, all three a light grey), so the shape of each
+   channel and of the whole stays readable. One column per screen pixel,
+   smoothed; scaled to the tallest column away from the ends (the
+   ends hold clipped pixels, which would flatten the rest); quarter
+   guides behind; a mark in the top corner when shadows or highlights
+   clip, in the colour of the channels clipping. */
+static const unsigned hist_mix[8] = {
+  0, 0x4848D800u, 0x48B84800u, 0x48C8D800u,      /* -, R, G, R+G yellow */
+  0xE0704800u, 0xC858C000u, 0xD0C04800u, 0xD8D8D800u   /* B, R+B magenta, G+B cyan, all */
+};
+
+static void draw_histogram (int x0, int y0, int x1, int y1)
+{
+  int px = 1 << draw_xeig (), py = 1 << draw_yeig ();
+  int ix0 = x0 + 6, ix1 = x1 - 6, iy0 = y0 + 6, ih = y1 - y0 - 12;
+  int cols = (ix1 - ix0) / px, c, k, x;
+  unsigned total = 0, peak = 1;
+  static unsigned colv[3][1024];
+  draw_rect (x0, y0, x1, y1, COL_FRAME);
+  draw_rect (x0 + 2, y0 + 2, x1 - 2, y1 - 2, COL_HIST_BG);
+  for (k = 1; k < 4; k++)
+    draw_rect (ix0 + (ix1 - ix0) * k / 4, iy0, ix0 + (ix1 - ix0) * k / 4 + px, iy0 + ih, COL_HIST_GUIDE);
+  if (cols > 1024)
+    cols = 1024;
+  for (k = 0; k < DEV_HIST_BINS; k++)
+    total += hist.c[HIST_LUM][k];
+  if (cols < 2 || total == 0)
+    return;
+  /* Each column: the mean of its bins, then a 1-2-1 blur across columns. */
+  for (c = 0; c < 3; c++)
+    {
+      static unsigned raw[1024];
+      for (x = 0; x < cols; x++)
+        {
+          int b0 = x * DEV_HIST_BINS / cols, b1 = (x + 1) * DEV_HIST_BINS / cols, b;
+          unsigned long long sum = 0;
+          if (b1 <= b0)
+            b1 = b0 + 1;
+          for (b = b0; b < b1; b++)
+            sum += hist.c[c][b];
+          raw[x] = (unsigned) (sum * 16 / (unsigned) (b1 - b0));
+        }
+      /* Two passes of 1-4-6-4-1 (a gaussian about three columns wide):
+         8-bit levels after a tone curve leave a comb of empty and doubled
+         bins that says nothing about the photo. */
+      {
+        int pass;
+        for (pass = 0; pass < 2; pass++)
+          {
+            unsigned *in = pass ? colv[c] : raw, *out = pass ? raw : colv[c];
+            for (x = 0; x < cols; x++)
+              {
+                unsigned a = in[x > 1 ? x - 2 : 0], b = in[x > 0 ? x - 1 : 0];
+                unsigned d = in[x < cols - 1 ? x + 1 : cols - 1], e = in[x < cols - 2 ? x + 2 : cols - 1];
+                out[x] = (a + 4 * b + 6 * in[x] + 4 * d + e) / 16;
+              }
+          }
+        for (x = 0; x < cols; x++)
+          {
+            colv[c][x] = raw[x];
+            if (x > 3 && x < cols - 4 && colv[c][x] > peak)
+              peak = colv[c][x];
+          }
+      }
+    }
+  for (x = 0; x < cols; x++)
+    {
+      int h[3], order[3] = { 0, 1, 2 }, mask = 7, base = 0, i, j;
+      for (c = 0; c < 3; c++)
+        {
+          unsigned v = colv[c][x] > peak ? peak : colv[c][x];
+          h[c] = (int) ((unsigned long long) v * (unsigned) ih / peak) / py * py;
+        }
+      for (i = 0; i < 2; i++)          /* lowest first */
+        for (j = i + 1; j < 3; j++)
+          if (h[order[j]] < h[order[i]])
+            {
+              int t = order[i]; order[i] = order[j]; order[j] = t;
+            }
+      /* Up to the lowest all three overlap; then the other two; then the tallest alone. */
+      for (i = 0; i < 3; i++)
+        {
+          int top = h[order[i]];
+          if (top > base)
+            draw_rect (ix0 + x * px, iy0 + base, ix0 + x * px + px - 1, iy0 + top - 1, hist_mix[mask]);
+          base = top > base ? top : base;
+          mask &= ~(1 << order[i]);
+        }
+    }
+  /* Clipping: more than 0.5% of pixels at 0 or 255 in a channel. */
+  for (k = 0; k < 2; k++)
+    {
+      int mask = 0, bin = k ? DEV_HIST_BINS - 1 : 0, mx = k ? ix1 - 14 : ix0 + 2;
+      for (c = 0; c < 3; c++)
+        if (hist.c[c][bin] * 200u > total)
+          mask |= 1 << c;
+      if (mask)
+        draw_rect (mx, iy0 + ih - 14, mx + 12, iy0 + ih - 2, hist_mix[mask]);
+    }
+}
+
 static void draw_panel (int ox, int oy)
 {
   int px = ox + panel_x0 (), g, k;
-  unsigned peak = 1;
   draw_rect (px, oy - vis_h, ox + vis_w, oy, COL_PANEL);
   draw_rect (px, oy - vis_h, px + 2, oy, COL_FRAME);
-  /* Histogram */
-  {
-    int x0 = px + PAD, x1 = ox + vis_w - PAD, y1 = oy + hist_top (), y0 = y1 - HIST_H;
-    int bw = (x1 - x0) / 64;
-    draw_rect (x0, y0, x1, y1, COL_HIST_BG);
-    for (k = 1; k < 63; k++)           /* the ends hold clipped pixels: don't let them flatten the rest */
-      if (hist[k] > peak)
-        peak = hist[k];
-    for (k = 0; k < 64; k++)
-      {
-        unsigned v = hist[k] > peak ? peak : hist[k];
-        int h = (int) ((unsigned long long) v * (HIST_H - 12) / peak);
-        if (h > 0)
-          draw_rect (x0 + 4 + k * bw, y0 + 4, x0 + 4 + k * bw + bw - 2, y0 + 4 + h, COL_HIST);
-      }
-  }
+  draw_histogram (px + PAD, oy + hist_top () - HIST_H, ox + vis_w - PAD, oy + hist_top ());
   /* Place in the list, rating */
   {
     char t[64];
@@ -1628,8 +1718,12 @@ static void draw_image (int ox, int oy)
       if (s->area)
         {
           int pr[4];
+          /* The half-size render changes on every move of a slider:
+             plotted as it is. The full one is smoothed to the size shown. */
+          draw_set_smoothing (s == &full_spr);
           draw_sprite_rect (s->area, (const unsigned *) s->area + 4, s->w, s->h,
                             ox + r[0], oy + r[1], ox + r[2], oy + r[3], out);
+          draw_set_smoothing (1);
           /* The overlays line up with the full-size placement. */
           if (photo_rect (pr))
             {

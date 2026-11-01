@@ -139,7 +139,7 @@ static inline void pixel (const develop *d, const uint16_t *s, int *r, int *g, i
 }
 
 void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
-                   uint32_t *dst, unsigned hist[64])
+                   uint32_t *dst, dev_hist *hist)
 {
   int y, x;
   make_tables ();
@@ -153,7 +153,12 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
             unsigned r = l2s[s[0]], g = l2s[s[1]], b = l2s[s[2]];
             o[x] = r | g << 8 | b << 16;
             if (hist)
-              hist[(r * 54 + g * 183 + b * 19) >> 10]++;
+              {
+                hist->c[HIST_R][r]++;
+                hist->c[HIST_G][g]++;
+                hist->c[HIST_B][b]++;
+                hist->c[HIST_LUM][(r * 54 + g * 183 + b * 19) >> 8]++;
+              }
           }
       else
         for (x = 0; x < w; x++, s += 3)
@@ -164,7 +169,12 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
             r = l2s[R]; g = l2s[G]; b = l2s[B];
             o[x] = r | g << 8 | b << 16;
             if (hist)
-              hist[(r * 54 + g * 183 + b * 19) >> 10]++;
+              {
+                hist->c[HIST_R][r]++;
+                hist->c[HIST_G][g]++;
+                hist->c[HIST_B][b]++;
+                hist->c[HIST_LUM][(r * 54 + g * 183 + b * 19) >> 8]++;
+              }
           }
     }
 }

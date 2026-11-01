@@ -1,4 +1,4 @@
-Lumen 0.0.4 (01 Nov 2026) - test build
+Lumen 0.0.5 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -36,7 +36,17 @@ Keys (with the library window focused)
 
 The viewer
 ----------
-The photo on the left, the adjustments on the right. Drag a slider: the
+The photo on the left, the adjustments on the right. At the top, the
+histogram: red, green and blue laid over each other (where they overlap
+the colours add: yellow, cyan, magenta, and grey where all three do). A
+small square in a top corner means shadows or highlights are clipping,
+in the colour of the channels affected.
+
+Photos and thumbnails are smoothed to the size they are shown. While a
+slider is being dragged the quick half-size picture is shown as it is,
+and the smooth one comes back when you let go.
+
+The rest of the panel: Drag a slider: the
 photo follows (at half resolution while you drag, then in full). Click
 Adjust on a slider to put it back to its default; "Reset" beside a group
 resets the group. Every change is saved as you make it.
