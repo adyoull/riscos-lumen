@@ -187,6 +187,22 @@ int looks_presets (cat_preset **out);
 int looks_save_preset (const char *name);   /* the viewer's look */
 void looks_delete_preset (cat_id id);
 
+/* --- exportbox.c: the Export save box and the queue of exports */
+int exportbox_create (void);
+int exportbox_window (void);
+void exportbox_open (int from_viewer, int x, int y);   /* for the selection, or the viewer's photo */
+void exportbox_click (int *block);
+int exportbox_key (int key);
+int exportbox_dragging (void);
+void exportbox_drag_end (void);
+void exportbox_save_ack (int *message);
+int exportbox_save_to (const char *path);
+void exportbox_set_name (const char *s);   /* tests */
+const char *exportbox_name (void);
+int exports_busy (void);
+void exports_idle (unsigned deadline);
+void exports_status (char *out, size_t n);
+
 /* --- menus.c */
 void menus_init (void);
 void menus_open_window_menu (int x, int y);

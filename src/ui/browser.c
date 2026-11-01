@@ -183,6 +183,12 @@ void browser_update_title (void)
     snprintf (status, sizeof status, "  \xB7  Importing: %d found", p.found);
   else if (p.thumbs_pending > 0)
     snprintf (status, sizeof status, "  \xB7  Making thumbnails: %d to go", p.thumbs_pending);
+  if (exports_busy ())
+    {
+      char e[60];
+      exports_status (e, sizeof e);
+      snprintf (status + strlen (status), sizeof status - strlen (status), "  \xB7  %s", e);
+    }
   snprintf (t, sizeof t, "%s - %s (%d)%s%s", APP_NAME, name, n,
             src.min_rating > 0 ? (src.min_rating == 5 ? "  \xB7  5 stars" : "  \xB7  rated") : "", status);
   if (strcmp (t, title) != 0)
@@ -630,6 +636,12 @@ int browser_key (int key)
     }
   else if (key == KEY_CTRL_A)
     browser_select_all (1);
+  else if (key == 0x05)                /* Ctrl-E: export */
+    {
+      int ptr[5];
+      if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+        exportbox_open (0, ptr[0], ptr[1]);
+    }
   else if (key == 0x03)                /* Ctrl-C: copy the adjustments */
     looks_copy_selection ();
   else if (key == 0x16)                /* Ctrl-V: paste them */

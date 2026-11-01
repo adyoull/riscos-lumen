@@ -49,7 +49,7 @@ static int create_iconbar_icon (void)
 
 int app_init (const char *library_path)
 {
-  static const int messages[] = { Message_DataLoad, Message_ModeChange, 0 };
+  static const int messages[] = { Message_DataLoad, 2 /* DataSaveAck */, Message_ModeChange, 0 };
   char err[300];
   if (_swix (Wimp_Initialise, _INR (0, 3) | _OUT (1), 380, TASK_WORD, APP_NAME, messages, &task))
     return 1;
@@ -60,7 +60,7 @@ int app_init (const char *library_path)
       app_report (err);
       return 1;
     }
-  if (create_iconbar_icon () || browser_create () || viewer_create ())
+  if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       return 1;
@@ -79,7 +79,7 @@ void app_quit (void)
 
 int app_busy (void)
 {
-  return viewer_busy () || lib_busy (lib) || thumbcache_pending ();
+  return viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy ();
 }
 
 static void thumb_made (void *ctx, cat_id v)
@@ -100,6 +100,15 @@ static void idle (void)
   /* What is on screen comes first. */
   if (thumbcache_pending ())
     thumbcache_work (app_now, start + 1, browser_thumb_loaded);
+  if (exports_busy ())
+    {
+      exports_idle (deadline);
+      if ((int) (app_now () - last_title) > 25 || !exports_busy ())
+        {
+          last_title = app_now ();
+          browser_update_title ();
+        }
+    }
   if (!lib_busy (lib))
     {
       browser_update_title ();
@@ -197,12 +206,18 @@ int app_event (int reason, int *b, int sender)
         browser_click (b);
       else if (b[3] == viewer_window ())
         viewer_click (b);
+      else if (b[3] == exportbox_window ())
+        exportbox_click (b);
       break;
     case User_Drag_Box:
-      viewer_drag_end ();
+      if (exportbox_dragging ())
+        exportbox_drag_end ();
+      else
+        viewer_drag_end ();
       break;
     case Key_Pressed:
-      if (b[0] == viewer_window () ? !viewer_key (b[6])
+      if (b[0] == exportbox_window () ? !exportbox_key (b[6])
+          : b[0] == viewer_window () ? !viewer_key (b[6])
           : (b[0] != browser_window () || !browser_key (b[6])))
         _swix (Wimp_ProcessKey, _IN (0), b[6]);
       break;
@@ -216,6 +231,9 @@ int app_event (int reason, int *b, int sender)
           return 1;
         case Message_DataLoad:
           data_load (b);
+          break;
+        case 2:                        /* Message_DataSaveAck */
+          exportbox_save_ack (b);
           break;
         case Message_ModeChange:
           draw_init_mode ();

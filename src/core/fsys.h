@@ -43,6 +43,8 @@ void fsys_join (char *out, size_t n, const char *dir, const char *leaf);
 const char *fsys_leaf (const char *path);
 /* Create path and any missing parents. 0 on success. */
 int fsys_mkdirs (const char *path);
+/* Sets a file's RISC OS filetype (OS_File 18, PRM p339); nothing on Linux. */
+int fsys_settype (const char *path, int filetype);
 /* Expand to a canonical full pathname (system variables, paths).
    On Linux it copies. 0 on success. */
 int fsys_canonical (const char *path, char *out, size_t n);

@@ -10,6 +10,7 @@
 #include "../src/core/develop.h"
 #include "../src/core/geometry.h"
 #include "../src/core/resample.h"
+#include "../src/core/export.h"
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
 #include "../src/core/recipe.h"
@@ -675,6 +676,139 @@ static void test_resample (void)
   free (dst);
 }
 
+/* ---- export ---- */
+static int run_export (exporter *e)
+{
+  int r, steps = 0;
+  while ((r = export_step (e, 7)) == 0)
+    steps++;
+  return r == 1 ? steps : -1;
+}
+
+static int read_back (const char *path, rgb_image *img)
+{
+  char err[200];
+  thumbgen *t = thumbgen_start (path, NULL, 1 << 20, 1, err, sizeof err);
+  int r;
+  if (!t)
+    return -1;
+  while ((r = thumbgen_step (t, 64)) == 0)
+    ;
+  r = r == 1 ? thumbgen_take (t, img) : -1;
+  thumbgen_free (t);
+  return r;
+}
+
+static void test_export (const char *work)
+{
+  char src[700], dst[700], err[200];
+  rgb_image img, back;
+  recipe r;
+  export_opts o = { EXPORT_JPEG, 92, 0 };
+  exporter *e;
+  int x, y, steps, worst = 0;
+  FILE *f;
+  img.w = 400; img.h = 300;
+  img.rgb = malloc (400 * 300 * 3);
+  for (y = 0; y < 300; y++)
+    for (x = 0; x < 400; x++)
+      {
+        unsigned char *p = img.rgb + (y * 400 + x) * 3;
+        int red = x < 100 && y < 100;
+        p[0] = (unsigned char) (red ? 220 : 40 + x / 3);
+        p[1] = (unsigned char) (red ? 30 : 60 + y / 3);
+        p[2] = (unsigned char) (red ? 30 : 90);
+      }
+  snprintf (src, sizeof src, "%s/source.jpg", work);
+  CHECK (img_save_jpeg (&img, src, 95, err, sizeof err) == 0, "a 400x300 source");
+
+  /* Untouched, full size: the same picture back. */
+  recipe_default (&r);
+  snprintf (dst, sizeof dst, "%s/out-full.jpg", work);
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  CHECK (e != NULL, "export started");
+  steps = e ? run_export (e) : -1;
+  CHECK (steps > 10, "in many small steps");
+  CHECK (e && export_progress (e) == 100, "progress reaches 100");
+  export_free (e);
+  CHECK (read_back (dst, &back) == 0 && back.w == 400 && back.h == 300, "written at 400x300");
+  for (y = 0; y < 300; y += 7)
+    for (x = 0; x < 400; x += 7)
+      {
+        int c;
+        for (c = 0; c < 3; c++)
+          {
+            int d = abs (back.rgb[(y * 400 + x) * 3 + c] - img.rgb[(y * 400 + x) * 3 + c]);
+            if (d > worst) worst = d;
+          }
+      }
+  CHECK (worst <= 12, "pixels as the original (within JPEG's error)");
+  free (back.rgb);
+
+  /* Smaller, brighter. */
+  o.max_side = 100;
+  recipe_set (&r, P_EV, 1);
+  snprintf (dst, sizeof dst, "%s/out-small.jpg", work);
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  run_export (e);
+  export_free (e);
+  CHECK (read_back (dst, &back) == 0 && back.w == 100 && back.h == 75, "max 100: 100x75");
+  CHECK (back.rgb[(70 * 100 + 90) * 3 + 1] > img.rgb[(280 * 400 + 360) * 3 + 1] + 20, "and brighter (+1 EV)");
+  free (back.rgb);
+
+  /* Turned, cropped, as PNG. */
+  recipe_default (&r);
+  recipe_set (&r, P_ROTATE, 1);
+  recipe_set (&r, P_CROP_X1, 0.5f);
+  o.format = EXPORT_PNG;
+  o.max_side = 0;
+  snprintf (dst, sizeof dst, "%s/out-turned.png", work);
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  CHECK (run_export (e) >= 0, "PNG export");
+  export_free (e);
+  {
+    unsigned char head[8] = { 0 };
+    f = fopen (dst, "rb");
+    if (f) { if (fread (head, 1, 8, f) != 8) head[0] = 0; fclose (f); }
+    CHECK (head[1] == 'P' && head[2] == 'N' && head[3] == 'G', "a PNG file");
+  }
+  CHECK (read_back (dst, &back) == 0 && back.w == 150 && back.h == 400, "turned (300 wide) and half cropped: 150x400");
+  /* Turned clockwise: the red top left corner is now at the top right,
+     which the crop (left half) leaves out; the top left is from the bottom left. */
+  CHECK (back.rgb[0] < 120 && back.rgb[(5 * 150 + 5) * 3] < 120, "the red corner went with the turn");
+  free (back.rgb);
+
+  /* Failures. */
+  o.format = EXPORT_JPEG;
+  CHECK (export_start ("/nonexistent/x.jpg", 400, 300, 1, &r, dst, &o, err, sizeof err) == NULL && err[0],
+         "a missing original: an error");
+  e = export_start (src, 400, 300, 1, &r, "/nonexistent/dir/out.jpg", &o, err, sizeof err);
+  CHECK (e && run_export (e) == -1 && strstr (export_error (e), "Can't write") != NULL, "an unwritable place: an error");
+  export_free (e);
+  /* Abandoned half way: no partial file. */
+  snprintf (dst, sizeof dst, "%s/out-abandoned.jpg", work);
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  for (x = 0; x < 60; x++)              /* about 43 steps to decode, 43 to write */
+    export_step (e, 7);
+  f = fopen (dst, "rb");
+  CHECK (f != NULL, "part written");
+  if (f) fclose (f);
+  export_free (e);
+  f = fopen (dst, "rb");
+  CHECK (f == NULL, "abandoned: the partial file is removed");
+  if (f) fclose (f);
+  /* Sizes from the plan. */
+  {
+    int ow, oh;
+    recipe_default (&r);
+    export_plan_size (6000, 4000, &r, 2048, &ow, &oh);
+    CHECK (ow == 2048 && oh == 1365, "6000x4000 at 2048: 2048x1365");
+    export_plan_size (6000, 4000, &r, 0, &ow, &oh);
+    CHECK (ow == 6000 && oh == 4000, "full size");
+  }
+  free (img.rgb);
+}
+
 int main (int argc, char **argv)
 {
   if (argc < 2)
@@ -689,6 +823,7 @@ int main (int argc, char **argv)
   test_develop_image ();
   test_auto ();
   test_presets (argv[1]);
+  test_export (argv[1]);
   printf ("test_develop: %d checks, %d failed\n", checks, fails);
   return fails != 0;
 }

@@ -13,13 +13,13 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.6
+VERSION := 0.0.7
 DATE := 01 Nov 2026
 OUT := out
 
-CORE := src/core/exif.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/autoadj.c src/core/catalog.c src/core/library.c src/core/sqlite_vfs.c
+CORE := src/core/exif.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/export.c src/core/autoadj.c src/core/catalog.c src/core/library.c src/core/sqlite_vfs.c
 CORE_H := $(wildcard src/core/*.h)
-UI := src/ui/main.c src/ui/app.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c
+UI := src/ui/main.c src/ui/app.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c
 UI_H := $(wildcard src/ui/*.h)
 SQLITE := third_party/sqlite/sqlite3.c
 SQLITE_FLAGS := -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION \

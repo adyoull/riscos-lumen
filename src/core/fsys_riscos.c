@@ -152,3 +152,8 @@ int fsys_canonical (const char *path, char *out, size_t n)
     return -1;
   return 0;
 }
+
+int fsys_settype (const char *path, int filetype)
+{
+  return _swix (OS_File, _INR (0, 2), 18, path, filetype) ? -1 : 0;
+}

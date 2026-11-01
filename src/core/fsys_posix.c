@@ -128,3 +128,9 @@ int fsys_canonical (const char *path, char *out, size_t n)
   snprintf (out, n, "%s", path);
   return 0;
 }
+
+int fsys_settype (const char *path, int filetype)
+{
+  (void) path; (void) filetype;
+  return 0;
+}

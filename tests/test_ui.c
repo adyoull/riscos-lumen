@@ -1,4 +1,6 @@
 #include <math.h>
+#include <stdint.h>
+#include "thumbgen.h"
 /* Lumen's desktop front end against the Fake RISC OS. Every SWI it uses is
    faked here; the test plays what a user does: drops a folder from the
    Filer, waits for thumbnails, rates and flags with the keyboard, uses the
@@ -16,11 +18,13 @@
 #define BROWSER 0x2a000
 #define INFO 0x2b000
 #define VIEWER 0x2c000
+#define EXPORTW 0x2d000
+#define FILER 0x9000
 #define TASK 0x1234
 
 static char work[512];
 static int nwindows, browser_block[23], viewer_block[23];
-static int vopened[8], vopen_calls, vclosed, drag_block[10], drag_calls, ptr_x, ptr_y, ptr_buttons;
+static int vopened[8], vopen_calls, vclosed, drag_block[10], drag_calls, ptr_x, ptr_y, ptr_buttons, ptr_window = -1, ptr_icon = -1;
 static char *vtitle;
 static int last_plot_w, last_plot_h;
 static char *title_buf;
@@ -66,6 +70,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
           vtitle = (char *) b[18];
           r[0] = VIEWER;
         }
+      else if (nwindows == 3)
+        r[0] = EXPORTW;
       else
         r[0] = INFO;
       return NULL;
@@ -83,8 +89,13 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         }
       return NULL;
     case Wimp_GetWindowState:
-      CHECK (b[0] == BROWSER || b[0] == VIEWER, "window state: one of ours");
-      memcpy (&b[1], b[0] == VIEWER ? &vopened[1] : &opened[1], 6 * sizeof (int));
+      CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW, "window state: one of ours");
+      if (b[0] == EXPORTW)
+        {
+          b[1] = 600; b[2] = 400; b[3] = 1320; b[4] = 860; b[5] = 0; b[6] = 0;
+        }
+      else
+        memcpy (&b[1], b[0] == VIEWER ? &vopened[1] : &opened[1], 6 * sizeof (int));
       b[7] = -1; b[8] = 0;
       return NULL;
     case Wimp_DragBox:
@@ -123,6 +134,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_SendMessage:
       sent_reason = r[0];
+      b[2] = 0x5151;                   /* the Wimp fills in my_ref */
       memcpy (sent_block, b, sizeof sent_block);
       sent_to = r[2];
       return NULL;
@@ -130,7 +142,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       menu_open = b;
       return NULL;
     case Wimp_GetPointerInfo:
-      b[0] = ptr_x; b[1] = ptr_y; b[2] = ptr_buttons;
+      b[0] = ptr_x; b[1] = ptr_y; b[2] = ptr_buttons; b[3] = ptr_window; b[4] = ptr_icon;
       return NULL;
     case Wimp_ProcessKey:
       processed_key = r[0];
@@ -214,7 +226,7 @@ static void fakes (void)
     { OS_ReadModeVariable, "OS_ReadModeVariable", 0 }, { ColourTrans_SetGCOL, "ColourTrans_SetGCOL", 0 },
     { ColourTrans_SelectTable, "ColourTrans_SelectTable", 0 }, { OS_Plot, "OS_Plot", 0 },
     { OS_SpriteOp, "OS_SpriteOp", 0 }, { OS_ReadMonotonicTime, "OS_ReadMonotonicTime", 0 },
-    { Wimp_DragBox, "Wimp_DragBox", 1 } };
+    { Wimp_DragBox, "Wimp_DragBox", 1 }, { Wimp_SetIconState, "Wimp_SetIconState", 1 } };
   size_t i;
   fake_reset ();
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
@@ -330,7 +342,7 @@ int main (int argc, char **argv)
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 3, "the library, viewer and Info windows");
+  CHECK (nwindows == 4, "the library, viewer, Export and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0xBF000002u, "browser: title, close, back, toggle, scroll, resize");
   CHECK (open_calls == 1 && caret_window == BROWSER, "the library window opens with the input focus");
@@ -694,6 +706,98 @@ int main (int argc, char **argv)
       browser_focus_on (0);
     }
 
+    /* ---- Export ---- */
+    {
+      char path[700], err[200];
+      int eb[64];
+      FILE *f;
+      unsigned char head[8];
+      thumbgen *t;
+      int w = 0, h = 0, r;
+      browser_focus_on (0);
+      key (0x05);
+      CHECK ((intptr_t) menu_open == EXPORTW, "Ctrl-E: the Export box, opened as a dialogue");
+      CHECK (strcmp (exportbox_name (), "IMG_0001") == 0, "named after the photo, without its extension");
+      /* PNG, 1024 at most, saved to a typed path. */
+      memset (eb, 0, sizeof eb);
+      eb[2] = Button_Select; eb[3] = EXPORTW; eb[4] = 4;          /* PNG */
+      app_event (Mouse_Click, eb, 0);
+      eb[4] = 9;                                                   /* 1024 */
+      app_event (Mouse_Click, eb, 0);
+      reported[0] = '\0';
+      eb[4] = 13;                                                  /* Save, with just a leafname */
+      app_event (Mouse_Click, eb, 0);
+      CHECK (strstr (reported, "drag the icon") != NULL && !exports_busy (), "Save with a leafname: drag it instead");
+      reported[0] = '\0';
+      snprintf (path, sizeof path, "%s/IMG_0001-export.png", work);
+      exportbox_set_name (path);
+      app_event (Mouse_Click, eb, 0);
+      CHECK ((intptr_t) menu_open == -1 && exports_busy (), "Save with a full path: the box closes, the export runs");
+      browser_update_title ();
+      CHECK (strstr (title_buf, "Exporting 1 of 1") != NULL, "the library's title shows it");
+      nulls_until_idle ();
+      CHECK (!exports_busy () && strstr (title_buf, "Exporting") == NULL, "done, and the title says so");
+      f = fopen (path, "rb");
+      memset (head, 0, sizeof head);
+      if (f) { if (fread (head, 1, 8, f) != 8) head[0] = 0; fclose (f); }
+      CHECK (head[1] == 'P' && head[2] == 'N' && head[3] == 'G', "a PNG was written");
+      t = thumbgen_start (path, NULL, 1 << 20, 1, err, sizeof err);
+      while (t && (r = thumbgen_step (t, 64)) == 0)
+        ;
+      if (t) thumbgen_size (t, &w, &h);
+      thumbgen_free (t);
+      CHECK (w == 640 && h == 480, "at the photo's own size (1024 only shrinks larger ones)");
+
+      /* Several photos: a directory of them. */
+      browser_select_all (1);
+      caret_window = BROWSER;
+      key (0x05);
+      CHECK (strcmp (exportbox_name (), "Lumen_export") == 0, "several: a directory name");
+      snprintf (path, sizeof path, "%s/Batch", work);
+      exportbox_set_name (path);
+      key (KEY_RETURN);
+      nulls_until_idle ();
+      {
+        int k, all = 1;
+        for (k = 1; k <= 6; k++)
+          {
+            char p2[760];
+            snprintf (p2, sizeof p2, "%s/Batch/IMG_%04d.png", work, k);
+            f = fopen (p2, "rb");
+            if (!f) all = 0; else fclose (f);
+          }
+        CHECK (all, "six files in the new directory, named after the photos");
+      }
+
+      /* Dragging the icon to a directory display: DataSave, then the Filer's DataSaveAck. */
+      browser_focus_on (1);
+      caret_window = BROWSER;
+      key (0x05);
+      eb[2] = 64; eb[4] = 0;                                       /* drag the file icon */
+      k = drag_calls;
+      app_event (Mouse_Click, eb, 0);
+      CHECK (drag_calls == k + 1 && drag_block[1] == 5, "dragging the icon: a fixed box drag");
+      ptr_window = FILER; ptr_icon = -1; ptr_x = 900; ptr_y = 500;
+      app_event (User_Drag_Box, eb, 0);
+      CHECK (sent_block[4] == 1 && sent_to == FILER && sent_block[10] == 0xB60
+             && strcmp ((const char *) &sent_block[11], "IMG_0002") == 0, "Message_DataSave to the Filer: PNG, IMG_0002");
+      memset (eb, 0, sizeof eb);
+      memcpy (eb, sent_block, 44);
+      eb[3] = 0x5151; eb[4] = 2; eb[9] = 4321;
+      snprintf (path, sizeof path, "%s/Dragged.png", work);
+      strcpy ((char *) &eb[11], path);
+      eb[0] = 44 + (int) ((strlen (path) + 4) & ~3u);
+      app_event (User_Message, eb, 0);
+      nulls_until_idle ();
+      f = fopen (path, "rb");
+      CHECK (f != NULL, "Message_DataSaveAck: written where the Filer said");
+      if (f) fclose (f);
+      ptr_window = -1;
+      caret_window = BROWSER;
+      browser_select_all (0);
+      browser_focus_on (0);
+    }
+
     /* A double click opens the viewer; its menu takes us back. */
     for (k = 0; k < 2; k++)
       click (16 + 352 + 60, -16 - 60, Button_Select);
@@ -702,8 +806,8 @@ int main (int argc, char **argv)
     b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
-    CHECK (strstr (item_text (menu_open, 12), "Back to the library") != NULL, "Back to the library");
-    choose (12, -1, -1);
+    CHECK (strstr (item_text (menu_open, 13), "Back to the library") != NULL, "Back to the library");
+    choose (13, -1, -1);
     CHECK (vclosed == 2, "Back to the library closes the viewer");
   }
 

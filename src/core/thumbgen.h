@@ -25,6 +25,7 @@ const char *thumbgen_error (const thumbgen *t);
 /* The thumbnail's size, once finished (after orientation). */
 void thumbgen_size (const thumbgen *t, int *w, int *h);
 void thumbgen_free (thumbgen *t);
+int thumbgen_progress (const thumbgen *t);   /* 0-100 */
 
 typedef struct rgb_image rgb_image;
 /* Once finished: hands over the image (free img->rgb). 0 on success. */

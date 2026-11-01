@@ -80,6 +80,23 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
 - New icon: the aperture redrawn in the desktop's own colours (Wimp blues
   for the blades, cream light through the opening, a bevelled grey
   barrel, lit from the top left, outlined), `app/make-icons.py`.
+
+## 0.0.7
+
+- Export (export.c, exportbox.c): JPEG (quality; no colour subsampling
+  from 90 up) or PNG (sRGB chunk), full size or a longer side of 3840,
+  2048 or 1024. The original is decoded only as large as needed (DCT
+  scaling + area averaging) into 8-bit RGB, then each 16-row band goes
+  through the geometry (sampled in linear light from the 8-bit source),
+  the develop pipeline and straight into the encoder; the filetype is set
+  with OS_File 18; a failed or abandoned export removes its file.
+- The Export box is a standard save box (Wimp icons, radio groups,
+  writable name and quality) using the data transfer protocol:
+  Message_DataSave, DataSaveAck, and DataLoad back to a program receiving
+  <Wimp$Scrap>. Several photos go into a new directory. Exports are queued
+  and run in idle time; the library's title shows "Exporting 2 of 5 (40%)".
+- Tested in ROL 5.31-5: single JPEG dragged to a Filer window; three photos
+  as PNG at 1024 into a new directory.
 - Still to come in milestone 1: the loupe, a curves editor, several
   versions of one original, full-resolution rendering.
 

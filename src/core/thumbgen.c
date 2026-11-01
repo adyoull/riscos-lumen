@@ -540,3 +540,10 @@ int img_load_jpeg (const char *path, rgb_image *img, char *err, size_t errlen)
   img->rgb = buf;
   return 0;
 }
+
+int thumbgen_progress (const thumbgen *t)
+{
+  if (t->done)
+    return 100;
+  return t->sc.sh > 0 ? (int) ((long long) t->y * 100 / t->sc.sh) : 0;
+}

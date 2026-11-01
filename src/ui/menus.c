@@ -26,6 +26,7 @@ static int which;                      /* 1 window menu, 2 icon bar menu, 3 view
 static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40];
+static int export_after_menu;          /* 1 the selection, 2 the viewer's photo: open the box once the menu is done */
 
 /* The presets the open menu was built from. */
 static cat_preset *presets;
@@ -218,7 +219,7 @@ static menu *build_window_menu (void)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
   npresets = looks_presets (&presets);
   apply = preset_list ("Apply preset", nsel == 0);
-  selm = new_menu ("Selection", 8);
+  selm = new_menu ("Selection", 9);
   if (selm)
     {
       set_item (selm, 0, 0, "Rating", 0, (int) rating, nsel == 0);
@@ -228,7 +229,8 @@ static menu *build_window_menu (void)
       set_item (selm, 4, 0, "Clear selection      Esc", MF_DOTTED, -1, nsel == 0);
       set_item (selm, 5, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
       set_item (selm, 6, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
-      set_item (selm, 7, 1, "Apply preset", 0, (int) apply, nsel == 0 || npresets == 0);
+      set_item (selm, 7, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0 || npresets == 0);
+      set_item (selm, 8, 1, "Export...      ^E", 0, -1, nsel == 0);
     }
 
   newalbum = writable_menu ("Name", album_name, sizeof album_name);
@@ -263,7 +265,7 @@ static menu *build_window_menu (void)
 
 /* Photo > ... (the order menus_selection decodes) */
 enum { VM_BEFORE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
-       VM_PRESETS, VM_COPY, VM_PASTE, VM_BACK, VM_COUNT };
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_EXPORT, VM_BACK, VM_COUNT };
 
 static menu *build_viewer_menu (void)
 {
@@ -292,6 +294,7 @@ static menu *build_viewer_menu (void)
       set_item (m, VM_PRESETS, 0, "Presets", 0, (int) pre, 0);
       set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
       set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
+      set_item (m, VM_EXPORT, 0, "Export...      ^E", MF_DOTTED, -1, 0);
       set_item (m, VM_BACK, 1, "Back to the library      Esc", 0, -1, 0);
     }
   return m;
@@ -476,6 +479,8 @@ static int window_choice (const int *c)
         looks_apply_selection (looks_clip ());
       else if (c[1] == 7 && c[2] >= 0 && c[2] < npresets && c[2] < MAX_LIST)
         looks_apply_selection (presets[c[2]].recipe);
+      else if (c[1] == 8)
+        export_after_menu = 1;
       break;
     case 2:                            /* Album */
       if (c[1] == 0 && c[2] == 0)
@@ -516,6 +521,7 @@ int menus_selection (const int *choice)
       case VM_PRESETS: if (choice[1] >= 0) presets_choice (choice + 1); break;
       case VM_COPY: looks_copy_viewer (); break;
       case VM_PASTE: if (looks_clip ()) viewer_apply_look (looks_clip ()); break;
+      case VM_EXPORT: export_after_menu = 2; break;
       case VM_BACK: viewer_close (); return 0;
       }
   else if (which == 4)
@@ -529,6 +535,15 @@ int menus_selection (const int *choice)
     }
   if (quit_requested)
     return 1;
+  if (export_after_menu)
+    {
+      /* The Export box replaces the menu, at the pointer (as a menu would open). */
+      int from_viewer = export_after_menu == 2;
+      export_after_menu = 0;
+      if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+        exportbox_open (from_viewer, ptr[0], ptr[1]);
+      return 0;
+    }
   /* Adjust keeps the menu open, rebuilt with fresh ticks. */
   if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL && (ptr[2] & Button_Adjust))
     {

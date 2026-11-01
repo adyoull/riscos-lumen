@@ -44,4 +44,10 @@ void geom_to_source (const geom_plan *g, double x, double y, double *sx, double 
    its centre, inside the canvas. Canvas shape cw x ch decides fractions. */
 void geom_crop_aspect (double *x0, double *y0, double *x1, double *y1, double aspect, int cw, int ch);
 
+/* As geom_rows, but from 8-bit sRGB (export works on the full-size
+   original, which would take twice the memory as 16-bit linear): output
+   rows y0..y1-1 go to dst starting at its row (y - dst_row0), as linear. */
+void geom_rows_rgb8 (const geom_plan *g, const unsigned char *src, const uint16_t *s2l,
+                     uint16_t *dst, int y0, int y1, int dst_row0);
+
 #endif

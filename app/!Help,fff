@@ -1,4 +1,4 @@
-Lumen 0.0.6 (01 Nov 2026) - test build
+Lumen 0.0.7 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -29,6 +29,7 @@ Keys (with the library window focused)
   Cursor keys   move to the next photo; Page Up/Down, Home, End too
   Ctrl-A        select all
   Escape        clear the selection
+  Ctrl-E        export the selected photos
   Ctrl-C        copy the adjustments of the (first) selected photo
   Ctrl-V        paste them onto the selected photos
 
@@ -81,9 +82,22 @@ that no empty corners show.
   M             before and after (the original, and back)
   Ctrl-Z        undo          Ctrl-Y   redo
   Ctrl-C        copy the adjustments   Ctrl-V   paste them here
+  Ctrl-E        export this photo
   0 to 5, 9, /  rating, reject, flag, as in the library
   Escape, V     back to the library
   Menu          all of the above, plus Crop shape, Grid and Presets
+
+Exporting
+---------
+Ctrl-E (or Export... in the Selection or Photo menu) opens the Export
+box. Drag its icon to a directory display, or into another program, or
+type a full pathname and click Save. Choose JPEG or PNG, the size (Full,
+or the longer side at 3840, 2048 or 1024 pixels; photos are never made
+bigger) and the JPEG quality. The photo is written with all its
+adjustments, crop and straightening, from the full-size original. With
+several photos selected, the icon is a directory: they are written into
+a new directory of that name, one file each, named after the originals.
+Exports run in the background; the library's title shows the progress.
 
 Edited photos are marked "Edited" in the library, and their thumbnails
 are made again with the edit.

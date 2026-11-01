@@ -173,3 +173,46 @@ void geom_crop_aspect (double *x0, double *y0, double *x1, double *y1, double as
   *y0 = (cy - h / 2) / ch;
   *y1 = (cy + h / 2) / ch;
 }
+
+void geom_rows_rgb8 (const geom_plan *g, const unsigned char *src, const uint16_t *s2l,
+                     uint16_t *dst, int y0, int y1, int dst_row0)
+{
+  int x, y, c;
+  int simple = g->quarter == 0 && g->sn == 0 && g->kv == 0 && g->kh == 0;
+  for (y = y0; y < y1; y++)
+    {
+      uint16_t *o = dst + (size_t) (y - dst_row0) * g->ow * 3;
+      for (x = 0; x < g->ow; x++, o += 3)
+        {
+          double sx, sy, fx, fy;
+          int ix, iy, ix1, iy1;
+          const unsigned char *p00, *p10, *p01, *p11;
+          if (simple)
+            {
+              sx = (g->x0 + (x + 0.5) / g->ow * (g->x1 - g->x0)) * g->sw;
+              sy = (g->y0 + (y + 0.5) / g->oh * (g->y1 - g->y0)) * g->sh;
+            }
+          else
+            geom_to_source (g, x + 0.5, y + 0.5, &sx, &sy);
+          sx = clampd (sx - 0.5, 0, g->sw - 1);
+          sy = clampd (sy - 0.5, 0, g->sh - 1);
+          ix = (int) sx;
+          iy = (int) sy;
+          fx = sx - ix;
+          fy = sy - iy;
+          ix1 = ix + 1 < g->sw ? ix + 1 : ix;
+          iy1 = iy + 1 < g->sh ? iy + 1 : iy;
+          p00 = src + ((size_t) iy * g->sw + ix) * 3;
+          p10 = src + ((size_t) iy * g->sw + ix1) * 3;
+          p01 = src + ((size_t) iy1 * g->sw + ix) * 3;
+          p11 = src + ((size_t) iy1 * g->sw + ix1) * 3;
+          /* Interpolated in linear light, as the proxy is. */
+          for (c = 0; c < 3; c++)
+            {
+              double top = s2l[p00[c]] + (s2l[p10[c]] - s2l[p00[c]]) * fx;
+              double bot = s2l[p01[c]] + (s2l[p11[c]] - s2l[p01[c]]) * fx;
+              o[c] = (uint16_t) (top + (bot - top) * fy + 0.5);
+            }
+        }
+    }
+}
