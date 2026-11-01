@@ -26,6 +26,7 @@
 #include <kernel.h>
 #include <swis.h>
 #include "ui.h"
+#include "exif.h"
 
 #define TB_H 120                       /* the toolbar */
 #define TAB_H 72                       /* the inspector's tabs */
@@ -59,6 +60,8 @@ typedef struct { int kind; cat_id id; char text[80]; int heading; } lib_row;
 static lib_row *rows;
 static int nrows;
 static void build_rows (void);
+static void info_load (int force);
+static int info_height;
 static void apply_extent (void);
 
 int mainwin_window (void) { return win; }
@@ -363,7 +366,10 @@ void mainwin_inspector_changed (void)
   else if (tab == TAB_ADJUST)
     mainwin_inspector_extent (viewer_panel_height ());
   else
-    mainwin_inspector_extent (1400);
+    {
+      info_load (0);
+      mainwin_inspector_extent (info_height);
+    }
   if (insp != -1)
     _swix (Wimp_ForceRedraw, _INR (0, 4), insp, 0, -0x10000000, 0x10000000, 0);
   _swix (Wimp_ForceRedraw, _INR (0, 4), win, 0, -TB_H - TAB_H, INSP_W + SB_W + GAP, -TB_H);
@@ -570,100 +576,203 @@ static void library_click (int wy)
   mainwin_force_inspector (0, -0x10000000, 0x10000000, 0);
 }
 
-/* --- the Info tab */
-static void info_line (int *y, int ox, int oy, const char *label, const char *value)
+/* --- the Info tab: the photo's details, then every EXIF tag in its file */
+#define INFO_LINE 40                   /* one line of text */
+#define INFO_LABEL_X 24
+#define INFO_VALUE_X 300               /* labels left of this, values right */
+#define INFO_HEAD 1                    /* a row that is a group heading */
+
+typedef struct { char label[48]; char value[256]; int flags; } info_row;
+static info_row *irows;
+static int nirows;
+static cat_id info_id = -1;            /* the version irows describe */
+static int info_has_exif;
+
+static void info_add (const char *label, const char *value, int flags)
 {
-  draw_text (ox + 24, oy + *y, label, COL_QUIET, COL_PANEL);
-  draw_text (ox + 210, oy + *y, value, COL_TEXT, COL_PANEL);
-  *y -= 48;
+  info_row *more = realloc (irows, sizeof *irows * (size_t) (nirows + 1));
+  if (!more)
+    return;
+  irows = more;
+  snprintf (irows[nirows].label, sizeof irows[nirows].label, "%s", label);
+  snprintf (irows[nirows].value, sizeof irows[nirows].value, "%s", value);
+  irows[nirows].flags = flags;
+  nirows++;
 }
 
-static void draw_info (int ox, int oy)
+static const char *exif_group_seen;
+
+static void info_exif_tag (void *ctx, const char *group, const char *name, const char *value)
+{
+  (void) ctx;
+  if (!exif_group_seen || strcmp (exif_group_seen, group) != 0)
+    {
+      char h[40];
+      size_t k;
+      snprintf (h, sizeof h, "%s", group);
+      for (k = 0; h[k]; k++)
+        if (h[k] >= 'a' && h[k] <= 'z')
+          h[k] = (char) (h[k] - 32);
+      info_add (h, "", INFO_HEAD);
+      exif_group_seen = group;
+    }
+  info_add (name, value, 0);
+}
+
+/* The photo the Info tab describes: the Viewer's, else the Browser's focus. */
+static int info_index (void)
+{
+  return mode != LAYOUT_BROWSER && viewer_index () >= 0 ? viewer_index () : browser_focus ();
+}
+
+/* Splits s into lines no wider than width (at spaces or full stops where it
+   can). Returns the number of lines; with draw, plots them from (x, y) down. */
+static int wrap (const char *s, int width, int draw, int x, int y, unsigned fg)
+{
+  int lines = 0;
+  if (!*s)
+    return 1;
+  while (*s)
+    {
+      char line[260];
+      int n = 0, brk = 0;
+      while (s[n] && n < (int) sizeof line - 1)
+        {
+          line[n] = s[n];
+          line[n + 1] = '\0';
+          if (draw_text_width (line) > width)
+            break;
+          if (s[n] == ' ' || s[n] == '.' || s[n] == ',')
+            brk = n + 1;
+          n++;
+        }
+      if (s[n] && brk > 0)
+        n = brk;                       /* back to the last space or stop */
+      if (n == 0)
+        n = 1;
+      memcpy (line, s, (size_t) n);
+      line[n] = '\0';
+      if (draw)
+        draw_text (x, y - lines * INFO_LINE, line, fg, COL_PANEL);
+      lines++;
+      s += n;
+      while (*s == ' ')
+        s++;
+    }
+  return lines;
+}
+
+/* Lays the rows out from the top; with draw, plots those in cy0..cy1
+   (screen y). Returns the height used. */
+static int info_layout (int draw, int ox, int oy, int cy0, int cy1)
+{
+  int y = -24, k;
+  for (k = 0; k < nirows; k++)
+    {
+      const info_row *r = &irows[k];
+      int top = y, h;
+      if (r->flags & INFO_HEAD)
+        {
+          y -= k ? 20 : 0;
+          if (draw && oy + y >= cy0 && oy + y - 56 <= cy1)
+            {
+              draw_rect (ox + 16, oy + y - 2, ox + INSP_W - 16, oy + y, 0xB0B0B000u);
+              draw_text (ox + INFO_LABEL_X, oy + y - 44, r->label, COL_QUIET, COL_PANEL);
+            }
+          y -= 60;
+          continue;
+        }
+      if (!r->value[0])                /* a line of its own: the name, the file */
+        {
+          h = wrap (r->label, INSP_W - 2 * INFO_LABEL_X, 0, 0, 0, 0);
+          if (draw && oy + top >= cy0 && oy + top - h * INFO_LINE <= cy1)
+            wrap (r->label, INSP_W - 2 * INFO_LABEL_X, 1, ox + INFO_LABEL_X, oy + top - 32, COL_TEXT);
+          y -= h * INFO_LINE + 8;
+          continue;
+        }
+      {
+        int hl = wrap (r->label, INFO_VALUE_X - INFO_LABEL_X - 16, 0, 0, 0, 0);
+        int hv = wrap (r->value, INSP_W - INFO_VALUE_X - 16, 0, 0, 0, 0);
+        h = hl > hv ? hl : hv;
+        if (draw && oy + top >= cy0 && oy + top - h * INFO_LINE <= cy1)
+          {
+            wrap (r->label, INFO_VALUE_X - INFO_LABEL_X - 16, 1, ox + INFO_LABEL_X, oy + top - 32, COL_QUIET);
+            wrap (r->value, INSP_W - INFO_VALUE_X - 16, 1, ox + INFO_VALUE_X, oy + top - 32, COL_TEXT);
+          }
+        y -= h * INFO_LINE + 8;
+      }
+    }
+  return -y + 24;
+}
+
+/* Reads the details and the file's EXIF again if the photo changed. */
+static void info_load (int force)
 {
   cat_item it;
   cat_details d;
   char v[160];
-  int y = -60, i = mode != LAYOUT_BROWSER ? viewer_index () : browser_focus ();
-  if (i < 0 || !browser_item (i, &it) || cat_get_details (lib_cat (app_library ()), it.id, &d))
+  int i = info_index ();
+  cat_id id = i >= 0 && browser_item (i, &it) ? it.id : 0;
+  if (id == info_id && !force)
+    return;
+  info_id = id;
+  nirows = 0;
+  info_has_exif = 0;
+  exif_group_seen = NULL;
+  if (!id || cat_get_details (lib_cat (app_library ()), it.id, &d))
     {
-      draw_text (ox + 24, oy + y, "Select a photo to see its details.", COL_QUIET, COL_PANEL);
+      info_add ("Select a photo to see its details.", "", 0);
+      info_height = info_layout (0, 0, 0, 0, 0);
       return;
     }
-  draw_text (ox + 24, oy + y, it.name, COL_TEXT, COL_PANEL);
-  y -= 64;
-  draw_rect (ox + 16, oy + y + 40, ox + INSP_W - 16, oy + y + 42, 0xB0B0B000u);
-  snprintf (v, sizeof v, "%d x %d", d.width, d.height);
-  info_line (&y, ox, oy, "Size", v);
-  info_line (&y, ox, oy, "Taken", d.taken[0] ? d.taken : "-");
-  snprintf (v, sizeof v, "%s %s", d.make, d.model);
-  info_line (&y, ox, oy, "Camera", d.make[0] || d.model[0] ? v : "-");
-  if (d.exposure > 0)
-    {
-      if (d.exposure < 1)
-        snprintf (v, sizeof v, "1/%.0f s", 1 / d.exposure);
-      else
-        snprintf (v, sizeof v, "%.1f s", d.exposure);
-      info_line (&y, ox, oy, "Shutter", v);
-    }
-  if (d.fnumber > 0)
-    {
-      snprintf (v, sizeof v, "f/%.1f", d.fnumber);
-      info_line (&y, ox, oy, "Aperture", v);
-    }
-  if (d.iso > 0)
-    {
-      snprintf (v, sizeof v, "%d", d.iso);
-      info_line (&y, ox, oy, "ISO", v);
-    }
-  if (d.focal > 0)
-    {
-      snprintf (v, sizeof v, "%.0f mm", d.focal);
-      info_line (&y, ox, oy, "Focal length", v);
-    }
-  snprintf (v, sizeof v, "%s", it.rating == RATING_REJECT ? "Rejected" : it.rating ? "" : "Not rated");
-  if (it.rating > 0)
-    {
-      int k;
-      for (k = 0; k < it.rating; k++)
-        strcat (v, "*");
-    }
-  info_line (&y, ox, oy, "Rating", v);
-  info_line (&y, ox, oy, "Flag", it.flag ? "Flagged" : "-");
-  info_line (&y, ox, oy, "Adjusted", it.edited ? "Yes" : "No");
-  y -= 8;
-  draw_text (ox + 24, oy + y, "File", COL_QUIET, COL_PANEL);
-  y -= 44;
+  info_add (it.name, "", 0);
+  snprintf (v, sizeof v, "%d x %d pixels", d.width, d.height);
+  info_add ("Size", v, 0);
+  if (it.rating == RATING_REJECT)
+    snprintf (v, sizeof v, "Rejected");
+  else if (it.rating > 0)
+    snprintf (v, sizeof v, "%d star%s", it.rating, it.rating == 1 ? "" : "s");
+  else
+    snprintf (v, sizeof v, "Not rated");
+  info_add ("Rating", v, 0);
+  info_add ("Flag", it.flag ? "Flagged" : "Not flagged", 0);
+  info_add ("Adjusted", it.edited ? "Yes" : "No", 0);
+  info_add ("File", d.path, 0);
+  /* The EXIF block is near the start of the file: 256 KB is plenty. */
   {
-    /* The path, wrapped to the panel's width. */
-    const char *p = d.path;
-    while (*p)
+    FILE *f = fopen (d.path, "rb");
+    unsigned char *buf = malloc (256 * 1024);
+    size_t got = 0;
+    if (f && buf)
+      got = fread (buf, 1, 256 * 1024, f);
+    if (f)
+      fclose (f);
+    if (buf && got)
+      info_has_exif = exif_list (buf, got, info_exif_tag, NULL) > 0;
+    free (buf);
+    if (!info_has_exif)
       {
-        char line[160];
-        int n = 0;
-        while (p[n] && n < (int) sizeof line - 1)
-          {
-            line[n] = p[n];
-            line[n + 1] = '\0';
-            if (draw_text_width (line) > INSP_W - 48)
-              break;
-            n++;
-          }
-        if (n == 0)
-          n = 1;
-        memcpy (line, p, (size_t) n);
-        line[n] = '\0';
-        draw_text (ox + 24, oy + y, line, COL_TEXT, COL_PANEL);
-        y -= 40;
-        p += n;
+        info_add ("EXIF", "", INFO_HEAD);
+        info_add (!f ? "The file can't be read." : "No EXIF data in this file.", "", 0);
       }
   }
+  info_height = info_layout (0, 0, 0, 0, 0);
+}
+
+static void draw_info (int ox, int oy, int cy0, int cy1)
+{
+  info_layout (1, ox, oy, cy0, cy1);
 }
 
 void mainwin_info_changed (void)
 {
   mainwin_status_changed ();
   if (tab == TAB_INFO)
-    mainwin_force_inspector (0, -0x10000000, 0x10000000, 0);
+    {
+      info_load (1);
+      mainwin_inspector_extent (info_height);
+      mainwin_force_inspector (0, -0x10000000, 0x10000000, 0);
+    }
 }
 
 /* --- drawing */
@@ -854,7 +963,7 @@ void mainwin_inspector_redraw (int *b)
       if (tab == TAB_LIBRARY)
         draw_library (ox, oy, b[8], b[10]);
       else if (tab == TAB_INFO)
-        draw_info (ox, oy);
+        draw_info (ox, oy, b[8], b[10]);
       else
         viewer_panel_draw (ox, oy);
       _swix (Wimp_GetRectangle, _IN (1) | _OUT (0), b, &more);

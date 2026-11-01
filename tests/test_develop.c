@@ -2,6 +2,7 @@
    qemu-arm-aligntrap). Usage: test_develop WORKDIR */
 #include <math.h>
 #include <stdio.h>
+#include "bus_trap.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -953,6 +954,7 @@ static void test_curves (void)
 
 int main (int argc, char **argv)
 {
+  bus_trap_install ();
   if (argc < 2)
     return 2;
   fsys_mkdirs (argv[1]);

@@ -13,7 +13,7 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.13
+VERSION := 0.0.14
 DATE := 01 Nov 2026
 OUT := out
 
@@ -99,13 +99,16 @@ $(OUT)/test_core_arm: tests/test_core.c $(CORE) src/core/fsys_posix.c $(CORE_H) 
 	$(LINUXARM_CC) $(LINUXARM_CFLAGS) $(WARN) -Ithird_party/sqlite -I$(DEPS)/linuxarm/include -o $@ \
 	  tests/test_core.c $(CORE) src/core/fsys_posix.c $(OUT)/arm/sqlite3.o $(ARM_LIBS)
 test-arm: $(OUT)/test_core_arm
-	rm -rf $(OUT)/work-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" $(ALIGNTRAP) $(OUT)/test_core_arm $(OUT)/work-arm
+	@# Both of libjpeg-turbo's paths: its NEON routines, and the plain C fallback.
+	rm -rf $(OUT)/work-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENEON=1 $(ALIGNTRAP) $(OUT)/test_core_arm $(OUT)/work-arm
+	rm -rf $(OUT)/work-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENONE=1 $(ALIGNTRAP) $(OUT)/test_core_arm $(OUT)/work-arm
 
 $(OUT)/test_develop_arm: tests/test_develop.c $(CORE) src/core/fsys_posix.c $(CORE_H) $(OUT)/arm/sqlite3.o
 	$(LINUXARM_CC) $(LINUXARM_CFLAGS) $(WARN) -Ithird_party/sqlite -I$(DEPS)/linuxarm/include -o $@ \
 	  tests/test_develop.c $(CORE) src/core/fsys_posix.c $(OUT)/arm/sqlite3.o $(ARM_LIBS)
 test-develop-arm: $(OUT)/test_develop_arm
-	rm -rf $(OUT)/work-dev-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" $(ALIGNTRAP) $(OUT)/test_develop_arm $(OUT)/work-dev-arm
+	rm -rf $(OUT)/work-dev-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENEON=1 $(ALIGNTRAP) $(OUT)/test_develop_arm $(OUT)/work-dev-arm
+	rm -rf $(OUT)/work-dev-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENONE=1 $(ALIGNTRAP) $(OUT)/test_develop_arm $(OUT)/work-dev-arm
 
 H32 := $(DEPS)/host32
 $(OUT)/test_ui: tests/test_ui.c $(CORE) src/core/fsys_posix.c $(filter-out src/ui/main.c,$(UI)) $(CORE_H) $(UI_H) $(OUT)/host32/sqlite3.o $(FAKE_SRC)

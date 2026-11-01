@@ -1,4 +1,4 @@
-Lumen 0.0.13 (01 Nov 2026) - test build
+Lumen 0.0.14 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -32,8 +32,10 @@ Lumen has one window, laid out as Aperture 3's:
                   Library      Photos, Flagged, Rejected, Last Import,
                                your projects (one per imported folder)
                                and albums: click one to show it
-                  Info         the photo's size, date, camera, shutter,
-                               aperture, ISO, rating and file
+                  Info         the photo's size, rating and file, then
+                               every EXIF tag in it: camera, exposure,
+                               lens, dates, GPS position and the rest
+                               (it scrolls)
                   Adjustments  the histogram, Auto, Crop, Grid, Presets
                                and the adjustments (it scrolls)
   Browser       the photos as thumbnails
@@ -155,6 +157,12 @@ are made again with the edit.
 
 Speed: !Lumen.Bench measures the editing pipeline on your machine. Run it
 in a task window (Ctrl-F12):  *Run <Lumen$Dir>.Bench
+
+JPEGs are read and written with the CPU's NEON instructions when it has
+them (every ARMv7 machine RISC OS 5 runs on does); Bench's first line says
+"JPEG code: NEON" or "plain C". To compare, *Set JSIMD_FORCENONE 1 before
+running Bench (or Lumen) uses the plain C code; *Unset JSIMD_FORCENONE
+puts NEON back.
 
 Mouse
 -----

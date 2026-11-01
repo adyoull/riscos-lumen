@@ -30,4 +30,13 @@ int img_probe (const unsigned char *buf, size_t len);
    and its pixel size found, -1 otherwise. */
 int img_read_info (const unsigned char *buf, size_t len, img_info *info);
 
+/* Every EXIF tag in the file, named and formatted for people to read:
+   fn (ctx, group, name, value) once for each, in file order. group is
+   "Camera" (the main image's IFD0), "Exif", "GPS" or "Interoperability".
+   Tags it has no name for are given as "Tag &XXXX"; binary blocks (the
+   maker's notes, say) as their size. Returns the number given, or -1 if
+   buf has no EXIF block (a PNG, or a JPEG without one). */
+typedef void (*exif_tag_fn) (void *ctx, const char *group, const char *name, const char *value);
+int exif_list (const unsigned char *buf, size_t len, exif_tag_fn fn, void *ctx);
+
 #endif

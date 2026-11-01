@@ -37,6 +37,9 @@ static double time_develop (const develop *d, const uint16_t *src, int w, int h,
   return ms_since (t0) / reps;
 }
 
+/* libjpeg-turbo's own (jsimd.h): 1 if its NEON inverse DCT is in use. */
+extern int jsimd_can_idct_islow (void);
+
 int main (void)
 {
   char err[200];
@@ -51,6 +54,9 @@ int main (void)
   double tone, full, half_tone, half_full, open_ms;
 
   printf ("LumenBench %s\n", LUMEN_VERSION);
+  /* libjpeg-turbo picks NEON or plain C when it starts (VFPSupport says
+     whether there's NEON; *Set JSIMD_FORCENONE 1 forces plain C). */
+  printf ("JPEG code: %s\n", jsimd_can_idct_islow () ? "NEON" : "plain C");
   /* A 6000 x 4000 test picture: smooth gradients with some texture. */
   big.w = 6000; big.h = 4000;
   big.rgb = malloc ((size_t) big.w * big.h * 3);
@@ -68,11 +74,13 @@ int main (void)
         p[2] = (unsigned char) ((x ^ y) & 255);
       }
   printf ("Writing a 6000 x 4000 test JPEG...\n");
+  t0 = clock ();
   if (img_save_jpeg (&big, SCRAP, 90, err, sizeof err))
     {
       printf ("%s\n", err);
       return 1;
     }
+  printf ("Writing it (JPEG, quality 90): %6.0f ms\n", ms_since (t0));
   free (big.rgb);
 
   t0 = clock ();

@@ -4,6 +4,7 @@
    imports them and checks the catalogue, the thumbnails and the time
    slicing. Usage: test_core WORKDIR */
 #include <stdio.h>
+#include "bus_trap.h"
 #include <stdlib.h>
 #include <string.h>
 #include <jpeglib.h>
@@ -62,6 +63,14 @@ static size_t make_exif (unsigned char *b, int orientation, const char *taken)
     put32 (t + data, 31); put32 (t + data + 4, 1); data += 8;
     put32 (e + 12, 0); }
   return 6 + data;
+}
+
+/* exif_list callback: "group|name|value;" appended to ctx (NULL: ignore). */
+static void list_tag (void *ctx, const char *group, const char *name, const char *value)
+{
+  char *all = ctx;
+  if (all && strlen (all) + strlen (group) + strlen (name) + strlen (value) + 4 < 2048)
+    sprintf (all + strlen (all), "%s|%s|%s;", group, name, value);
 }
 
 /* A w x h JPEG: left half red, right half blue (so orientation shows). */
@@ -171,6 +180,23 @@ static void test_exif (void)
   CHECK (in.fnumber > 5.59 && in.fnumber < 5.61, "FNumber 5.6");
   CHECK (in.iso == 400, "ISO 400");
   CHECK (in.focal > 30.9 && in.focal < 31.1, "FocalLength 31");
+  /* Every tag, for the Info tab. */
+  {
+    char all[2048];
+    int k;
+    all[0] = '\0';
+    k = exif_list (buf, n, list_tag, all);
+    CHECK (k == 8, "exif_list: eight tags (the EXIF pointer isn't one)");
+    CHECK (strstr (all, "Camera|Orientation|Turned right;") != NULL, "Orientation 6 in words");
+    CHECK (strstr (all, "Camera|Model|HQ Camera;") != NULL, "Model");
+    CHECK (strstr (all, "Exif|Exposure time|1/250 s;") != NULL, "exposure as a fraction");
+    CHECK (strstr (all, "Exif|F number|f/5.6;") != NULL, "f number");
+    CHECK (strstr (all, "Exif|ISO|400;") != NULL && strstr (all, "Exif|Focal length|31 mm;") != NULL, "ISO, focal length");
+    CHECK (strstr (all, "Exif|Date taken|2026:06:16 04:52:10;") != NULL, "date taken");
+    for (k = 0; k < (int) n; k += 3)
+      exif_list (buf, (size_t) k, list_tag, NULL);
+    CHECK (1, "cut-off buffers listed safely");
+  }
   /* Truncated buffers never crash, and say no. */
   for (n = 0; n < 200; n++)
     img_read_info (buf, n, &in);
@@ -394,6 +420,7 @@ static void test_time_slicing (void)
 
 int main (int argc, char **argv)
 {
+  bus_trap_install ();
   if (argc < 2)
     {
       fprintf (stderr, "usage: test_core WORKDIR\n");

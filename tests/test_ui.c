@@ -998,7 +998,8 @@ int main (int argc, char **argv)
     b[0] = INSP;
     ntexts = 0;
     app_event (Redraw_Window_Request, b, 0);
-    CHECK (text_drawn ("IMG_0004.jpg") && text_drawn ("760 x 480"), "Info: the photo's name and size");
+    CHECK (text_drawn ("IMG_0004.jpg") && text_drawn ("760 x 480 pixels"), "Info: the photo's name and size");
+    CHECK (text_drawn ("EXIF") && text_drawn ("No EXIF data in this file."), "and says when the file has no EXIF");
     key ('v');
     CHECK (mainwin_mode () == LAYOUT_VIEWER, "V again: the Viewer");
     key ('v');
