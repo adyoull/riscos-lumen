@@ -106,6 +106,35 @@ static void ensure_table (const void *area, const void *sprite)
     }
 }
 
+void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
+                       int bx0, int by0, int bx1, int by1, int out[4])
+{
+  /* Fit the sprite inside the box, keeping its shape, centred both ways.
+     The scale is mul/div with mul in OS units and div in source pixels. */
+  int bw = bx1 - bx0, bh = by1 - by0, mul, div, dw, dh, scale[4];
+  out[0] = bx0; out[1] = by0; out[2] = bx1; out[3] = by1;
+  if (w <= 0 || h <= 0 || bw <= 0 || bh <= 0)
+    return;
+  ensure_table (area, sprite);
+  if ((long long) bw * h <= (long long) bh * w)
+    {
+      mul = bw; div = w;
+    }
+  else
+    {
+      mul = bh; div = h;
+    }
+  dw = (int) ((long long) w * mul / div);
+  dh = (int) ((long long) h * mul / div);
+  scale[0] = mul; scale[1] = mul;
+  scale[2] = div << xeig; scale[3] = div << yeig;
+  out[0] = bx0 + (bw - dw) / 2;
+  out[1] = by0 + (bh - dh) / 2;
+  out[2] = out[0] + dw;
+  out[3] = out[1] + dh;
+  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, out[0], out[1], 0, scale, table);
+}
+
 void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
                       int bx0, int by0, int bx1, int by1, int out[4])
 {

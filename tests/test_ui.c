@@ -14,10 +14,14 @@
 
 #define BROWSER 0x2a000
 #define INFO 0x2b000
+#define VIEWER 0x2c000
 #define TASK 0x1234
 
 static char work[512];
-static int nwindows, browser_block[23];
+static int nwindows, browser_block[23], viewer_block[23];
+static int vopened[8], vopen_calls, vclosed, drag_block[10], drag_calls, ptr_x, ptr_y, ptr_buttons;
+static char *vtitle;
+static int last_plot_w, last_plot_h;
 static char *title_buf;
 static int iconbar[9];
 static int opened[8], open_calls;
@@ -55,6 +59,12 @@ static const _kernel_oserror *wimp (int swi, int r[10])
           title_buf = (char *) b[18];
           r[0] = BROWSER;
         }
+      else if (nwindows == 2)
+        {
+          memcpy (viewer_block, b, sizeof viewer_block);
+          vtitle = (char *) b[18];
+          r[0] = VIEWER;
+        }
       else
         r[0] = INFO;
       return NULL;
@@ -65,11 +75,20 @@ static const _kernel_oserror *wimp (int swi, int r[10])
           scroll_y = b[6];
           open_calls++;
         }
+      else if (b[0] == VIEWER)
+        {
+          memcpy (vopened, b, sizeof vopened);
+          vopen_calls++;
+        }
       return NULL;
     case Wimp_GetWindowState:
-      CHECK (b[0] == BROWSER, "window state: the browser");
-      memcpy (&b[1], &opened[1], 6 * sizeof (int));
+      CHECK (b[0] == BROWSER || b[0] == VIEWER, "window state: one of ours");
+      memcpy (&b[1], b[0] == VIEWER ? &vopened[1] : &opened[1], 6 * sizeof (int));
       b[7] = -1; b[8] = 0;
+      return NULL;
+    case Wimp_DragBox:
+      memcpy (drag_block, b, sizeof drag_block);
+      drag_calls++;
       return NULL;
     case Wimp_SetExtent:
       memcpy (extent, b, sizeof extent);
@@ -85,8 +104,11 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_RedrawWindow:
       /* The whole visible area, one rectangle. */
-      memcpy (&b[1], &opened[1], 6 * sizeof (int));
-      b[7] = opened[1]; b[8] = opened[2]; b[9] = opened[3]; b[10] = opened[4];
+      {
+        const int *o = b[0] == VIEWER ? vopened : opened;
+        memcpy (&b[1], &o[1], 6 * sizeof (int));
+        b[7] = o[1]; b[8] = o[2]; b[9] = o[3]; b[10] = o[4];
+      }
       r[0] = 1;
       return NULL;
     case Wimp_GetRectangle:
@@ -107,7 +129,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       menu_open = b;
       return NULL;
     case Wimp_GetPointerInfo:
-      b[2] = 0;
+      b[0] = ptr_x; b[1] = ptr_y; b[2] = ptr_buttons;
       return NULL;
     case Wimp_ProcessKey:
       processed_key = r[0];
@@ -116,6 +138,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       snprintf (reported, sizeof reported, "%s", ((const _kernel_oserror *) r[0])->errmess);
       return NULL;
     case Wimp_CloseWindow:
+      if (b[0] == VIEWER)
+        vclosed++;
       return NULL;
     case Wimp_CloseDown:
       CHECK (r[0] == TASK && r[1] == 0x4B534154, "Wimp_CloseDown: task handle, TASK");
@@ -155,6 +179,11 @@ static const _kernel_oserror *graphics (int swi, int r[10])
         CHECK (sp[10] == 0x301680B5u && sp[8] == 44u && sp[6] == 0u && sp[7] == 31u, "a 32bpp new-format sprite header");
       }
       memcpy (last_scale, (const int *) r[6], sizeof last_scale);
+      {
+        const unsigned *sp = (const unsigned *) r[2];
+        last_plot_w = (int) sp[4] + 1;
+        last_plot_h = (int) sp[5] + 1;
+      }
       sprite_plots++;
       return NULL;
     }
@@ -175,7 +204,8 @@ static void fakes (void)
     { Wimp_CloseWindow, "Wimp_CloseWindow", 1 }, { Wimp_CloseDown, "Wimp_CloseDown", 1 },
     { OS_ReadModeVariable, "OS_ReadModeVariable", 0 }, { ColourTrans_SetGCOL, "ColourTrans_SetGCOL", 0 },
     { ColourTrans_SelectTable, "ColourTrans_SelectTable", 0 }, { OS_Plot, "OS_Plot", 0 },
-    { OS_SpriteOp, "OS_SpriteOp", 0 }, { OS_ReadMonotonicTime, "OS_ReadMonotonicTime", 0 } };
+    { OS_SpriteOp, "OS_SpriteOp", 0 }, { OS_ReadMonotonicTime, "OS_ReadMonotonicTime", 0 },
+    { Wimp_DragBox, "Wimp_DragBox", 1 } };
   size_t i;
   fake_reset ();
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
@@ -251,7 +281,7 @@ static void click (int wx, int wy, int buttons)
 static void key (int k)
 {
   int b[64] = { 0 };
-  b[0] = BROWSER;
+  b[0] = caret_window;                 /* the Wimp sends keys to the caret's window */
   b[6] = k;
   app_event (Key_Pressed, b, 0);
 }
@@ -291,7 +321,8 @@ int main (int argc, char **argv)
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 2, "the library window and the Info box");
+  CHECK (nwindows == 3, "the library, viewer and Info windows");
+  CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0xBF000002u, "browser: title, close, back, toggle, scroll, resize");
   CHECK (open_calls == 1 && caret_window == BROWSER, "the library window opens with the input focus");
   CHECK (title_buf && strstr (title_buf, "All photos (0)") != NULL, "title: an empty library");
@@ -392,6 +423,114 @@ int main (int argc, char **argv)
   choose (3, 2, -1);
   redraw ();
   CHECK (last_scale[0] == 320, "Large: a 320-unit box");
+
+  /* ---- The viewer ---- */
+  {
+    int px, tx0, tx1, ev_mid, sx, sy, k;
+    char text[256];
+    cat_item it;
+    browser_focus_on (0);
+    browser_item (0, &it);
+    key (KEY_RETURN);
+    CHECK (vopen_calls == 1 && caret_window == VIEWER, "Return opens the viewer, with the input focus");
+    CHECK (strstr (vtitle, "IMG_0001.jpg (1 of 6)") != NULL, "viewer title: the photo, 1 of 6");
+    CHECK (app_busy (), "the proxy is decoded in idle time");
+    memset (b, 0, sizeof b);
+    b[0] = VIEWER;
+    sprite_plots = 0;
+    app_event (Redraw_Window_Request, b, 0);
+    CHECK (sprite_plots == 1 && last_plot_w <= 256, "straight away: the thumbnail, enlarged");
+    i = nulls_until_idle ();
+    CHECK (i > 1, "the proxy took several slices");
+    {
+      int w, h;
+      CHECK (viewer_proxy_size (&w, &h) && w == 640 && h == 480, "proxy: the whole 640x480 photo");
+    }
+    sprite_plots = 0; ntexts = 0;
+    app_event (Redraw_Window_Request, b, 0);
+    CHECK (sprite_plots == 1 && last_plot_w == 640, "then the developed proxy");
+    CHECK (text_drawn ("Exposure") && text_drawn ("White Balance") && text_drawn ("Reset all"), "the panel: groups, sliders, buttons");
+
+    /* Drag Exposure from 0 to +1 EV. Layout as viewer.c's. */
+    px = (vopened[3] - vopened[1]) - 640;
+    tx0 = px + 232; tx1 = px + 640 - 132;
+    ev_mid = -24 - 150 - 16 - 52 - (52 + 2 * 56 + 8) - 52 - 28;
+    sx = vopened[1] + (tx0 + tx1) / 2;
+    sy = vopened[4] + ev_mid;
+    memset (b, 0, sizeof b);
+    b[0] = sx; b[1] = sy; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+    app_event (Mouse_Click, b, 0);
+    CHECK (drag_calls == 1 && drag_block[0] == VIEWER && drag_block[1] == 7, "a drag starts: Wimp_DragBox type 7");
+    CHECK (drag_block[6] <= vopened[1] + tx0 && drag_block[8] >= vopened[1] + tx1
+           && drag_block[7] < sy && drag_block[9] > sy, "the pointer is kept on the track's row");
+    CHECK (app_busy (), "null events while dragging");
+    ptr_x = vopened[1] + tx0 + (int) ((1.0 + 4) / 8 * (tx1 - tx0));
+    ptr_y = sy;
+    memset (b, 0, sizeof b);
+    app_event (Null_Reason, b, 0);
+    CHECK (viewer_recipe ()->v[P_EV] > 0.9f && viewer_recipe ()->v[P_EV] < 1.1f, "dragging moves exposure to +1");
+    cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+    CHECK (text[0] == '\0', "nothing saved until the button is let go");
+    app_event (User_Drag_Box, b, 0);
+    cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+    CHECK (strncmp (text, "exposure ev=", 12) == 0, "let go: saved");
+    CHECK (strstr (vtitle, "edited") != NULL, "the title says edited");
+    CHECK (!viewer_before (), "showing the edit");
+    key ('m');
+    CHECK (viewer_before (), "M: before");
+    key ('M');
+    CHECK (!viewer_before (), "M again: after");
+    key (0x1A);
+    cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+    CHECK (text[0] == '\0' && viewer_recipe ()->v[P_EV] == 0, "Ctrl-Z: undone, and saved");
+    key (0x19);
+    cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+    CHECK (strncmp (text, "exposure ev=", 12) == 0, "Ctrl-Y: redone");
+    /* Adjust on a slider: back to its default. */
+    memset (b, 0, sizeof b);
+    b[0] = sx; b[1] = sy; b[2] = Button_Adjust; b[3] = VIEWER; b[4] = -1;
+    app_event (Mouse_Click, b, 0);
+    CHECK (viewer_recipe ()->v[P_EV] == 0 && drag_calls == 1, "Adjust: back to 0, no drag");
+    key (0x1A);
+    CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "undo brings +1 back");
+    /* Reset all, then undo it. */
+    memset (b, 0, sizeof b);
+    b[0] = vopened[1] + px + 24 + 2 * 202 + 93; b[1] = vopened[4] - 24 - 150 - 16 - 52 - 744 - 16 - 30;
+    b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+    app_event (Mouse_Click, b, 0);
+    CHECK (recipe_is_default (viewer_recipe ()), "Reset all");
+    key (0x1A);
+    CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and undo it");
+    /* Rate it from the viewer. */
+    key ('5');
+    browser_item (0, &it);
+    CHECK (it.rating == 5, "5 in the viewer: rated 5");
+    nulls_until_idle ();
+    browser_item (0, &it);
+    CHECK (it.edited && it.thumb_state == THUMB_READY, "the thumbnail is made again, marked edited");
+    key (KEY_RIGHT);
+    CHECK (strstr (vtitle, "(2 of 6)") != NULL, "right: the next photo");
+    nulls_until_idle ();
+    key (KEY_LEFT);
+    CHECK (strstr (vtitle, "IMG_0001.jpg (1 of 6)") != NULL, "left: back");
+    CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "with its edit");
+    nulls_until_idle ();
+    key (KEY_ESCAPE);
+    CHECK (vclosed == 1 && caret_window == BROWSER && browser_focus () == 0, "Escape: back to the library, on the photo");
+    CHECK (!app_busy (), "nothing left running");
+
+    /* A double click opens the viewer; its menu takes us back. */
+    for (k = 0; k < 2; k++)
+      click (16 + 352 + 60, -16 - 60, Button_Select);
+    CHECK (vopen_calls == 2 && strstr (vtitle, "(2 of 6)") != NULL, "a double click opens the photo clicked");
+    memset (b, 0, sizeof b);
+    b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
+    app_event (Mouse_Click, b, 0);
+    CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
+    CHECK (strstr (item_text (menu_open, 4), "Back to the library") != NULL, "Back to the library");
+    choose (4, -1, -1);
+    CHECK (vclosed == 2, "Back to the library closes the viewer");
+  }
 
   /* The icon bar menu: Quit. */
   memset (b, 0, sizeof b);

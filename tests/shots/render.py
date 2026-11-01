@@ -63,13 +63,13 @@ def text_c(d, cx, top, h, s, fill):
     d.text((cx - w / 2, top + h / 2 + 9), s, font=FONT, fill=fill, anchor='ls')
 
 
-def window_chrome(d, win, title, extent, focused):
+def window_chrome(d, win, title, extent, focused, vscroll=True):
     x0, y0, x1, y1, sx, sy = win
     X0, X1 = x0, x1
     T0, T1 = fy(y1) - TOOL, fy(y1)                 # title bar, canvas y
-    S0 = x1                                        # scroll bar x start
+    S0 = x1 if vscroll else x1 - TOOL              # where the title bar's right icon starts
     # outer border
-    d.rectangle([X0 - 2, T0 - 2, S0 + TOOL + 2, fy(y0) + 2], outline=GREY[7], width=2)
+    d.rectangle([X0 - 2, T0 - 2, (S0 + TOOL if vscroll else x1) + 2, fy(y0) + 2], outline=GREY[7], width=2)
     # title bar
     bevel(d, X0, T0, X0 + TOOL, T1, GREY[1]); glyph(d, 'back', X0, T0)
     bevel(d, X0 + TOOL, T0, X0 + 2 * TOOL, T1, GREY[1]); glyph(d, 'close', X0 + TOOL, T0)
@@ -78,6 +78,8 @@ def window_chrome(d, win, title, extent, focused):
     mid = (X0 + 2 * TOOL + S0) / 2
     d.text((mid - tw / 2, T0 + 32), title, font=FONT, fill=GREY[7], anchor='ls')
     bevel(d, S0, T0, S0 + TOOL, T1, GREY[1]); glyph(d, 'toggle', S0, T0)
+    if not vscroll:
+        return
     # vertical scroll bar: arrows, well, slider, adjust-size icon
     Y_top, Y_bot = fy(y1), fy(y0)
     bevel(d, S0, Y_top, S0 + TOOL, Y_top + TOOL); glyph(d, 'up', S0, Y_top)
@@ -138,6 +140,7 @@ def parse(path):
         elif tag == 'WINDOW':
             v = [int(x) for x in rest.split()]
             cur['win'], cur['focus'] = v[:6], v[6]
+            cur['vscroll'] = v[7] if len(v) > 7 else 1
         elif tag == 'TITLE':
             cur['title'] = rest
         elif tag == 'EXTENT':
@@ -254,7 +257,7 @@ def render(out_dir, app_icon):
         d = ImageDraw.Draw(img)
         icon_bar(img, d, app_icon)
         draw_ops(img, shot)
-        window_chrome(d, shot['win'], shot['title'], shot['extent'], shot['focus'])
+        window_chrome(d, shot['win'], shot['title'], shot['extent'], shot['focus'], shot['vscroll'])
         for (mx, my, tree) in shot['menus']:
             # Show > Projects, with the pointer on the project
             last = draw_menu(d, mx, fy(my), tree, [0, 4, 0])

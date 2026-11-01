@@ -48,6 +48,9 @@ void lib_get_progress (library *l, lib_progress *p);
 
 void lib_thumb_path (library *l, cat_id version, char *out, size_t n);
 
+/* Thumbnails were marked to be made again (cat_set_recipe): count again. */
+void lib_thumbs_changed (library *l);
+
 /* The last problem met while working (a file that couldn't be read), or "". */
 const char *lib_last_error (library *l);
 

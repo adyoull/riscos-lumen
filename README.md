@@ -1,7 +1,8 @@
 # Lumen
 
 A photo library and non-destructive editor for RISC OS 5, in the spirit of
-Apple's Aperture. This is milestone 0: import, browse, rate, flag, albums.
+Apple's Aperture. Milestone 0 (import, browse, rate, flag, albums) and the
+first part of milestone 1 (the viewer and the first adjustments).
 
 - Design spec: https://claude.ai/artifact/ELstfvAAkFbZGNj7wbhYTs
 - Target: RISC OS 5.30+ on a Raspberry Pi 4, 400 or CM4.
@@ -21,14 +22,34 @@ Apple's Aperture. This is milestone 0: import, browse, rate, flag, albums.
 - Keys: 0-5 rating, 9 reject, / flag, cursor keys, Ctrl-A, Escape.
 - EXIF orientation, capture time, camera and exposure are read on import.
 
+## Milestone 1 so far (0.0.3)
+
+- The viewer: Return or double-click opens a photo; its thumbnail shows at
+  once, a 1600-pixel proxy is decoded in idle time, turned into 16-bit
+  linear light and developed a band of rows per slice.
+- Adjustments: white balance (temperature, tint), exposure, levels (black,
+  white, midtones), contrast, saturation, vibrancy. Per-channel steps are
+  folded into one table per channel; a pixel costs six lookups plus the
+  saturation step, all in 32-bit integers.
+- Sliders follow the pointer (Wimp_DragBox type 7) at half resolution while
+  dragging, full resolution on release. Adjust resets a slider.
+- Recipes are text in the catalogue (`exposure ev=0.35`), saved at every
+  change, with undo/redo, Reset all, before/after (M).
+- Edited thumbnails are made again with the recipe; "Edited" marks them.
+- `!Lumen.Bench` times decoding and developing on the machine it runs on.
+- Still to come in milestone 1: the loupe, a curves editor, several
+  versions of one original, full-resolution rendering.
+
 ## Layout
 
 ```
-src/core/   portable C: catalogue (SQLite), EXIF, thumbnails, importer
+src/core/   portable C: catalogue (SQLite), EXIF, thumbnails, importer,
+            recipe.c (adjustments as text), develop.c (the pipeline)
   fsys_riscos.c / fsys_posix.c   the filing system, RISC OS or Linux
   sqlite_vfs.c                   SQLite on plain POSIX calls, native paths
 src/ui/     the Wimp front end: app, browser window, menus, sprites
-tests/      test_core (Linux and ARM/QEMU), test_ui and test_fsys (Fake RISC OS)
+tests/      test_core and test_develop (Linux and ARM/QEMU), test_ui and test_fsys
+            (Fake RISC OS), bench.c (LumenBench), shots/ (make shots)
 app/        !Run, !Boot, !Help, icons (make-icons.py draws them)
 third_party/sqlite/   SQLite 3.49.2 amalgamation
 ```

@@ -7,6 +7,7 @@
 #include "fsys.h"
 #include "library.h"
 #include "thumbgen.h"
+#include "develop.h"
 
 #define HEAD_BYTES (128 * 1024)       /* enough for EXIF in nearly every camera's files */
 #define HASH_BYTES (64 * 1024)
@@ -35,6 +36,8 @@ struct library
   /* thumbnails */
   thumbgen *tg;
   cat_id tg_version;
+  char tg_recipe[1024];               /* applied when the thumbnail is finished */
+  char tg_dst[1100];
   int thumbs_pending;                 /* cached count; -1 to recount */
   unsigned char shard_made[256];
   char err[256];
@@ -127,6 +130,11 @@ void lib_get_progress (library *l, lib_progress *p)
   if (l->thumbs_pending < 0)
     l->thumbs_pending = cat_count_thumbs_pending (l->db);
   p->thumbs_pending = l->thumbs_pending;
+}
+
+void lib_thumbs_changed (library *l)
+{
+  l->thumbs_pending = -1;
 }
 
 void lib_thumb_path (library *l, cat_id v, char *out, size_t n)
@@ -348,7 +356,7 @@ static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
       char src[1024], dst[1100], e[200];
       int orient = 1;
       cat_id v;
-      if (cat_next_thumb (l->db, &v, src, sizeof src, &orient) != 1)
+      if (cat_next_thumb (l->db, &v, src, sizeof src, &orient, l->tg_recipe, sizeof l->tg_recipe) != 1)
         {
           l->thumbs_pending = 0;
           return -1;
@@ -364,7 +372,9 @@ static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
           l->shard_made[v & 0xFF] = 1;
         }
       lib_thumb_path (l, v, dst, sizeof dst);
-      l->tg = thumbgen_start (src, dst, THUMB_SIDE, orient, e, sizeof e);
+      snprintf (l->tg_dst, sizeof l->tg_dst, "%s", dst);
+      /* With a recipe, take the pixels, develop them, then save. */
+      l->tg = thumbgen_start (src, l->tg_recipe[0] ? NULL : dst, THUMB_SIDE, orient, e, sizeof e);
       if (!l->tg)
         {
           snprintf (l->err, sizeof l->err, "%s: %s", fsys_leaf (src), e);
@@ -381,6 +391,25 @@ static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
     return 0;
   if (r < 0)
     snprintf (l->err, sizeof l->err, "Thumbnail: %s", thumbgen_error (l->tg));
+  else if (l->tg_recipe[0])
+    {
+      rgb_image img;
+      recipe rc;
+      develop *d = malloc (sizeof *d);
+      char e[200];
+      r = -1;
+      if (d && thumbgen_take (l->tg, &img) == 0)
+        {
+          recipe_parse (&rc, l->tg_recipe);
+          develop_prepare (d, &rc);
+          develop_rgb8 (d, &img);
+          r = img_save_jpeg (&img, l->tg_dst, 85, e, sizeof e) == 0 ? 1 : -1;
+          if (r < 0)
+            snprintf (l->err, sizeof l->err, "Thumbnail: %s", e);
+          free (img.rgb);
+        }
+      free (d);
+    }
   cat_set_thumb (l->db, l->tg_version, r > 0 ? THUMB_READY : THUMB_FAILED);
   if (l->thumbs_pending > 0)
     l->thumbs_pending--;

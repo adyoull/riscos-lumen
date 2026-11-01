@@ -5,6 +5,7 @@
 #define LUMEN_UI_H
 #include "catalog.h"
 #include "library.h"
+#include "recipe.h"
 
 #define APP_NAME "Lumen"
 #ifndef LUMEN_VERSION
@@ -46,6 +47,7 @@ enum { Button_Adjust = 1, Button_Menu = 2, Button_Select = 4 };
 #define KEY_END 0x1AB
 #define KEY_ESCAPE 0x1B
 #define KEY_CTRL_A 0x01
+#define KEY_RETURN 0x0D
 
 /* --- app.c: the task, its icon bar icon, the poll dispatch */
 int app_init (const char *library_path);
@@ -72,6 +74,9 @@ int draw_text_width (const char *s);
    and sitting on its bottom edge. out gets the rectangle plotted. */
 void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
                       int bx0, int by0, int bx1, int by1, int out[4]);
+/* Any shape of box: fitted inside, centred both ways. */
+void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
+                       int bx0, int by0, int bx1, int by1, int out[4]);
 
 /* --- thumbcache.c: thumbnails as 32bpp sprites, loaded in idle time */
 typedef struct
@@ -116,11 +121,40 @@ void browser_select_all (int on);
 void browser_set_size (int size);      /* 0 small, 1 medium, 2 large */
 int browser_size (void);
 void browser_after_change (void);      /* ratings etc. changed: reload and redraw */
+int browser_item (int i, cat_item *out);   /* 1 if i is in the list */
+int browser_focus (void);
+void browser_focus_on (int i);         /* select and show item i, alone */
+
+/* --- viewer.c: one photo and the adjustments panel */
+int viewer_create (void);
+int viewer_window (void);
+int viewer_is_open (void);
+void viewer_open (int index);          /* the browser's item index */
+void viewer_show (int index);
+void viewer_open_window (int *block);
+void viewer_close (void);
+void viewer_redraw (int *block);
+void viewer_click (int *block);
+void viewer_drag_end (void);
+int viewer_key (int key);
+int viewer_busy (void);
+void viewer_idle (void);
+void viewer_undo (void);
+void viewer_redo (void);
+void viewer_reset_all (void);
+void viewer_toggle_before (void);
+int viewer_can_undo (void);
+int viewer_can_redo (void);
+int viewer_before (void);
+void viewer_mode_changed (void);
+int viewer_proxy_size (int *w, int *h);
+const recipe *viewer_recipe (void);
 
 /* --- menus.c */
 void menus_init (void);
 void menus_open_window_menu (int x, int y);
 void menus_open_iconbar_menu (int x);
+void menus_open_viewer_menu (int x, int y);
 int menus_selection (const int *choice);   /* 1: quit */
 
 #endif

@@ -22,7 +22,7 @@
 
 static char pool[24 * 1024];
 static size_t used;
-static int which;                      /* 1 window menu, 2 icon bar menu */
+static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu */
 static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40];
@@ -192,6 +192,32 @@ static menu *build_window_menu (void)
       set_item (m, 4, 1, "Quit", 0, -1, 0);
     }
   return m;
+}
+
+static menu *build_viewer_menu (void)
+{
+  menu *m;
+  used = 0;
+  m = new_menu ("Photo", 5);
+  if (m)
+    {
+      set_item (m, 0, 0, "Before and after      M", viewer_before () ? MF_TICK : 0, -1, 0);
+      set_item (m, 1, 0, "Undo      ^Z", 0, -1, !viewer_can_undo ());
+      set_item (m, 2, 0, "Redo      ^Y", 0, -1, !viewer_can_redo ());
+      set_item (m, 3, 0, "Reset all adjustments", MF_DOTTED, -1, 0);
+      set_item (m, 4, 1, "Back to the library      Esc", 0, -1, 0);
+    }
+  return m;
+}
+
+void menus_open_viewer_menu (int x, int y)
+{
+  menu *m = build_viewer_menu ();
+  which = 3;
+  open_x = x - 64;
+  open_y = y;
+  if (m)
+    _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
 
 static menu *build_iconbar_menu (void)
@@ -370,6 +396,15 @@ int menus_selection (const int *choice)
   int ptr[5] = { 0 }, quit_requested = 0;
   if (which == 1)
     quit_requested = window_choice (choice);
+  else if (which == 3)
+    switch (choice[0])
+      {
+      case 0: viewer_toggle_before (); break;
+      case 1: viewer_undo (); break;
+      case 2: viewer_redo (); break;
+      case 3: viewer_reset_all (); break;
+      case 4: viewer_close (); return 0;
+      }
   else if (which == 2)
     {
       if (choice[0] == 1)
@@ -382,7 +417,7 @@ int menus_selection (const int *choice)
   /* Adjust keeps the menu open, rebuilt with fresh ticks. */
   if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL && (ptr[2] & Button_Adjust))
     {
-      menu *m = which == 1 ? build_window_menu () : build_iconbar_menu ();
+      menu *m = which == 1 ? build_window_menu () : which == 3 ? build_viewer_menu () : build_iconbar_menu ();
       if (m)
         _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
     }

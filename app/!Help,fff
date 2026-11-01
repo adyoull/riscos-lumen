@@ -1,9 +1,11 @@
-Lumen 0.0.2 (01 Nov 2026) - test build
+Lumen 0.0.3 (01 Nov 2026) - test build
 =====================================
 
-A photo library for RISC OS 5, in the spirit of Aperture. This first
-build is milestone 0: importing, browsing, rating, flagging and albums.
-Editing comes in milestone 1.
+A photo library and editor for RISC OS 5, in the spirit of Aperture.
+This test build has importing, browsing, rating, flagging and albums,
+and the first adjustments: white balance, exposure, levels, contrast,
+saturation and vibrancy. Your photos are never changed: each edit is a
+recipe kept in the library, and can be undone or reset at any time.
 
 Getting started
 ---------------
@@ -25,6 +27,28 @@ Keys (with the library window focused)
   Cursor keys   move to the next photo; Page Up/Down, Home, End too
   Ctrl-A        select all
   Escape        clear the selection
+
+  Return        open the focused photo in the viewer (or double-click)
+
+The viewer
+----------
+The photo on the left, the adjustments on the right. Drag a slider: the
+photo follows (at half resolution while you drag, then in full). Click
+Adjust on a slider to put it back to its default; "Reset" beside a group
+resets the group. Every change is saved as you make it.
+
+  Left, Right   previous and next photo
+  M             before and after (the original, and back)
+  Ctrl-Z        undo          Ctrl-Y   redo
+  0 to 5, 9, /  rating, reject, flag, as in the library
+  Escape, V     back to the library
+  Menu          Before and after, Undo, Redo, Reset all, Back
+
+Edited photos are marked "Edited" in the library, and their thumbnails
+are made again with the edit.
+
+Speed: !Lumen.Bench measures the editing pipeline on your machine. Run it
+in a task window (Ctrl-F12):  *Run <Lumen$Dir>.Bench
 
 Mouse
 -----

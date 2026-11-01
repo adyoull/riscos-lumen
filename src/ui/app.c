@@ -60,7 +60,7 @@ int app_init (const char *library_path)
       app_report (err);
       return 1;
     }
-  if (create_iconbar_icon () || browser_create ())
+  if (create_iconbar_icon () || browser_create () || viewer_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       return 1;
@@ -79,7 +79,7 @@ void app_quit (void)
 
 int app_busy (void)
 {
-  return lib_busy (lib) || thumbcache_pending ();
+  return viewer_busy () || lib_busy (lib) || thumbcache_pending ();
 }
 
 static void thumb_made (void *ctx, cat_id v)
@@ -90,8 +90,13 @@ static void thumb_made (void *ctx, cat_id v)
 
 static void idle (void)
 {
-  unsigned start = app_now (), deadline = start + 2;
+  unsigned start, deadline;
   int changed;
+  /* The photo being edited comes first. */
+  if (viewer_busy ())
+    viewer_idle ();
+  start = app_now ();
+  deadline = start + 2;
   /* What is on screen comes first. */
   if (thumbcache_pending ())
     thumbcache_work (app_now, start + 1, browser_thumb_loaded);
@@ -154,6 +159,8 @@ int app_event (int reason, int *b, int sender)
     case Redraw_Window_Request:
       if (b[0] == browser_window ())
         browser_redraw (b);
+      else if (b[0] == viewer_window ())
+        viewer_redraw (b);
       else
         {
           int more = 0;
@@ -165,12 +172,16 @@ int app_event (int reason, int *b, int sender)
     case Open_Window_Request:
       if (b[0] == browser_window ())
         browser_open (b);
+      else if (b[0] == viewer_window ())
+        viewer_open_window (b);
       else
         _swix (Wimp_OpenWindow, _IN (1), b);
       break;
     case Close_Window_Request:
       if (b[0] == browser_window ())
         browser_close ();
+      else if (b[0] == viewer_window ())
+        viewer_close ();
       else
         _swix (Wimp_CloseWindow, _IN (1), b);
       break;
@@ -184,9 +195,15 @@ int app_event (int reason, int *b, int sender)
         }
       else if (b[3] == browser_window ())
         browser_click (b);
+      else if (b[3] == viewer_window ())
+        viewer_click (b);
+      break;
+    case User_Drag_Box:
+      viewer_drag_end ();
       break;
     case Key_Pressed:
-      if (b[0] != browser_window () || !browser_key (b[6]))
+      if (b[0] == viewer_window () ? !viewer_key (b[6])
+          : (b[0] != browser_window () || !browser_key (b[6])))
         _swix (Wimp_ProcessKey, _IN (0), b[6]);
       break;
     case Menu_Selection:
@@ -203,6 +220,7 @@ int app_event (int reason, int *b, int sender)
         case Message_ModeChange:
           draw_init_mode ();
           browser_mode_changed ();
+          viewer_mode_changed ();
           break;
         }
       break;

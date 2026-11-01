@@ -295,7 +295,7 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
     default:              where = "v.rating >= ?2"; break;
     }
   snprintf (sql, sizeof sql,
-            "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype FROM version v"
+            "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '' FROM version v"
             " JOIN original o ON o.id = v.original WHERE %s"
             " ORDER BY IFNULL(o.taken, '9999'), v.name, v.id", where);
   s = prep (c, sql);
@@ -326,6 +326,7 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
       a[n].flag = sqlite3_column_int (s, 3);
       a[n].thumb_state = sqlite3_column_int (s, 4);
       a[n].filetype = sqlite3_column_int (s, 5);
+      a[n].edited = sqlite3_column_int (s, 6);
       n++;
     }
   sqlite3_finalize (s);
@@ -334,9 +335,10 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
   return 0;
 }
 
-int cat_next_thumb (cat *c, cat_id *version, char *path, size_t n, int *orientation)
+int cat_next_thumb (cat *c, cat_id *version, char *path, size_t n, int *orientation,
+                    char *recipe, size_t rn)
 {
-  sqlite3_stmt *s = prep (c, "SELECT v.id, o.path, o.orientation FROM version v"
+  sqlite3_stmt *s = prep (c, "SELECT v.id, o.path, o.orientation, v.recipe FROM version v"
                              " JOIN original o ON o.id = v.original WHERE v.thumb = 0"
                              " ORDER BY o.batch DESC, IFNULL(o.taken, '9999'), v.name LIMIT 1");
   int r = 0;
@@ -347,6 +349,7 @@ int cat_next_thumb (cat *c, cat_id *version, char *path, size_t n, int *orientat
       *version = sqlite3_column_int64 (s, 0);
       snprintf (path, n, "%s", (const char *) sqlite3_column_text (s, 1));
       *orientation = sqlite3_column_int (s, 2);
+      snprintf (recipe, rn, "%s", sqlite3_column_text (s, 3) ? (const char *) sqlite3_column_text (s, 3) : "");
       r = 1;
     }
   sqlite3_finalize (s);
@@ -362,6 +365,37 @@ int cat_set_thumb (cat *c, cat_id version, int state)
   sqlite3_bind_int64 (s, 1, version);
   sqlite3_bind_int (s, 2, state);
   r = sqlite3_step (s) == SQLITE_DONE ? 0 : fail (c, "thumbnail state");
+  sqlite3_finalize (s);
+  return r;
+}
+
+int cat_get_recipe (cat *c, cat_id version, char *out, size_t n)
+{
+  sqlite3_stmt *s = prep (c, "SELECT recipe FROM version WHERE id = ?1");
+  int r = -1;
+  out[0] = '\0';
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, version);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    {
+      snprintf (out, n, "%s", sqlite3_column_text (s, 0) ? (const char *) sqlite3_column_text (s, 0) : "");
+      r = 0;
+    }
+  sqlite3_finalize (s);
+  return r;
+}
+
+int cat_set_recipe (cat *c, cat_id version, const char *recipe)
+{
+  sqlite3_stmt *s = prep (c, "UPDATE version SET recipe = ?2, thumb = 0, modified = ?3 WHERE id = ?1");
+  int r;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, version);
+  sqlite3_bind_text (s, 2, recipe, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64 (s, 3, (sqlite3_int64) time (NULL));
+  r = sqlite3_step (s) == SQLITE_DONE ? 0 : fail (c, "save the adjustments");
   sqlite3_finalize (s);
   return r;
 }

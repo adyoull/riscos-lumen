@@ -59,6 +59,7 @@ typedef struct
   int rating, flag;
   int thumb_state;            /* THUMB_* */
   int filetype;
+  int edited;                 /* has a recipe */
 } cat_item;
 
 enum { THUMB_NONE = 0, THUMB_READY = 1, THUMB_FAILED = 2 };
@@ -66,9 +67,15 @@ enum { THUMB_NONE = 0, THUMB_READY = 1, THUMB_FAILED = 2 };
 /* Fills a malloc'd array (free it). Sorted by capture time, then name. */
 int cat_list (cat *c, const cat_source *src, cat_item **items, int *count);
 
-/* The next version without a thumbnail: its id, the original's path and
-   EXIF orientation. 1 if found, 0 if none, -1 on error. */
-int cat_next_thumb (cat *c, cat_id *version, char *path, size_t n, int *orientation);
+/* The next version without a thumbnail: its id, the original's path,
+   EXIF orientation and recipe. 1 if found, 0 if none, -1 on error. */
+int cat_next_thumb (cat *c, cat_id *version, char *path, size_t n, int *orientation,
+                    char *recipe, size_t rn);
+
+/* A version's recipe text ("" for none). 0 on success. */
+int cat_get_recipe (cat *c, cat_id version, char *out, size_t n);
+/* Stores a recipe and marks the thumbnail to be made again. */
+int cat_set_recipe (cat *c, cat_id version, const char *recipe);
 int cat_set_thumb (cat *c, cat_id version, int state);
 int cat_count_thumbs_pending (cat *c);
 

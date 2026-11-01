@@ -398,7 +398,8 @@ static void draw_cell (int i, int ox, int oy)
   x0 += ox; x1 += ox; y0 += oy; y1 += oy;
   bx0 = (x0 + x1 - box ()) / 2; bx1 = bx0 + box ();
   by1 = y1 - 16; by0 = by1 - box ();
-  s = it->thumb_state == THUMB_READY ? thumbcache_get (it->id, 1) : NULL;
+  /* A thumbnail being made again (after an edit) keeps showing the old one. */
+  s = thumbcache_get (it->id, it->thumb_state == THUMB_READY);
   if (selected || i == focus)
     {
       /* Highlight up to just above the photo, not the empty box above a wide one. */
@@ -421,6 +422,13 @@ static void draw_cell (int i, int ox, int oy)
       pic[1] = by0; pic[3] = by0 + (pic[2] - pic[0]) * 2 / 3;
       draw_rect (pic[0], pic[1], pic[2], pic[3],
                  it->thumb_state == THUMB_FAILED ? COL_FAILED : COL_PLACEHOLDER);
+    }
+  if (it->edited && box () >= 224)     /* "Edited" on the photo's bottom right corner */
+    {
+      int tw = draw_text_width ("Edited");
+      draw_rect (pic[2] - tw - 24, pic[1] + 8, pic[2] - 8, pic[1] + 48, 0x30303000u);
+      draw_rect (pic[2] - tw - 21, pic[1] + 11, pic[2] - 11, pic[1] + 45, 0xFFFFFF00u);
+      draw_text (pic[2] - tw - 16, pic[1] + 18, "Edited", COL_TEXT, 0xFFFFFF00u);
     }
   if (it->flag)                        /* a flag on the photo's top left corner */
     {
@@ -464,6 +472,29 @@ void browser_redraw (int *b)
 }
 
 /* --- input */
+int browser_item (int i, cat_item *out)
+{
+  if (i < 0 || i >= n)
+    return 0;
+  *out = items[i];
+  return 1;
+}
+
+int browser_focus (void)
+{
+  return focus;
+}
+
+static void set_focus (int i, int extend);
+
+void browser_focus_on (int i)
+{
+  if (i >= 0 && i < n)
+    set_focus (i, 0);
+  if (is_open)
+    _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
+}
+
 static void set_focus (int i, int extend)
 {
   int old = focus, k;
@@ -512,10 +543,20 @@ void browser_click (int *block)
   i = index_at (block[0] - (b[1] - b[5]), block[1] - (b[4] - b[6]));
   if (buttons == Button_Select)
     {
+      static int last_i = -1;
+      static unsigned last_t;
       if (i < 0)
         browser_select_all (0);
+      else if (i == last_i && (int) (app_now () - last_t) < 50)
+        {
+          last_i = -1;                 /* a double click: open it */
+          viewer_open (i);
+          return;
+        }
       else
         set_focus (i, sel[i]);         /* clicking a selected photo keeps the selection */
+      last_i = i;
+      last_t = app_now ();
     }
   else if (buttons == Button_Adjust && i >= 0)
     {
@@ -577,6 +618,11 @@ int browser_key (int key)
       if (f < 0) f = 0;
       if (f >= n) f = n - 1;
       set_focus (f, 0);
+    }
+  else if (key == KEY_RETURN)
+    {
+      if (n)
+        viewer_open (focus >= 0 ? focus : 0);
     }
   else if (key == KEY_CTRL_A)
     browser_select_all (1);

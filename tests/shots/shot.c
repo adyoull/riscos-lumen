@@ -25,7 +25,9 @@ static char outdir[512];
 static int sprites;
 static unsigned gcol;
 static int px[3], py[3];               /* the last three OS_Plot points */
-static int opened[8];
+static int opened[8], vopened[8];
+static char *vtitle;
+#define VIEWER 0x2c000
 static char *title_buf;
 static unsigned clock_cs;
 static int caret;
@@ -57,23 +59,33 @@ static const _kernel_oserror *swi (int n, int r[10])
           title_buf = (char *) b[18];
           r[0] = BROWSER;
         }
+      else if (!vtitle)
+        {
+          vtitle = (char *) b[18];
+          r[0] = VIEWER;
+        }
       else
         r[0] = INFO;
       return NULL;
     case Wimp_OpenWindow:
       if (b[0] == BROWSER)
         memcpy (opened, b, sizeof opened);
+      else if (b[0] == VIEWER)
+        memcpy (vopened, b, sizeof vopened);
       return NULL;
     case Wimp_GetWindowState:
-      memcpy (&b[1], &opened[1], 6 * sizeof (int));
+      memcpy (&b[1], b[0] == VIEWER ? &vopened[1] : &opened[1], 6 * sizeof (int));
       b[7] = -1; b[8] = 0;
       return NULL;
     case Wimp_SetExtent:
       memcpy (extent, b, sizeof extent);
       return NULL;
     case Wimp_RedrawWindow:
-      memcpy (&b[1], &opened[1], 6 * sizeof (int));
-      b[7] = opened[1]; b[8] = opened[2]; b[9] = opened[3]; b[10] = opened[4];
+      {
+        const int *o = b[0] == VIEWER ? vopened : opened;
+        memcpy (&b[1], &o[1], 6 * sizeof (int));
+        b[7] = o[1]; b[8] = o[2]; b[9] = o[3]; b[10] = o[4];
+      }
       if (ops)
         fprintf (ops, "CLIP %d %d %d %d\n", b[7], b[8], b[9], b[10]);
       r[0] = 1;
@@ -209,7 +221,7 @@ static void redraw (void)
 static void begin_shot (const char *name)
 {
   fprintf (ops, "SHOT %s\n", name);
-  fprintf (ops, "WINDOW %d %d %d %d %d %d %d\n", opened[1], opened[2], opened[3], opened[4],
+  fprintf (ops, "WINDOW %d %d %d %d %d %d %d 1\n", opened[1], opened[2], opened[3], opened[4],
            opened[5], opened[6], caret == BROWSER);
   fprintf (ops, "TITLE %s\n", title_buf);
   fprintf (ops, "EXTENT %d %d %d %d\n", extent[0], extent[1], extent[2], extent[3]);
@@ -329,6 +341,14 @@ int main (int argc, char **argv)
         if (flags[i])
           cat_set_flag (lib_cat (app_library ()), &items[i].id, 1, 1);
       }
+    /* Catbells is edited: warmer, a touch brighter, more contrast and vibrancy. */
+    if (n > 4)
+      {
+        cat_set_recipe (lib_cat (app_library ()), items[4].id,
+                        "wb temp=18 tint=0\nexposure ev=0.25\nlevels black=2.0 white=100.0 mid=8\n"
+                        "enhance contrast=22 saturation=0 vibrance=30\n");
+        lib_thumbs_changed (app_library ());
+      }
     free (items);
     browser_after_change ();
   }
@@ -366,6 +386,34 @@ int main (int argc, char **argv)
   redraw ();
   fclose (ops);
   ops = NULL;
+
+  /* 5. The viewer on the edited photo. */
+  {
+    cat_group *g;
+    int ng;
+    cat_groups (lib_cat (app_library ()), SRC_PROJECT, &g, &ng);
+    if (ng)
+      {
+        cat_source s = { SRC_PROJECT, g[0].id, 0 };
+        browser_set_source (&s);
+      }
+    free (g);
+    browser_set_size (2);
+    viewer_open (4);
+    run (100000);
+    ops = fopen (opsname, "a");
+    fprintf (ops, "SHOT viewer\n");
+    fprintf (ops, "WINDOW %d %d %d %d 0 0 1 0\n", vopened[1], vopened[2], vopened[3], vopened[4]);
+    fprintf (ops, "TITLE %s\n", vtitle);
+    fprintf (ops, "EXTENT 0 -1800 3200 0\n");
+    {
+      int vb[64] = { 0 };
+      vb[0] = VIEWER;
+      app_event (Redraw_Window_Request, vb, 0);
+    }
+    fclose (ops);
+    ops = NULL;
+  }
 
   app_quit ();
   printf ("shot: %d sprites recorded in %s\n", sprites, outdir);

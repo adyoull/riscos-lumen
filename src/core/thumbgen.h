@@ -14,7 +14,8 @@
 
 typedef struct thumbgen thumbgen;
 
-/* Opens src and reads its header. NULL on error, with a message in err. */
+/* Opens src and reads its header. NULL on error, with a message in err.
+   dst NULL: nothing is written; take the pixels with thumbgen_take. */
 thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
                           int orientation, char *err, size_t errlen);
 /* Decodes up to rows source rows. 0: more to do; 1: finished, dst written;
@@ -25,8 +26,12 @@ const char *thumbgen_error (const thumbgen *t);
 void thumbgen_size (const thumbgen *t, int *w, int *h);
 void thumbgen_free (thumbgen *t);
 
+typedef struct rgb_image rgb_image;
+/* Once finished: hands over the image (free img->rgb). 0 on success. */
+int thumbgen_take (thumbgen *t, rgb_image *img);
+
 /* An 8-bit RGB image, rows top-down, 3 bytes a pixel, no padding. */
-typedef struct { int w, h; unsigned char *rgb; } rgb_image;
+struct rgb_image { int w, h; unsigned char *rgb; };
 
 /* Loads a (small) JPEG whole, e.g. a thumbnail for display. 0 on success;
    free img->rgb when done. */

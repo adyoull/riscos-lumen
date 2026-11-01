@@ -323,7 +323,7 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
     }
   t->max_side = max_side;
   t->orientation = orientation;
-  snprintf (t->dst, sizeof t->dst, "%s", dst);
+  snprintf (t->dst, sizeof t->dst, "%s", dst ? dst : "");
   t->f = fopen (src, "rb");
   if (!t->f)
     {
@@ -367,7 +367,7 @@ int thumbgen_step (thumbgen *t, int rows)
   t->sc.out = img.rgb;                 /* img_orient may have replaced the buffer */
   t->out_w = img.w;
   t->out_h = img.h;
-  if (img_save_jpeg (&img, t->dst, 85, t->err, sizeof t->err))
+  if (t->dst[0] && img_save_jpeg (&img, t->dst, 85, t->err, sizeof t->err))
     return t->done = -1;
   return t->done = 1;
 }
@@ -375,6 +375,17 @@ int thumbgen_step (thumbgen *t, int rows)
 const char *thumbgen_error (const thumbgen *t)
 {
   return t->err;
+}
+
+int thumbgen_take (thumbgen *t, rgb_image *img)
+{
+  if (t->done != 1 || !t->sc.out)
+    return -1;
+  img->w = t->out_w;
+  img->h = t->out_h;
+  img->rgb = t->sc.out;
+  t->sc.out = NULL;                    /* the caller frees it now */
+  return 0;
 }
 
 void thumbgen_size (const thumbgen *t, int *w, int *h)
