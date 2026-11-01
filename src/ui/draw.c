@@ -107,11 +107,12 @@ static void ensure_table (const void *area, const void *sprite)
 }
 
 void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
-                      int bx0, int by0, int bx1, int by1)
+                      int bx0, int by0, int bx1, int by1, int out[4])
 {
   int box = (bx1 - bx0) < (by1 - by0) ? (bx1 - bx0) : (by1 - by0);
   int big = w > h ? w : h;
   int dw, dh, scale[4];
+  out[0] = bx0; out[1] = by0; out[2] = bx1; out[3] = by1;
   if (big <= 0 || box <= 0)
     return;
   ensure_table (area, sprite);
@@ -122,6 +123,10 @@ void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
   scale[3] = big << yeig;
   dw = w * box / big;
   dh = h * box / big;
-  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite,
-         bx0 + ((bx1 - bx0) - dw) / 2, by0 + ((by1 - by0) - dh) / 2, 0, scale, table);
+  /* Centred across, sitting on the bottom of the box (on the photo's name). */
+  out[0] = bx0 + ((bx1 - bx0) - dw) / 2;
+  out[1] = by0;
+  out[2] = out[0] + dw;
+  out[3] = by0 + dh;
+  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, out[0], out[1], 0, scale, table);
 }

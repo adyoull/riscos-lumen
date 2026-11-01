@@ -13,7 +13,7 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.1
+VERSION := 0.0.2
 DATE := 01 Nov 2026
 OUT := out
 
@@ -103,3 +103,17 @@ clean:
 	rm -rf $(OUT)
 
 .PHONY: all check checks test-host test-arm test-ui test-fsys clean
+
+# --- Screenshots: Lumen's own drawing, recorded against the Fake RISC OS ----------
+# out/shots/lumen-*.png. The window frame, menus' frames and icon bar are an
+# approximation of RISC OS 5's; everything inside is what Lumen drew.
+$(OUT)/shot: tests/shots/shot.c tests/shots/widths.h $(CORE) src/core/fsys_posix.c $(filter-out src/ui/main.c,$(UI)) $(CORE_H) $(UI_H) $(OUT)/host32/sqlite3.o $(FAKE_SRC)
+	$(FAKE_CC) $(FAKE_CFLAGS) -Wno-format-truncation $(DEFS) -Ithird_party/sqlite -I$(H32)/include -Isrc/core -Isrc/ui -Itests/shots -o $@ \
+	  tests/shots/shot.c $(CORE) src/core/fsys_posix.c $(filter-out src/ui/main.c,$(UI)) $(OUT)/host32/sqlite3.o $(FAKE_SRC) \
+	  $(H32)/lib/libjpeg.a $(H32)/lib/libpng16.a $(H32)/lib/libz.a -lm
+shots: $(OUT)/shot
+	rm -rf $(OUT)/shots $(OUT)/photos
+	python3 tests/shots/make-photos.py "$(OUT)/photos/Lake District 2026"
+	$(OUT)/shot "$(OUT)/photos/Lake District 2026" $(OUT)/shots
+	python3 tests/shots/render.py $(OUT)/shots app/lumen.png
+.PHONY: shots

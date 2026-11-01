@@ -68,9 +68,10 @@ void draw_frame (int x0, int y0, int x1, int y1, unsigned rgb);
 void draw_star (int cx, int cy, int r, unsigned rgb);
 void draw_text (int x, int y, const char *s, unsigned fg, unsigned bg);
 int draw_text_width (const char *s);
-/* A 32bpp sprite (see thumbcache.c) scaled to fit a box, centred. */
+/* A 32bpp sprite (see thumbcache.c) scaled to fit a box, centred across
+   and sitting on its bottom edge. out gets the rectangle plotted. */
 void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
-                      int bx0, int by0, int bx1, int by1);
+                      int bx0, int by0, int bx1, int by1, int out[4]);
 
 /* --- thumbcache.c: thumbnails as 32bpp sprites, loaded in idle time */
 typedef struct

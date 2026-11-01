@@ -11,7 +11,7 @@
 
 #define MARGIN 16
 #define TEXT_H 36
-#define STARS_H 32
+#define STARS_H 40
 
 #define COL_SELECTED 0x2F2F2F00u       /* &BBGGRR00 */
 #define COL_PLACEHOLDER 0xC4C4C400u
@@ -33,11 +33,13 @@ static cat_source src = { SRC_ALL, 0, 0 };
 static cat_item *items;
 static unsigned char *sel;
 static int n, cols = 1, size = 1, focus = -1, is_open;
+static int layout_w = 256;            /* a cell's width: the window's width shared out */
 static int vis_w = 1200, vis_h = 800;
 static int screen_w = 1920, screen_h = 1080;
 
 static int box (void) { return box_sizes[size]; }
-static int cell_w (void) { return box () + 32; }
+static int min_cell_w (void) { return box () + 32; }
+static int cell_w (void) { return layout_w; }
 static int cell_h (void) { return box () + 24 + TEXT_H + STARS_H; }
 
 int browser_window (void) { return win; }
@@ -143,8 +145,21 @@ static void redraw_cell (int i)
 
 static int columns_for (int width)
 {
-  int c = (width - 2 * MARGIN) / cell_w ();
+  int c = (width - 2 * MARGIN) / min_cell_w ();
   return c < 1 ? 1 : c;
+}
+
+/* Columns and cell width for a window this wide. 1 if they changed. */
+static int relayout (int width)
+{
+  int c = columns_for (width), w = (width - 2 * MARGIN) / c;
+  if (w < min_cell_w ())
+    w = min_cell_w ();
+  if (c == cols && w == layout_w)
+    return 0;
+  cols = c;
+  layout_w = w;
+  return 1;
 }
 
 /* --- title */
@@ -252,7 +267,7 @@ void browser_set_size (int s)
   if (s < 0 || s > 2 || s == size)
     return;
   size = s;
-  cols = columns_for (vis_w);
+  relayout (vis_w);
   set_extent ();
   redraw_all ();
   b[0] = win;
@@ -315,9 +330,8 @@ void browser_open (int *block)
     }
   vis_w = block[3] - block[1];
   vis_h = block[4] - block[2];
-  if (columns_for (vis_w) != cols)
+  if (relayout (vis_w))
     {
-      cols = columns_for (vis_w);
       set_extent ();
       redraw_all ();
     }
@@ -375,39 +389,50 @@ static void draw_name (const char *name, int x0, int x1, int y, unsigned fg, uns
 
 static void draw_cell (int i, int ox, int oy)
 {
-  int x0, y0, x1, y1, bx0, by0, bx1, by1, k;
+  int x0, y0, x1, y1, bx0, by0, bx1, by1, k, pic[4];
   const cat_item *it = &items[i];
   const thumb_sprite *s;
   int selected = sel[i];
   unsigned bg = selected ? COL_SELECTED : COL_BG, fg = selected ? COL_TEXT_SEL : COL_TEXT;
   cell_rect (i, &x0, &y0, &x1, &y1);
   x0 += ox; x1 += ox; y0 += oy; y1 += oy;
-  if (selected)
-    draw_rect (x0 + 4, y0 + 4, x1 - 4, y1 - 4, COL_SELECTED);
-  if (i == focus)
-    draw_frame (x0 + 4, y0 + 4, x1 - 4, y1 - 4, COL_ACCENT);
-  bx0 = x0 + 16; bx1 = bx0 + box ();
+  bx0 = (x0 + x1 - box ()) / 2; bx1 = bx0 + box ();
   by1 = y1 - 16; by0 = by1 - box ();
   s = it->thumb_state == THUMB_READY ? thumbcache_get (it->id, 1) : NULL;
+  if (selected || i == focus)
+    {
+      /* Highlight up to just above the photo, not the empty box above a wide one. */
+      int top = by0 + box () * 2 / 3;
+      if (s)
+        top = by0 + s->h * box () / (s->w > s->h ? s->w : s->h);
+      top += 12;
+      if (selected)
+        draw_rect (x0 + 4, y0 + 4, x1 - 4, top, COL_SELECTED);
+      if (i == focus)
+        draw_frame (x0 + 4, y0 + 4, x1 - 4, top, COL_ACCENT);
+    }
   if (s)
-    draw_sprite_fit (s->area, s->sprite, s->w, s->h, bx0, by0, bx1, by1);
+    draw_sprite_fit (s->area, s->sprite, s->w, s->h, bx0, by0, bx1, by1, pic);
   else
     {
+      /* A 3:2 placeholder where a landscape photo will be. */
       int inset = box () / 8;
-      draw_rect (bx0 + inset, by0 + inset * 2, bx1 - inset, by1 - inset * 2,
+      pic[0] = bx0 + inset; pic[2] = bx1 - inset;
+      pic[1] = by0; pic[3] = by0 + (pic[2] - pic[0]) * 2 / 3;
+      draw_rect (pic[0], pic[1], pic[2], pic[3],
                  it->thumb_state == THUMB_FAILED ? COL_FAILED : COL_PLACEHOLDER);
     }
-  if (it->flag)
+  if (it->flag)                        /* a flag on the photo's top left corner */
     {
-      draw_rect (bx0 - 4, by1 - 28, bx0 + 24, by1 + 4, 0x30303000u);
-      draw_rect (bx0, by1 - 24, bx0 + 20, by1, COL_FLAG);
+      draw_rect (pic[0] + 8, pic[3] - 40, pic[0] + 36, pic[3] - 8, 0x30303000u);
+      draw_rect (pic[0] + 12, pic[3] - 36, pic[0] + 32, pic[3] - 12, COL_FLAG);
     }
   draw_name (it->name, x0 + 12, x1 - 12, by0 - 8 - 28, fg, bg);
   if (it->rating == RATING_REJECT)
     draw_name ("Rejected", x0 + 12, x1 - 12, y0 + 10, selected ? COL_TEXT_SEL : COL_REJECT, bg);
   else
     for (k = 0; k < 5; k++)
-      draw_star ((x0 + x1) / 2 + (k - 2) * 28, y0 + 22, 11,
+      draw_star ((x0 + x1) / 2 + (k - 2) * 34, y0 + 26, 15,
                  k < it->rating ? COL_ACCENT : (selected ? COL_STAR_OFF_SEL : COL_STAR_OFF));
 }
 
