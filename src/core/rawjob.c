@@ -49,8 +49,15 @@ void rawjob_setup (const char *h, const char *s, rawjob_runner run)
 
 int rawjob_available (void) { return have_helper; }
 
+static int switched_off;
+
+void rawjob_set_switched_off (int off) { switched_off = off; }
+
 const char *rawjob_missing_message (void)
 {
+  if (switched_off)
+    return "This is a camera raw file, and the LibRaw plug-in that reads them is switched off. "
+           "Tick it in Plug-ins on Lumen's icon bar menu.";
   return "This is a camera raw file. Lumen reads raw files with its LibRaw plug-in: "
          "install LumenRaw from PackMan, then open Lumen again.";
 }

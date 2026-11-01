@@ -184,8 +184,11 @@ void browser_title (char *out, size_t size)
     case SRC_ALBUM: cat_group_name (lib_cat (app_library ()), src.kind, src.id, name, sizeof name); break;
     default: snprintf (name, sizeof name, "All photos"); break;
     }
-  snprintf (out, size, "%s (%d)%s", name, n,
-            src.min_rating > 0 ? (src.min_rating == 5 ? "  \xB7  5 stars" : "  \xB7  rated") : "");
+  {
+    static const char *const rated[6] = { "", "  \xB7  1 star and up", "  \xB7  2 stars and up",
+                                          "  \xB7  3 stars and up", "  \xB7  4 stars and up", "  \xB7  5 stars" };
+    snprintf (out, size, "%s (%d)%s", name, n, src.min_rating > 0 && src.min_rating <= 5 ? rated[src.min_rating] : "");
+  }
   if (src.search[0] && strlen (out) + strlen (src.search) + 12 < size)
     snprintf (out + strlen (out), size - strlen (out), "  \xB7  \"%s\"", src.search);
 }
@@ -331,6 +334,15 @@ void browser_select_all (int on)
         sel[i] = (unsigned char) on;
         redraw_cell (i);
       }
+  if (!on && focus >= 0)
+    {
+      /* Nothing selected means nothing: the focus goes too (else it would
+         still count as the photo the keys work on). */
+      int old = focus;
+      focus = -1;
+      redraw_cell (old);
+      mainwin_info_changed ();
+    }
   mainwin_status_changed ();
 }
 
@@ -529,6 +541,23 @@ int browser_focus (void)
 
 static void set_focus (int i, int extend);
 
+/* Scrolls photo i into view. */
+static void scroll_to (int i)
+{
+  int b[9], x0, y0, x1, y1;
+  b[0] = win;
+  if (is_open && _swix (Wimp_GetWindowState, _IN (1), b) == NULL)
+    {
+      int top = b[6], bottom = b[6] - (b[4] - b[2]);
+      cell_rect (i, &x0, &y0, &x1, &y1);
+      if (y1 > top || y0 < bottom)
+        {
+          b[6] = y1 > top ? y1 + MARGIN : y0 + (b[4] - b[2]) - MARGIN;
+          open_nested (b);
+        }
+    }
+}
+
 void browser_focus_on (int i)
 {
   if (i >= 0 && i < n)
@@ -556,21 +585,15 @@ static void set_focus (int i, int extend)
   if (mainwin_mode () == LAYOUT_SPLIT && viewer_index () != i)
     viewer_show (i);                   /* Split View: the Viewer follows */
   mainwin_info_changed ();
-  /* Scroll it into view. */
-  {
-    int b[9], x0, y0, x1, y1;
-    b[0] = win;
-    if (_swix (Wimp_GetWindowState, _IN (1), b) == NULL)
-      {
-        int top = b[6], bottom = b[6] - (b[4] - b[2]);
-        cell_rect (i, &x0, &y0, &x1, &y1);
-        if (y1 > top || y0 < bottom)
-          {
-            b[6] = y1 > top ? y1 + MARGIN : y0 + (b[4] - b[2]) - MARGIN;
-            open_nested (b);
-          }
-      }
-  }
+  scroll_to (i);
+}
+
+/* After the layout changes (Split View's strip is short): the focused
+   photo back in sight. */
+void browser_show_focus (void)
+{
+  if (focus >= 0 && focus < n)
+    scroll_to (focus);
 }
 
 void browser_click (int *block)

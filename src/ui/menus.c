@@ -353,7 +353,7 @@ static menu *build_viewer_menu (void)
       set_item (m, VM_REDO, 0, "Redo      ^Y", 0, -1, !viewer_can_redo ());
       set_item (m, VM_RESET, 0, "Reset all adjustments", MF_DOTTED, -1, 0);
       set_item (m, VM_AUTO, 0, "Auto adjust      A", 0, -1, crop);
-      set_item (m, VM_PICK, 0, "Pick white balance      W", viewer_picking () ? MF_TICK : 0, -1, crop);
+      set_item (m, VM_PICK, 0, "Pick white balance", viewer_picking () ? MF_TICK : 0, -1, crop);
       set_item (m, VM_CROP, 0, "Crop      C", crop ? MF_TICK : 0, -1, 0);
       set_item (m, VM_SHAPE, 0, "Crop shape", 0, (int) shape, 0);
       set_item (m, VM_GRID, 0, "Grid      G", MF_DOTTED, (int) grid, 0);
@@ -394,14 +394,16 @@ static menu *build_iconbar_menu (void)
   menu *m, *plugm;
   used = 0;
   plugm = build_plugins_menu ();
-  m = new_menu (APP_NAME, 5);
+  m = new_menu (APP_NAME, 7);
   if (m)
     {
       set_item (m, 0, 0, "Info", 0, info_window, info_window == -1);
-      set_item (m, 1, 0, "Open library", MF_DOTTED, -1, 0);
-      set_item (m, 2, 0, "Choices...", 0, -1, 0);
-      set_item (m, 3, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
-      set_item (m, 4, 1, "Quit", 0, -1, 0);
+      set_item (m, 1, 0, "Help...", 0, -1, 0);
+      set_item (m, 2, 0, "User guide", MF_DOTTED, -1, 0);
+      set_item (m, 3, 0, "Open library", MF_DOTTED, -1, 0);
+      set_item (m, 4, 0, "Choices...", 0, -1, 0);
+      set_item (m, 5, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
+      set_item (m, 6, 1, "Quit", 0, -1, 0);
     }
   return m;
 }
@@ -602,7 +604,7 @@ void menus_open_iconbar_menu (int x)
   menu *m = build_iconbar_menu ();
   which = 2;
   open_x = x - 64;
-  open_y = 96 + 5 * 44;
+  open_y = 96 + 7 * 44;
   if (m)
     _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
@@ -784,12 +786,16 @@ int menus_selection (const int *choice)
   else if (which == 2)
     {
       if (choice[0] == 1)
-        mainwin_open (NULL);
+        app_open_doc ("!Help");
       else if (choice[0] == 2)
-        choicewin_open ();
+        app_open_doc ("Guide.index/html");
       else if (choice[0] == 3)
-        plugins_choice (choice + 1);
+        mainwin_open (NULL);
       else if (choice[0] == 4)
+        choicewin_open ();
+      else if (choice[0] == 5)
+        plugins_choice (choice + 1);
+      else if (choice[0] == 6)
         quit_requested = 1;
     }
   if (quit_requested)
@@ -856,7 +862,7 @@ const char *menus_help (int window, int icon)
     n = MAX_LIST;
   base = n ? n : 1;
   /* The Plug-ins submenu, from the icon bar menu (2) or the window menu (4). */
-  if ((which == 2 && c[0] == 3) || (which == 1 && c[0] == 4))
+  if ((which == 2 && c[0] == 5) || (which == 1 && c[0] == 4))
     {
       if (c[1] < 0)
         return "Lumen's plug-ins: switch them on or off, add or remove them.";
@@ -873,9 +879,11 @@ const char *menus_help (int window, int icon)
     switch (c[0])
       {
       case 0: return "Who made Lumen, and its version.";
-      case 1: return "Opens Lumen's window.";
-      case 2: return "Where the library is, how exports and thumbnails start, and checking for missing files.";
-      case 4: return "Leaves Lumen. Everything is saved as you go.";
+      case 1: return "Shows Lumen's short help file.";
+      case 2: return "Opens the Lumen User Guide in your web browser.";
+      case 3: return "Opens Lumen's window.";
+      case 4: return "Where the library is, how exports and thumbnails start, and checking for missing files.";
+      case 6: return "Leaves Lumen. Everything is saved as you go.";
       }
   if (which == 1)
     switch (c[0])

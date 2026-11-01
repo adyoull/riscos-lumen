@@ -704,6 +704,12 @@ static void list_ifd (const tiff *t, size_t ifd, int group, lister *ls, int dept
       if (tag == 0x8769 && group == 0) { *exif_ifd = int_value (t, e, type, count); continue; }
       if (tag == 0x8825 && group == 0) { *gps_ifd = int_value (t, e, type, count); continue; }
       if (tag == 0xA005 && group == 1) { *interop_ifd = int_value (t, e, type, count); continue; }
+      /* The file's own structure, not the photo's: in a raw file's IFD0 it
+         describes the embedded preview (160 x 120, strips...), which only
+         confuses next to the photo's real size. */
+      if (group == 0 && (tag == 0x00FE || (tag >= 0x0100 && tag <= 0x0103) || tag == 0x0106 || tag == 0x0115
+                         || tag == 0x0116 || tag == 0x011C || tag == 0x014A))
+        continue;
       if (tag == 0x927C || tag == 0xC4A5 || tag == 0xEA1C || tag == 0x0201 || tag == 0x0202
           || tag == 0x0111 || tag == 0x0117)
         {

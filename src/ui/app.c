@@ -169,6 +169,31 @@ static void raw_message (int *b)
    them there: LumenRaw, for instance, into Apps.Graphics.!Lumen.Plugins.
    LibRaw). Which are switched off is kept in <Choices$Write>.Lumen.
    Plugins. A raw plug-in that is on is the one rawjob runs. */
+/* --- !Help and the User Guide */
+void app_open_doc (const char *leaf)
+{
+  const char *v = getenv ("Lumen$Dir");
+  char dir[600], cmd[700];
+  snprintf (dir, sizeof dir, "%s", v ? v : "");
+  if (!dir[0])
+    return;
+  if (!strcmp (leaf, "Guide.index/html"))
+    {
+      /* An HTML file runs only if something says how: a web browser
+         sets Alias$@RunType_FAF when the Filer sees it. */
+      const char *run = getenv ("Alias$@RunType_FAF");
+      if (!run || !*run)
+        {
+          app_report ("There's no web browser to show the User Guide in. Open the directory a browser such as "
+                      "NetSurf is in (so the Filer sees it), then try again. The guide is !Lumen.Guide.index/html.");
+          return;
+        }
+    }
+  snprintf (cmd, sizeof cmd, "Filer_Run %s.%s", dir, leaf);
+  if (_swix (Wimp_StartTask, _IN (0), cmd))
+    app_report ("Lumen couldn't open that file.");
+}
+
 /* --- Choices (prefs.h) */
 static prefs the_prefs;
 static char prefs_path[700];
@@ -236,6 +261,13 @@ void app_plugins_rescan (void)
     plugin_paths ();
   nplugins = plugins_dir[0] ? plugins_scan (plugins_dir, plugins_state, plugin_list, PLUGINS_MAX) : 0;
   raw = plugins_find (plugin_list, nplugins, "raw");
+  {
+    int k, off = 0;
+    for (k = 0; k < nplugins; k++)
+      if (!strcmp (plugin_list[k].kind, "raw") && !plugin_list[k].enabled)
+        off = 1;
+    rawjob_set_switched_off (!raw && off);
+  }
   if (!strcmp (raw ? raw->program : "", raw_helper))
     return;                            /* the same as before: jobs carry on */
   snprintf (raw_helper, sizeof raw_helper, "%s", raw ? raw->program : "");

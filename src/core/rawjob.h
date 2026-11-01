@@ -28,6 +28,8 @@ void rawjob_setup (const char *helper, const char *scratch, rawjob_runner run);
 int rawjob_available (void);
 /* The message for a raw file when the plug-in isn't installed. */
 const char *rawjob_missing_message (void);
+/* A raw plug-in is installed but switched off: the message says so. */
+void rawjob_set_switched_off (int off);
 
 typedef struct rawjob rawjob;
 rawjob *rawjob_start (const char *src, int develop, int max_side, char *err, size_t n);

@@ -139,10 +139,17 @@ static void leaf_from (const char *photo, char *out, size_t n)
   const char *dot = strrchr (photo, '.');
   const char *slash = strrchr (photo, '/');
   const char *end = photo + strlen (photo);
-  if (dot && (!strcasecmp (dot, ".jpg") || !strcasecmp (dot, ".jpeg") || !strcasecmp (dot, ".png")))
-    end = dot;
-  else if (slash && (!strcasecmp (slash, "/jpg") || !strcasecmp (slash, "/jpeg") || !strcasecmp (slash, "/png")))
-    end = slash;
+  /* The original's extension goes ("/jpg", ".png", a raw file's "/NEF"...):
+     the export is a new file of its own type. */
+  const char *ext = dot && (!slash || dot > slash) ? dot : slash;
+  if (ext && ext > photo && strlen (ext + 1) >= 2 && strlen (ext + 1) <= 4)
+    {
+      const char *c = ext + 1;
+      while (*c && ((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9')))
+        c++;
+      if (!*c)
+        end = ext;
+    }
   for (i = 0; photo + i < end && k + 1 < n; i++)
     {
       char c = photo[i];

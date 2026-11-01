@@ -66,6 +66,9 @@ int app_confirm (const char *msg, const char *button);   /* 1: the button was ch
 unsigned app_now (void);               /* centiseconds */
 library *app_library (void);
 int app_task (void);
+/* Opens a file in !Lumen ("!Help", "Guide.index/html") with Filer_Run; the
+   guide needs a web browser, and says so if there isn't one. */
+void app_open_doc (const char *leaf);
 /* Lumen's Choices (prefs.h), read at start from <Choices$Write>.Lumen.Choices. */
 void app_load_prefs (void);
 const prefs *app_prefs (void);
@@ -156,6 +159,7 @@ int browser_size (void);
 void browser_after_change (void);      /* ratings etc. changed: reload and redraw */
 int browser_item (int i, cat_item *out);   /* 1 if i is in the list */
 int browser_focus (void);
+void browser_show_focus (void);       /* scroll the focused photo into view */
 void browser_focus_on (int i);         /* select and show item i, alone */
 void browser_remove_selection (void);  /* asks, then takes them out of the library */
 void browser_removed (const cat_id *ids, int n);   /* the photos left the library */

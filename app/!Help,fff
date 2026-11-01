@@ -1,4 +1,4 @@
-Lumen 0.0.17 (01 Nov 2026) - test build
+Lumen 0.0.18 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -225,7 +225,8 @@ They are kept in <Choices$Write>.Lumen.Choices.
 Help
 ----
 Lumen answers !Help: run it and point at anything in Lumen's windows or
-menus.
+menus. The Lumen User Guide, with pictures, is !Lumen.Guide.index/html: choose
+User guide on the icon bar menu to read it in your web browser.
 
 One Lumen at a time
 -------------------

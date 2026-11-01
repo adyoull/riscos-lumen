@@ -13,7 +13,7 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.17
+VERSION := 0.0.18
 DATE := 01 Nov 2026
 OUT := out
 
@@ -69,7 +69,8 @@ $(OUT)/!Sprites,ff9: app/lumen.png app/sm-lumen.png
 
 APPFILES := app/!Run,feb app/!Boot,feb app/!Help,fff
 LICENCES := $(wildcard app/Licences/*)
-$(OUT)/Lumen.zip: $(OUT)/lumen $(OUT)/!Sprites,ff9 $(APPFILES) $(LICENCES) | checks
+GUIDE := docs/guide/index.html $(wildcard docs/guide/images/*.png)
+$(OUT)/Lumen.zip: $(OUT)/lumen $(OUT)/!Sprites,ff9 $(APPFILES) $(LICENCES) $(GUIDE) | checks
 	rm -rf $(OUT)/!Lumen && mkdir -p $(OUT)/!Lumen
 	$(RO_STRIP) -o $(OUT)/lumen.stripped $(OUT)/lumen
 	$(ELF2AIF) -e $(OUT)/lumen.stripped $(OUT)/!Lumen/!RunImage,ff8 >/dev/null
@@ -78,6 +79,9 @@ $(OUT)/Lumen.zip: $(OUT)/lumen $(OUT)/!Sprites,ff9 $(APPFILES) $(LICENCES) | che
 	cp $(APPFILES) $(OUT)/!Sprites,ff9 $(OUT)/!Lumen/
 	mkdir -p $(OUT)/!Lumen/Licences
 	for f in $(LICENCES); do cp $$f $(OUT)/!Lumen/Licences/$$(basename $$f),fff; done
+	mkdir -p $(OUT)/!Lumen/Guide/images
+	cp docs/guide/index.html $(OUT)/!Lumen/Guide/index.html,faf
+	for f in docs/guide/images/*.png; do cp $$f $(OUT)/!Lumen/Guide/images/$$(basename $$f),b60; done
 	$(ROZIP) $@ -C $(OUT) !Lumen
 	@echo "$@: unzip on RISC OS and run !Lumen"
 
@@ -162,6 +166,10 @@ $(OUT)/LumenRaw-$(RAW_VERSION).zip: $(OUT)/LumenRaw,ff8 plugins/libraw/ReadMe pl
 	$(ROZIP) $@ -C $(OUT)/rawpkg !Lumen
 $(OUT)/LibRaw-0.21.4-source.zip:
 	cd /build/src/LibRaw && git archive --format=zip --prefix=LibRaw-0.21.4/ -o $(CURDIR)/$@ HEAD
+# The guide on its own, to read on any computer.
+$(OUT)/Lumen-User-Guide.zip: $(GUIDE)
+	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ guide
+guide: $(OUT)/Lumen-User-Guide.zip
 plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-0.21.4-source.zip
 # The helper on real raw files (not in the repository: their licences
 # vary), on Linux and on ARM with RISC OS's alignment rules.

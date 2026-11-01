@@ -1130,6 +1130,10 @@ int main (int argc, char **argv)
   test_plugins ();
   test_raw_names ();
   test_prefs ();
+  rawjob_set_switched_off (1);
+  checks++; if (!strstr (rawjob_missing_message (), "switched off")) { fails++; fprintf (stderr, "FAIL: raw plug-in off: says so\n"); }
+  rawjob_set_switched_off (0);
+  checks++; if (!strstr (rawjob_missing_message (), "install LumenRaw")) { fails++; fprintf (stderr, "FAIL: no raw plug-in: says to install\n"); }
   make_fixtures ();
   test_library ();
   test_time_slicing ();

@@ -196,6 +196,18 @@ void mainwin_open_child (int *block)
   _swix (Wimp_OpenWindow, _INR (1, 4), block, TASK_WORD, win, 0);
 }
 
+/* The inspector back to its top (another tab, or another photo's details). */
+static void insp_to_top (void)
+{
+  int st[9];
+  st[0] = insp;
+  if (insp == -1 || _swix (Wimp_GetWindowState, _IN (1), st) || st[6] == 0 || !(st[8] & (1 << 16)))
+    return;
+  st[6] = 0;
+  st[7] = -1;
+  _swix (Wimp_OpenWindow, _INR (1, 4), st, TASK_WORD, win, 0);
+}
+
 static void close_child (int w)
 {
   int b[1];
@@ -277,6 +289,8 @@ static void open_main (int *b)
     }
 }
 
+static int closed_at[9], have_closed_at;   /* where the window was when it was last closed */
+
 void mainwin_open (int *block)
 {
   int b[9];
@@ -285,6 +299,13 @@ void mainwin_open (int *block)
       b[0] = win;
       if (is_open && _swix (Wimp_GetWindowState, _IN (1), b) == NULL)
         b[7] = -1;
+      else if (have_closed_at)
+        {
+          /* Where it was, the size it was. */
+          memcpy (b, closed_at, sizeof b);
+          b[0] = win;
+          b[7] = -1;
+        }
       else
         {
           int w = screen_w - 160 < 3600 ? screen_w - 160 : 3600;
@@ -310,6 +331,11 @@ void mainwin_close (void)
     return;
   viewer_shutdown ();
   mode = LAYOUT_BROWSER;               /* it opens again on the Browser */
+  if (!full_screen)
+    {
+      closed_at[0] = win;
+      have_closed_at = _swix (Wimp_GetWindowState, _IN (1), closed_at) == NULL;
+    }
   if (full_screen)
     frame_change = 1;                  /* with its frame back */
   full_screen = 0;
@@ -352,6 +378,8 @@ void mainwin_set_mode (int m)
     }
   mode = m;
   relayout ();
+  if (mode != LAYOUT_VIEWER)
+    browser_show_focus ();             /* Split View's short strip: the photo in focus in sight */
   mainwin_update_title ();
   if (tab != TAB_LIBRARY)
     mainwin_inspector_changed ();      /* Adjustments and Info follow the layout's photo */
@@ -372,6 +400,8 @@ void mainwin_set_tab (int t)
 {
   if (t < TAB_LIBRARY || t > TAB_ADJUST)
     return;
+  if (t != tab)
+    insp_to_top ();
   tab = t;
   if (!insp_on)
     insp_on = 1;
@@ -788,6 +818,8 @@ static void info_load (int force)
   cat_id id = i >= 0 && browser_item (i, &it) ? it.id : 0;
   if (id == info_id && !force)
     return;
+  if (id != info_id)
+    insp_to_top ();                    /* another photo's details start at the top */
   info_id = id;
   nirows = 0;
   info_has_exif = 0;

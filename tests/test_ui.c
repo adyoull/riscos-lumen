@@ -49,6 +49,7 @@ static const int *menu_open;
 static char reported[256], asked[256], asked_button[32];
 static int answer = 2;            /* Cancel */
 static int plugw_opens;
+static char started[300];               /* the last Wimp_StartTask command */
 static int other_lumen;
 static int menu_state[4] = { -1, -1, -1, -1 };   /* what Wimp_GetMenuState 1 reports */
 static unsigned choice_icon_flags[32];  /* the Choices window's icons' state (bit 21: selected) */                /* a task handle the fake Task Manager lists as another Lumen */
@@ -186,6 +187,9 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       CHECK (b[0] == CHOICEW, "icon state: the Choices window's");
       if (b[1] >= 0 && b[1] < 32)
         b[6] = (int) choice_icon_flags[b[1]];
+      return NULL;
+    case Wimp_StartTask:
+      snprintf (started, sizeof started, "%s", (const char *) r[0]);
       return NULL;
     case Wimp_GetMenuState:
       CHECK (r[0] == 1, "Wimp_GetMenuState 1: for a window and icon");
@@ -335,7 +339,8 @@ static void fakes (void)
     { OS_SpriteOp, "OS_SpriteOp", 0 }, { OS_ReadMonotonicTime, "OS_ReadMonotonicTime", 0 },
     { Wimp_DragBox, "Wimp_DragBox", 1 }, { Wimp_SetIconState, "Wimp_SetIconState", 1 },
     { Wimp_SpriteOp, "Wimp_SpriteOp", 1 }, { Wimp_ResizeIcon, "Wimp_ResizeIcon", 1 },
-    { Wimp_GetMenuState, "Wimp_GetMenuState", 1 }, { Wimp_GetIconState, "Wimp_GetIconState", 1 } };
+    { Wimp_GetMenuState, "Wimp_GetMenuState", 1 }, { Wimp_GetIconState, "Wimp_GetIconState", 1 },
+    { Wimp_StartTask, "Wimp_StartTask", 1 } };
   size_t i;
   fake_reset ();
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
@@ -548,6 +553,12 @@ int main (int argc, char **argv)
   CHECK (processed_key == 'x', "keys Lumen doesn't use are passed on");
   /* Adjust-click on another photo: both cells redrawn (the old focus frame goes). */
   key (KEY_ESCAPE);
+  {
+    cat_id *none;
+    int k = browser_selection (&none);
+    free (none);
+    CHECK (k == 0 && browser_focus () < 0, "Escape: nothing selected, not even the photo in focus");
+  }
   click (16 + 256 + 40, -16 - 40, Button_Select);   /* not the photo clicked earlier: that would be a double click */
   force_redraws = 0;
   click (16 + 2 * 256 + 40, -16 - 40, Button_Adjust);
@@ -1387,9 +1398,9 @@ int main (int argc, char **argv)
     memset (b, 0, sizeof b);
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
-    menu_state[0] = 3; menu_state[1] = 0; menu_state[2] = -1;
+    menu_state[0] = 5; menu_state[1] = 0; menu_state[2] = -1;
     CHECK (strstr (help_text (0x9000, 0, 0, 0), "plug-in is on") != NULL, "help: Plug-ins > LibRaw (on)");
-    menu_state[0] = 4; menu_state[1] = -1;
+    menu_state[0] = 6; menu_state[1] = -1;
     CHECK (strstr (help_text (0x9000, 3, 0, 0), "Leaves Lumen") != NULL, "help: icon bar menu > Quit");
     menu_state[0] = -1;
     CHECK (strstr (help_text (0x9000, 3, 0, 0), "") != NULL && help_text (0x9000, 3, 0, 0)[0] == '\0',
@@ -1411,24 +1422,25 @@ int main (int argc, char **argv)
     memset (b, 0, sizeof b);
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
-    CHECK (menu_open && strcmp (item_text (menu_open, 2), "Choices...") == 0
-           && strcmp (item_text (menu_open, 3), "Plug-ins") == 0 && strcmp (item_text (menu_open, 4), "Quit") == 0,
-           "icon bar menu: Info, Open library, Choices..., Plug-ins, Quit");
-    pm = submenu (menu_open, 3);
+    CHECK (menu_open && strcmp (item_text (menu_open, 1), "Help...") == 0 && strcmp (item_text (menu_open, 2), "User guide") == 0
+           && strcmp (item_text (menu_open, 4), "Choices...") == 0
+           && strcmp (item_text (menu_open, 5), "Plug-ins") == 0 && strcmp (item_text (menu_open, 6), "Quit") == 0,
+           "icon bar menu: Info, Help..., User guide, Open library, Choices..., Plug-ins, Quit");
+    pm = submenu (menu_open, 5);
     CHECK (strcmp (item_text (pm, 0), "Camera raw (LibRaw) 1.0") == 0 && (item (pm, 0)[0] & 1),
            "Plug-ins: LibRaw, ticked (on)");
     CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0 && strcmp (item_text (pm, 2), "Remove") == 0
            && (item (pm, 2)[0] & 0x80), "Plug-ins: Add plug-in..., Remove");
     CHECK (rawjob_available (), "the raw plug-in is at work");
-    choose (3, 0, -1);
+    choose (5, 0, -1);
     CHECK (!rawjob_available (), "switched off: raw files aren't read");
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 3);
+    pm = submenu (menu_open, 5);
     CHECK (!(item (pm, 0)[0] & 1), "Plug-ins: LibRaw not ticked");
-    choose (3, 0, -1);
+    choose (5, 0, -1);
     CHECK (rawjob_available (), "switched back on");
     /* Add plug-in...: the window to drop one on. */
-    choose (3, 1, -1);
+    choose (5, 1, -1);
     CHECK (plugw_opens == 1, "Add plug-in... opens its window");
     snprintf (d, sizeof d, "%s/Download/Extra", work);
     fsys_mkdirs (d);
@@ -1465,21 +1477,21 @@ int main (int argc, char **argv)
     memset (b, 0, sizeof b);
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 3);
+    pm = submenu (menu_open, 5);
     CHECK (strcmp (item_text (pm, 0), "Camera raw (LibRaw) 1.0") == 0 && strcmp (item_text (pm, 1), "Extra 2") == 0
            && strcmp (item_text (pm, 2), "Add plug-in...") == 0, "Plug-ins: both, by name");
     CHECK (strcmp (item_text (submenu (pm, 3), 1), "Extra...") == 0, "Remove > Extra...");
     /* Remove > LibRaw: Cancel keeps it; it mentions PackMan. */
     answer = 2;
-    choose (3, 3, 0);
+    choose (5, 3, 0);
     CHECK (strstr (asked, "LumenRaw) in PackMan") != NULL && rawjob_available (), "Remove LibRaw: mentions PackMan; Cancel keeps it");
     answer = 3;
-    choose (3, 3, 1);
+    choose (5, 3, 1);
     snprintf (f, sizeof f, "%s/App/Plugins/Extra", work);
     CHECK (fsys_stat (f, &e) != 0, "Remove > Extra: deleted");
     answer = 2;
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 3);
+    pm = submenu (menu_open, 5);
     CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0, "Plug-ins: LibRaw alone again");
   }
   memset (b, 0, sizeof b);
@@ -1490,7 +1502,7 @@ int main (int argc, char **argv)
   {
     char cf[760];
     prefs p;
-    choose (2, -1, -1);
+    choose (4, -1, -1);
     CHECK ((choice_icon_flags[4] & (1u << 21)) && !(choice_icon_flags[5] & (1u << 21))
            && (choice_icon_flags[15] & (1u << 21)) && (choice_icon_flags[17] & (1u << 21)),
            "Choices: shows JPEG, Medium thumbnails, checking files: the defaults");
@@ -1516,7 +1528,17 @@ int main (int argc, char **argv)
     app_event (User_Message_Recorded, b, 0);
     CHECK (strstr (choicewin_library_text (), "/Holiday") != NULL, "Choices: a directory dropped sets the library");
   }
-  CHECK (choose (4, -1, -1) == 1, "Quit from the icon bar menu quits");
+  /* User guide: no web browser, so it says so; with one, Filer_Run. */
+  unsetenv ("Alias$@RunType_FAF");
+  choose (2, -1, -1);
+  CHECK (strstr (reported, "no web browser") != NULL, "User guide: no browser: says so");
+  reported[0] = '\0';
+  setenv ("Alias$@RunType_FAF", "/NetSurf:!Run %*0", 1);
+  choose (2, -1, -1);
+  CHECK (strstr (started, ".Guide.index") != NULL && !strncmp (started, "Filer_Run ", 10), "User guide: Filer_Run the guide");
+  choose (1, -1, -1);
+  CHECK (strstr (started, ".!Help") != NULL, "Help...: Filer_Run !Help");
+  CHECK (choose (6, -1, -1) == 1, "Quit from the icon bar menu quits");
   memset (b, 0, sizeof b);
   b[4] = 0;
   CHECK (app_event (User_Message, b, 0) == 1, "Message_Quit quits");
