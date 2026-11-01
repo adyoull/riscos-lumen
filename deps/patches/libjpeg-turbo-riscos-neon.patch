@@ -1,0 +1,50 @@
+diff --git a/simd/arm/aarch32/jsimd.c b/simd/arm/aarch32/jsimd.c
+index 04d6452..2569f74 100644
+--- a/simd/arm/aarch32/jsimd.c
++++ b/simd/arm/aarch32/jsimd.c
+@@ -26,6 +26,9 @@
+ #include "../../jsimd.h"
+ 
+ #include <ctype.h>
++#ifdef __riscos
++#include <kernel.h>
++#endif
+ 
+ static THREAD_LOCAL unsigned int simd_support = ~0;
+ static THREAD_LOCAL unsigned int simd_huffman = 1;
+@@ -114,6 +117,18 @@ init_simd(void)
+ 
+ #if defined(__ARM_NEON__)
+   simd_support |= JSIMD_NEON;
++#elif defined(__riscos)
++  /* RISC OS: ask VFPSupport (VFPSupport_Features 0, SWI &58EC8, PRM p706, which returns
++   * FPSID, MVFR0, MVFR1). Neon needs 32 doubleword registers (MVFR0 bits
++   * 0-3 = 2) and the Advanced SIMD integer instructions (MVFR1 bits 8-11).
++   * Without VFPSupport, or without Neon, the plain C code is used. */
++  {
++    _kernel_swi_regs r;
++    r.r[0] = 0;
++    if (_kernel_swi(0x58EC8, &r, &r) == NULL &&
++        (r.r[1] & 0xF) == 2 && ((r.r[2] >> 8) & 0xF) != 0)
++      simd_support |= JSIMD_NEON;
++  }
+ #elif defined(__linux__) || defined(ANDROID) || defined(__ANDROID__)
+   /* We still have a chance to use Neon regardless of globally used
+    * -mcpu/-mfpu options passed to gcc by performing runtime detection via
+diff --git a/simd/arm/jchuff.h b/simd/arm/jchuff.h
+index 2fbd252..c522a82 100644
+--- a/simd/arm/jchuff.h
++++ b/simd/arm/jchuff.h
+@@ -74,7 +74,11 @@ typedef struct {
+ 
+ #else
+ 
+-#if defined(_MSC_VER) && !defined(__clang__)
++/* Byte stores when the target can't store a word to any address: buffer is
++ * only byte-aligned, and RISC OS (or Linux with -mno-unaligned-access)
++ * aborts on an unaligned STR. */
++#if (defined(_MSC_VER) && !defined(__clang__)) || \
++    (defined(__GNUC__) && !defined(__ARM_FEATURE_UNALIGNED))
+ #define SPLAT() { \
+   buffer[0] = (JOCTET)(put_buffer >> 24); \
+   buffer[1] = (JOCTET)(put_buffer >> 16); \
