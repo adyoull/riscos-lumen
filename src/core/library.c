@@ -36,7 +36,7 @@ struct library
   /* thumbnails */
   thumbgen *tg;
   cat_id tg_version;
-  char tg_recipe[1024];               /* applied when the thumbnail is finished */
+  char tg_recipe[2048];               /* applied when the thumbnail is finished */
   char tg_dst[1100];
   int thumbs_pending;                 /* cached count; -1 to recount */
   unsigned char shard_made[256];

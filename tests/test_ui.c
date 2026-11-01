@@ -532,7 +532,11 @@ int main (int argc, char **argv)
     CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "undo brings +1 back");
     /* Reset all, then undo it. */
     memset (b, 0, sizeof b);
-    b[0] = vopened[1] + px + 24 + 2 * 202 + 93; b[1] = vopened[4] - 24 - 150 - 16 - 52 - 84 - 972 - 172 - 16 - 30;
+    {
+      int bx, by;
+      viewer_button_centre (2, &bx, &by);
+      b[0] = vopened[1] + bx; b[1] = vopened[4] + by;
+    }
     b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
     app_event (Mouse_Click, b, 0);
     CHECK (recipe_is_default (viewer_recipe ()), "Reset all");
@@ -554,6 +558,32 @@ int main (int argc, char **argv)
       app_event (Mouse_Click, b, 0);
       CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and unfolded again");
     }
+    /* Curves: click the middle of the graph and drag up. */
+    {
+      int cr[4], k0 = drag_calls;
+      CHECK (viewer_curve_rect (cr), "the curves editor is open");
+      memset (b, 0, sizeof b);
+      b[0] = vopened[1] + (cr[0] + cr[2]) / 2; b[1] = vopened[4] + (cr[1] + cr[3]) / 2;
+      b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      CHECK (drag_calls == k0 + 1 && viewer_recipe ()->curve[CURVE_RGB].n == 3, "a click adds a point and drags it");
+      ptr_x = b[0]; ptr_y = vopened[4] + cr[1] + (cr[3] - cr[1]) * 3 / 4;
+      memset (b, 0, sizeof b);
+      app_event (Null_Reason, b, 0);
+      CHECK (fabsf (viewer_recipe ()->curve[CURVE_RGB].y[1] - 0.75f) < 0.01f, "the point follows the pointer up");
+      app_event (User_Drag_Box, b, 0);
+      cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+      CHECK (strstr (text, "curves rgb=0.000:0.000,0.500:0.750,1.000:1.000") != NULL, "let go: saved");
+      memset (b, 0, sizeof b);
+      b[0] = ptr_x; b[1] = ptr_y; b[2] = Button_Adjust; b[3] = VIEWER; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 0, "Adjust on the point: gone, a straight line again");
+      key (0x1A);
+      CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 3, "and undo brings it back");
+      key (0x1A);
+      CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 0 && viewer_recipe ()->v[P_EV] > 0.9f, "undo again: as before the curve");
+    }
+
     /* Rate it from the viewer. */
     key ('5');
     browser_item (0, &it);

@@ -85,7 +85,8 @@ void draw_set_smoothing (int on);
 /* One pixel a pixel, bottom left at (x, y). */
 void draw_sprite_at (const void *area, const void *sprite, int x, int y);
 void draw_sprite_masked (const void *area, const void *sprite, int x, int y);   /* using its mask */
-void draw_circle (int cx, int cy, int r, unsigned rgb);                          /* an outline */
+void draw_circle (int cx, int cy, int r, unsigned rgb);
+void draw_line (int x0, int y0, int x1, int y1, unsigned rgb);                          /* an outline */
 /* A sprite's pixels changed, or it is about to be freed. */
 void draw_forget (const void *sprite);
 
@@ -161,6 +162,8 @@ void viewer_mode_changed (void);
 int viewer_proxy_size (int *w, int *h);
 const recipe *viewer_recipe (void);
 int viewer_shown_size (int *w, int *h);   /* after geometry */
+void viewer_button_centre (int k, int *x, int *y);   /* tests */
+int viewer_curve_rect (int r[4]);                     /* tests */
 cat_id viewer_item (void);             /* the photo shown, 0 if closed */
 void viewer_reload (cat_id version);   /* its recipe changed from outside */
 void viewer_apply_look (const char *look);

@@ -43,11 +43,19 @@ typedef struct
 extern const recipe_param recipe_params[P_COUNT];
 
 /* The panel's groups, in order: name and first/last parameter. */
-typedef struct { const char *name; int first, last; int panel; } recipe_group;
+typedef struct { const char *name; int first, last; int panel; int curves; } recipe_group;
 extern const recipe_group recipe_groups[];
 extern const int recipe_ngroups;
 
-typedef struct { float v[P_COUNT]; } recipe;
+/* Curves: for RGB together and for red, green and blue, up to
+   CURVE_POINTS points (x, y in 0..1, sorted by x, the first and last
+   are the ends). No points: a straight line. Text form, one line:
+     curves rgb=0.000:0.000,0.250:0.180,1.000:1.000 red=...  */
+#define CURVE_POINTS 10
+enum { CURVE_RGB, CURVE_RED, CURVE_GREEN, CURVE_BLUE, CURVE_COUNT };
+typedef struct { int n; float x[CURVE_POINTS], y[CURVE_POINTS]; } recipe_curve;
+
+typedef struct { float v[P_COUNT]; recipe_curve curve[CURVE_COUNT]; } recipe;
 
 void recipe_default (recipe *r);
 int recipe_is_default (const recipe *r);
@@ -66,6 +74,17 @@ int recipe_geometry_is_default (const recipe *r);
 /* The tone and colour adjustments of src into dst, keeping dst's geometry
    (presets and pasting carry looks, not crops). */
 void recipe_copy_look (recipe *dst, const recipe *src);
+/* A curve with no effect (no points, or points on the diagonal)? */
+int recipe_curve_is_identity (const recipe_curve *c);
+/* The curve's value at x (monotone cubic through the points). */
+double recipe_curve_eval (const recipe_curve *c, double x);
+/* 0..1 in, 0..1 out, n entries (n >= 2), for develop's tables. */
+void recipe_curve_table (const recipe_curve *c, float *out, int n);
+/* Adds a point at x (on the curve), keeping the order; its index, or -1. */
+int recipe_curve_add (recipe_curve *c, float x);
+void recipe_curve_remove (recipe_curve *c, int i);
+/* Moves point i, kept between its neighbours. */
+void recipe_curve_move (recipe_curve *c, int i, float x, float y);
 /* Formats only the look (no geometry lines): what a preset stores. */
 int recipe_format_look (const recipe *r, char *out, size_t n);
 

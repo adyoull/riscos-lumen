@@ -282,6 +282,13 @@ void draw_sprite_masked (const void *area, const void *sprite, int x, int y)
   _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, x, y, plot_flags | 8, 0, table);
 }
 
+void draw_line (int x0, int y0, int x1, int y1, unsigned rgb)
+{
+  gcol (rgb);
+  _swix (OS_Plot, _INR (0, 2), 4, x0, y0);
+  _swix (OS_Plot, _INR (0, 2), 5, x1, y1);
+}
+
 void draw_circle (int cx, int cy, int r, unsigned rgb)
 {
   /* OS_Plot 4 (move) to the centre, then 149: circle outline through a point. */

@@ -481,7 +481,7 @@ int cat_apply_look (cat *c, const cat_id *versions, int n, const char *look)
   exec (c, "SAVEPOINT look");
   for (i = 0; i < n && rc == 0; i++)
     {
-      char text[1024];
+      char text[2048];
       if (cat_get_recipe (c, versions[i], text, sizeof text))
         continue;
       recipe_parse (&to, text);

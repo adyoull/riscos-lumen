@@ -80,7 +80,7 @@ int cat_set_thumb (cat *c, cat_id version, int state);
 int cat_count_thumbs_pending (cat *c);
 
 /* Presets: named looks (recipes without geometry), for the whole library. */
-typedef struct { cat_id id; char name[48]; char recipe[1024]; } cat_preset;
+typedef struct { cat_id id; char name[48]; char recipe[2048]; } cat_preset;
 /* Saves (or replaces, by name) a preset. Its id, or -1. */
 cat_id cat_preset_save (cat *c, const char *name, const char *look);
 int cat_presets (cat *c, cat_preset **out, int *count);   /* sorted by name; free it */

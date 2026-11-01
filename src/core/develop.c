@@ -51,6 +51,18 @@ static double clamp01 (double v)
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+static float (*curve_tab)[1024];
+static int curve_has[CURVE_COUNT];
+
+static double curve_at (int c, double p)
+{
+  double f = p * 1023;
+  int i = (int) f;
+  if (i >= 1023)
+    return curve_tab[c][1023];
+  return curve_tab[c][i] + (curve_tab[c][i + 1] - curve_tab[c][i]) * (f - i);
+}
+
 void develop_prepare (develop *d, const recipe *r)
 {
   double t = r->v[P_TEMP] / 100.0, n = r->v[P_TINT] / 100.0;
@@ -72,6 +84,18 @@ void develop_prepare (develop *d, const recipe *r)
   }
   if (white - black < 0.05)
     white = black + 0.05;
+  /* Curves, on the value as seen (after levels and contrast): RGB, then
+     the channel's own. Tables of 1024 steps, read with interpolation. */
+  {
+    static float ct[CURVE_COUNT][1024];
+    int has[CURVE_COUNT];
+    for (c = 0; c < CURVE_COUNT; c++)
+      if ((has[c] = !recipe_curve_is_identity (&r->curve[c])))
+        recipe_curve_table (&r->curve[c], ct[c], 1024);
+    curve_tab = ct;
+    for (c = 0; c < CURVE_COUNT; c++)
+      curve_has[c] = has[c];
+  }
   for (c = 0; c < 3; c++)
     for (i = 0; i < DEV_LUT_SIZE; i++)
       {
@@ -90,6 +114,10 @@ void develop_prepare (develop *d, const recipe *r)
             double s = p * p * (3 - 2 * p);
             p = clamp01 (p + k * (s - p));
           }
+        if (curve_has[CURVE_RGB])
+          p = curve_at (CURVE_RGB, p);
+        if (curve_has[CURVE_RED + c])
+          p = curve_at (CURVE_RED + c, p);
         d->tone[c][i] = (uint16_t) lround (srgb_decode (p) * 65535);
       }
   d->sat = (int) lround (65536 * (1 + r->v[P_SATURATION] / 100.0));

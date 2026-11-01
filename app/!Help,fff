@@ -1,4 +1,4 @@
-Lumen 0.0.11 (01 Nov 2026) - test build
+Lumen 0.0.12 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -70,6 +70,13 @@ The tools above the sliders:
 Click a group's name (or its triangle) to fold it away or open it again.
 If the window is too short for everything, Lumen folds the groups you
 haven't touched, from the bottom.
+
+Curves: choose RGB (all three together) or Red, Green or Blue above the
+graph. Click on the curve to add a point and drag it; drag a point to
+move it; Adjust-click a point to remove it. The ends can be moved too
+(up from the bottom left lifts the blacks, down from the top right dims
+the whites). The faint shape behind is the photo's histogram for that
+channel. Up to 10 points a curve; "Reset" straightens all four.
 
 Sharpen: Amount (0 to 200) and Radius (in pixels of the full-size
 photo). It sharpens brightness only, so edges get crisper without

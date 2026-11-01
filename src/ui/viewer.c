@@ -70,7 +70,7 @@
 #define COL_CROP 0xFFFFFF00u
 
 enum { V_CLOSED, V_LOADING, V_READY, V_FAILED };
-enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE, HIT_GROUP };
+enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE, HIT_GROUP, HIT_CURVE, HIT_CURVE_TAB };
 enum { TOOL_AUTO, TOOL_CROP, TOOL_GRID, TOOL_PRESETS, TOOL_COUNT };
 enum { LINK_RESET, LINK_PICK, LINK_AUTO_WB, LINK_LEFT, LINK_RIGHT };
 /* Crop drags: which edges move (or all of it). */
@@ -123,6 +123,7 @@ static uint16_t *zlin;
 static int pan_dx, pan_dy;             /* while dragging the view: how far, in OS units */
 static int pan_start_x, pan_start_y;
 #define DRAG_PAN (-3)
+#define DRAG_CURVE (-4)
 
 /* The loupe: a round magnifier that follows the pointer over the photo,
    showing the full-size original there at 100%, 200% or 400%. */
@@ -265,13 +266,28 @@ static int group_rows (int g)
   return n;
 }
 
+/* The curves editor: channel buttons, then the graph. */
+#define CURVE_SEL_H 72
+#define CURVE_BOX_H 360
+static int curve_ch, curve_drag = -1;
+
+/* The height under a group's header. */
+static int group_body (int g)
+{
+  if (g < MAX_GROUPS && folded[g])
+    return 0;
+  if (recipe_groups[g].curves)
+    return CURVE_SEL_H + CURVE_BOX_H;
+  return ROW_H * group_rows (g);
+}
+
 /* The top of group g's header, and of parameter p's row (0 if it has none). */
 static int group_top (int g)
 {
   int y = groups_top (), k;
   for (k = 0; k < g; k++)
     if (group_shown (k))
-      y -= GROUP_H + ROW_H * group_rows (k) + 8;
+      y -= GROUP_H + group_body (k) + 8;
   return y;
 }
 
@@ -301,10 +317,49 @@ static int buttons_top (void)
 static int group_changed (int g)
 {
   int p;
+  if (recipe_groups[g].curves)
+    {
+      for (p = 0; p < CURVE_COUNT; p++)
+        if (!recipe_curve_is_identity (&current.curve[p]))
+          return 1;
+      return 0;
+    }
   for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
     if (current.v[p] != recipe_params[p].def)
       return 1;
   return 0;
+}
+
+static int curves_group (void)
+{
+  int g;
+  for (g = 0; g < recipe_ngroups; g++)
+    if (recipe_groups[g].curves)
+      return g;
+  return -1;
+}
+
+/* The graph's inner rectangle (work area), 0 if the group is folded. */
+static int curve_graph (int r[4])
+{
+  int g = curves_group (), top;
+  if (g < 0 || (g < MAX_GROUPS && folded[g]))
+    return 0;
+  top = group_top (g) - GROUP_H - CURVE_SEL_H;
+  r[0] = panel_x0 () + PAD + 10;
+  r[2] = vis_w - PAD - 10;
+  r[3] = top - 10;
+  r[1] = top - CURVE_BOX_H + 10;
+  return 1;
+}
+
+static void curve_tab_rect (int k, int r[4])
+{
+  int g = curves_group (), top = group_top (g) - GROUP_H, w = (PANEL_W - 2 * PAD - 3 * 12) / 4;
+  r[0] = panel_x0 () + PAD + k * (w + 12);
+  r[2] = r[0] + w;
+  r[3] = top - 6;
+  r[1] = top - CURVE_SEL_H + 12;
 }
 
 /* Folds groups (not ones set by hand) from the bottom until the panel fits. */
@@ -412,6 +467,20 @@ static int hit (int wx, int wy, int *what)
   int p, g, k, r[4];
   if (wx < panel_x0 ())
     return HIT_IMAGE;
+  if (curve_graph (r))
+    {
+      if (wx >= r[0] - 10 && wx <= r[2] + 10 && wy >= r[1] - 10 && wy <= r[3] + 10)
+        return HIT_CURVE;
+      for (k = 0; k < CURVE_COUNT; k++)
+        {
+          curve_tab_rect (k, r);
+          if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
+            {
+              *what = k;
+              return HIT_CURVE_TAB;
+            }
+        }
+    }
   for (p = 0; p < P_COUNT; p++)
     {
       int top = row_top (p);
@@ -1153,7 +1222,7 @@ static int proxy_ready (void)
 /* --- the photo */
 static void load_recipe (void)
 {
-  char text[1024];
+  char text[2048];
   cat_get_recipe (lib_cat (app_library ()), item.id, text, sizeof text);
   recipe_parse (&current, text);
   undo_stack[0] = current;
@@ -1222,6 +1291,7 @@ int viewer_busy (void)
 }
 
 static void crop_follow (double fx, double fy);
+static void curve_follow (int wx, int wy);
 
 /* Called on null events while busy. */
 void viewer_idle (void)
@@ -1238,7 +1308,9 @@ void viewer_idle (void)
         {
           drag_x = ptr[0];
           drag_y = ptr[1];
-          if (dragging == DRAG_PAN)
+          if (dragging == DRAG_CURVE)
+            curve_follow (ptr[0] - b[1], ptr[1] - b[4]);
+          else if (dragging == DRAG_PAN)
             {
               pan_dx = ptr[0] - pan_start_x;
               pan_dy = ptr[1] - pan_start_y;
@@ -1303,7 +1375,7 @@ void viewer_idle (void)
 /* --- changes: saved at once, with undo */
 static void save (void)
 {
-  char text[1024];
+  char text[2048];
   recipe_format (&current, text, sizeof text);
   cat_set_recipe (lib_cat (app_library ()), item.id, text);
   lib_thumbs_changed (app_library ());
@@ -1381,7 +1453,7 @@ void viewer_reload (cat_id id)
   if (!is_open || id != item.id || crop_mode)
     return;
   {
-    char text[1024];
+    char text[2048];
     recipe r;
     cat_get_recipe (lib_cat (app_library ()), item.id, text, sizeof text);
     recipe_parse (&r, text);
@@ -1735,6 +1807,8 @@ static void link_click (int g, int id)
     case LINK_RESET:
       for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
         current.v[p] = recipe_params[p].def;
+      if (recipe_groups[g].curves)
+        memset (current.curve, 0, sizeof current.curve);
       if (recipe_groups[g].first == P_ROTATE && !crop_mode)
         for (p = P_CROP_X0; p <= P_CROP_Y1; p++)   /* the crop was of the turned picture */
           current.v[p] = recipe_params[p].def;
@@ -1758,6 +1832,78 @@ static void tool_click (int k, int b0, int b1)
     case TOOL_GRID: viewer_set_grid (grid_mode + 1); break;
     case TOOL_PRESETS: menus_open_presets_menu (b0, b1); break;
     }
+}
+
+static void force_curves (void)
+{
+  int r[4];
+  if (curve_graph (r))
+    force (r[0] - 12, r[1] - 12, r[2] + 12, r[3] + 12);
+}
+
+/* Select: drag the point there, or add one; Adjust: remove the point. */
+static void curve_click (int *b, const int *st, int wx, int wy)
+{
+  int r[4], i, best = -1;
+  double fx, fy, bd = 1e9;
+  recipe_curve *cv = &current.curve[curve_ch];
+  if (!curve_graph (r) || !src)
+    return;
+  fx = (double) (wx - r[0]) / (r[2] - r[0]);
+  fy = (double) (wy - r[1]) / (r[3] - r[1]);
+  fx = fx < 0 ? 0 : fx > 1 ? 1 : fx;
+  fy = fy < 0 ? 0 : fy > 1 ? 1 : fy;
+  for (i = 0; i < cv->n; i++)
+    {
+      double dx = (cv->x[i] - fx) * (r[2] - r[0]), dy = (cv->y[i] - fy) * (r[3] - r[1]);
+      double d2 = dx * dx + dy * dy;
+      if (d2 < bd)
+        {
+          bd = d2;
+          best = i;
+        }
+    }
+  if (best >= 0 && bd > 24 * 24)
+    best = -1;
+  if (b[2] == Button_Adjust)
+    {
+      if (best > 0 && best < cv->n - 1)
+        {
+          recipe_curve_remove (cv, best);
+          if (recipe_curve_is_identity (cv))
+            cv->n = 0;
+          commit ();
+          refresh (1);
+          force_curves ();
+        }
+      return;
+    }
+  if (b[2] != Button_Select)
+    return;
+  if (best < 0)
+    {
+      best = recipe_curve_add (cv, (float) fx);
+      if (best < 0)
+        return;
+    }
+  before = 0;
+  recipe_curve_move (cv, best, (float) fx, (float) fy);
+  curve_drag = best;
+  refresh (0);
+  force_curves ();
+  force_hist ();
+  start_drag (b[0], b[1], st[1] + r[0], st[4] + r[1], st[1] + r[2], st[4] + r[3], DRAG_CURVE);
+}
+
+static void curve_follow (int wx, int wy)
+{
+  int r[4];
+  if (!curve_graph (r) || curve_drag < 0)
+    return;
+  recipe_curve_move (&current.curve[curve_ch], curve_drag, (float) (wx - r[0]) / (r[2] - r[0]),
+                     (float) (wy - r[1]) / (r[3] - r[1]));
+  refresh (0);
+  force_curves ();
 }
 
 void viewer_click (int *b)
@@ -1844,6 +1990,13 @@ void viewer_click (int *b)
           start_drag (b[0], b[1], st[1] + r[0], st[4] + r[1], st[1] + r[2], st[4] + r[3], DRAG_CROP);
         }
     }
+  else if (h == HIT_CURVE_TAB && b[2] == Button_Select)
+    {
+      curve_ch = what;
+      force_panel ();
+    }
+  else if (h == HIT_CURVE)
+    curve_click (b, st, wx, wy);
   else if (h == HIT_LINK && b[2] == Button_Select)
     link_click (what / 8, what % 8);
   else if (h == HIT_GROUP && what < MAX_GROUPS && (b[2] == Button_Select || b[2] == Button_Adjust))
@@ -1869,6 +2022,16 @@ void viewer_drag_end (void)
   if (dragging == -1)
     return;
   dragging = -1;
+  if (p == DRAG_CURVE)
+    {
+      curve_drag = -1;
+      if (recipe_curve_is_identity (&current.curve[curve_ch]))
+        current.curve[curve_ch].n = 0;
+      commit ();
+      force_curves ();
+      restart_full ();
+      return;
+    }
   if (p == DRAG_PAN)
     {
       /* Moving the pointer right shows what was to the left. */
@@ -2159,6 +2322,85 @@ static void draw_histogram (int x0, int y0, int x1, int y1)
     }
 }
 
+static const unsigned curve_col[CURVE_COUNT] = { 0xEEEEEE00u, 0x5050E000u, 0x50C85000u, 0xF0805000u };
+
+static void draw_curves (int ox, int oy)
+{
+  static const char *const names[CURVE_COUNT] = { "RGB", "Red", "Green", "Blue" };
+  int r[4], k, c, x, gw, gh, step = 2 << draw_xeig ();
+  unsigned peak = 1;
+  for (k = 0; k < CURVE_COUNT; k++)
+    {
+      int t[4];
+      curve_tab_rect (k, t);
+      draw_button_rect (t, names[k], 1, k == curve_ch, ox, oy);
+    }
+  if (!curve_graph (r))
+    return;
+  r[0] += ox; r[2] += ox; r[1] += oy; r[3] += oy;
+  gw = r[2] - r[0];
+  gh = r[3] - r[1];
+  draw_rect (r[0] - 10, r[1] - 10, r[2] + 10, r[3] + 10, COL_FRAME);
+  draw_rect (r[0] - 8, r[1] - 8, r[2] + 8, r[3] + 8, COL_HIST_BG);
+  /* The channel's histogram, faint, behind. */
+  {
+    int ch = curve_ch == CURVE_RGB ? HIST_LUM : curve_ch - 1, b;
+    for (b = 2; b < DEV_HIST_BINS - 2; b++)
+      if (hist.c[ch][b] > peak)
+        peak = hist.c[ch][b];
+    for (x = 0; x < gw; x += step)
+      {
+        int b0 = x * DEV_HIST_BINS / gw, b1 = (x + step) * DEV_HIST_BINS / gw;
+        unsigned v = 0;
+        for (b = b0; b < b1 && b < DEV_HIST_BINS; b++)
+          v = hist.c[ch][b] > v ? hist.c[ch][b] : v;
+        if (v > peak)
+          v = peak;
+        if (v)
+          draw_rect (r[0] + x, r[1], r[0] + x + step - 1, r[1] + (int) ((unsigned long long) v * (unsigned) gh / peak), 0x34343400u);
+      }
+  }
+  for (k = 1; k < 4; k++)
+    {
+      draw_rect (r[0] + gw * k / 4, r[1], r[0] + gw * k / 4 + 1, r[3], COL_HIST_GUIDE);
+      draw_rect (r[0], r[1] + gh * k / 4, r[2], r[1] + gh * k / 4 + 1, COL_HIST_GUIDE);
+    }
+  draw_line (r[0], r[1], r[2], r[3], 0x50505000u);
+  /* Every curve that does something, the chosen one last and brightest. */
+  for (k = 0; k <= CURVE_COUNT; k++)
+    {
+      int prevx = r[0], prevy = 0, first = 1;
+      const recipe_curve *cv;
+      c = k < CURVE_COUNT ? k : curve_ch;
+      if ((k < CURVE_COUNT && c == curve_ch) || (k < CURVE_COUNT && recipe_curve_is_identity (&current.curve[c])))
+        continue;
+      cv = &current.curve[c];
+      for (x = 0; x <= gw; x += step)
+        {
+          int y = r[1] + (int) lround (recipe_curve_eval (cv, (double) x / gw) * gh);
+          if (!first)
+            {
+              draw_line (prevx, prevy, r[0] + x, y, k < CURVE_COUNT ? (curve_col[c] >> 1) & 0x7F7F7F00u : curve_col[c]);
+              if (k == CURVE_COUNT)
+                draw_line (prevx, prevy + 2, r[0] + x, y + 2, curve_col[c]);
+            }
+          prevx = r[0] + x;
+          prevy = y;
+          first = 0;
+        }
+      if (k == CURVE_COUNT)
+        {
+          int i;
+          for (i = 0; i < cv->n; i++)
+            {
+              int px = r[0] + (int) lround (cv->x[i] * gw), py = r[1] + (int) lround (cv->y[i] * gh);
+              draw_rect (px - 8, py - 8, px + 8, py + 8, COL_FRAME);
+              draw_rect (px - 6, py - 6, px + 6, py + 6, i == curve_drag ? COL_ACCENT : COL_KNOB);
+            }
+        }
+    }
+}
+
 static void draw_panel (int ox, int oy)
 {
   int px = ox + panel_x0 (), g, k;
@@ -2201,9 +2443,7 @@ static void draw_panel (int ox, int oy)
       const char *names[3];
       if (!group_shown (g))
         continue;
-      for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
-        if (current.v[p] != recipe_params[p].def)
-          changed = 1;
+      changed = group_changed (g);
       if (recipe_groups[g].first == P_ROTATE && !crop_mode)
         for (p = P_CROP_X0; p <= P_CROP_Y1; p++)   /* its Reset takes the crop away too */
           if (current.v[p] != recipe_params[p].def)
@@ -2227,6 +2467,8 @@ static void draw_panel (int ox, int oy)
             }
           draw_text (ox + x0, top - 36, names[k], src ? col : COL_STAR_OFF, COL_PANEL);
         }
+      if (recipe_groups[g].curves && !(g < MAX_GROUPS && folded[g]))
+        draw_curves (ox, oy);
       if (!(g < MAX_GROUPS && folded[g]))
         for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
           if (!recipe_params[p].hidden)
@@ -2362,6 +2604,18 @@ int viewer_proxy_size (int *w, int *h)
   *w = sw;
   *h = sh;
   return src != NULL;
+}
+
+/* For the tests: the curves graph (work area), 0 if folded. */
+int viewer_curve_rect (int r[4]) { return curve_graph (r); }
+
+/* For the tests: the middle of a bottom button (0 Undo, 1 Redo, 2 Reset all), work area. */
+void viewer_button_centre (int k, int *x, int *y)
+{
+  int r[4];
+  button_rect (k, r);
+  *x = (r[0] + r[2]) / 2;
+  *y = (r[1] + r[3]) / 2;
 }
 
 int viewer_shown_size (int *w, int *h)

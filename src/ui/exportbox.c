@@ -321,7 +321,7 @@ void exports_idle (unsigned deadline)
       if (!cur)
         {
           cat_details d;
-          char text[1024], err[200];
+          char text[2048], err[200];
           recipe rc;
           if (ijob >= njobs)
             {

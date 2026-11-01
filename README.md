@@ -141,7 +141,19 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
   catalogue ø:") and fixed there.
 - !Run: the nested If ... Else could leave Lumen$Library unset; now two
   plain lines (Choices, else beside !Lumen).
-- Still to come in milestone 1: the loupe, a curves editor, several
+
+## 0.0.12
+
+- Loupe (`): a round, masked 300-pixel magnifier over the photo showing
+  the full-size original at 100/200/400% (Adjust), pinnable (Select),
+  with a bezel; it follows the sliders.
+- Curves: RGB, red, green and blue, up to 10 points each, monotone cubic
+  (Fritsch-Carlson, no overshoot), applied in develop's per-channel tables
+  on the value as seen (after levels and contrast), RGB first. Text form
+  `curves rgb=0.000:0.000,0.500:0.700,1.000:1.000 red=...`; part of a look
+  (presets, copy/paste). The editor: channel buttons, the graph with the
+  channel's histogram behind, add/drag/Adjust-remove points.
+- Still to come in milestone 1: versions, a curves editor, several
   versions of one original, full-resolution rendering.
 
 ## Layout

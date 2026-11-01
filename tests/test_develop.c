@@ -882,7 +882,73 @@ static void test_sharpen (void)
   CHECK (flat, "flat areas away from the edge unchanged");
   CHECK ((px[5 * 40 + 19] & 255) == (px[5 * 40 + 19] >> 8 & 255) && (px[5 * 40 + 19] & 255) == (px[5 * 40 + 19] >> 16 & 255),
          "grey stays grey (luminance only)");
-  CHECK (sharpen_margin (1.0) == 3 && sharpen_sigma (NULL == NULL ? &(recipe) { { 0 } } : NULL, 0.1) >= 0.35, "margin, and the smallest sigma");
+  {
+    recipe z;
+    recipe_default (&z);
+    CHECK (sharpen_margin (1.0) == 3 && sharpen_sigma (&z, 0.1) >= 0.35, "margin, and the smallest sigma");
+  }
+}
+
+static void test_curves (void)
+{
+  recipe r, back;
+  recipe_curve *c;
+  char text[2048];
+  int i, mono = 1;
+  static develop d;
+  uint16_t in[9];
+  uint32_t px[3];
+  recipe_default (&r);
+  c = &r.curve[CURVE_RGB];
+  CHECK (recipe_curve_is_identity (c) && fabs (recipe_curve_eval (c, 0.3) - 0.3) < 1e-9, "no points: a straight line");
+  i = recipe_curve_add (c, 0.5f);
+  CHECK (i == 1 && c->n == 3 && fabsf (c->y[1] - 0.5f) < 1e-6f, "a point added on the line, between the ends");
+  recipe_curve_move (c, 1, 0.5f, 0.7f);
+  CHECK (fabs (recipe_curve_eval (c, 0.5) - 0.7) < 1e-6 && recipe_curve_eval (c, 0) == 0 && recipe_curve_eval (c, 1) == 1,
+         "through its points; the ends stay");
+  recipe_curve_add (c, 0.8f);
+  recipe_curve_move (c, 2, 0.8f, 0.72f);
+  for (i = 1; i <= 100; i++)
+    if (recipe_curve_eval (c, i / 100.0) < recipe_curve_eval (c, (i - 1) / 100.0) - 1e-9)
+      mono = 0;
+  CHECK (mono, "rising points: the curve never turns back (no overshoot)");
+  recipe_curve_move (c, 1, 0.95f, 0.7f);
+  CHECK (c->x[1] < c->x[2], "a point can't pass its neighbour");
+  recipe_curve_move (c, 1, 0.5f, 0.7f);
+  CHECK (recipe_curve_add (c, 0.51f) == -1, "not on top of another point");
+  recipe_curve_remove (c, 0);
+  CHECK (c->n == 4, "the ends can't be removed");
+  recipe_curve_remove (c, 2);
+  CHECK (c->n == 3, "a middle point can");
+  r.curve[CURVE_RED].n = 2;
+  r.curve[CURVE_RED].x[0] = 0; r.curve[CURVE_RED].y[0] = 0.1f;
+  r.curve[CURVE_RED].x[1] = 1; r.curve[CURVE_RED].y[1] = 0.9f;
+  CHECK (recipe_format (&r, text, sizeof text) > 0 && strstr (text, "curves rgb=0.000:0.000,0.500:0.700,1.000:1.000 red=0.000:0.100,1.000:0.900\n") != NULL,
+         "text form: one curves line");
+  recipe_parse (&back, text);
+  CHECK (recipe_equal (&r, &back), "and back again");
+  CHECK (!recipe_is_default (&r), "a curve is an edit");
+  recipe_parse (&back, "curves rgb=0.5:0.5,0.2:0.9 green=bad\n");
+  CHECK (recipe_curve_is_identity (&back.curve[CURVE_RGB]) && back.curve[CURVE_GREEN].n == 0, "nonsense ignored");
+  /* Develop: mid grey brighter, black and white kept; the red curve only touches red. */
+  recipe_default (&back);
+  back.curve[CURVE_RGB] = r.curve[CURVE_RGB];
+  develop_prepare (&d, &back);
+  in[0] = in[1] = in[2] = 0;
+  in[3] = in[4] = in[5] = 13996;             /* about sRGB 128 */
+  in[6] = in[7] = in[8] = 65535;
+  develop_rows (&d, in, 3, 0, 1, px, NULL);
+  CHECK ((px[0] & 255) == 0 && (px[2] & 255) == 255 && (px[1] & 255) > 160, "RGB curve: the middle up, the ends kept");
+  recipe_default (&back);
+  back.curve[CURVE_RED] = r.curve[CURVE_RED];
+  develop_prepare (&d, &back);
+  develop_rows (&d, in, 3, 0, 1, px, NULL);
+  CHECK ((px[0] & 255) > 20 && (px[0] >> 8 & 255) == 0 && (px[2] & 255) < 235 && (px[2] >> 16 & 255) == 255,
+         "red curve: red lifted and lowered at the ends, green and blue untouched");
+  /* A look carries curves. */
+  recipe_default (&back);
+  recipe_copy_look (&back, &r);
+  CHECK (recipe_equal (&back, &r), "copy_look takes the curves");
 }
 
 int main (int argc, char **argv)
@@ -897,6 +963,7 @@ int main (int argc, char **argv)
   test_geometry ();
   test_resample ();
   test_sharpen ();
+  test_curves ();
   test_develop_image ();
   test_auto ();
   test_presets (argv[1]);
