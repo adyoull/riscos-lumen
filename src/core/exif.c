@@ -168,6 +168,65 @@ int img_probe (const unsigned char *buf, size_t len)
   return IMG_UNKNOWN;
 }
 
+int img_has_raw_extension (const char *name)
+{
+  static const char *const ext[] = { "nef", "nrw", "arw", "srf", "sr2", "dng", "pef", "raf", "orf", "rw2", "rwl",
+                                     "cr2", "cr3", "crw", "srw", "3fr", "erf", "kdc", "dcr", "mos", "mrw", "x3f",
+                                     "iiq", "mef", "raw", "gpr" };
+  const char *dot = NULL, *p;
+  size_t k;
+  if (!name)
+    return 0;
+  for (p = name; *p; p++)
+    if (*p == '/' || *p == '.')
+      dot = p;                         /* RISC OS's "/nef" or POSIX's ".nef" */
+  if (!dot || strlen (dot + 1) > 4)
+    return 0;
+  for (k = 0; k < sizeof ext / sizeof ext[0]; k++)
+    {
+      const char *a = dot + 1, *b = ext[k];
+      while (*a && *b && (*a | 0x20) == *b)
+        a++, b++;
+      if (!*a && !*b)
+        return 1;
+    }
+  return 0;
+}
+
+int img_probe_named (const unsigned char *buf, size_t len, const char *name)
+{
+  int t = img_probe (buf, len);
+  int tiff = len >= 4 && ((buf[0] == 'I' && buf[1] == 'I' && buf[2] == 42 && buf[3] == 0)
+                          || (buf[0] == 'M' && buf[1] == 'M' && buf[2] == 0 && buf[3] == 42));
+  if (t != IMG_UNKNOWN)
+    return t;
+  if (len >= 10 && tiff && buf[8] == 'C' && buf[9] == 'R')
+    return IMG_RAW;                                  /* Canon CR2 */
+  if (len >= 12 && memcmp (buf + 4, "ftypcrx ", 8) == 0)
+    return IMG_RAW;                                  /* Canon CR3 */
+  if (len >= 15 && memcmp (buf, "FUJIFILMCCD-RAW", 15) == 0)
+    return IMG_RAW;                                  /* Fuji RAF */
+  if (len >= 4 && (memcmp (buf, "IIRO", 4) == 0 || memcmp (buf, "IIRS", 4) == 0 || memcmp (buf, "MMOR", 4) == 0))
+    return IMG_RAW;                                  /* Olympus ORF */
+  if (len >= 4 && memcmp (buf, "IIU\0", 4) == 0)
+    return IMG_RAW;                                  /* Panasonic RW2 */
+  if ((tiff || (len >= 4 && buf[0] == 'F' && buf[1] == 'O' && buf[2] == 'V')) && img_has_raw_extension (name))
+    return IMG_RAW;
+  return IMG_UNKNOWN;
+}
+
+int img_read_raw_info (const unsigned char *buf, size_t len, img_info *info)
+{
+  memset (info, 0, sizeof *info);
+  info->orientation = 1;
+  info->format = IMG_RAW;
+  if (len >= 8 && ((buf[0] == 'I' && buf[1] == 'I') || (buf[0] == 'M' && buf[1] == 'M')))
+    parse_exif (buf, len, 0, info);
+  info->orientation = 1;               /* the plug-in's word on it is better (makers differ) */
+  info->thumb_offset = info->thumb_length = 0;
+  return info->make[0] || info->taken[0] ? 0 : -1;
+}
+
 static int read_jpeg (const unsigned char *buf, size_t len, img_info *info)
 {
   size_t pos = 2;

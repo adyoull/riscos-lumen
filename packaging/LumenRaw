@@ -1,0 +1,22 @@
+# Spec for tools/riscpkg.py: the LibRaw plug-in, from LumenRaw-<ver>.zip.
+Package: LumenRaw
+Section: Graphics
+Priority: Optional
+Licence: Free
+Maintainer: Andrew Youll <adyoull@users.noreply.github.com>
+Standards-Version: 0.4.0
+Environment: arm32, vfpv3
+Depends: Lumen, SharedUnixLibrary (>= 1.16), ARMEABISupport
+Description: Camera raw files for Lumen (LibRaw)
+ Lets Lumen import, show, adjust and export camera raw files (Canon,
+ Nikon, Sony, Fujifilm, Olympus, Panasonic, Pentax, DNG and many more)
+ with LibRaw 0.21.4: the camera's own preview for thumbnails, developed
+ with its white balance and colour for the viewer and exports. It goes
+ into Lumen's Plugins directory; Lumen finds it the next time it starts.
+Build-Map: !Lumen/Plugins/LibRaw -> Apps/Graphics/!Lumen/Plugins/LibRaw
+Build-Notice: The LibRaw plug-in for Lumen, packaged for PackMan from its
+ release zip.
+ .
+ LumenRaw is copyright (C) 2026 Andrew Youll. LibRaw is copyright LibRaw
+ LLC and used under the GNU LGPL 2.1, which follows.
+Build-Copyright: !Lumen/Plugins/LibRaw/Licence

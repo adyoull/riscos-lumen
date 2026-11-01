@@ -13,6 +13,8 @@
 #include <sys/stat.h>
 #include "fake.h"
 #include "swis.h"
+#include "fsys.h"
+#include "rawjob.h"
 #include "ui.h"
 
 #define BROWSER 0x2a000
@@ -21,6 +23,7 @@
 #define EXPORTW 0x2d000
 #define MAINW 0x2e000
 #define INSP 0x2f000
+#define PLUGW 0x30000
 #define FILER 0x9000
 #define TASK 0x1234
 
@@ -44,6 +47,7 @@ static int sent_reason, sent_block[64], sent_to;
 static const int *menu_open;
 static char reported[256], asked[256], asked_button[32];
 static int answer = 2;            /* Cancel */
+static int plugw_opens;
 static int scroll_y;
 static int closedown;
 static int processed_key;
@@ -100,6 +104,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         }
       else if (nwindows == 5)
         r[0] = INSP;
+      else if (nwindows == 6)
+        r[0] = PLUGW;
       else
         r[0] = INFO;
       return NULL;
@@ -120,6 +126,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         }
       else if (b[0] == INSP)
         memcpy (iopened, b, sizeof iopened);
+      else if (b[0] == PLUGW)
+        plugw_opens++;
       else if (b[0] == BROWSER)
         {
           memcpy (opened, b, sizeof opened);
@@ -133,8 +141,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         }
       return NULL;
     case Wimp_GetWindowState:
-      CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP,
-             "window state: one of ours");
+      CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP
+             || b[0] == PLUGW, "window state: one of ours");
       if (b[0] == EXPORTW)
         {
           b[1] = 600; b[2] = 400; b[3] = 1320; b[4] = 860; b[5] = 0; b[6] = 0;
@@ -400,10 +408,32 @@ int main (int argc, char **argv)
     }
   snprintf (lib, sizeof lib, "%s/Library", work);
 
+  /* Lumen's directory, with the LibRaw plug-in as PackMan installs it. */
+  {
+    char d[760], f[800];
+    FILE *fp;
+    snprintf (d, sizeof d, "%s/App", work);
+    setenv ("Lumen$Dir", d, 1);
+    snprintf (d, sizeof d, "%s/App/Plugins/LibRaw", work);
+    fsys_mkdirs (d);
+    snprintf (f, sizeof f, "%s/Plugin,fff", d);
+    if ((fp = fopen (f, "w")))
+      {
+        fputs ("Name: Camera raw (LibRaw)\nVersion: 1.0\nKind: raw\nProgram: LumenRaw\nPackage: LumenRaw\n", fp);
+        fclose (fp);
+      }
+    snprintf (f, sizeof f, "%s/LumenRaw,ff8", d);
+    if ((fp = fopen (f, "w")))
+      fclose (fp);
+    snprintf (d, sizeof d, "%s/PluginChoices", work);
+    setenv ("Lumen$PluginChoices", d, 1);
+    snprintf (d, sizeof d, "%s/Scratch", work);
+    setenv ("Lumen$Scratch", d, 1);
+  }
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 6, "the browser, viewer, Export, main, inspector and Info windows");
+  CHECK (nwindows == 7, "the browser, viewer, Export, main, inspector, Add plug-in and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
   CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
@@ -482,9 +512,10 @@ int main (int argc, char **argv)
   /* The window menu. */
   click (5, -5, Button_Menu);
   CHECK (menu_open && strncmp ((const char *) menu_open, "Lumen", 5) == 0, "Menu: the Lumen menu");
-  CHECK (strcmp (item_text (menu_open, 0), "Show") == 0 && strcmp (item_text (menu_open, 4), "Quit") == 0,
-         "Show ... Quit");
-  CHECK ((item (menu_open, 4)[0] & 0x80) != 0, "Quit is the last item");
+  CHECK (strcmp (item_text (menu_open, 0), "Show") == 0 && strcmp (item_text (menu_open, 4), "Plug-ins") == 0
+         && strcmp (item_text (menu_open, 5), "Quit") == 0, "Show ... Plug-ins, Quit");
+  CHECK ((item (menu_open, 5)[0] & 0x80) != 0, "Quit is the last item");
+  CHECK (strcmp (item_text (submenu (menu_open, 4), 0), "Camera raw (LibRaw) 1.0") == 0, "Plug-ins > the LibRaw plug-in");
   {
     const int *show = submenu (menu_open, 0), *proj = submenu (show, 4);
     CHECK (strcmp (item_text (show, 1), "Flagged") == 0, "Show > Flagged");
@@ -1280,13 +1311,90 @@ int main (int argc, char **argv)
     reported[0] = '\0';
   }
 
-  /* The icon bar menu: Quit. */
+  /* The icon bar menu: Plug-ins. */
+  {
+    const int *pm;
+    char d[760], f[800];
+    FILE *fp;
+    fsys_entry e;
+    memset (b, 0, sizeof b);
+    b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
+    app_event (Mouse_Click, b, 0);
+    CHECK (menu_open && strcmp (item_text (menu_open, 2), "Plug-ins") == 0 && strcmp (item_text (menu_open, 3), "Quit") == 0,
+           "icon bar menu: Info, Open library, Plug-ins, Quit");
+    pm = submenu (menu_open, 2);
+    CHECK (strcmp (item_text (pm, 0), "Camera raw (LibRaw) 1.0") == 0 && (item (pm, 0)[0] & 1),
+           "Plug-ins: LibRaw, ticked (on)");
+    CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0 && strcmp (item_text (pm, 2), "Remove") == 0
+           && (item (pm, 2)[0] & 0x80), "Plug-ins: Add plug-in..., Remove");
+    CHECK (rawjob_available (), "the raw plug-in is at work");
+    choose (2, 0, -1);
+    CHECK (!rawjob_available (), "switched off: raw files aren't read");
+    app_event (Mouse_Click, b, 0);
+    pm = submenu (menu_open, 2);
+    CHECK (!(item (pm, 0)[0] & 1), "Plug-ins: LibRaw not ticked");
+    choose (2, 0, -1);
+    CHECK (rawjob_available (), "switched back on");
+    /* Add plug-in...: the window to drop one on. */
+    choose (2, 1, -1);
+    CHECK (plugw_opens == 1, "Add plug-in... opens its window");
+    snprintf (d, sizeof d, "%s/Download/Extra", work);
+    fsys_mkdirs (d);
+    snprintf (f, sizeof f, "%s/Plugin", d);
+    if ((fp = fopen (f, "w")))
+      {
+        fputs ("Name: Extra\nVersion: 2\nKind: export\nProgram: Run\n", fp);
+        fclose (fp);
+      }
+    snprintf (f, sizeof f, "%s/Run", d);
+    if ((fp = fopen (f, "w")))
+      fclose (fp);
+    memset (b, 0, sizeof b);
+    b[0] = 256; b[1] = 0x5678; b[2] = 91; b[4] = 3;
+    b[5] = PLUGW; b[6] = -1; b[10] = 0x1000;
+    snprintf ((char *) &b[11], 200, "%s", d);
+    app_event (User_Message_Recorded, b, 0);
+    snprintf (f, sizeof f, "%s/App/Plugins/Extra/Run", work);
+    CHECK (fsys_stat (f, &e) == 0, "dropped on Add plug-in: copied into Plugins");
+    /* The same dropped on the main window: it is a plug-in, so it asks to replace it. */
+    answer = 2;
+    b[4] = 3;                          /* the acknowledgement changed the block */
+    b[5] = BROWSER;
+    app_event (User_Message_Recorded, b, 0);
+    CHECK (strstr (asked, "called Extra in Lumen already") != NULL && strcmp (asked_button, "Replace") == 0,
+           "dropped again: asks to replace it");
+    /* Not a plug-in, on the Add plug-in window. */
+    b[4] = 3;
+    b[5] = PLUGW;
+    snprintf ((char *) &b[11], 200, "%s/Holiday", work);
+    app_event (User_Message_Recorded, b, 0);
+    CHECK (strstr (reported, "isn't a Lumen plug-in") != NULL, "photos on the Add plug-in window: not a plug-in");
+    reported[0] = '\0';
+    memset (b, 0, sizeof b);
+    b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
+    app_event (Mouse_Click, b, 0);
+    pm = submenu (menu_open, 2);
+    CHECK (strcmp (item_text (pm, 0), "Camera raw (LibRaw) 1.0") == 0 && strcmp (item_text (pm, 1), "Extra 2") == 0
+           && strcmp (item_text (pm, 2), "Add plug-in...") == 0, "Plug-ins: both, by name");
+    CHECK (strcmp (item_text (submenu (pm, 3), 1), "Extra...") == 0, "Remove > Extra...");
+    /* Remove > LibRaw: Cancel keeps it; it mentions PackMan. */
+    answer = 2;
+    choose (2, 3, 0);
+    CHECK (strstr (asked, "LumenRaw) in PackMan") != NULL && rawjob_available (), "Remove LibRaw: mentions PackMan; Cancel keeps it");
+    answer = 3;
+    choose (2, 3, 1);
+    snprintf (f, sizeof f, "%s/App/Plugins/Extra", work);
+    CHECK (fsys_stat (f, &e) != 0, "Remove > Extra: deleted");
+    answer = 2;
+    app_event (Mouse_Click, b, 0);
+    pm = submenu (menu_open, 2);
+    CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0, "Plug-ins: LibRaw alone again");
+  }
   memset (b, 0, sizeof b);
   b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
   app_event (Mouse_Click, b, 0);
-  CHECK (menu_open && strcmp (item_text (menu_open, 2), "Quit") == 0, "icon bar menu: Info, Open library, Quit");
   CHECK (submenu (menu_open, 0) == (const int *) INFO, "Info opens the Info box");
-  CHECK (choose (2, -1, -1) == 1, "Quit from the icon bar menu quits");
+  CHECK (choose (3, -1, -1) == 1, "Quit from the icon bar menu quits");
   memset (b, 0, sizeof b);
   b[4] = 0;
   CHECK (app_event (User_Message, b, 0) == 1, "Message_Quit quits");

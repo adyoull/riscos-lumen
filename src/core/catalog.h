@@ -100,6 +100,9 @@ int cat_set_missing (cat *c, cat_id original, int missing);
 int cat_relink (cat *c, cat_id version, const char *path, long long mtime);
 int cat_count_missing (cat *c);        /* versions */
 int cat_tidy (cat *c);                 /* projects with no photos go */
+int cat_retry_failed_thumbs (cat *c);  /* failed thumbnails: to be made again */
+/* A raw file's details from the plug-in (size, orientation, camera...). */
+int cat_set_original_info (cat *c, cat_id version, const img_info *info);
 
 /* Takes versions out of the library: their album places, their originals'
    records when no other version uses them, and projects left empty. The

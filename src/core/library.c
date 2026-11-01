@@ -203,6 +203,12 @@ void lib_thumb_path (library *l, cat_id v, char *out, size_t n)
   fsys_join (out, n, dir, leaf);
 }
 
+void lib_retry_failed_thumbs (library *l)
+{
+  cat_retry_failed_thumbs (l->db);
+  l->thumbs_pending = -1;
+}
+
 int lib_remove (library *l, const cat_id *v, int n)
 {
   int i;
@@ -249,9 +255,12 @@ static unsigned long long fnv (unsigned long long h, const unsigned char *p, siz
   return h;
 }
 
-static int likely_image_type (int ft)
+/* Raw files come typed every way (DOS from a card, Text, Data, TIFF or
+   nothing), so their extension lets any type through to the probe. */
+static int likely_image_type (int ft, const char *path)
 {
-  return ft == FT_JPEG || ft == FT_PNG || ft == FT_NONE || ft == FT_DATA;
+  return ft == FT_JPEG || ft == FT_PNG || ft == FT_NONE || ft == FT_DATA || ft == FT_TIFF
+         || img_has_raw_extension (path);
 }
 
 /* Imports one file. Unreadable or non-image files are skipped quietly
@@ -264,7 +273,7 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   cat_original o;
   cat_id existing, v;
   unsigned long long h = 14695981039346656037ULL;
-  if (!likely_image_type (e->filetype))
+  if (!likely_image_type (e->filetype, path))
     return;
   f = fopen (path, "rb");
   if (!f)
@@ -274,7 +283,7 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       return;
     }
   got = fread (l->head, 1, HEAD_BYTES, f);
-  if (img_probe (l->head, got) == IMG_UNKNOWN)
+  if (img_probe_named (l->head, got, path) == IMG_UNKNOWN)
     {
       if (e->filetype == FT_JPEG || e->filetype == FT_PNG)
         {
@@ -285,7 +294,9 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       return;
     }
   l->found++;
-  if (img_read_info (l->head, got, &info))
+  if (img_probe_named (l->head, got, path) == IMG_RAW)
+    img_read_raw_info (l->head, got, &info);   /* the rest comes from the plug-in with the thumbnail */
+  else if (img_read_info (l->head, got, &info))
     {
       snprintf (l->err, sizeof l->err, "%s: can't read its size", fsys_leaf (path));
       l->skipped++;
@@ -308,7 +319,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   o.size = e->size;
   o.mtime = e->mtime;
   o.hash = h;
-  o.filetype = e->filetype == FT_NONE ? (info.format == IMG_JPEG ? FT_JPEG : FT_PNG) : e->filetype;
+  o.filetype = e->filetype != FT_NONE ? e->filetype
+             : info.format == IMG_JPEG ? FT_JPEG : info.format == IMG_PNG ? FT_PNG : FT_DATA;
   o.batch = l->batch;
   o.info = &info;
   if (!l->project)
@@ -494,6 +506,12 @@ static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
         }
       free (d);
     }
+  {
+    /* A raw file: its size, orientation and camera, from the plug-in. */
+    img_info ri;
+    if (r > 0 && thumbgen_raw_details (l->tg, &ri))
+      cat_set_original_info (l->db, l->tg_version, &ri);
+  }
   cat_set_thumb (l->db, l->tg_version, r > 0 ? THUMB_READY : THUMB_FAILED);
   if (l->thumbs_pending > 0)
     l->thumbs_pending--;

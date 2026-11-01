@@ -12,6 +12,9 @@
 #include <kernel.h>
 #include <swis.h>
 #include "ui.h"
+#include "rawjob.h"
+#include "fsys.h"
+#include "plugins.h"
 
 static int task;
 static library *lib;
@@ -110,9 +113,211 @@ static void close_down (void)
     }
 }
 
+/* --- the LibRaw plug-in: a program run in a task window (rawjob.h) ---
+
+   Lumen is the task window's parent (*TaskWindow ... -task &<Lumen>
+   -txt &<tag>), so TaskWindow tells Lumen, not a task window server, what
+   happens: TaskWindow_Ego gives the child's task handle for our tag,
+   TaskWindow_Morio says it has ended, TaskWindow_Output carries anything
+   it prints (it prints nothing; not acknowledged, see the PRM's erratum).
+   PRM: *TaskWindow p986, the messages p1359-1361. */
+#define Message_TaskWindow_Output 0x808C1
+#define Message_TaskWindow_Ego 0x808C2
+#define Message_TaskWindow_Morio 0x808C3
+#define RAW_CHILDREN 8
+static struct { int tag, child; } children[RAW_CHILDREN];
+
+static int run_in_task_window (const char *cmdline, int tag)
+{
+  char cmd[2600];
+  int k;
+  /* Starts small; UnixLib grows the slot as LibRaw needs (a big raw file
+     can take a few hundred megabytes while it is developed). */
+  snprintf (cmd, sizeof cmd, "TaskWindow \"%s\" -wimpslot 8000K -name LumenRaw -quit -task &%08X -txt &%08X",
+            cmdline, (unsigned) task, (unsigned) tag);
+  for (k = 0; k < RAW_CHILDREN; k++)
+    if (!children[k].tag)
+      {
+        children[k].tag = tag;
+        children[k].child = 0;
+        break;
+      }
+  return _swix (Wimp_StartTask, _IN (0), cmd) ? -1 : 0;
+}
+
+static void raw_message (int *b)
+{
+  int k;
+  if (b[4] == Message_TaskWindow_Ego)
+    {
+      for (k = 0; k < RAW_CHILDREN; k++)
+        if (children[k].tag && children[k].tag == b[5])
+          children[k].child = b[1];
+    }
+  else if (b[4] == Message_TaskWindow_Morio)
+    for (k = 0; k < RAW_CHILDREN; k++)
+      if (children[k].tag && children[k].child == b[1])
+        {
+          rawjob_ended (children[k].tag);
+          children[k].tag = 0;
+        }
+}
+
+/* --- plug-ins (plugins.h)
+
+   They live in <Lumen$Dir>.Plugins, one directory each (PackMan installs
+   them there: LumenRaw, for instance, into Apps.Graphics.!Lumen.Plugins.
+   LibRaw). Which are switched off is kept in <Choices$Write>.Lumen.
+   Plugins. A raw plug-in that is on is the one rawjob runs. */
+static plugin_info plugin_list[PLUGINS_MAX];
+static int nplugins;
+static char plugins_dir[700], plugins_state[700], raw_helper[1024];
+
+int app_plugins (const plugin_info **list)
+{
+  *list = plugin_list;
+  return nplugins;
+}
+
+static void plugin_paths (void)
+{
+  const char *v = getenv ("Lumen$Dir");
+  char dir[600];
+  snprintf (dir, sizeof dir, "%s", v ? v : "");   /* copied at once (getenv's buffer is reused) */
+  if (dir[0])
+    fsys_join (plugins_dir, sizeof plugins_dir, dir, "Plugins");
+  v = getenv ("Lumen$PluginChoices");   /* the tests' own */
+  if (v && *v)
+    snprintf (plugins_state, sizeof plugins_state, "%s", v);
+  else if (fsys_canonical ("<Choices$Write>.Lumen", dir, sizeof dir) == 0)
+    fsys_join (plugins_state, sizeof plugins_state, dir, "Plugins");
+  else
+    snprintf (plugins_state, sizeof plugins_state, "<Choices$Write>.Lumen.Plugins");
+}
+
+void app_plugins_rescan (void)
+{
+  const plugin_info *raw;
+  char scratch[700];
+  if (!plugins_dir[0])
+    plugin_paths ();
+  nplugins = plugins_dir[0] ? plugins_scan (plugins_dir, plugins_state, plugin_list, PLUGINS_MAX) : 0;
+  raw = plugins_find (plugin_list, nplugins, "raw");
+  if (!strcmp (raw ? raw->program : "", raw_helper))
+    return;                            /* the same as before: jobs carry on */
+  snprintf (raw_helper, sizeof raw_helper, "%s", raw ? raw->program : "");
+  if (!raw)
+    {
+      rawjob_setup (NULL, NULL, NULL);
+      return;
+    }
+  {
+    const char *v = getenv ("Lumen$Scratch");   /* the tests' own */
+    if (v && *v)
+      snprintf (scratch, sizeof scratch, "%s", v);
+    else if (fsys_canonical ("<Wimp$ScrapDir>.LumenRaw", scratch, sizeof scratch))
+      snprintf (scratch, sizeof scratch, "<Wimp$ScrapDir>.LumenRaw");
+  }
+  rawjob_setup (raw_helper, scratch, run_in_task_window);
+  if (lib)
+    lib_retry_failed_thumbs (lib);     /* raw files imported while there was no plug-in */
+}
+
+/* A plug-in can't change under a job that is running it. */
+static int plugins_in_use (void)
+{
+  if (!rawjob_busy ())
+    return 0;
+  app_report ("A plug-in is at work just now. Try again when Lumen has finished making thumbnails.");
+  return 1;
+}
+
+static void plugins_changed (void)
+{
+  app_plugins_rescan ();
+  browser_reload ();
+  mainwin_info_changed ();
+}
+
+void app_plugin_toggle (int k)
+{
+  if (k < 0 || k >= nplugins || plugins_in_use ())
+    return;
+  if (plugins_set_enabled (plugins_state, plugin_list[k].dir, !plugin_list[k].enabled))
+    {
+      app_report ("Lumen couldn't save the plug-in choices.");
+      return;
+    }
+  plugins_changed ();
+}
+
+void app_plugin_remove (int k)
+{
+  char msg[600], err[300];
+  plugin_info p;
+  if (k < 0 || k >= nplugins || plugins_in_use ())
+    return;
+  p = plugin_list[k];
+  if (p.package[0])
+    snprintf (msg, sizeof msg,
+              "Remove the plug-in %s? Its directory is deleted from Lumen's Plugins. "
+              "If it came from PackMan, remove its package (%s) in PackMan instead, so PackMan knows it has gone.",
+              p.name, p.package);
+  else
+    snprintf (msg, sizeof msg, "Remove the plug-in %s? Its directory is deleted from Lumen's Plugins.", p.name);
+  if (!app_confirm (msg, "Remove"))
+    return;
+  if (plugins_remove (plugins_dir, p.dir, err, sizeof err))
+    app_report (err);
+  plugins_set_enabled (plugins_state, p.dir, 1);   /* forget it was off */
+  plugins_changed ();
+}
+
+int app_is_plugin (const char *path)
+{
+  char f[1100];
+  fsys_entry e;
+  fsys_join (f, sizeof f, path, "Plugin");
+  if (fsys_stat (f, &e) == 0 && !e.is_dir)
+    return 1;
+  fsys_join (f, sizeof f, path, "Plugin,fff");
+  return fsys_stat (f, &e) == 0 && !e.is_dir;
+}
+
+void app_plugin_add (const char *path)
+{
+  char err[300], msg[400];
+  plugin_info p;
+  int rc;
+  if (!plugins_dir[0])
+    {
+      app_report ("Lumen doesn't know where its Plugins directory is (Lumen$Dir isn't set).");
+      return;
+    }
+  if (plugins_in_use ())
+    return;
+  rc = plugins_add (plugins_dir, path, 0, err, sizeof err);
+  if (rc == 1)
+    {
+      plugins_read (path, &p);
+      snprintf (msg, sizeof msg, "There is a plug-in called %s in Lumen already. Replace it with this one%s%s?",
+                p.dir, p.version[0] ? ", version " : "", p.version);
+      if (!app_confirm (msg, "Replace"))
+        return;
+      rc = plugins_add (plugins_dir, path, 1, err, sizeof err);
+    }
+  if (rc)
+    {
+      app_report (err);
+      return;
+    }
+  plugins_changed ();
+}
+
 int app_init (const char *library_path)
 {
-  static const int messages[] = { Message_DataLoad, 2 /* DataSaveAck */, Message_ModeChange, 0 };
+  static const int messages[] = { Message_DataLoad, 2 /* DataSaveAck */, Message_ModeChange,
+                                  Message_TaskWindow_Output, Message_TaskWindow_Ego, Message_TaskWindow_Morio, 0 };
   char err[300];
   if (_swix (Wimp_Initialise, _INR (0, 3) | _OUT (1), 380, TASK_WORD, APP_NAME, messages, &task))
     return 1;
@@ -126,13 +331,15 @@ int app_init (const char *library_path)
       close_down ();
       return 1;
     }
-  if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ())
+  if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ()
+      || plugwin_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       close_down ();
       return 1;
     }
   menus_init ();
+  app_plugins_rescan ();               /* also retries raw files imported before the plug-in was installed */
   mainwin_open (NULL);
   return 0;
 }
@@ -146,7 +353,8 @@ void app_quit (void)
 
 int app_busy (void)
 {
-  return viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib);
+  return viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib)
+         || rawjob_busy ();
 }
 
 static void thumb_made (void *ctx, cat_id v)
@@ -211,8 +419,21 @@ static void data_load (int *b)
   const char *path = (const char *) &b[11];
   int type = b[10];
   if (b[5] != browser_window () && b[5] != mainwin_window () && b[5] != viewer_window ()
-      && b[5] != mainwin_inspector () && b[5] != -2)
+      && b[5] != mainwin_inspector () && b[5] != -2 && b[5] != plugwin_window ())
     return;
+  /* A plug-in, to the Add plug-in window or anywhere else in Lumen. */
+  if (b[5] == plugwin_window () || ((type == FT_DIR || type == FT_APP) && app_is_plugin (path)))
+    {
+      b[3] = b[2];
+      b[4] = Message_DataLoadAck;
+      _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
+      if (app_is_plugin (path))
+        app_plugin_add (path);
+      else
+        app_report ("That isn't a Lumen plug-in: a plug-in is a directory with a Plugin file in it. "
+                    "To add photos, drag them to Lumen's main window.");
+      return;
+    }
   if (lib_import (lib, path))
     {
       app_report ("Not enough memory to start the import.");
@@ -222,7 +443,6 @@ static void data_load (int *b)
   b[3] = b[2];
   b[4] = Message_DataLoadAck;
   _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
-  (void) type;
   /* Show what arrives. */
   {
     cat_source s = { SRC_LAST_IMPORT, 0, 0, "" };
@@ -312,6 +532,8 @@ int app_event (int reason, int *b, int sender)
         viewer_click (b);
       else if (b[3] == exportbox_window ())
         exportbox_click (b);
+      else if (b[3] == plugwin_window ())
+        plugwin_click (b);
       break;
     case User_Drag_Box:
       if (exportbox_dragging ())
@@ -338,6 +560,10 @@ int app_event (int reason, int *b, int sender)
           break;
         case 2:                        /* Message_DataSaveAck */
           exportbox_save_ack (b);
+          break;
+        case Message_TaskWindow_Ego:
+        case Message_TaskWindow_Morio:
+          raw_message (b);
           break;
         case Message_ModeChange:
           draw_init_mode ();

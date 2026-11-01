@@ -28,6 +28,7 @@
 #include "ui.h"
 #include "exif.h"
 #include "colour.h"
+#include "rawjob.h"
 
 #define TB_H 120                       /* the toolbar */
 #define TAB_H 72                       /* the inspector's tabs */
@@ -833,7 +834,16 @@ static void info_load (int force)
           snprintf (cv, sizeof cv, "%s", prof[0] ? prof : "sRGB");
         info_add ("Colour", cv, 0);
       }
-    if (buf && got)
+    if (buf && got && img_probe_named (buf, got, d.path) == IMG_RAW)
+      {
+        /* A camera raw file: through the plug-in. TIFF-based ones (NEF,
+           CR2, ARW, DNG...) have their EXIF where a TIFF has. */
+        info_add ("Format", rawjob_available () ? "Camera raw, developed by the LibRaw plug-in"
+                                                : "Camera raw: needs the LibRaw plug-in (LumenRaw, from PackMan)", 0);
+        if ((buf[0] == 'I' && buf[1] == 'I') || (buf[0] == 'M' && buf[1] == 'M'))
+          info_has_exif = exif_list_tiff (buf, got, info_exif_tag, NULL) > 0;
+      }
+    else if (buf && got)
       info_has_exif = exif_list (buf, got, info_exif_tag, NULL) > 0;
     free (buf);
     if (!info_has_exif)

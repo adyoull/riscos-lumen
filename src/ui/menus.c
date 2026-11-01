@@ -28,6 +28,8 @@ static int info_window = -1;
 static char album_name[40], preset_name[40];
 static int export_after_menu;
 static int remove_after_menu;          /* ask about removing once the menu has gone */
+static int plugin_remove_after_menu;   /* 1 + the plug-in to ask about removing */
+static int plugwin_after_menu;         /* open the Add plug-in window once the menu has gone */
 static int group_kind;                 /* the Library tab's project or album the menu is for */
 static cat_id group_id;
 static char group_name[64];          /* 1 the selection, 2 the viewer's photo: open the box once the menu is done */
@@ -189,12 +191,61 @@ static void load_groups (void)
 }
 
 /* Lumen > Show, Selection, Album, Size, Quit */
+/* Plug-ins: each one, ticked if it is on (choosing it switches it);
+   Add plug-in...; Remove > each one. */
+static menu *build_plugins_menu (void)
+{
+  const plugin_info *pl;
+  int n = app_plugins (&pl), k, base;
+  menu *m, *rem;
+  char label[100];
+  if (n > MAX_LIST)
+    n = MAX_LIST;
+  base = n ? n : 1;
+  rem = new_menu ("Remove", base);
+  if (rem && !n)
+    set_item (rem, 0, 1, "No plug-ins", 0, -1, 1);
+  for (k = 0; k < n && rem; k++)
+    {
+      snprintf (label, sizeof label, "%s...", pl[k].name);
+      set_item (rem, k, k == n - 1, label, 0, -1, 0);
+    }
+  m = new_menu ("Plug-ins", base + 2);
+  if (!m)
+    return NULL;
+  if (!n)
+    set_item (m, 0, 0, "None installed", MF_DOTTED, -1, 1);
+  for (k = 0; k < n; k++)
+    {
+      snprintf (label, sizeof label, "%s%s%s", pl[k].name, pl[k].version[0] ? " " : "", pl[k].version);
+      set_item (m, k, 0, label, (pl[k].enabled ? MF_TICK : 0) | (k == n - 1 ? MF_DOTTED : 0), -1, !pl[k].program[0]);
+    }
+  set_item (m, base, 0, "Add plug-in...", 0, -1, 0);
+  set_item (m, base + 1, 1, "Remove", 0, (int) rem, n == 0);
+  return m;
+}
+
+static void plugins_choice (const int *c)
+{
+  const plugin_info *pl;
+  int n = app_plugins (&pl), base;
+  if (n > MAX_LIST)
+    n = MAX_LIST;
+  base = n ? n : 1;
+  if (c[0] >= 0 && c[0] < n)
+    app_plugin_toggle (c[0]);
+  else if (c[0] == base)
+    plugwin_after_menu = 1;
+  else if (c[0] == base + 1 && c[1] >= 0 && c[1] < n)
+    plugin_remove_after_menu = 1 + c[1];
+}
+
 static menu *build_window_menu (void)
 {
   const cat_source *s = browser_source ();
   cat_id *ids;
   int nsel = browser_selection (&ids), k;
-  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb, *apply;
+  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb, *apply, *plugm;
   static const char *const rating_names[6] = { "No stars", "1 star", "2 stars", "3 stars", "4 stars", "5 stars" };
   static const char *const filter_names[6] = { "Any rating", "1 star and up", "2 stars and up", "3 stars and up", "4 stars and up", "5 stars" };
   free (ids);
@@ -256,14 +307,16 @@ static menu *build_window_menu (void)
       set_item (sizem, 2, 1, "Large", browser_size () == 2 ? MF_TICK : 0, -1, 0);
     }
 
-  m = new_menu (APP_NAME, 5);
+  plugm = build_plugins_menu ();
+  m = new_menu (APP_NAME, 6);
   if (m)
     {
       set_item (m, 0, 0, "Show", 0, (int) show, 0);
       set_item (m, 1, 0, "Selection", 0, (int) selm, 0);
       set_item (m, 2, 0, "Album", 0, (int) album, 0);
       set_item (m, 3, 0, "Thumbnail size", MF_DOTTED, (int) sizem, 0);
-      set_item (m, 4, 1, "Quit", 0, -1, 0);
+      set_item (m, 4, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
+      set_item (m, 5, 1, "Quit", 0, -1, 0);
     }
   return m;
 }
@@ -338,14 +391,16 @@ void menus_open_viewer_menu (int x, int y)
 
 static menu *build_iconbar_menu (void)
 {
-  menu *m;
+  menu *m, *plugm;
   used = 0;
-  m = new_menu (APP_NAME, 3);
+  plugm = build_plugins_menu ();
+  m = new_menu (APP_NAME, 4);
   if (m)
     {
       set_item (m, 0, 0, "Info", 0, info_window, info_window == -1);
       set_item (m, 1, 0, "Open library", MF_DOTTED, -1, 0);
-      set_item (m, 2, 1, "Quit", 0, -1, 0);
+      set_item (m, 2, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
+      set_item (m, 3, 1, "Quit", 0, -1, 0);
     }
   return m;
 }
@@ -546,7 +601,7 @@ void menus_open_iconbar_menu (int x)
   menu *m = build_iconbar_menu ();
   which = 2;
   open_x = x - 64;
-  open_y = 96 + 3 * 44;
+  open_y = 96 + 4 * 44;
   if (m)
     _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
@@ -647,7 +702,10 @@ static int window_choice (const int *c)
       if (c[1] >= 0 && c[1] <= 2)
         browser_set_size (c[1]);
       break;
-    case 4:
+    case 4:                            /* Plug-ins */
+      plugins_choice (c + 1);
+      break;
+    case 5:
       return 1;
     }
   return 0;
@@ -727,10 +785,25 @@ int menus_selection (const int *choice)
       if (choice[0] == 1)
         mainwin_open (NULL);
       else if (choice[0] == 2)
+        plugins_choice (choice + 1);
+      else if (choice[0] == 3)
         quit_requested = 1;
     }
   if (quit_requested)
     return 1;
+  if (plugin_remove_after_menu)
+    {
+      int k = plugin_remove_after_menu - 1;
+      plugin_remove_after_menu = 0;
+      app_plugin_remove (k);
+      return 0;
+    }
+  if (plugwin_after_menu)
+    {
+      plugwin_after_menu = 0;
+      plugwin_open ();
+      return 0;
+    }
   if (remove_after_menu)
     {
       /* The question replaces the menu. */

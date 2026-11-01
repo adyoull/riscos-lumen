@@ -59,6 +59,7 @@ static int exec (cat *c, const char *sql)
 }
 
 static sqlite3_stmt *prep (cat *c, const char *sql);
+static void bind_text_or_null (sqlite3_stmt *s, int i, const char *t);
 
 /* Schema 2 (0.0.16): originals whose files can't be found are marked. */
 static int upgrade (cat *c)
@@ -323,6 +324,42 @@ int cat_relink (cat *c, cat_id version, const char *path, long long mtime)
         }
     }
   return rc;
+}
+
+int cat_set_original_info (cat *c, cat_id version, const img_info *in)
+{
+  /* Only what it gives: a raw file's own EXIF may have more (an empty
+     lens or date from the plug-in doesn't wipe the one read at import). */
+  sqlite3_stmt *s = prep (c, "UPDATE original SET width = ?2, height = ?3, orientation = ?4,"
+                             " make = COALESCE(?5, make), model = COALESCE(?6, model), taken = COALESCE(?7, taken),"
+                             " iso = CASE WHEN ?8 > 0 THEN ?8 ELSE iso END,"
+                             " exposure = CASE WHEN ?9 > 0 THEN ?9 ELSE exposure END,"
+                             " fnumber = CASE WHEN ?10 > 0 THEN ?10 ELSE fnumber END,"
+                             " focal = CASE WHEN ?11 > 0 THEN ?11 ELSE focal END"
+                             " WHERE id = (SELECT original FROM version WHERE id = ?1)");
+  int rc = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, version);
+  sqlite3_bind_int (s, 2, in->width);
+  sqlite3_bind_int (s, 3, in->height);
+  sqlite3_bind_int (s, 4, in->orientation);
+  bind_text_or_null (s, 5, in->make);
+  bind_text_or_null (s, 6, in->model);
+  bind_text_or_null (s, 7, in->taken);
+  sqlite3_bind_int (s, 8, in->iso);
+  sqlite3_bind_double (s, 9, in->exposure);
+  sqlite3_bind_double (s, 10, in->fnumber);
+  sqlite3_bind_double (s, 11, in->focal);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    rc = fail (c, "details");
+  sqlite3_finalize (s);
+  return rc;
+}
+
+int cat_retry_failed_thumbs (cat *c)
+{
+  return exec (c, "UPDATE version SET thumb = 0 WHERE thumb = 2");
 }
 
 int cat_tidy (cat *c)

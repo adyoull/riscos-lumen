@@ -6,7 +6,7 @@
 #define LUMEN_EXIF_H
 #include <stddef.h>
 
-enum { IMG_UNKNOWN = 0, IMG_JPEG = 1, IMG_PNG = 2 };
+enum { IMG_UNKNOWN = 0, IMG_JPEG = 1, IMG_PNG = 2, IMG_RAW = 3 };
 
 typedef struct
 {
@@ -22,8 +22,20 @@ typedef struct
   long thumb_length;
 } img_info;
 
+/* 1 if the name ends in a camera raw extension ("/nef" or ".nef"). */
+int img_has_raw_extension (const char *name);
 /* What kind of image the first bytes are. */
 int img_probe (const unsigned char *buf, size_t len);
+/* The same, knowing the file's name: camera raw files (decoded by the
+   LibRaw plug-in) are IMG_RAW, by their own signature (Canon CR2 and CR3,
+   Fuji RAF, Olympus ORF, Panasonic RW2) or, for the many that are TIFF
+   files inside (Nikon NEF, Sony ARW, Adobe DNG, Pentax PEF...), by a TIFF
+   header and a raw file's extension ("/nef" on RISC OS, ".nef" elsewhere). */
+int img_probe_named (const unsigned char *buf, size_t len, const char *name);
+/* What can be read of a raw file's metadata without the plug-in: the
+   camera, date and exposure from a TIFF-based raw's EXIF. Its size and
+   orientation come from the plug-in. 0 if anything was found. */
+int img_read_raw_info (const unsigned char *buf, size_t len, img_info *info);
 
 /* Fills *info from buf, the first len bytes of the file (64 KB or more is
    enough for nearly every camera). Returns 0 if the format was recognised

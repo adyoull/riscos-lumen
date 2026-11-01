@@ -13,13 +13,13 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.15
+VERSION := 0.0.16
 DATE := 01 Nov 2026
 OUT := out
 
-CORE := src/core/exif.c src/core/colour.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/export.c src/core/autoadj.c src/core/catalog.c src/core/library.c src/core/sqlite_vfs.c
+CORE := src/core/exif.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/export.c src/core/autoadj.c src/core/catalog.c src/core/library.c src/core/sqlite_vfs.c
 CORE_H := $(wildcard src/core/*.h)
-UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c
+UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/plugwin.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c
 UI_H := $(wildcard src/ui/*.h)
 SQLITE := third_party/sqlite/sqlite3.c
 SQLITE_FLAGS := -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION \
@@ -55,7 +55,7 @@ $(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/risc
 
 $(OUT)/bench: tests/bench.c $(CORE) $(CORE_H) $(OUT)/riscos/sqlite3.o
 	$(RO_CC) $(RISCOS_CFLAGS) $(WARN) $(DEFS) -Isrc/core -Ithird_party/sqlite -I$(DEPS)/riscos/include \
-	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/colour.c \
+	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/colour.c src/core/rawjob.c src/core/fsys_riscos.c \
 	  -L$(DEPS)/riscos/lib -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
 
 checks: $(OUT)/lumen $(OUT)/bench
@@ -84,8 +84,8 @@ $(OUT)/test_core_host: tests/test_core.c $(CORE) src/core/fsys_posix.c $(CORE_H)
 	gcc -O1 -g $(WARN) -fsanitize=address,undefined -Ithird_party/sqlite -I$(DEPS)/host/include -o $@ \
 	  tests/test_core.c $(CORE) src/core/fsys_posix.c $(OUT)/host/sqlite3.o \
 	  $(DEPS)/host/lib/libjpeg.a $(DEPS)/host/lib/libpng16.a -lz -lm
-test-host: $(OUT)/test_core_host
-	rm -rf $(OUT)/work-host && $(OUT)/test_core_host $(OUT)/work-host
+test-host: $(OUT)/test_core_host $(OUT)/lumenraw-host
+	rm -rf $(OUT)/work-host && LUMENRAW=$(OUT)/lumenraw-host RAW_SAMPLES=$(RAW_SAMPLES) $(OUT)/test_core_host $(OUT)/work-host
 
 $(OUT)/test_develop_host: tests/test_develop.c $(CORE) src/core/fsys_posix.c $(CORE_H) $(OUT)/host/sqlite3.o
 	gcc -O2 -g $(WARN) -fsanitize=address,undefined -Ithird_party/sqlite -I$(DEPS)/host/include -o $@ \
@@ -127,6 +127,44 @@ clean:
 	rm -rf $(OUT)
 
 .PHONY: all check checks test-host test-arm test-develop test-develop-arm test-ui test-fsys clean
+
+# --- The LibRaw plug-in (LumenRaw), a separate program in its own package --
+# deps/build-libraw.sh builds LibRaw into $(DEPS)/<target>/lib/libraw.a.
+RAW_SRC := plugins/libraw/lumenraw.cpp
+RAW_FLAGS := -O2 -Wall -Wextra
+RAW_SAMPLES ?= /home/claude/rawsamples
+$(OUT)/LumenRaw,ff8: $(RAW_SRC)
+	@mkdir -p $(OUT)
+	$(RO_CXX) $(RISCOS_CFLAGS) $(RAW_FLAGS) -I$(DEPS)/riscos/include -o $(OUT)/lumenraw.elf $(RAW_SRC) \
+	  $(RISCOS_LDFLAGS) -L$(DEPS)/riscos/lib -lraw -ljpeg $(DEVKIT_LDFLAGS) -lz -lm
+	$(CHECK_ALL) $(OUT)/lumenraw.elf
+	$(RO_STRIP) -o $(OUT)/lumenraw.stripped $(OUT)/lumenraw.elf
+	$(ELF2AIF) -e $(OUT)/lumenraw.stripped $@ >/dev/null
+$(OUT)/lumenraw-host: $(RAW_SRC)
+	g++ $(RAW_FLAGS) -I$(DEPS)/host/include -o $@ $(RAW_SRC) $(DEPS)/host/lib/libraw.a $(DEPS)/host/lib/libjpeg.a -lz -lm
+$(OUT)/lumenraw-arm: $(RAW_SRC)
+	arm-linux-gnueabihf-g++ -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard -mno-unaligned-access -no-pie $(RAW_FLAGS) \
+	  -I$(DEPS)/linuxarm/include -o $@ $(RAW_SRC) $(DEPS)/linuxarm/lib/libraw.a $(DEPS)/linuxarm/lib/libjpeg.a \
+	  $(DEPS)/linuxarm/lib/libz.a -lm
+RAW_VERSION := 1.0
+# The plug-in's release zip, laid out as it goes into Lumen (PackMan's
+# LumenRaw package maps it into Apps.Graphics.!Lumen.Plugins.LibRaw), and
+# the LibRaw source it was built from (the LGPL asks for it with the binary).
+$(OUT)/LumenRaw-$(RAW_VERSION).zip: $(OUT)/LumenRaw,ff8 plugins/libraw/ReadMe plugins/libraw/Licence plugins/libraw/Plugin
+	rm -rf $(OUT)/rawpkg && mkdir -p $(OUT)/rawpkg/!Lumen/Plugins/LibRaw
+	cp $(OUT)/LumenRaw,ff8 $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/
+	cp plugins/libraw/ReadMe $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/ReadMe,fff
+	cp plugins/libraw/Licence $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Licence,fff
+	cp plugins/libraw/Plugin $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Plugin,fff
+	$(ROZIP) $@ -C $(OUT)/rawpkg !Lumen
+$(OUT)/LibRaw-0.21.4-source.zip:
+	cd /build/src/LibRaw && git archive --format=zip --prefix=LibRaw-0.21.4/ -o $(CURDIR)/$@ HEAD
+plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-0.21.4-source.zip
+# The helper on real raw files (not in the repository: their licences
+# vary), on Linux and on ARM with RISC OS's alignment rules.
+test-plugin: $(OUT)/lumenraw-host $(OUT)/lumenraw-arm
+	RAW_SAMPLES=$(RAW_SAMPLES) tests/test_plugin.sh $(OUT)/lumenraw-host "" $(OUT)/plugin-host
+	RAW_SAMPLES=$(RAW_SAMPLES) tests/test_plugin.sh $(OUT)/lumenraw-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/plugin-arm
 
 # --- Screenshots: Lumen's own drawing, recorded against the Fake RISC OS ----------
 # out/shots/lumen-*.png. The window frame, menus' frames and icon bar are an

@@ -49,4 +49,10 @@ int fsys_settype (const char *path, int filetype);
    On Linux it copies. 0 on success. */
 int fsys_canonical (const char *path, char *out, size_t n);
 
+/* Copies a directory and everything in it to dst (which mustn't be
+   there yet), and deletes one the same way. 0 on success. On RISC OS
+   these are OS_FSControl 26 and 27 (*Copy and *Wipe). */
+int fsys_copy_tree (const char *src, const char *dst);
+int fsys_remove_tree (const char *path);
+
 #endif

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include "fsys.h"
 
 struct fsys_dir
@@ -133,4 +134,79 @@ int fsys_settype (const char *path, int filetype)
 {
   (void) path; (void) filetype;
   return 0;
+}
+
+/* Every entry, hidden ones too: a copy is a copy. */
+int fsys_copy_tree (const char *src, const char *dst)
+{
+  DIR *d;
+  struct dirent *de;
+  struct stat st;
+  int rc = 0;
+  if (stat (src, &st) != 0)
+    return -1;
+  if (!S_ISDIR (st.st_mode))
+    {
+      FILE *in = fopen (src, "rb"), *out;
+      char buf[8192];
+      size_t got;
+      if (!in)
+        return -1;
+      out = fopen (dst, "wb");
+      if (!out)
+        {
+          fclose (in);
+          return -1;
+        }
+      while ((got = fread (buf, 1, sizeof buf, in)) > 0)
+        if (fwrite (buf, 1, got, out) != got)
+          rc = -1;
+      fclose (in);
+      if (fclose (out) != 0)
+        rc = -1;
+      chmod (dst, st.st_mode & 0777);
+      return rc;
+    }
+  if (mkdir (dst, 0777) != 0 && errno != EEXIST)
+    return -1;
+  if (!(d = opendir (src)))
+    return -1;
+  while (rc == 0 && (de = readdir (d)) != NULL)
+    {
+      char a[1300], b[1300];
+      if (!strcmp (de->d_name, ".") || !strcmp (de->d_name, ".."))
+        continue;
+      fsys_join (a, sizeof a, src, de->d_name);
+      fsys_join (b, sizeof b, dst, de->d_name);
+      rc = fsys_copy_tree (a, b);
+    }
+  closedir (d);
+  return rc;
+}
+
+int fsys_remove_tree (const char *path)
+{
+  DIR *d;
+  struct dirent *de;
+  struct stat st;
+  int rc = 0;
+  if (lstat (path, &st) != 0)
+    return -1;
+  if (!S_ISDIR (st.st_mode))
+    return unlink (path) == 0 ? 0 : -1;
+  if (!(d = opendir (path)))
+    return -1;
+  while ((de = readdir (d)) != NULL)
+    {
+      char a[1300];
+      if (!strcmp (de->d_name, ".") || !strcmp (de->d_name, ".."))
+        continue;
+      fsys_join (a, sizeof a, path, de->d_name);
+      if (fsys_remove_tree (a) != 0)
+        rc = -1;
+    }
+  closedir (d);
+  if (rmdir (path) != 0)
+    rc = -1;
+  return rc;
 }

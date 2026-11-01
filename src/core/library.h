@@ -57,6 +57,9 @@ void lib_verify_start (library *l);
 int lib_verifying (library *l);
 int lib_verify_step (library *l, unsigned (*now) (void), unsigned deadline);
 
+/* Thumbnails that failed are tried again (the raw plug-in is installed now). */
+void lib_retry_failed_thumbs (library *l);
+
 /* Removes versions from the library (cat_remove_versions) and their
    thumbnails. The photos' files are not touched. 0 on success. */
 int lib_remove (library *l, const cat_id *versions, int n);

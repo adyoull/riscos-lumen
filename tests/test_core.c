@@ -13,9 +13,11 @@
 #include "../src/core/catalog.h"
 #include "../src/core/exif.h"
 #include "../src/core/colour.h"
+#include "../src/core/rawjob.h"
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
 #include "../src/core/thumbgen.h"
+#include "../src/core/plugins.h"
 
 static int checks, fails;
 #define CHECK(c, what) do { checks++; if (!(c)) { fails++; fprintf (stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, what); } } while (0)
@@ -788,6 +790,305 @@ static void test_time_slicing (void)
   lib_close (l);
 }
 
+/* --- camera raw files through the plug-in (when LUMENRAW and RAW_SAMPLES are set) */
+
+/* Runs the helper there and then (on RISC OS it runs in a task window). */
+static int run_now (const char *cmd, int tag)
+{
+  int r = system (cmd);
+  rawjob_ended (tag);
+  return r < 0 ? -1 : 0;
+}
+
+static int ran_nothing (const char *cmd, int tag)
+{
+  (void) cmd;
+  rawjob_ended (tag);                  /* as if it had died at once */
+  return 0;
+}
+
+static int sample (char *out, size_t n, const char *name)
+{
+  const char *dir = getenv ("RAW_SAMPLES");
+  FILE *f;
+  if (!dir)
+    return 0;
+  snprintf (out, n, "%s/%s", dir, name);
+  f = fopen (out, "rb");
+  if (f)
+    fclose (f);
+  return f != NULL;
+}
+
+static void test_raw (void)
+{
+  char nef[700], cr2[700], c400[700], err[300], scratch[700], path[1024];
+  unsigned char head[64];
+  const char *helper = getenv ("LUMENRAW");
+  thumbgen *t;
+  rgb_image img;
+  img_info ri;
+  FILE *f;
+  int r, w, h;
+  if (!helper || !sample (nef, sizeof nef, "iss030e122639.NEF") || !sample (cr2, sizeof cr2, "RAW_CANON_40D_SRAW_V103.CR2")
+      || !sample (c400, sizeof c400, "M0054341_01_00005.cr2"))
+    {
+      printf ("test_core: no LUMENRAW or RAW_SAMPLES: raw files not tested\n");
+      return;
+    }
+  /* Recognised: Canon's by signature, Nikon's (TIFF inside) by name. */
+  f = fopen (cr2, "rb");
+  r = (int) fread (head, 1, sizeof head, f);
+  fclose (f);
+  CHECK (img_probe_named (head, (size_t) r, "photo") == IMG_RAW, "CR2: raw by its signature, whatever its name");
+  f = fopen (nef, "rb");
+  r = (int) fread (head, 1, sizeof head, f);
+  fclose (f);
+  CHECK (img_probe_named (head, (size_t) r, "ADFS::4.$.Photos.DSC_0001/NEF") == IMG_RAW, "NEF: raw by its /NEF name (RISC OS)");
+  CHECK (img_probe_named (head, (size_t) r, "/home/x/DSC_0001.nef") == IMG_RAW, "and by .nef (POSIX)");
+  CHECK (img_probe_named (head, (size_t) r, "picture/tif") == IMG_UNKNOWN, "a TIFF with another name isn't taken for raw");
+
+  /* No plug-in: a clear message. */
+  rawjob_setup (NULL, NULL, NULL);
+  t = thumbgen_start (nef, NULL, 256, 1, err, sizeof err);
+  CHECK (!t && strstr (err, "LumenRaw") && strstr (err, "PackMan"), "without the plug-in: install LumenRaw from PackMan");
+
+  p (scratch, "RawScratch");
+  rawjob_setup (helper, scratch, run_now);
+  CHECK (rawjob_available (), "with it: available");
+  /* A thumbnail: the camera's own preview, made small. */
+  t = thumbgen_start (nef, NULL, 256, 1, err, sizeof err);
+  CHECK (t != NULL, "a raw thumbnail starts");
+  while (t && (r = thumbgen_step (t, 64)) == 0)
+    ;
+  CHECK (t && r == 1, "and finishes");
+  CHECK (t && thumbgen_raw_details (t, &ri) && ri.width == 4284 && ri.height == 2844 && strcmp (ri.make, "Nikon") == 0
+         && strcmp (ri.model, "D3S") == 0 && ri.iso == 3200 && strcmp (ri.taken, "2012:03:04 17:20:59") == 0,
+         "the plug-in's details: 4284 x 2844, Nikon D3S, ISO 3200, the date");
+  thumbgen_size (t, &w, &h);
+  CHECK (w == 256 && h > 160 && h < 175, "a 256-wide thumbnail");
+  thumbgen_free (t);
+  /* Developed, at half size (2142 wide is more than 1600). */
+  t = thumbgen_start (nef, NULL, 1600, 1, err, sizeof err);
+  while (t && (r = thumbgen_step (t, 256)) == 0)
+    ;
+  CHECK (t && r == 1 && thumbgen_take (t, &img) == 0 && img.w == 1600, "developed for the viewer: 1600 wide");
+  if (t && r == 1)
+    {
+      /* An aurora over the Earth at night: plenty of strongly coloured
+         pixels (green and red), which a missing colour matrix would grey. */
+      long coloured = 0, total = 0;
+      int x, y;
+      for (y = 0; y < img.h; y += 4)
+        for (x = 0; x < img.w; x += 4)
+          {
+            const unsigned char *q = img.rgb + (y * img.w + x) * 3;
+            int mx = q[0] > q[1] ? (q[0] > q[2] ? q[0] : q[2]) : (q[1] > q[2] ? q[1] : q[2]);
+            int mn = q[0] < q[1] ? (q[0] < q[2] ? q[0] : q[2]) : (q[1] < q[2] ? q[1] : q[2]);
+            total++;
+            if (mx - mn > 40)
+              coloured++;
+          }
+      CHECK (coloured * 20 > total, "in colour: over 5% of it strongly coloured (the camera's colour matrix)");
+      free (img.rgb);
+    }
+  thumbgen_free (t);
+  /* Upside down (orientation 3 from the plug-in): turned, whatever the caller said. */
+  t = thumbgen_start (c400, NULL, 256, 1, err, sizeof err);
+  while (t && (r = thumbgen_step (t, 64)) == 0)
+    ;
+  CHECK (t && r == 1 && thumbgen_raw_details (t, &ri) && ri.orientation == 3, "a camera held upside down: orientation 3");
+  thumbgen_free (t);
+  /* Two jobs at once wait their turn. */
+  {
+    thumbgen *a = thumbgen_start (nef, NULL, 256, 1, err, sizeof err);
+    thumbgen *b = thumbgen_start (cr2, NULL, 256, 1, err, sizeof err);
+    int ra = 0, rb = 0, guard = 0;
+    while ((ra == 0 || rb == 0) && guard++ < 10000)
+      {
+        if (ra == 0) ra = thumbgen_step (a, 64);
+        if (rb == 0) rb = thumbgen_step (b, 64);
+      }
+    CHECK (ra == 1 && rb == 1 && !rawjob_busy (), "two at once: both done, nothing left running");
+    thumbgen_free (a);
+    thumbgen_free (b);
+  }
+  /* Not a raw file after all (a raw name): the plug-in's error. */
+  p (path, "fake.nef");
+  {
+    FILE *ff = fopen (path, "wb");
+    fwrite ("II*\0 not really", 1, 15, ff);
+    fclose (ff);
+  }
+  t = thumbgen_start (path, NULL, 256, 1, err, sizeof err);
+  while (t && (r = thumbgen_step (t, 64)) == 0)
+    ;
+  CHECK (t && r == -1 && strstr (thumbgen_error (t), "couldn't read this raw file"), "a damaged one: the plug-in says so");
+  thumbgen_free (t);
+  /* The plug-in dying without a word. */
+  rawjob_setup (helper, scratch, ran_nothing);
+  t = thumbgen_start (nef, NULL, 256, 1, err, sizeof err);
+  while (t && (r = thumbgen_step (t, 64)) == 0)
+    ;
+  CHECK (t && r == -1 && strstr (thumbgen_error (t), "stopped without finishing"), "ended with nothing: said so, not waited for for ever");
+  thumbgen_free (t);
+  rawjob_setup (helper, scratch, run_now);
+
+  /* Importing a folder of raw files: added, thumbnails made, details filled in. */
+  {
+    library *l;
+    char libdir[700], dir[700], dst[760];
+    cat_source all = { SRC_ALL, 0, 0, "" };
+    cat_item *items;
+    cat_details d;
+    int n, k, guard = 0;
+    lib_progress pr;
+    p (dir, "Raws");
+    mkdir (dir, 0777);
+    snprintf (dst, sizeof dst, "%s/aurora.nef", dir);
+    {
+      FILE *in = fopen (nef, "rb"), *out = fopen (dst, "wb");
+      char buf[65536];
+      size_t got;
+      while ((got = fread (buf, 1, sizeof buf, in)) > 0)
+        fwrite (buf, 1, got, out);
+      fclose (in);
+      fclose (out);
+    }
+    p (libdir, "RawLibrary");
+    CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "a library for raws");
+    lib_import (l, dir);
+    while (lib_busy (l) && guard++ < 100000)
+      lib_work (l, fake_now, clock_cs + 3, NULL, NULL);
+    lib_get_progress (l, &pr);
+    CHECK (pr.added == 1, "the raw file added");
+    cat_list (lib_cat (l), &all, &items, &n);
+    k = n == 1 ? 0 : -1;
+    CHECK (k == 0 && items[0].thumb_state == THUMB_READY, "its thumbnail made by the plug-in");
+    CHECK (k == 0 && cat_get_details (lib_cat (l), items[0].id, &d) == 0 && d.width == 4284 && d.height == 2844
+           && strcmp (d.model, "D3S") == 0 && d.iso == 3200, "its details from the plug-in: 4284 x 2844, D3S, ISO 3200");
+    free (items);
+    lib_close (l);
+  }
+}
+
+
+/* --- plug-ins: described, listed, switched off and on, added, removed */
+static void put_file (const char *path, const char *text)
+{
+  FILE *f = fopen (path, "w");
+  if (f)
+    {
+      fputs (text, f);
+      fclose (f);
+    }
+}
+
+static void test_plugins (void)
+{
+  char dir[700], state[700], src[700], p[900], err[300];
+  plugin_info list[PLUGINS_MAX], one;
+  const plugin_info *raw;
+  int n;
+  fsys_entry e;
+  fsys_join (dir, sizeof dir, work, "Plugins");
+  fsys_join (state, sizeof state, work, "Choices/Lumen/Plugins");
+  fsys_join (src, sizeof src, work, "Downloads");
+  fsys_remove_tree (dir);
+  fsys_remove_tree (src);
+  CHECK (plugins_scan (dir, state, list, PLUGINS_MAX) == 0, "plug-ins: no Plugins directory, none");
+  /* LibRaw as PackMan installs it: typed files (",fff", ",ff8" off RISC OS). */
+  fsys_join (p, sizeof p, dir, "LibRaw");
+  fsys_mkdirs (p);
+  fsys_join (p, sizeof p, dir, "LibRaw/Plugin,fff");
+  put_file (p, "# about\nName: Camera raw (LibRaw)\nVersion: 1.0\nKind:  raw \nProgram: LumenRaw\n"
+               "Package: LumenRaw\nDescription: Reads camera raw files\n");
+  fsys_join (p, sizeof p, dir, "LibRaw/LumenRaw,ff8");
+  put_file (p, "program");
+  /* An old one with no Plugin file, one whose program is missing, and a stray directory. */
+  fsys_join (p, sizeof p, dir, "Old");
+  fsys_mkdirs (p);
+  fsys_join (p, sizeof p, dir, "Old/LumenRaw");
+  put_file (p, "program");
+  fsys_join (p, sizeof p, dir, "Broken");
+  fsys_mkdirs (p);
+  fsys_join (p, sizeof p, dir, "Broken/Plugin");
+  put_file (p, "Name: Another raw reader\nKind: raw\nProgram: Gone\n");
+  fsys_join (p, sizeof p, dir, "Stray");
+  fsys_mkdirs (p);
+  n = plugins_scan (dir, state, list, PLUGINS_MAX);
+  CHECK (n == 3, "plug-ins: three found (the stray directory isn't one)");
+  CHECK (n == 3 && !strcmp (list[0].name, "Another raw reader") && !strcmp (list[1].name, "Camera raw (LibRaw)")
+         && !strcmp (list[1].dir, "LibRaw") && !strcmp (list[2].dir, "Old"), "plug-ins: sorted by name");
+  CHECK (n == 3 && !strcmp (list[1].version, "1.0") && !strcmp (list[1].kind, "raw")
+         && !strcmp (list[1].package, "LumenRaw") && strstr (list[1].program, "LibRaw/LumenRaw,ff8"),
+         "plug-ins: the Plugin file read (trimmed), the program found with its type suffix");
+  CHECK (n == 3 && list[0].program[0] == '\0' && list[0].enabled, "plug-ins: a missing program is left out");
+  CHECK (n == 3 && !strcmp (list[2].name, "Camera raw (LibRaw)") && strstr (list[2].program, "Old/LumenRaw"),
+         "plug-ins: one with no Plugin file but LumenRaw is LibRaw");
+  raw = plugins_find (list, n, "raw");
+  CHECK (raw && !strcmp (raw->dir, "LibRaw"), "plug-ins: the raw reader is the first that works");
+  /* Switching off and on, remembered in Choices (made when needed). */
+  CHECK (plugins_set_enabled (state, "LibRaw", 0) == 0 && plugins_set_enabled (state, "Old", 0) == 0,
+         "plug-ins: switched off");
+  n = plugins_scan (dir, state, list, PLUGINS_MAX);
+  CHECK (n == 3 && !list[1].enabled && !list[2].enabled && list[0].enabled, "plug-ins: off after a rescan");
+  CHECK (plugins_find (list, n, "raw") == NULL, "plug-ins: no raw reader when they are off");
+  CHECK (plugins_set_enabled (state, "LibRaw", 1) == 0 && plugins_enabled (state, "LibRaw")
+         && !plugins_enabled (state, "Old"), "plug-ins: one back on, the other still off");
+  CHECK (plugins_set_enabled (state, "LibRaw", 1) == 0 && plugins_set_enabled (state, "Old", 0) == 0
+         && !plugins_enabled (state, "Old"), "plug-ins: switching twice is harmless");
+  /* Adding: a downloaded plug-in, with a subdirectory. */
+  fsys_join (p, sizeof p, src, "Extra/Docs");
+  fsys_mkdirs (p);
+  fsys_join (p, sizeof p, src, "Extra/Plugin");
+  put_file (p, "Name: Extra\nVersion: 2\nKind: export\nProgram: Run\n");
+  fsys_join (p, sizeof p, src, "Extra/Run");
+  put_file (p, "program");
+  fsys_join (p, sizeof p, src, "Extra/Docs/Notes");
+  put_file (p, "notes");
+  fsys_join (p, sizeof p, src, "Extra");
+  CHECK (plugins_add (dir, p, 0, err, sizeof err) == 0, "plug-ins: added");
+  fsys_join (p, sizeof p, dir, "Extra/Docs/Notes");
+  CHECK (fsys_stat (p, &e) == 0, "plug-ins: added with everything in it");
+  fsys_join (p, sizeof p, src, "Extra");
+  CHECK (plugins_add (dir, p, 0, err, sizeof err) == 1, "plug-ins: one of that name there: asks");
+  fsys_join (p, sizeof p, src, "Extra/Plugin");
+  put_file (p, "Name: Extra\nVersion: 3\nKind: export\nProgram: Run\n");
+  fsys_join (p, sizeof p, src, "Extra");
+  CHECK (plugins_add (dir, p, 1, err, sizeof err) == 0, "plug-ins: replaced");
+  fsys_join (p, sizeof p, dir, "Extra");
+  CHECK (plugins_read (p, &one) == 0 && !strcmp (one.version, "3"), "plug-ins: the new one is there");
+  fsys_join (p, sizeof p, src, "Docs");
+  fsys_mkdirs (p);
+  CHECK (plugins_add (dir, p, 0, err, sizeof err) == -1 && strstr (err, "isn't a Lumen plug-in"),
+         "plug-ins: a directory with no Plugin file isn't added");
+  fsys_join (p, sizeof p, dir, "Extra");
+  CHECK (plugins_add (dir, p, 1, err, sizeof err) == -1 && strstr (err, "already"),
+         "plug-ins: one already in Plugins isn't added to itself");
+  CHECK (fsys_stat (p, &e) == 0, "plug-ins: ...and is still there");
+  /* Removing. */
+  CHECK (plugins_remove (dir, "Extra", err, sizeof err) == 0 && fsys_stat (p, &e) != 0, "plug-ins: removed");
+  CHECK (plugins_remove (dir, "../Downloads", err, sizeof err) == -1, "plug-ins: only a plug-in's own name");
+  CHECK (plugins_remove (dir, "Extra", err, sizeof err) == 0, "plug-ins: removing one that's gone is fine");
+  n = plugins_scan (dir, state, list, PLUGINS_MAX);
+  CHECK (n == 3, "plug-ins: three again");
+  fsys_remove_tree (dir);
+  fsys_remove_tree (src);
+}
+
+/* Raw files arrive typed anyhow (DOS from a card, Text, Data): their
+   extension is what lets them in to be probed. */
+static void test_raw_names (void)
+{
+  CHECK (img_has_raw_extension ("SDFS::Card.$.DCIM.IMG_0001/CR2"), "raw names: RISC OS /CR2");
+  CHECK (img_has_raw_extension ("/media/card/dsc_0001.nef"), "raw names: POSIX .nef");
+  CHECK (img_has_raw_extension ("x.y.Photo/Dng"), "raw names: any case");
+  CHECK (!img_has_raw_extension ("SDFS::Card.$.DCIM.IMG_0001/JPG"), "raw names: not a JPEG");
+  CHECK (!img_has_raw_extension ("SDFS::Card.$.Raw.Notes"), "raw names: a directory called Raw isn't one");
+  CHECK (!img_has_raw_extension ("Photo/nefx"), "raw names: the whole extension");
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -800,6 +1101,9 @@ int main (int argc, char **argv)
   fsys_mkdirs (work);
   test_exif ();
   test_colour ();
+  test_raw ();
+  test_plugins ();
+  test_raw_names ();
   make_fixtures ();
   test_library ();
   test_time_slicing ();

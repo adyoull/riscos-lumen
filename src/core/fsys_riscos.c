@@ -157,3 +157,22 @@ int fsys_settype (const char *path, int filetype)
 {
   return _swix (OS_File, _INR (0, 2), 18, path, filetype) ? -1 : 0;
 }
+
+/* OS_FSControl 26 (copy) and 27 (wipe), PRM p359-360. Their flags are
+   from the classic PRM (2-80, 2-82; the 2026 edition doesn't list them):
+   bit 0 recurse, bit 1 force (overwrite or delete locked objects), bit 2
+   look at the date range in R4-R7, bit 3 confirm, bit 4 verbose, bit 13
+   use the buffer described at R8. Recurse and force, nothing else: no
+   questions, no output, no date range. */
+#define FSC_RECURSE 1
+#define FSC_FORCE 2
+
+int fsys_copy_tree (const char *src, const char *dst)
+{
+  return _swix (OS_FSControl, _INR (0, 8), 26, src, dst, FSC_RECURSE | FSC_FORCE, 0, 0, 0, 0, 0) ? -1 : 0;
+}
+
+int fsys_remove_tree (const char *path)
+{
+  return _swix (OS_FSControl, _INR (0, 7), 27, path, 0, FSC_RECURSE | FSC_FORCE, 0, 0, 0, 0) ? -1 : 0;
+}

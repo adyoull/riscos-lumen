@@ -9,6 +9,7 @@
 #include "exif.h"
 #include "thumbgen.h"
 #include "colour.h"
+#include "rawjob.h"
 
 /* --- Box-filter downscaler: rows in at the source size, out at the target. */
 typedef struct
@@ -123,6 +124,11 @@ struct thumbgen
   int y;                               /* next source row */
   unsigned char *row;                  /* one decoded row */
   int cs;                              /* the file's colour space (colour.h): converted to sRGB */
+  /* A camera raw file: the plug-in's job, then its picture read as a
+     JPEG or a PPM. */
+  rawjob *rj;
+  int is_raw;
+  img_info raw_info;
   int done;
   int out_w, out_h;
   /* JPEG */
@@ -247,6 +253,108 @@ static void png_warn (png_structp p, png_const_charp msg)
   (void) p; (void) msg;
 }
 
+/* --- PPM (P6, 8 bits): what the raw plug-in develops to */
+#define IMG_PPM 4
+
+static int ppm_number (FILE *f)
+{
+  int c, n = 0;
+  do
+    {
+      c = getc (f);
+      if (c == '#')
+        while (c != '\n' && c != EOF)
+          c = getc (f);
+    }
+  while (c == ' ' || c == '\n' || c == '\r' || c == '\t');
+  if (c < '0' || c > '9')
+    return -1;
+  while (c >= '0' && c <= '9')
+    {
+      n = n * 10 + (c - '0');
+      if (n > 1 << 20)
+        return -1;
+      c = getc (f);
+    }
+  return n;                            /* the one whitespace after it is read too */
+}
+
+static int start_ppm (thumbgen *t)
+{
+  int w, h, maxval;
+  if (getc (t->f) != 'P' || getc (t->f) != '6')
+    {
+      seterr (t, "Not a picture the raw plug-in made");
+      return -1;
+    }
+  w = ppm_number (t->f);
+  h = ppm_number (t->f);
+  maxval = ppm_number (t->f);
+  if (w <= 0 || h <= 0 || maxval != 255)
+    {
+      seterr (t, "Not a picture the raw plug-in made");
+      return -1;
+    }
+  t->row = malloc ((size_t) w * 3);
+  if (!t->row || scaler_init (&t->sc, w, h, t->max_side))
+    {
+      seterr (t, "Not enough memory for the thumbnail");
+      return -1;
+    }
+  return 0;
+}
+
+static int step_ppm (thumbgen *t, int rows)
+{
+  while (rows-- > 0 && t->y < t->sc.sh)
+    {
+      if (fread (t->row, (size_t) t->sc.sw * 3, 1, t->f) != 1)
+        {
+          seterr (t, "The raw plug-in's picture is cut short");
+          return -1;
+        }
+      scaler_row (&t->sc, t->y++, t->row);
+    }
+  return t->y >= t->sc.sh;
+}
+
+/* The raw job finished: its picture is read like any other file. */
+static int start_raw_picture (thumbgen *t)
+{
+  unsigned char head[4];
+  rawjob_details (t->rj, &t->raw_info);
+  t->orientation = t->raw_info.orientation;   /* the plug-in's, as the catalogue will have it */
+  t->f = fopen (rawjob_image (t->rj), "rb");
+  if (!t->f)
+    {
+      seterr (t, "Can't open the raw plug-in's picture");
+      return -1;
+    }
+  if (fread (head, 1, sizeof head, t->f) != sizeof head)
+    head[0] = 0;
+  rewind (t->f);
+  if (head[0] == 'P' && head[1] == '6')
+    {
+      t->format = IMG_PPM;
+      return start_ppm (t);
+    }
+  t->format = img_probe (head, sizeof head);
+  if (t->format != IMG_JPEG)
+    {
+      seterr (t, "The raw plug-in's picture isn't one Lumen reads");
+      return -1;
+    }
+  return start_jpeg (t);
+}
+
+int thumbgen_raw_details (const thumbgen *t, img_info *info)
+{
+  if (!t->is_raw || !t->raw_info.width)
+    return 0;
+  *info = t->raw_info;
+  return 1;
+}
+
 static int start_png (thumbgen *t)
 {
   png_uint_32 w, h;
@@ -349,7 +457,8 @@ static int step_png (thumbgen *t, int rows_in)
 thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
                           int orientation, char *err, size_t errlen)
 {
-  unsigned char head[8];
+  unsigned char head[16];
+  size_t got;
   thumbgen *t = calloc (1, sizeof *t);
   if (!t)
     {
@@ -366,10 +475,22 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
       free (t);
       return NULL;
     }
-  if (fread (head, 1, sizeof head, t->f) != sizeof head)
-    head[0] = 0;
+  got = fread (head, 1, sizeof head, t->f);
   rewind (t->f);
-  t->format = img_probe (head, sizeof head);
+  t->format = img_probe_named (head, got, src);
+  if (t->format == IMG_RAW)
+    {
+      /* The plug-in does the work: the camera's preview for thumbnails,
+         developed for anything bigger. */
+      fclose (t->f);
+      t->f = NULL;
+      t->is_raw = 1;
+      t->rj = rawjob_start (src, max_side > 1024, max_side, err, errlen);
+      if (t->rj)
+        return t;
+      free (t);
+      return NULL;
+    }
   if (t->format == IMG_UNKNOWN)
     seterr (t, "Not a JPEG or PNG file");
   else if ((t->format == IMG_JPEG ? start_jpeg (t) : start_png (t)) == 0)
@@ -385,7 +506,21 @@ int thumbgen_step (thumbgen *t, int rows)
   rgb_image img;
   if (t->done)
     return t->done;
-  r = t->format == IMG_JPEG ? step_jpeg (t, rows) : step_png (t, rows);
+  if (t->format == IMG_RAW)
+    {
+      int j = rawjob_poll (t->rj);
+      if (j == 0)
+        return 0;
+      if (j < 0)
+        {
+          seterr (t, rawjob_error (t->rj));
+          return t->done = -1;
+        }
+      if (start_raw_picture (t))
+        return t->done = -1;
+      return 0;
+    }
+  r = t->format == IMG_JPEG ? step_jpeg (t, rows) : t->format == IMG_PPM ? step_ppm (t, rows) : step_png (t, rows);
   if (r == 0)
     return 0;
   if (r < 0)
@@ -444,6 +579,7 @@ void thumbgen_free (thumbgen *t)
     png_destroy_read_struct (&t->png, t->pinfo ? &t->pinfo : NULL, NULL);
   if (t->f)
     fclose (t->f);
+  rawjob_free (t->rj);
   scaler_free (&t->sc);
   free (t->row);
   free (t);

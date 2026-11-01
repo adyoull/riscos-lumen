@@ -6,6 +6,7 @@
 #include "catalog.h"
 #include "library.h"
 #include "recipe.h"
+#include "plugins.h"
 
 #define APP_NAME "Lumen"
 #ifndef LUMEN_VERSION
@@ -61,6 +62,13 @@ int app_confirm (const char *msg, const char *button);   /* 1: the button was ch
 unsigned app_now (void);               /* centiseconds */
 library *app_library (void);
 int app_task (void);
+/* Lumen's plug-ins (plugins.h): the list as last read, sorted by name. */
+int app_plugins (const plugin_info **list);
+void app_plugins_rescan (void);        /* reads the Plugins directory again and puts what is on to work */
+void app_plugin_toggle (int k);        /* switches plug-in k on or off */
+void app_plugin_remove (int k);        /* asks, then deletes it */
+void app_plugin_add (const char *path);   /* a plug-in's directory dropped on Lumen */
+int app_is_plugin (const char *path);  /* a directory with a Plugin file */
 
 /* --- draw.c: plotting inside a redraw loop */
 void draw_init_mode (void);            /* read eigen factors etc.: at start and after mode changes */
@@ -269,6 +277,12 @@ const char *exportbox_name (void);
 int exports_busy (void);
 void exports_idle (unsigned deadline);
 void exports_status (char *out, size_t n);
+
+/* --- plugwin.c: the Add plug-in window, somewhere to drop one */
+int plugwin_create (void);
+int plugwin_window (void);
+void plugwin_open (void);
+void plugwin_click (int *block);
 
 /* --- menus.c */
 void menus_init (void);

@@ -18,6 +18,19 @@ static const obj dir[] = {
 #define NOBJ (int) (sizeof dir / sizeof dir[0])
 
 static int gbpb_calls;
+static int fsc[10], fsc_calls;
+static char fsc_src[128], fsc_dst[128];
+
+/* OS_FSControl 26 (copy) and 27 (wipe): what they were asked. */
+static const _kernel_oserror *fscontrol (int n, int r[10])
+{
+  (void) n;
+  memcpy (fsc, r, sizeof fsc);
+  snprintf (fsc_src, sizeof fsc_src, "%s", (const char *) r[1]);
+  snprintf (fsc_dst, sizeof fsc_dst, "%s", r[0] == 26 ? (const char *) r[2] : "");
+  fsc_calls++;
+  return NULL;
+}
 static char created[8][128];
 static int ncreated;
 
@@ -86,6 +99,7 @@ int main (void)
   fake_reset ();
   fake_swi (OS_GBPB, "OS_GBPB", swi);
   fake_swi (OS_File, "OS_File", swi);
+  fake_swi (OS_FSControl, "OS_FSControl", fscontrol);
 
   CHECK (fsys_opendir ("SDFS::Pi.$.Nowhere") == NULL, "a missing directory doesn't open");
   d = fsys_opendir ("SDFS::Pi.$.Photos");
@@ -125,5 +139,16 @@ int main (void)
   CHECK (fsys_mkdirs ("SDFS::Pi.$.Lumen.Library.Thumbs") == 0, "mkdirs");
   CHECK (ncreated == 3 && strcmp (created[0], "SDFS::Pi.$.Lumen") == 0
          && strcmp (created[2], "SDFS::Pi.$.Lumen.Library.Thumbs") == 0, "creates each level after $, in order");
+
+  /* Plug-ins are copied in and deleted as whole directories: *Copy and
+     *Wipe with recurse and force, and nothing that would ask or print. */
+  CHECK (fsys_copy_tree ("SDFS::Pi.$.Downloads.LibRaw", "SDFS::Pi.$.Apps.!Lumen.Plugins.LibRaw") == 0
+         && fsc[0] == 26 && fsc[3] == 3 && strcmp (fsc_src, "SDFS::Pi.$.Downloads.LibRaw") == 0
+         && strcmp (fsc_dst, "SDFS::Pi.$.Apps.!Lumen.Plugins.LibRaw") == 0,
+         "copy tree: OS_FSControl 26, recurse and force");
+  CHECK (fsc[4] == 0 && fsc[5] == 0 && fsc[6] == 0 && fsc[7] == 0 && fsc[8] == 0, "copy tree: no dates, no buffer");
+  CHECK (fsys_remove_tree ("SDFS::Pi.$.Apps.!Lumen.Plugins.Old") == 0 && fsc[0] == 27 && fsc[3] == 3
+         && strcmp (fsc_src, "SDFS::Pi.$.Apps.!Lumen.Plugins.Old") == 0, "remove tree: OS_FSControl 27, recurse and force");
+  CHECK (fsc_calls == 2, "one call each");
   return fake_done ("test_fsys");
 }

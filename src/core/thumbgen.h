@@ -12,6 +12,7 @@
 #ifndef LUMEN_THUMBGEN_H
 #define LUMEN_THUMBGEN_H
 #include <stddef.h>
+#include "exif.h"
 
 typedef struct thumbgen thumbgen;
 
@@ -26,6 +27,9 @@ const char *thumbgen_error (const thumbgen *t);
 /* The colour space found in the file (colour.h's CS_*); Adobe RGB and
    Display P3 are converted to sRGB as they are decoded. */
 int thumbgen_colour (const thumbgen *t);
+/* A camera raw file (through the LibRaw plug-in, rawjob.h): 1 and its
+   details (size, orientation, camera...) once the plug-in has given them. */
+int thumbgen_raw_details (const thumbgen *t, img_info *info);
 /* The thumbnail's size, once finished (after orientation). */
 void thumbgen_size (const thumbgen *t, int *w, int *h);
 void thumbgen_free (thumbgen *t);

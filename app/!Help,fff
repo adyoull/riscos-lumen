@@ -1,4 +1,4 @@
-Lumen 0.0.15 (01 Nov 2026) - test build
+Lumen 0.0.16 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -193,6 +193,55 @@ The Lumen menu
   Album           make a new album from the selection, add to one,
                   or remove from the album shown
   Thumbnail size  Small, Medium, Large
+
+Camera raw files
+----------------
+Lumen reads camera raw files (Canon, Nikon, Sony, Fujifilm, Olympus,
+Panasonic, Pentax, DNG and many more) with its LibRaw plug-in, which is
+a separate package in PackMan: LumenRaw. It goes into !Lumen.Plugins,
+and Lumen finds it when it next starts (or at once, if it is added from
+the Plug-ins menu). Without it, raw files are still
+imported (and listed), and Lumen says what to install when you open one;
+their thumbnails are made once the plug-in is there.
+
+Thumbnails come from the camera's own preview, so they are quick. The
+viewer develops the raw data with the camera's white balance and colour
+in the background (a few seconds for a big file), at half size; 100%,
+the loupe and exports develop it in full.
+
+Plug-ins
+--------
+Plug-ins add to what Lumen can do; LumenRaw (camera raw files) is the
+first. Each is a directory in !Lumen.Plugins, where PackMan puts them.
+Plug-ins, on the icon bar menu and the main window's menu, lists them:
+choose one to switch it off (it stays installed, unticked) or back on.
+Add plug-in... opens a window to drag a plug-in's directory into (or
+drag it to Lumen's window); Lumen copies it into its Plugins. Remove
+deletes one, after asking - for one PackMan installed, remove its
+package in PackMan instead, so PackMan knows. Lumen remembers which are
+off in its Choices.
+
+A plug-in's directory has a text file, Plugin, saying what it is:
+Name, Version, Kind (raw), Program, Package and Description lines.
+
+Removing photos
+---------------
+Delete (or Selection > Remove from library, or the Photo menu) takes the
+selected photos out of the library, after asking. Their files are never
+touched: their ratings, adjustments and album places go, and they can be
+imported again. Menu over a project or album in the Library tab renames
+it, deletes an album (its photos stay), or removes a project and all its
+photos from the library.
+
+Missing files
+-------------
+Lumen checks that each photo's file is still where it was (when it
+starts, and when its window is opened again). A photo whose file has
+gone - moved, renamed, or on a disc that isn't there - is marked
+"Missing", and the Library tab lists them under Missing Files. If you
+moved them, drag the folder they are in now into Lumen: it recognises
+them by their contents, and takes their new place, with nothing added
+twice.
 
 Colour
 ------
