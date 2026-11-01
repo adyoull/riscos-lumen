@@ -50,4 +50,9 @@ void geom_crop_aspect (double *x0, double *y0, double *x1, double *y1, double as
 void geom_rows_rgb8 (const geom_plan *g, const unsigned char *src, const uint16_t *s2l,
                      uint16_t *dst, int y0, int y1, int dst_row0);
 
+/* Any rectangle of the output (rw x rh from (rx, ry)), from 8-bit sRGB,
+   to dst (rw pixels a row) as linear: the viewer's 100% view. */
+void geom_region_rgb8 (const geom_plan *g, const unsigned char *src, const uint16_t *s2l,
+                       uint16_t *dst, int rx, int ry, int rw, int rh);
+
 #endif

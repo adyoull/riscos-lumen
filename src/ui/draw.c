@@ -262,6 +262,12 @@ void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
   plot_scaled (area, sprite, w, h, out[0], out[1], dw, dh);
 }
 
+void draw_sprite_at (const void *area, const void *sprite, int x, int y)
+{
+  ensure_table (area, sprite);
+  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, x, y, plot_flags, 0, table);
+}
+
 void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
                       int bx0, int by0, int bx1, int by1, int out[4])
 {

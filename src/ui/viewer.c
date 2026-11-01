@@ -105,11 +105,30 @@ static int before;                     /* showing the original */
 static int dragging = -1, drag_x = -1, drag_y = -1; /* the parameter (or DRAG_CROP), the pointer's last place */
 
 static int crop_mode, crop_edges, crop_shape, grid_mode, picking;
+
+/* 100%: the full-size original (8-bit, decoded on first use), and the
+   part of the output that fits the window, rendered into zspr. zcx, zcy
+   is the output pixel at the middle of the view. */
+static int zoom;                       /* 0 fit, 1 decoding the full size, 2 at 100% */
+static char photo_path[1024];
+static int photo_orientation;
+static thumbgen *zgen;
+static rgb_image zfull;
+static geom_plan zplan;
+static double zcx, zcy, zfx = 0.5, zfy = 0.5;
+static sprite32 zspr;
+static int zrx, zry, zy = -1;          /* the region's top left; next band, -1 done */
+static uint16_t *zlin;
+static int pan_dx, pan_dy;             /* while dragging the view: how far, in OS units */
+static int pan_start_x, pan_start_y;
+#define DRAG_PAN (-3)
 static recipe crop_saved;
 static double crop_ax, crop_ay, crop_start[4], crop_px, crop_py;
 
 static const char *const shape_names[6] = { "Free", "Original", "Square", "3:2", "4:3", "16:9" };
 static const char *const grid_names[4] = { "None", "Thirds", "Quarters", "Fine" };
+
+static void zoom_layout (int replan);
 
 int viewer_window (void) { return win; }
 int viewer_is_open (void) { return is_open; }
@@ -165,8 +184,22 @@ static void free_geo (void)
   geo_pending = 0;
 }
 
+static void free_zoom (void)
+{
+  thumbgen_free (zgen);
+  zgen = NULL;
+  free (zfull.rgb);
+  zfull.rgb = NULL;
+  free (zlin);
+  zlin = NULL;
+  sprite_free (&zspr);
+  zy = -1;
+  zoom = 0;
+}
+
 static void free_photo (void)
 {
+  free_zoom ();
   thumbgen_free (tg);
   tg = NULL;
   free_geo ();
@@ -474,6 +507,8 @@ void viewer_open_window (int *block)
       vis_w = block[3] - block[1];
       vis_h = block[4] - block[2];
       force (0, -0x10000000, 0x10000000, 0);
+      if (zoom == 2)
+        zoom_layout (0);
     }
   block[5] = 0;                        /* never scrolled */
   block[6] = 0;
@@ -637,6 +672,151 @@ static void render_full_until (unsigned deadline)
 
 /* Something changed: the geometry image if need be, then the half-size
    render now, and (if full) the full one in the background. */
+/* --- 100% */
+static double clampd2 (double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+/* The view in screen pixels: the image area less its margins. */
+static void zoom_view (int *w, int *h)
+{
+  int r[4];
+  image_rect (r);
+  *w = (r[2] - r[0] - 2 * PAD) >> draw_xeig ();
+  *h = (r[3] - r[1] - 2 * PAD) >> draw_yeig ();
+}
+
+/* Plans the full-size output (geometry as now) and lays the region out
+   round zcx, zcy; starts rendering it. */
+static void zoom_layout (int replan)
+{
+  int vw, vh, w, h;
+  if (zoom != 2 || !zfull.rgb)
+    return;
+  if (replan)
+    {
+      recipe r;
+      double fx = zplan.ow ? zcx / zplan.ow : zfx, fy = zplan.oh ? zcy / zplan.oh : zfy;
+      effective (&r);
+      geom_plan_make (&zplan, &r, zfull.w, zfull.h, 1, 0, 0);
+      zcx = fx * zplan.ow;
+      zcy = fy * zplan.oh;
+    }
+  zoom_view (&vw, &vh);
+  w = vw < zplan.ow ? vw : zplan.ow;
+  h = vh < zplan.oh ? vh : zplan.oh;
+  if (w < 1 || h < 1)
+    return;
+  zcx = clampd2 (zcx, w / 2.0, zplan.ow - w / 2.0);
+  zcy = clampd2 (zcy, h / 2.0, zplan.oh - h / 2.0);
+  zrx = (int) (zcx - w / 2.0);
+  zry = (int) (zcy - h / 2.0);
+  if (zrx + w > zplan.ow) zrx = zplan.ow - w;
+  if (zry + h > zplan.oh) zry = zplan.oh - h;
+  if (zrx < 0) zrx = 0;
+  if (zry < 0) zry = 0;
+  if (!zspr.area || zspr.w != w)
+    {
+      free (zlin);
+      zlin = malloc ((size_t) w * BAND_ROWS * 6);
+    }
+  if (sprite_size (&zspr, w, h) || !zlin)
+    {
+      free_zoom ();
+      app_report ("There isn't enough memory to show this photo at 100%.");
+      return;
+    }
+  zy = 0;
+}
+
+static void zoom_render_until (unsigned deadline)
+{
+  const uint16_t *s2l = dev_srgb_to_linear ();
+  while (zy >= 0 && zy < zspr.h)
+    {
+      int n = zspr.h - zy < BAND_ROWS ? zspr.h - zy : BAND_ROWS;
+      geom_region_rgb8 (&zplan, zfull.rgb, s2l, zlin, zrx, zry + zy, zspr.w, n);
+      develop_rows (dev, zlin, zspr.w, 0, n, zspr.pixels + (size_t) zy * zspr.w, NULL);
+      zy += n;
+      if ((int) (app_now () - deadline) >= 0)
+        break;
+    }
+  if (zy >= zspr.h)
+    zy = -1;
+  force_image ();
+}
+
+/* Zooms to 100% with output fraction (fx, fy) in the middle, or back to fit. */
+static void zoom_to (double fx, double fy)
+{
+  char e[200];
+  if (zoom)
+    {
+      zoom = 0;
+      zy = -1;
+      force_image ();
+      force_panel ();
+      return;
+    }
+  if (!src || crop_mode || picking)
+    return;
+  zfx = fx;
+  zfy = fy;
+  zoom = 1;
+  if (zfull.rgb)
+    {
+      zoom = 2;
+      zplan.ow = zplan.oh = 0;
+      zoom_layout (1);
+    }
+  else if (!zgen && !(zgen = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, sizeof e)))
+    {
+      zoom = 0;
+      app_report (e);
+    }
+  force_image ();
+  force_panel ();
+}
+
+void viewer_toggle_zoom (void)
+{
+  zoom_to (0.5, 0.5);
+}
+
+int viewer_zoomed (void) { return zoom; }
+
+/* Called in idle time: the decode, then the region. */
+static void zoom_idle (unsigned deadline)
+{
+  if (zgen)
+    {
+      int r;
+      do
+        r = thumbgen_step (zgen, 32);
+      while (r == 0 && (int) (app_now () - deadline) < 0);
+      if (r == 0)
+        return;
+      if (r < 0 || thumbgen_take (zgen, &zfull))
+        {
+          char m[300];
+          snprintf (m, sizeof m, "The full-size photo couldn't be read: %s", thumbgen_error (zgen));
+          free_zoom ();
+          app_report (m);
+          force_image ();
+          return;
+        }
+      thumbgen_free (zgen);
+      zgen = NULL;
+      if (zoom == 1)
+        {
+          zoom = 2;
+          zplan.ow = zplan.oh = 0;
+          zoom_layout (1);
+        }
+      return;
+    }
+  if (zoom == 2 && zy >= 0)
+    zoom_render_until (deadline);
+}
+
 static void refresh (int full)
 {
   if (!src)
@@ -650,6 +830,8 @@ static void refresh (int full)
   render_half ();
   if (full)
     restart_full ();
+  if (zoom == 2)
+    zoom_layout (1);                   /* geometry may have changed the output */
 }
 
 /* Proxy decoded: linear copies and the half-size copy. */
@@ -722,7 +904,8 @@ void viewer_show (int i)
       state = V_FAILED;
       snprintf (err, sizeof err, "This photo is no longer in the library.");
     }
-  else if (!(tg = thumbgen_start (d.path, NULL, PROXY_SIDE, d.orientation, e, sizeof e)))
+  else if (snprintf (photo_path, sizeof photo_path, "%s", d.path), photo_orientation = d.orientation,
+           !(tg = thumbgen_start (d.path, NULL, PROXY_SIDE, d.orientation, e, sizeof e)))
     {
       state = V_FAILED;
       snprintf (err, sizeof err, "%s", e);
@@ -756,7 +939,7 @@ void viewer_close (void)
 
 int viewer_busy (void)
 {
-  return is_open && (dragging != -1 || (state == V_LOADING && tg) || full_y >= 0);
+  return is_open && (dragging != -1 || (state == V_LOADING && tg) || full_y >= 0 || zgen || (zoom == 2 && zy >= 0));
 }
 
 static void crop_follow (double fx, double fy);
@@ -776,7 +959,13 @@ void viewer_idle (void)
         {
           drag_x = ptr[0];
           drag_y = ptr[1];
-          if (dragging == DRAG_CROP)
+          if (dragging == DRAG_PAN)
+            {
+              pan_dx = ptr[0] - pan_start_x;
+              pan_dy = ptr[1] - pan_start_y;
+              force_image ();
+            }
+          else if (dragging == DRAG_CROP)
             {
               int r[4];
               if (photo_rect (r))
@@ -794,7 +983,15 @@ void viewer_idle (void)
                 }
             }
         }
+      if (zoom == 2 && zy >= 0 && dragging != DRAG_PAN)
+        zoom_render_until (app_now () + 4);   /* the 100% view follows the slider */
       return;
+    }
+  if (zgen || (zoom == 2 && zy >= 0))
+    {
+      zoom_idle (deadline);
+      if (zgen)
+        return;
     }
   if (state == V_LOADING && tg)
     {
@@ -1093,6 +1290,8 @@ void viewer_crop_start (void)
 {
   if (!src || crop_mode)
     return;
+  if (zoom)
+    zoom_to (0, 0);
   crop_saved = current;
   crop_mode = 1;
   before = 0;
@@ -1323,6 +1522,15 @@ void viewer_click (int *b)
     {
       int r[4];
       double fx, fy;
+      if (zoom == 2)
+        {
+          /* Drag the view about (anywhere on the screen). */
+          pan_start_x = b[0];
+          pan_start_y = b[1];
+          pan_dx = pan_dy = 0;
+          start_drag (b[0], b[1], -0x10000000, -0x10000000, 0x10000000, 0x10000000, DRAG_PAN);
+          return;
+        }
       if (!photo_rect (r) || wx < r[0] - HANDLE || wx > r[2] + HANDLE || wy < r[1] - HANDLE || wy > r[3] + HANDLE)
         return;
       fx = (double) (wx - r[0]) / (r[2] - r[0]);
@@ -1331,6 +1539,12 @@ void viewer_click (int *b)
         {
           if (fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1)
             pick_at (fx, fy);
+        }
+      else if (!crop_mode && !zoom)
+        {
+          /* A click on the photo: 100% there. */
+          if (fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1)
+            zoom_to (fx, fy);
         }
       else if (crop_mode)
         {
@@ -1357,6 +1571,18 @@ void viewer_drag_end (void)
   if (dragging == -1)
     return;
   dragging = -1;
+  if (p == DRAG_PAN)
+    {
+      /* Moving the pointer right shows what was to the left. */
+      zcx -= (double) pan_dx / (1 << draw_xeig ());
+      zcy += (double) pan_dy / (1 << draw_yeig ());
+      pan_dx = pan_dy = 0;
+      if (abs (pan_start_x - drag_x) < 8 && abs (pan_start_y - drag_y) < 8)
+        zoom_to (0, 0);                /* a click, not a drag: back to fit */
+      else
+        zoom_layout (0);
+      return;
+    }
   if (p >= 0)
     {
       force_row (p);
@@ -1378,6 +1604,11 @@ int viewer_key (int key)
   if (picking && key == KEY_ESCAPE)
     {
       viewer_pick_white ();
+      return 1;
+    }
+  if (zoom && key == KEY_ESCAPE)
+    {
+      zoom_to (0, 0);
       return 1;
     }
   switch (key)
@@ -1412,6 +1643,10 @@ int viewer_key (int key)
     case 'g':
     case 'G':
       viewer_set_grid (grid_mode + 1);
+      return 1;
+    case 'z':
+    case 'Z':
+      viewer_toggle_zoom ();
       return 1;
     case 'w':
     case 'W':
@@ -1721,7 +1956,18 @@ static void draw_image (int ox, int oy)
   image_rect (r);
   draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + r[3], COL_GROUND);
   r[0] += PAD; r[1] += PAD; r[2] -= PAD; r[3] -= PAD;
-  if ((state == V_READY || state == V_LOADING) && (src || state == V_LOADING))
+  if (zoom == 2 && zspr.area)
+    {
+      /* 100%: the region, a pixel a pixel, centred (and offset while dragged). */
+      int pw = zspr.w << draw_xeig (), ph = zspr.h << draw_yeig ();
+      int x = ox + (r[0] + r[2] - pw) / 2 + pan_dx, y = oy + (r[1] + r[3] - ph) / 2 + pan_dy;
+      char t[40];
+      draw_sprite_at (zspr.area, (const unsigned *) zspr.area + 4, x, y);
+      snprintf (t, sizeof t, "100%%");
+      draw_rect (ox + r[0] + 16, oy + r[3] - 64, ox + r[0] + 56 + draw_text_width (t), oy + r[3] - 16, 0x00000000u);
+      draw_text (ox + r[0] + 36, oy + r[3] - 50, t, COL_LIGHT, 0x00000000u);
+    }
+  else if ((state == V_READY || state == V_LOADING) && (src || state == V_LOADING))
     {
       const sprite32 *s = show_half || full_y >= 0 ? &half_spr : &full_spr;
       if (s->area)
@@ -1749,9 +1995,9 @@ static void draw_image (int ox, int oy)
           else
             draw_text (ox + r[0] + 24, oy + r[3] - 60, "Opening...", COL_LIGHT, COL_GROUND);
         }
-      if (before || picking || crop_mode)
+      if (before || picking || crop_mode || zoom == 1)
         {
-          const char *t = before ? "Before" : picking ? "Click something that should be grey or white"
+          const char *t = zoom == 1 ? "Reading the full-size photo..." : before ? "Before" : picking ? "Click something that should be grey or white"
             : "Drag the corners or edges; Return to crop, Escape to cancel";
           int tw = draw_text_width (t);
           draw_rect (ox + r[0] + 16, oy + r[3] - 64, ox + r[0] + 56 + tw, oy + r[3] - 16, 0x00000000u);

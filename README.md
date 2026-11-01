@@ -97,6 +97,16 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
   and run in idle time; the library's title shows "Exporting 2 of 5 (40%)".
 - Tested in ROL 5.31-5: single JPEG dragged to a Filer window; three photos
   as PNG at 1024 into a new directory.
+
+## 0.0.8
+
+- 100% view: Z, Photo > Zoom to 100%, or a click on the photo. The
+  full-size original is decoded once (8-bit, in idle time), and only the
+  part that fits the window is rendered (geom_region_rgb8, then develop),
+  in bands, plotted 1:1. Drag to pan (the view moves with the pointer and
+  renders on release); a click without moving, Z or Escape returns to fit.
+  Adjustments while zoomed re-render the region; the histogram stays the
+  proxy's.
 - Still to come in milestone 1: the loupe, a curves editor, several
   versions of one original, full-resolution rendering.
 

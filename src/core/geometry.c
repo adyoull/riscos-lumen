@@ -177,12 +177,18 @@ void geom_crop_aspect (double *x0, double *y0, double *x1, double *y1, double as
 void geom_rows_rgb8 (const geom_plan *g, const unsigned char *src, const uint16_t *s2l,
                      uint16_t *dst, int y0, int y1, int dst_row0)
 {
+  geom_region_rgb8 (g, src, s2l, dst + (size_t) (y0 - dst_row0) * g->ow * 3, 0, y0, g->ow, y1 - y0);
+}
+
+void geom_region_rgb8 (const geom_plan *g, const unsigned char *src, const uint16_t *s2l,
+                       uint16_t *dst, int rx, int ry, int rw, int rh)
+{
   int x, y, c;
   int simple = g->quarter == 0 && g->sn == 0 && g->kv == 0 && g->kh == 0;
-  for (y = y0; y < y1; y++)
+  for (y = ry; y < ry + rh; y++)
     {
-      uint16_t *o = dst + (size_t) (y - dst_row0) * g->ow * 3;
-      for (x = 0; x < g->ow; x++, o += 3)
+      uint16_t *o = dst + (size_t) (y - ry) * rw * 3;
+      for (x = rx; x < rx + rw; x++, o += 3)
         {
           double sx, sy, fx, fy;
           int ix, iy, ix1, iy1;

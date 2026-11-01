@@ -81,6 +81,8 @@ void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
    until draw_forget). Off: OS_SpriteOp's own (pixel-dropping) scaling,
    for pictures that change on every frame, such as while dragging. */
 void draw_set_smoothing (int on);
+/* One pixel a pixel, bottom left at (x, y). */
+void draw_sprite_at (const void *area, const void *sprite, int x, int y);
 /* A sprite's pixels changed, or it is about to be freed. */
 void draw_forget (const void *sprite);
 
@@ -161,6 +163,8 @@ void viewer_reload (cat_id version);   /* its recipe changed from outside */
 void viewer_apply_look (const char *look);
 void viewer_look (char *out, size_t n);
 void viewer_auto (void);
+void viewer_toggle_zoom (void);        /* fit, or 100% of the original */
+int viewer_zoomed (void);              /* 0 fit, 1 loading the full size, 2 at 100% */
 void viewer_set (int p, float v);      /* one adjustment, saved */
 void viewer_pick_white (void);         /* the white balance eyedropper, on or off */
 int viewer_picking (void);

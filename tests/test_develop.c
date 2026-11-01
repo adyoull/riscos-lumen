@@ -797,6 +797,24 @@ static void test_export (const char *work)
   f = fopen (dst, "rb");
   CHECK (f == NULL, "abandoned: the partial file is removed");
   if (f) fclose (f);
+  /* The 100% view's region matches the same part of whole rows. */
+  {
+    geom_plan g;
+    uint16_t *rows = malloc ((size_t) 400 * 10 * 6), *reg = malloc ((size_t) 50 * 10 * 6);
+    int same = 1, xx, yy;
+    recipe_default (&r);
+    recipe_set (&r, P_ANGLE, 3);
+    geom_plan_make (&g, &r, 400, 300, 1, 0, 0);
+    geom_rows_rgb8 (&g, img.rgb, dev_srgb_to_linear (), rows, 100, 110, 100);
+    geom_region_rgb8 (&g, img.rgb, dev_srgb_to_linear (), reg, 200, 100, 50, 10);
+    for (yy = 0; yy < 10; yy++)
+      for (xx = 0; xx < 50 * 3; xx++)
+        if (reg[yy * 150 + xx] != rows[yy * 1200 + 600 + xx])
+          same = 0;
+    CHECK (same, "a region is exactly that part of the rows");
+    free (rows);
+    free (reg);
+  }
   /* Sizes from the plan. */
   {
     int ow, oh;

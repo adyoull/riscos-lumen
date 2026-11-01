@@ -1,4 +1,4 @@
-Lumen 0.0.7 (01 Nov 2026) - test build
+Lumen 0.0.8 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -74,6 +74,9 @@ either way), Vertical and Horizontal (perspective) zoom in just enough
 that no empty corners show.
 
   Left, Right   previous and next photo
+  Z             100%: the full-size photo, a pixel a pixel (or click the
+                photo). Drag to move about; click, Z or Escape for the
+                whole photo again
   A             Auto
   C             crop (Return to crop, Escape to cancel)
   [ ]           turn 90 degrees anticlockwise, clockwise

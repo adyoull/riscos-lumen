@@ -264,7 +264,7 @@ static menu *build_window_menu (void)
 }
 
 /* Photo > ... (the order menus_selection decodes) */
-enum { VM_BEFORE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
+enum { VM_BEFORE, VM_ZOOM, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
        VM_PRESETS, VM_COPY, VM_PASTE, VM_EXPORT, VM_BACK, VM_COUNT };
 
 static menu *build_viewer_menu (void)
@@ -283,6 +283,7 @@ static menu *build_viewer_menu (void)
   if (m)
     {
       set_item (m, VM_BEFORE, 0, "Before and after      M", viewer_before () ? MF_TICK : 0, -1, crop);
+      set_item (m, VM_ZOOM, 0, "Zoom to 100%      Z", viewer_zoomed () ? MF_TICK : 0, -1, crop);
       set_item (m, VM_UNDO, 0, "Undo      ^Z", 0, -1, !viewer_can_undo ());
       set_item (m, VM_REDO, 0, "Redo      ^Y", 0, -1, !viewer_can_redo ());
       set_item (m, VM_RESET, 0, "Reset all adjustments", MF_DOTTED, -1, 0);
@@ -510,6 +511,7 @@ int menus_selection (const int *choice)
     switch (choice[0])
       {
       case VM_BEFORE: viewer_toggle_before (); break;
+      case VM_ZOOM: viewer_toggle_zoom (); break;
       case VM_UNDO: viewer_undo (); break;
       case VM_REDO: viewer_redo (); break;
       case VM_RESET: viewer_reset_all (); break;

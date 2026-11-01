@@ -612,8 +612,8 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      CHECK (strstr (item_text (menu_open, 7), "Crop shape") != NULL, "Photo > Crop shape");
-      choose (7, 2, -1);
+      CHECK (strstr (item_text (menu_open, 8), "Crop shape") != NULL, "Photo > Crop shape");
+      choose (8, 2, -1);
       CHECK (viewer_crop_mode () && fabsf ((viewer_recipe ()->v[P_CROP_X1] - viewer_recipe ()->v[P_CROP_X0]) * 640
                                            - (viewer_recipe ()->v[P_CROP_Y1] - viewer_recipe ()->v[P_CROP_Y0]) * 480) < 2,
              "Square: the crop becomes square");
@@ -653,11 +653,11 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      pm = submenu (menu_open, 9);
+      pm = submenu (menu_open, 10);
       CHECK (pm && strstr (item_text (pm, 0), "No presets") != NULL, "Presets: none yet");
       save = submenu (pm, 1);
       strcpy ((char *) item (save, 0)[3], "Bright");
-      choose (9, 1, 0);
+      choose (10, 1, 0);
       {
         cat_preset *ps;
         int np;
@@ -668,11 +668,38 @@ int main (int argc, char **argv)
       }
       viewer_reset_all ();
       app_event (Mouse_Click, b, 0);
-      pm = submenu (menu_open, 9);
+      pm = submenu (menu_open, 10);
       CHECK (strcmp (item_text (pm, 0), "Bright") == 0, "Presets lists it");
-      choose (9, 0, -1);
+      choose (10, 0, -1);
       CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f && viewer_recipe ()->v[P_CROP_X0] == 0,
              "applying it brings the look back (not the crop)");
+
+      /* 100%: Z reads the full-size original, then shows it a pixel a pixel. */
+      key ('z');
+      CHECK (viewer_zoomed () == 1 && app_busy (), "Z: reading the full-size photo");
+      nulls_until_idle ();
+      CHECK (viewer_zoomed () == 2, "then at 100%");
+      memset (b, 0, sizeof b);
+      b[0] = VIEWER;
+      sprite_plots = 0; smooth_plots = 0;
+      app_event (Redraw_Window_Request, b, 0);
+      viewer_shown_size (&gw2, &gh2);
+      CHECK (sprite_plots == 1 && smooth_plots == 1 && last_plot_w == gw2 && last_plot_h == gh2,
+             "plotted unscaled: the whole (cropped) photo fits the window");
+      key (KEY_ESCAPE);
+      CHECK (viewer_zoomed () == 0 && vclosed == 0, "Escape: back to fit, still in the viewer");
+      PHOTO_RECT ();
+      memset (b, 0, sizeof b);
+      b[0] = (pr[0] + pr[2]) / 2; b[1] = (pr[1] + pr[3]) / 2; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      CHECK (viewer_zoomed () == 2, "a click on the photo: 100% (the full size is kept once read)");
+      nulls_until_idle ();
+      k = drag_calls;
+      ptr_x = b[0]; ptr_y = b[1];
+      app_event (Mouse_Click, b, 0);
+      CHECK (drag_calls == k + 1, "at 100% a click starts dragging the view");
+      app_event (User_Drag_Box, b, 0);
+      CHECK (viewer_zoomed () == 0, "let go without moving: back to fit");
 
       /* Copy here, paste on photo 2 from the library. */
       key (0x03);
@@ -806,8 +833,8 @@ int main (int argc, char **argv)
     b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
-    CHECK (strstr (item_text (menu_open, 13), "Back to the library") != NULL, "Back to the library");
-    choose (13, -1, -1);
+    CHECK (strstr (item_text (menu_open, 14), "Back to the library") != NULL, "Back to the library");
+    choose (14, -1, -1);
     CHECK (vclosed == 2, "Back to the library closes the viewer");
   }
 
