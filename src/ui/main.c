@@ -1,5 +1,6 @@
 /* Lumen's poll loop. Null events are asked for only while there is
    background work, so an idle Lumen costs the desktop nothing. */
+#include <stdio.h>
 #include <stdlib.h>
 #include <kernel.h>
 #include <swis.h>
@@ -12,10 +13,13 @@ int __riscosify_control = __RISCOSIFY_NO_PROCESS;
 
 int main (void)
 {
-  const char *path = getenv ("Lumen$Library");
+  /* A copy, at once: UnixLib's getenv hands back a buffer that the next
+     getenv may reuse (found on a Pi: Lumen$Dir, read later, left this
+     empty and the library had nowhere to go). */
+  static char path[1024];
+  const char *v = getenv ("Lumen$Library");
   int quit = 0;
-  if (!path || !*path)
-    path = "<Choices$Write>.Lumen.Library";
+  snprintf (path, sizeof path, "%s", v && *v ? v : "<Choices$Write>.Lumen.Library");
   if (app_init (path))
     return 1;
   while (!quit)

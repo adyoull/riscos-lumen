@@ -130,6 +130,17 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
 - If the icon sprites aren't in the Wimp's pool when Lumen starts, it
   loads <Lumen$Dir>.!Sprites itself; if there is still no picture, the
   icon bar icon is the word "Lumen", so there is always something to click.
+
+## 0.0.11
+
+- Fixed the Pi's "Lumen doesn't know where to keep its library ("")":
+  main kept the pointer UnixLib's getenv returned for Lumen$Library, and
+  the getenv of Lumen$Dir (made when the icon sprites had to be loaded)
+  reused that buffer, emptying it. The value is copied at once now.
+  Reproduced in ROL 5.31-5 (the old build showed "Can't open the
+  catalogue ø:") and fixed there.
+- !Run: the nested If ... Else could leave Lumen$Library unset; now two
+  plain lines (Choices, else beside !Lumen).
 - Still to come in milestone 1: the loupe, a curves editor, several
   versions of one original, full-resolution rendering.
 

@@ -49,11 +49,14 @@ static int have_sprite (const char *name)
    now, so the icon bar icon has its picture. */
 static void ensure_sprites (void)
 {
-  const char *dir = getenv ("Lumen$Dir");
   char cmd[300];
-  if (have_sprite ("!lumen") || !dir || !*dir)
+  const char *v;
+  if (have_sprite ("!lumen"))
     return;
-  snprintf (cmd, sizeof cmd, "IconSprites %s.!Sprites", dir);
+  v = getenv ("Lumen$Dir");
+  if (!v || !*v)
+    return;
+  snprintf (cmd, sizeof cmd, "IconSprites %s.!Sprites", v);
   _swix (OS_CLI, _IN (0), cmd);
 }
 
