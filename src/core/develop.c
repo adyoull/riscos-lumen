@@ -98,7 +98,7 @@ void develop_prepare (develop *d, const recipe *r)
   {
     recipe look = *r;
     int p;
-    for (p = P_FIRST_GEOMETRY; p < P_COUNT; p++)   /* geometry is not develop's business */
+    for (p = P_SHARPEN; p < P_COUNT; p++)   /* sharpening and geometry are not develop's business */
       look.v[p] = recipe_params[p].def;
     d->identity = recipe_is_default (&look);
   }

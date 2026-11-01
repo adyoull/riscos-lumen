@@ -526,12 +526,28 @@ int main (int argc, char **argv)
     CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "undo brings +1 back");
     /* Reset all, then undo it. */
     memset (b, 0, sizeof b);
-    b[0] = vopened[1] + px + 24 + 2 * 202 + 93; b[1] = vopened[4] - 24 - 150 - 16 - 52 - 84 - 972 - 16 - 30;
+    b[0] = vopened[1] + px + 24 + 2 * 202 + 93; b[1] = vopened[4] - 24 - 150 - 16 - 52 - 84 - 972 - 172 - 16 - 30;
     b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
     app_event (Mouse_Click, b, 0);
     CHECK (recipe_is_default (viewer_recipe ()), "Reset all");
     key (0x1A);
     CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and undo it");
+    /* Fold the White Balance group by clicking its name: Exposure moves up. */
+    {
+      int wb_top = vopened[4] - 24 - 150 - 16 - 52 - 84;
+      memset (b, 0, sizeof b);
+      b[0] = vopened[1] + px + 24 + 60; b[1] = wb_top - 26; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      memset (b, 0, sizeof b);
+      b[0] = sx; b[1] = sy + 2 * 56; b[2] = Button_Adjust; b[3] = VIEWER; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      CHECK (viewer_recipe ()->v[P_EV] == 0, "White Balance folded: Exposure's slider is two rows higher");
+      key (0x1A);
+      memset (b, 0, sizeof b);
+      b[0] = vopened[1] + px + 24 + 60; b[1] = wb_top - 26; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and unfolded again");
+    }
     /* Rate it from the viewer. */
     key ('5');
     browser_item (0, &it);

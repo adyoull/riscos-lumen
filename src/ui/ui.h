@@ -68,6 +68,7 @@ int draw_yeig (void);
 void draw_rect (int x0, int y0, int x1, int y1, unsigned rgb);   /* rgb is &BBGGRR00 */
 void draw_frame (int x0, int y0, int x1, int y1, unsigned rgb);
 void draw_star (int cx, int cy, int r, unsigned rgb);
+void draw_triangle (int x0, int y0, int x1, int y1, int x2, int y2, unsigned rgb);
 void draw_text (int x, int y, const char *s, unsigned fg, unsigned bg);
 int draw_text_width (const char *s);
 /* A 32bpp sprite (see thumbcache.c) scaled to fit a box, centred across

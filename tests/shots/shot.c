@@ -439,6 +439,7 @@ int main (int argc, char **argv)
   /* 8. Straightened and keystoned, with the fine grid. */
   viewer_reset_all ();
   viewer_set (P_ANGLE, 6);
+  viewer_set (P_SHARPEN, 60);
   viewer_set (P_PERSP_V, 40);
   viewer_set_grid (3);
   run (100000);

@@ -11,6 +11,7 @@
 #include "export.h"
 #include "fsys.h"
 #include "geometry.h"
+#include "sharpen.h"
 #include "thumbgen.h"
 
 #define BAND 16                        /* rows rendered at a time */
@@ -32,7 +33,10 @@ struct exporter
   geom_plan g;
   develop *dev;
   int y;                               /* next output row */
+  int band, margin, sharp;             /* rows written a step; extra rows each side for sharpening */
+  double sigma;
   int done, file_open, created;
+  int full_w, full_h;                  /* the original as shown, full size */
   uint16_t *lin;                       /* BAND rows after geometry */
   uint32_t *px;                        /* BAND rows developed */
   unsigned char *row;                  /* one RGB row for the encoder */
@@ -112,6 +116,8 @@ exporter *export_start (const char *src, int src_w, int src_h, int orientation,
       full_w = src_h;
       full_h = src_w;
     }
+  e->full_w = full_w;
+  e->full_h = full_h;
   /* Decode only as large as the output needs: the output's scale relative
      to the full-size picture, applied to the original's longer side. */
   decode_side = longer (src_w, src_h);
@@ -195,13 +201,13 @@ static int open_output (exporter *e)
   return 0;
 }
 
-static int write_rows (exporter *e, int y0, int y1)
+static int write_rows (exporter *e, int y0, int y1, const uint32_t *band)
 {
   volatile int y;
   int x;
   for (y = y0; y < y1; y++)
     {
-      const uint32_t *p = e->px + (size_t) (y - y0) * e->g.ow;
+      const uint32_t *p = band + (size_t) (y - y0) * e->g.ow;
       for (x = 0; x < e->g.ow; x++)
         {
           e->row[3 * x] = (unsigned char) p[x];
@@ -281,12 +287,24 @@ int export_step (exporter *e, int rows)
       thumbgen_free (e->tg);
       e->tg = NULL;
       {
-        int ow, oh;
+        int ow, oh, fw, fh;
         export_plan_size (e->img.w, e->img.h, &e->r, e->o.max_side, &ow, &oh);
         geom_plan_make (&e->g, &e->r, e->img.w, e->img.h, 1, ow, oh);
+        /* Sharpening: its radius is in full-size pixels; the output's
+           scale is its size over the full-size output's. */
+        e->sharp = (int) e->r.v[P_SHARPEN];
+        e->band = BAND;
+        e->margin = 0;
+        if (e->sharp > 0)
+          {
+            export_plan_size (e->full_w, e->full_h, &e->r, 0, &fw, &fh);
+            e->sigma = sharpen_sigma (&e->r, fw > 0 ? (double) (ow > oh ? ow : oh) / (fw > fh ? fw : fh) : 1);
+            e->margin = sharpen_margin (e->sigma);
+            e->band = 48;              /* so the margins cost less */
+          }
       }
-      e->lin = malloc ((size_t) e->g.ow * BAND * 6);
-      e->px = malloc ((size_t) e->g.ow * BAND * 4);
+      e->lin = malloc ((size_t) e->g.ow * (e->band + 2 * e->margin) * 6);
+      e->px = malloc ((size_t) e->g.ow * (e->band + 2 * e->margin) * 4);
       e->row = malloc ((size_t) e->g.ow * 3);
       if (!e->lin || !e->px || !e->row)
         {
@@ -299,10 +317,16 @@ int export_step (exporter *e, int rows)
     }
   while (rows > 0 && e->y < e->g.oh)
     {
-      int y1 = e->y + BAND < e->g.oh ? e->y + BAND : e->g.oh;
-      geom_rows_rgb8 (&e->g, e->img.rgb, dev_srgb_to_linear (), e->lin, e->y, y1, e->y);
-      develop_rows (e->dev, e->lin, e->g.ow, 0, y1 - e->y, e->px, NULL);
-      if (write_rows (e, e->y, y1))
+      int y1 = e->y + e->band < e->g.oh ? e->y + e->band : e->g.oh;
+      /* With sharpening, the band is rendered with margin rows above and
+         below (as far as the picture goes), sharpened, and its middle written. */
+      int a = e->y - e->margin < 0 ? 0 : e->y - e->margin;
+      int b = y1 + e->margin > e->g.oh ? e->g.oh : y1 + e->margin;
+      geom_rows_rgb8 (&e->g, e->img.rgb, dev_srgb_to_linear (), e->lin, a, b, a);
+      develop_rows (e->dev, e->lin, e->g.ow, 0, b - a, e->px, NULL);
+      if (e->sharp > 0)
+        sharpen32 (e->px, e->g.ow, b - a, e->sharp, e->sigma);
+      if (write_rows (e, e->y, y1, e->px + (size_t) (e->y - a) * e->g.ow))
         return e->done = -1;
       rows -= y1 - e->y;
       e->y = y1;

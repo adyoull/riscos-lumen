@@ -107,6 +107,17 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
   renders on release); a click without moving, Z or Escape returns to fit.
   Adjustments while zoomed re-render the region; the histogram stays the
   proxy's.
+
+## 0.0.9
+
+- Sharpen (sharpen.c): unsharp mask on luminance (all three channels
+  move by the same amount, so no colour fringes), gaussian sigma = radius
+  in full-size pixels times the picture's scale, a one-level threshold.
+  Applied last: to the viewer's half and full renders and the 100%
+  region, and to exports in 48-row bands with overlapping margins (the
+  result is identical to sharpening the whole picture at once).
+- The panel's groups fold (click the name; disclosure triangles); when
+  the window is too short, untouched groups fold from the bottom.
 - Still to come in milestone 1: the loupe, a curves editor, several
   versions of one original, full-resolution rendering.
 

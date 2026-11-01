@@ -132,7 +132,7 @@ void auto_adjust (const uint16_t *lin, int w, int h, recipe *r)
   double m[3], *lum, chroma = 0, gain, p_lo, p_hi, p5, p95, med, spread;
   long cnt = 0, cap = SAMPLES * 2 + 64;
   int p;
-  for (p = 0; p < P_FIRST_GEOMETRY; p++)       /* start from the original look */
+  for (p = 0; p < P_SHARPEN; p++)       /* start from the original tones (sharpening and geometry stay) */
     r->v[p] = recipe_params[p].def;
   auto_white_balance (lin, w, h, &t, &n);
   recipe_set (r, P_TEMP, t);

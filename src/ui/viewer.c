@@ -34,6 +34,7 @@
 #include "develop.h"
 #include "geometry.h"
 #include "recipe.h"
+#include "sharpen.h"
 #include "thumbgen.h"
 #include "ui.h"
 
@@ -69,7 +70,7 @@
 #define COL_CROP 0xFFFFFF00u
 
 enum { V_CLOSED, V_LOADING, V_READY, V_FAILED };
-enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE };
+enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE, HIT_GROUP };
 enum { TOOL_AUTO, TOOL_CROP, TOOL_GRID, TOOL_PRESETS, TOOL_COUNT };
 enum { LINK_RESET, LINK_PICK, LINK_AUTO_WB, LINK_LEFT, LINK_RIGHT };
 /* Crop drags: which edges move (or all of it). */
@@ -111,7 +112,7 @@ static int crop_mode, crop_edges, crop_shape, grid_mode, picking;
    is the output pixel at the middle of the view. */
 static int zoom;                       /* 0 fit, 1 decoding the full size, 2 at 100% */
 static char photo_path[1024];
-static int photo_orientation;
+static int photo_orientation, photo_long;   /* the original's longer side */
 static thumbgen *zgen;
 static rgb_image zfull;
 static geom_plan zplan;
@@ -229,9 +230,17 @@ static int groups_top (void) { return tools_top () - TOOLS_H; }
 
 static int group_shown (int g) { return recipe_groups[g].panel; }
 
+/* Groups fold away, as Aperture's do: a click on a group's name. A
+   group the person hasn't folded or opened themselves is folded
+   automatically, from the bottom, when the panel wouldn't fit. */
+#define MAX_GROUPS 16
+static int folded[MAX_GROUPS], folded_by_hand[MAX_GROUPS];
+
 static int group_rows (int g)
 {
   int p, n = 0;
+  if (g < MAX_GROUPS && folded[g])
+    return 0;
   for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
     if (!recipe_params[p].hidden)
       n++;
@@ -256,7 +265,7 @@ static int row_top (int p)
   for (g = 0; g < recipe_ngroups; g++)
     if (p >= recipe_groups[g].first && p <= recipe_groups[g].last)
       {
-        if (!group_shown (g))
+        if (!group_shown (g) || (g < MAX_GROUPS && folded[g]))
           return 0;
         for (i = 0, q = recipe_groups[g].first; q < p; q++)
           if (!recipe_params[q].hidden)
@@ -269,6 +278,32 @@ static int row_top (int p)
 static int buttons_top (void)
 {
   return group_top (recipe_ngroups) - 16;
+}
+
+static int group_changed (int g)
+{
+  int p;
+  for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
+    if (current.v[p] != recipe_params[p].def)
+      return 1;
+  return 0;
+}
+
+/* Folds groups (not ones set by hand) from the bottom until the panel fits. */
+static void fit_panel (void)
+{
+  int g;
+  for (g = 0; g < recipe_ngroups && g < MAX_GROUPS; g++)
+    if (!folded_by_hand[g])
+      folded[g] = 0;
+  /* Unchanged groups go first, then any. */
+  {
+    int pass;
+    for (pass = 0; pass < 2; pass++)
+      for (g = recipe_ngroups - 1; g >= 0 && buttons_top () - BUTTON_H - PAD < -vis_h; g--)
+        if (g < MAX_GROUPS && group_shown (g) && !folded_by_hand[g] && (pass || !group_changed (g)))
+          folded[g] = 1;
+  }
 }
 
 /* Button k of n across the panel, its top at top. */
@@ -384,6 +419,11 @@ static int hit (int wx, int wy, int *what)
               *what = g * 8 + ids[k];
               return HIT_LINK;
             }
+        }
+      if (wx < panel_x0 () + PAD + 44 + draw_text_width (recipe_groups[g].name) + 24)
+        {
+          *what = g;
+          return HIT_GROUP;
         }
     }
   for (k = 0; k < TOOL_COUNT; k++)
@@ -506,6 +546,7 @@ void viewer_open_window (int *block)
     {
       vis_w = block[3] - block[1];
       vis_h = block[4] - block[2];
+      fit_panel ();
       force (0, -0x10000000, 0x10000000, 0);
       if (zoom == 2)
         zoom_layout (0);
@@ -605,6 +646,20 @@ no_memory:
   return -1;
 }
 
+/* Sharpening, last: on a picture at scale (its size over the full
+   size's). Not in the crop tool, where the picture is only a guide. */
+static void sharpen_pixels (uint32_t *px, int w, int h, int pic_long)
+{
+  recipe r;
+  effective (&r);
+  if (r.v[P_SHARPEN] <= 0 || crop_mode || pic_long <= 0)
+    return;
+  sharpen32 (px, w, h, (int) r.v[P_SHARPEN],
+             sharpen_sigma (&r, photo_long > 0 ? (double) pic_long / photo_long : 1));
+}
+
+static int longer_side (int w, int h) { return w > h ? w : h; }
+
 /* In the crop tool, everything outside the crop is darkened. */
 static void shade (uint32_t *pix, int w, int h, int y0, int y1)
 {
@@ -630,6 +685,7 @@ static void render_half (void)
     return;
   memset (&hist, 0, sizeof hist);
   develop_rows (dev, geo_half, ghw, 0, ghh, half_spr.pixels, &hist);
+  sharpen_pixels (half_spr.pixels, ghw, ghh, longer_side (hw, hh));
   shade (half_spr.pixels, ghw, ghh, 0, ghh);
   show_half = 1;
   force_image ();
@@ -660,6 +716,7 @@ static void render_full_until (unsigned deadline)
     }
   if (full_y >= gh)
     {
+      sharpen_pixels (full_spr.pixels, gw, gh, longer_side (sw, sh));
       draw_forget ((unsigned *) full_spr.area + 4);   /* new pixels: smooth them again */
       full_y = -1;
       geo_pending = 0;
@@ -740,7 +797,10 @@ static void zoom_render_until (unsigned deadline)
         break;
     }
   if (zy >= zspr.h)
-    zy = -1;
+    {
+      zy = -1;
+      sharpen_pixels (zspr.pixels, zspr.w, zspr.h, longer_side (zfull.w, zfull.h));
+    }
   force_image ();
 }
 
@@ -905,6 +965,7 @@ void viewer_show (int i)
       snprintf (err, sizeof err, "This photo is no longer in the library.");
     }
   else if (snprintf (photo_path, sizeof photo_path, "%s", d.path), photo_orientation = d.orientation,
+           photo_long = d.width > d.height ? d.width : d.height,
            !(tg = thumbgen_start (d.path, NULL, PROXY_SIDE, d.orientation, e, sizeof e)))
     {
       state = V_FAILED;
@@ -1554,6 +1615,12 @@ void viewer_click (int *b)
     }
   else if (h == HIT_LINK && b[2] == Button_Select)
     link_click (what / 8, what % 8);
+  else if (h == HIT_GROUP && what < MAX_GROUPS && (b[2] == Button_Select || b[2] == Button_Adjust))
+    {
+      folded[what] = !folded[what];
+      folded_by_hand[what] = 1;
+      force_panel ();
+    }
   else if (h == HIT_TOOL && b[2] == Button_Select)
     tool_click (what, b[0], b[1]);
   else if (h == HIT_UNDO && b[2] == Button_Select)
@@ -1697,6 +1764,21 @@ int viewer_key (int key)
 }
 
 /* --- drawing */
+/* A disclosure triangle: pointing down when open, right when folded. */
+static void draw_disclosure (int cx, int cy, int is_folded)
+{
+  int ax, ay, bx, by, qx, qy;
+  if (is_folded)
+    {
+      ax = cx - 7; ay = cy + 10; bx = cx - 7; by = cy - 10; qx = cx + 9; qy = cy;
+    }
+  else
+    {
+      ax = cx - 10; ay = cy + 7; bx = cx + 10; by = cy + 7; qx = cx; qy = cy - 9;
+    }
+  draw_triangle (ax, ay, bx, by, qx, qy, COL_QUIET);
+}
+
 static void draw_slider (int p, int ox, int oy)
 {
   const recipe_param *d = &recipe_params[p];
@@ -1886,7 +1968,8 @@ static void draw_panel (int ox, int oy)
           if (current.v[p] != recipe_params[p].def)
             changed = 1;
       draw_rect (px + PAD, top - 2, ox + vis_w - PAD, top, COL_TRACK);
-      draw_text (px + PAD, top - 36, recipe_groups[g].name, COL_TEXT, COL_PANEL);
+      draw_disclosure (px + PAD + 12, top - 26, g < MAX_GROUPS && folded[g]);
+      draw_text (px + PAD + 36, top - 36, recipe_groups[g].name, COL_TEXT, COL_PANEL);
       n = group_links (g, ids, names);
       for (k = 0; k < n; k++)
         {
@@ -1903,9 +1986,10 @@ static void draw_panel (int ox, int oy)
             }
           draw_text (ox + x0, top - 36, names[k], src ? col : COL_STAR_OFF, COL_PANEL);
         }
-      for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
-        if (!recipe_params[p].hidden)
-          draw_slider (p, ox, oy);
+      if (!(g < MAX_GROUPS && folded[g]))
+        for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
+          if (!recipe_params[p].hidden)
+            draw_slider (p, ox, oy);
     }
   draw_button (0, "Undo", viewer_can_undo (), ox, oy);
   draw_button (1, "Redo", viewer_can_redo (), ox, oy);

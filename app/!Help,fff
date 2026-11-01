@@ -1,4 +1,4 @@
-Lumen 0.0.8 (01 Nov 2026) - test build
+Lumen 0.0.9 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -66,6 +66,16 @@ The tools above the sliders:
                 fine grid shows anyway
   Presets       apply a saved look, save the current one by name, or
                 delete one. A preset keeps the look, not the crop
+
+Click a group's name (or its triangle) to fold it away or open it again.
+If the window is too short for everything, Lumen folds the groups you
+haven't touched, from the bottom.
+
+Sharpen: Amount (0 to 200) and Radius (in pixels of the full-size
+photo). It sharpens brightness only, so edges get crisper without
+coloured fringes, and leaves very small differences alone so skies stay
+smooth. Look at 100% (Z) to judge it; exports are sharpened at their own
+size, so a small export looks as sharp as the full-size one.
 
 White Balance: "Pick" then click something that should be grey or white
 (a cloud, a wall, a shirt); "Auto" works it out from the whole photo.

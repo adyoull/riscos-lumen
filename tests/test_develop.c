@@ -10,6 +10,7 @@
 #include "../src/core/develop.h"
 #include "../src/core/geometry.h"
 #include "../src/core/resample.h"
+#include "../src/core/sharpen.h"
 #include "../src/core/export.h"
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
@@ -815,6 +816,44 @@ static void test_export (const char *work)
     free (rows);
     free (reg);
   }
+  /* Sharpening in bands writes exactly what sharpening the whole would. */
+  {
+    rgb_image plain, sharp;
+    uint32_t *px;
+    int i, same = 1;
+    recipe_default (&r);
+    o.format = EXPORT_PNG;
+    o.max_side = 0;
+    snprintf (dst, sizeof dst, "%s/out-plain.png", work);
+    e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+    run_export (e);
+    export_free (e);
+    recipe_set (&r, P_SHARPEN, 150);
+    recipe_set (&r, P_SHARP_RADIUS, 2);
+    snprintf (dst, sizeof dst, "%s/out-sharp.png", work);
+    e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+    CHECK (run_export (e) >= 0, "a sharpened export");
+    export_free (e);
+    snprintf (dst, sizeof dst, "%s/out-plain.png", work);
+    read_back (dst, &plain);
+    snprintf (dst, sizeof dst, "%s/out-sharp.png", work);
+    read_back (dst, &sharp);
+    px = malloc ((size_t) 400 * 300 * 4);
+    for (i = 0; i < 400 * 300; i++)
+      px[i] = plain.rgb[3 * i] | plain.rgb[3 * i + 1] << 8 | (uint32_t) plain.rgb[3 * i + 2] << 16;
+    sharpen32 (px, 400, 300, 150, sharpen_sigma (&r, 1));
+    for (i = 0; i < 400 * 300; i++)
+      if (sharp.rgb[3 * i] != (px[i] & 255) || sharp.rgb[3 * i + 2] != (px[i] >> 16 & 255))
+        same = 0;
+    CHECK (same, "sharpened in 48-row bands: no seams, the same as all at once");
+    /* The red square's edge is crisper: more contrast across it. */
+    /* The red square is darker (in luminance) than what's right of it. */
+    /* Across the square's bottom edge (red above, at luminance 70, the
+       gradient below at about 110): darker above it, lighter below. */
+    CHECK (sharp.rgb[(98 * 400 + 50) * 3 + 1] < plain.rgb[(98 * 400 + 50) * 3 + 1]
+           && sharp.rgb[(101 * 400 + 50) * 3 + 1] > plain.rgb[(101 * 400 + 50) * 3 + 1], "edges get more contrast");
+    free (px); free (plain.rgb); free (sharp.rgb);
+  }
   /* Sizes from the plan. */
   {
     int ow, oh;
@@ -825,6 +864,25 @@ static void test_export (const char *work)
     CHECK (ow == 6000 && oh == 4000, "full size");
   }
   free (img.rgb);
+}
+
+static void test_sharpen (void)
+{
+  uint32_t px[40 * 10], before[40 * 10];
+  int i, flat = 1;
+  for (i = 0; i < 400; i++)
+    px[i] = (i % 40) < 20 ? 0x505050 : 0xA0A0A0;
+  memcpy (before, px, sizeof px);
+  CHECK (sharpen32 (px, 40, 10, 0, 1.0) == 0 && memcmp (px, before, sizeof px) == 0, "amount 0: nothing");
+  sharpen32 (px, 40, 10, 100, 1.0);
+  CHECK ((px[5 * 40 + 19] & 255) < 0x50 && (px[5 * 40 + 20] & 255) > 0xA0, "a step: darker before it, lighter after");
+  for (i = 0; i < 10; i++)
+    if (px[i * 40 + 2] != before[i * 40 + 2] || px[i * 40 + 37] != before[i * 40 + 37])
+      flat = 0;
+  CHECK (flat, "flat areas away from the edge unchanged");
+  CHECK ((px[5 * 40 + 19] & 255) == (px[5 * 40 + 19] >> 8 & 255) && (px[5 * 40 + 19] & 255) == (px[5 * 40 + 19] >> 16 & 255),
+         "grey stays grey (luminance only)");
+  CHECK (sharpen_margin (1.0) == 3 && sharpen_sigma (NULL == NULL ? &(recipe) { { 0 } } : NULL, 0.1) >= 0.35, "margin, and the smallest sigma");
 }
 
 int main (int argc, char **argv)
@@ -838,6 +896,7 @@ int main (int argc, char **argv)
   test_edited_thumbnail (argv[1]);
   test_geometry ();
   test_resample ();
+  test_sharpen ();
   test_develop_image ();
   test_auto ();
   test_presets (argv[1]);

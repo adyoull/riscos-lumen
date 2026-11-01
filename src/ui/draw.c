@@ -182,6 +182,14 @@ void draw_frame (int x0, int y0, int x1, int y1, unsigned rgb)
   draw_rect (x1 - t, y0, x1, y1, rgb);
 }
 
+void draw_triangle (int x0, int y0, int x1, int y1, int x2, int y2, unsigned rgb)
+{
+  gcol (rgb);
+  _swix (OS_Plot, _INR (0, 2), 4, x0, y0);
+  _swix (OS_Plot, _INR (0, 2), 4, x1, y1);
+  _swix (OS_Plot, _INR (0, 2), 85, x2, y2);
+}
+
 /* A five-pointed star as ten triangles round its centre. */
 void draw_star (int cx, int cy, int r, unsigned rgb)
 {

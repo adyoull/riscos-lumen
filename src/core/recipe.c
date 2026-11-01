@@ -15,6 +15,8 @@ const recipe_param recipe_params[P_COUNT] = {
   { "enhance",  "contrast",   "Contrast",    -100, 100, 0, 1, 0, 0 },
   { "enhance",  "saturation", "Saturation",  -100, 100, 0, 1, 0, 0 },
   { "enhance",  "vibrance",   "Vibrancy",    -100, 100, 0, 1, 0, 0 },
+  { "sharpen",  "amount",     "Amount",         0, 200, 0, 1, 0, 0 },
+  { "sharpen",  "radius",     "Radius",       0.3,   3, 1, 0.1f, 1, 0 },
   { "geometry", "rotate",     "Rotate",         0,   3, 0, 1, 0, 1 },
   { "geometry", "angle",      "Straighten",   -15,  15, 0, 0.1f, 1, 0 },
   { "geometry", "vertical",   "Vertical",    -100, 100, 0, 1, 0, 0 },
@@ -30,6 +32,7 @@ const recipe_group recipe_groups[] = {
   { "Exposure", P_EV, P_EV, 1 },
   { "Levels", P_BLACK, P_MID, 1 },
   { "Enhance", P_CONTRAST, P_VIBRANCE, 1 },
+  { "Sharpen", P_SHARPEN, P_SHARP_RADIUS, 1 },
   { "Geometry", P_ROTATE, P_PERSP_H, 1 },
   { "Crop", P_CROP_X0, P_CROP_Y1, 0 },
 };
