@@ -1,4 +1,4 @@
-Lumen 0.0.16 (01 Nov 2026) - test build
+Lumen 0.0.17 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -209,6 +209,29 @@ viewer develops the raw data with the camera's white balance and colour
 in the background (a few seconds for a big file), at half size; 100%,
 the loupe and exports develop it in full.
 
+Choices
+-------
+Choices... on the icon bar menu sets:
+  Library     where the library is kept, from the next time Lumen starts
+              (empty: the usual place, in Choices). Drag a directory to
+              the window to fill it in. Setting Lumen$Library before
+              running Lumen overrides it.
+  Export      the format, size and JPEG quality the Export box starts with
+  Thumbnails  the size Lumen starts with
+  Check the photos' files are still there when Lumen opens: switch off
+              for a big library on discs that are often away.
+They are kept in <Choices$Write>.Lumen.Choices.
+
+Help
+----
+Lumen answers !Help: run it and point at anything in Lumen's windows or
+menus.
+
+One Lumen at a time
+-------------------
+Running Lumen again while it is already running opens the one that is
+running, rather than a second copy on the same library.
+
 Plug-ins
 --------
 Plug-ins add to what Lumen can do; LumenRaw (camera raw files) is the
@@ -223,6 +246,15 @@ off in its Choices.
 
 A plug-in's directory has a text file, Plugin, saying what it is:
 Name, Version, Kind (raw), Program, Package and Description lines.
+
+Exported files
+--------------
+Exports keep the original's EXIF: camera, lens, exposure, date, GPS,
+author and copyright (a JPEG's EXIF block, a PNG's eXIf chunk). The
+orientation, size and colour space are the export's own; the
+thumbnail and the maker's notes are left out. For an original with no
+EXIF of its own (a PNG, some raw files), what the library knows of it
+is written instead.
 
 Removing photos
 ---------------
@@ -257,5 +289,14 @@ Needs
 RISC OS 5.30 or later on a Raspberry Pi 4, 400 or CM4 (other ARMv7
 machines should work), and the SharedUnixLibrary 1.16+ and ARMEABISupport
 modules from PackMan.
+
+Licences
+--------
+Lumen is (C) Andrew Youll, 2026. It is built with SQLite (public
+domain), libjpeg-turbo (IJG, BSD and zlib licences), libpng (PNG
+Reference Library License v2), zlib (zlib licence), UnixLib (revised
+BSD, with parts under the LGPL) and GCC's runtime library (GPL 3 with
+the Runtime Library Exception). Their licences are in !Lumen.Licences;
+its ReadMe lists them. The LibRaw plug-in has its own Licence file.
 
 Andrew Youll, 2026

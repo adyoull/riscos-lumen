@@ -394,13 +394,14 @@ static menu *build_iconbar_menu (void)
   menu *m, *plugm;
   used = 0;
   plugm = build_plugins_menu ();
-  m = new_menu (APP_NAME, 4);
+  m = new_menu (APP_NAME, 5);
   if (m)
     {
       set_item (m, 0, 0, "Info", 0, info_window, info_window == -1);
       set_item (m, 1, 0, "Open library", MF_DOTTED, -1, 0);
-      set_item (m, 2, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
-      set_item (m, 3, 1, "Quit", 0, -1, 0);
+      set_item (m, 2, 0, "Choices...", 0, -1, 0);
+      set_item (m, 3, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
+      set_item (m, 4, 1, "Quit", 0, -1, 0);
     }
   return m;
 }
@@ -601,7 +602,7 @@ void menus_open_iconbar_menu (int x)
   menu *m = build_iconbar_menu ();
   which = 2;
   open_x = x - 64;
-  open_y = 96 + 4 * 44;
+  open_y = 96 + 5 * 44;
   if (m)
     _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
@@ -785,8 +786,10 @@ int menus_selection (const int *choice)
       if (choice[0] == 1)
         mainwin_open (NULL);
       else if (choice[0] == 2)
-        plugins_choice (choice + 1);
+        choicewin_open ();
       else if (choice[0] == 3)
+        plugins_choice (choice + 1);
+      else if (choice[0] == 4)
         quit_requested = 1;
     }
   if (quit_requested)
@@ -837,4 +840,58 @@ int menus_selection (const int *choice)
         _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
     }
   return 0;
+}
+
+/* --- help for menu items (Wimp_GetMenuState 1: the item
+   under the pointer as a list of selections, -1 terminated; -1 first if
+   the pointer isn't over Lumen's menu) */
+const char *menus_help (int window, int icon)
+{
+  int c[16];
+  const plugin_info *pl;
+  int n = app_plugins (&pl), base;
+  if (window < 0 || _swix (Wimp_GetMenuState, _INR (0, 3), 1, c, window, icon) || c[0] < 0)
+    return NULL;
+  if (n > MAX_LIST)
+    n = MAX_LIST;
+  base = n ? n : 1;
+  /* The Plug-ins submenu, from the icon bar menu (2) or the window menu (4). */
+  if ((which == 2 && c[0] == 3) || (which == 1 && c[0] == 4))
+    {
+      if (c[1] < 0)
+        return "Lumen's plug-ins: switch them on or off, add or remove them.";
+      if (c[1] < n)
+        return pl[c[1]].enabled ? "Ticked: this plug-in is on. Choose it to switch it off (it stays installed)."
+                                : "Not ticked: this plug-in is off. Choose it to switch it on.";
+      if (c[1] == base)
+        return "Opens a window to drag a plug-in's directory into. Plug-ins come from PackMan.";
+      if (c[1] == base + 1)
+        return c[2] >= 0 ? "Deletes this plug-in from Lumen, after asking." : "Deletes a plug-in from Lumen.";
+      return "";
+    }
+  if (which == 2)
+    switch (c[0])
+      {
+      case 0: return "Who made Lumen, and its version.";
+      case 1: return "Opens Lumen's window.";
+      case 2: return "Where the library is, how exports and thumbnails start, and checking for missing files.";
+      case 4: return "Leaves Lumen. Everything is saved as you go.";
+      }
+  if (which == 1)
+    switch (c[0])
+      {
+      case 0: return "Which photos the Browser shows: all, flagged, rejected, the last import, a project or album, by rating.";
+      case 1:
+        if (c[1] == 9)
+          return "Takes the selected photos out of the library, after asking. Their files are not deleted.";
+        if (c[1] == 8)
+          return "Exports the selected photos as new JPEG or PNG files.";
+        return "Rate, flag, reject, select, copy and paste adjustments, export or remove the selected photos.";
+      case 2: return "Make albums from the selection, add the selection to one, or take it out of this one.";
+      case 3: return "Thumbnail size: Small, Medium or Large.";
+      case 5: return "Leaves Lumen. Everything is saved as you go.";
+      }
+  if (which == 3)
+    return "What can be done to this photo. Many have keys, shown beside them.";
+  return "";
 }

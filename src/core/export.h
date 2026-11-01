@@ -6,12 +6,14 @@
    area averaging, as for thumbnails) into 8-bit RGB - the only whole
    picture held, 3 bytes a pixel - and then each band of output rows goes
    through the geometry (in linear light), the develop pipeline and
-   straight into the encoder. The file gets its RISC OS filetype at the
+   straight into the encoder. The original's EXIF goes with it (see
+   exifout.h), in a JPEG's APP1 segment or a PNG's eXIf chunk. The file gets its RISC OS filetype at the
    end; a failed or abandoned export leaves no file behind. */
 #ifndef LUMEN_EXPORT_H
 #define LUMEN_EXPORT_H
 #include <stddef.h>
 #include "recipe.h"
+#include "exif.h"
 
 enum { EXPORT_JPEG, EXPORT_PNG };
 
@@ -20,6 +22,7 @@ typedef struct
   int format;                          /* EXPORT_JPEG or EXPORT_PNG */
   int quality;                         /* JPEG, 1-100 */
   int max_side;                        /* longer side in pixels; 0 = full size */
+  char software[32];                   /* EXIF Software, "" for none */
 } export_opts;
 
 typedef struct exporter exporter;
@@ -29,6 +32,9 @@ typedef struct exporter exporter;
 exporter *export_start (const char *src, int src_w, int src_h, int orientation,
                         const recipe *r, const char *dst, const export_opts *o,
                         char *err, size_t errlen);
+/* What the library knows of the photo (camera, date, exposure): the EXIF
+   written when the original has none of its own to copy (exifout.h). */
+void export_set_known (exporter *e, const img_info *known);
 /* Does up to rows rows of work. 0: more to do; 1: written; -1: failed. */
 int export_step (exporter *e, int rows);
 int export_progress (const exporter *e);   /* 0-100 */

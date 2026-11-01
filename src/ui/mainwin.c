@@ -272,7 +272,8 @@ static void open_main (int *b)
     {
       is_open = 1;
       _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
-      lib_verify_start (app_library ());   /* a disc may be back (or gone) since it was shut */
+      if (app_prefs ()->verify)
+        lib_verify_start (app_library ());   /* a disc may be back (or gone) since it was shut */
     }
 }
 
@@ -1270,6 +1271,51 @@ void mainwin_click (int *b)
             return;
           }
       }
+}
+
+/* What part of the main window a screen point is over, for help.c. */
+int mainwin_part_at (int x, int y, int icon)
+{
+  int st[9], wx, wy, k;
+  st[0] = win;
+  if (_swix (Wimp_GetWindowState, _IN (1), st))
+    return MW_NONE;
+  if (search_icon >= 0 && icon == search_icon)
+    return MW_SEARCH;
+  wx = x - (st[1] - st[5]);
+  wy = y - (st[4] - st[6]);
+  for (k = 0; k < TB_COUNT; k++)
+    {
+      int r[4];
+      toolbar_button (k, r);
+      if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
+        return MW_TOOLBAR + k;
+    }
+  if (wy < -vis_h + BB_H)
+    {
+      int r[4];
+      if (wx > vis_w - GRIP_W)
+        return MW_GRIP;
+      for (k = 0; k < 3; k++)
+        {
+          size_rect (k, r);
+          if (wx >= r[0] && wx <= r[2])
+            return MW_SIZE;
+        }
+      rating_rect (r);
+      if (wx >= r[0] && wx <= r[2])
+        return MW_RATING;
+      return MW_STATUS;
+    }
+  if (insp_on && !full_screen)
+    for (k = 0; k < 3; k++)
+      {
+        int r[4];
+        tab_rect (k, r);
+        if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
+          return MW_TAB + k;
+      }
+  return MW_NONE;
 }
 
 void mainwin_inspector_click (int *b)

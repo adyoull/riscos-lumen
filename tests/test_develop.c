@@ -13,6 +13,8 @@
 #include "../src/core/resample.h"
 #include "../src/core/sharpen.h"
 #include "../src/core/export.h"
+#include "../src/core/exifout.h"
+#include <png.h>
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
 #include "../src/core/recipe.h"
@@ -701,6 +703,203 @@ static int read_back (const char *path, rgb_image *img)
   return r;
 }
 
+/* --- EXIF carried into exports */
+static unsigned char *mm;              /* a big-endian TIFF being built */
+static size_t mm_len;
+static void be16 (size_t at, unsigned v) { mm[at] = (unsigned char) (v >> 8); mm[at + 1] = (unsigned char) v; }
+static void be32 (size_t at, unsigned long v) { be16 (at, (unsigned) (v >> 16)); be16 (at + 2, (unsigned) (v & 0xFFFF)); }
+/* An entry; values over 4 bytes go at *data. */
+static void be_entry (size_t at, unsigned tag, unsigned type, unsigned long count, const unsigned char *val, size_t len,
+                      size_t *data)
+{
+  be16 (at, tag); be16 (at + 2, type); be32 (at + 4, count);
+  memset (mm + at + 8, 0, 4);
+  if (len <= 4)
+    memcpy (mm + at + 8, val, len);
+  else
+    {
+      be32 (at + 8, (unsigned long) *data);
+      memcpy (mm + *data, val, len);
+      *data += (len + 1) & ~(size_t) 1;
+    }
+  if (*data > mm_len)
+    mm_len = *data;
+}
+
+/* Motorola-order EXIF, as a Nikon writes it: IFD0 (with a raw strip
+   tag and orientation 6), Exif (maker's notes, interop pointer, size),
+   GPS, and IFD1 with a thumbnail. */
+static size_t make_mm_exif (unsigned char *buf)
+{
+  size_t d = 600, i0 = 8, ie = 200, ig = 400, i1 = 500;
+  unsigned char v[64];
+  mm = buf; mm_len = 0;
+  memset (buf, 0, 4096);
+  memcpy (buf, "MM\0\x2A", 4); be32 (4, i0);
+  be16 (i0, 7);
+  be_entry (i0 + 2, 0x010F, 2, 6, (const unsigned char *) "NIKON", 6, &d);
+  be_entry (i0 + 14, 0x0110, 2, 9, (const unsigned char *) "NIKON Z6", 9, &d);
+  v[0] = 0; v[1] = 6; be_entry (i0 + 26, 0x0112, 3, 1, v, 2, &d);
+  be_entry (i0 + 38, 0x0111, 4, 1, (const unsigned char *) "\0\0\x10\0", 4, &d);   /* a strip: left out */
+  be_entry (i0 + 50, 0x8298, 2, 10, (const unsigned char *) "(c) Andy", 9, &d);
+  be_entry (i0 + 62, 0x8769, 4, 1, (const unsigned char *) "\0\0\0\xC8", 4, &d);   /* Exif at 200 */
+  be_entry (i0 + 74, 0x8825, 4, 1, (const unsigned char *) "\0\0\x01\x90", 4, &d); /* GPS at 400 */
+  be32 (i0 + 86, i1);
+  be16 (ie, 7);
+  memcpy (v, "\0\0\0\x01\0\0\0\xFA", 8); be_entry (ie + 2, 0x829A, 5, 1, v, 8, &d);   /* 1/250 */
+  memcpy (v, "\0\0\0\x38\0\0\0\x0A", 8); be_entry (ie + 14, 0x829D, 5, 1, v, 8, &d);  /* f/5.6 */
+  v[0] = 0x01; v[1] = 0x90; be_entry (ie + 26, 0x8827, 3, 1, v, 2, &d);               /* ISO 400 */
+  be_entry (ie + 38, 0x9003, 2, 20, (const unsigned char *) "2024:06:01 10:20:30", 20, &d);
+  be_entry (ie + 50, 0x927C, 7, 12, (const unsigned char *) "Nikon\0\x02\x10\0\0MM", 12, &d);
+  v[0] = 0xFF; v[1] = 0xFF; be_entry (ie + 62, 0xA001, 3, 1, v, 2, &d);               /* uncalibrated */
+  be_entry (ie + 74, 0xA002, 4, 1, (const unsigned char *) "\0\0\x0F\xA0", 4, &d);  /* 4000 */
+  be32 (ie + 86, 0);
+  be16 (ig, 2);
+  be_entry (ig + 2, 0x0001, 2, 2, (const unsigned char *) "N", 2, &d);
+  memcpy (v, "\0\0\0\x36\0\0\0\x01\0\0\0\x1E\0\0\0\x01\0\0\0\0\0\0\0\x01", 24);
+  be_entry (ig + 14, 0x0002, 5, 3, v, 24, &d);                                        /* 54 30 0 */
+  be32 (ig + 26, 0);
+  be16 (i1, 1);
+  be_entry (i1 + 2, 0x0201, 4, 1, (const unsigned char *) "\0\0\x09\0", 4, &d);
+  be32 (i1 + 14, 0);
+  return mm_len > 700 ? mm_len : 700;
+}
+
+static char exif_seen[4096];
+static void collect (void *ctx, const char *group, const char *name, const char *value)
+{
+  size_t l = strlen (exif_seen);
+  (void) ctx;
+  snprintf (exif_seen + l, sizeof exif_seen - l, "%s|%s|%s\n", group, name, value);
+}
+
+/* The EXIF of a file Lumen wrote: listed into exif_seen. */
+static int exif_of (const char *path, int png)
+{
+  static unsigned char buf[300000];
+  size_t got, off, n;
+  FILE *f = fopen (path, "rb");
+  exif_seen[0] = '\0';
+  if (!f)
+    return -1;
+  got = fread (buf, 1, sizeof buf, f);
+  fclose (f);
+  if (png)
+    {
+      /* The eXIf chunk. */
+      size_t p = 8;
+      while (p + 12 <= got)
+        {
+          size_t len = (size_t) buf[p] << 24 | (size_t) buf[p + 1] << 16 | (size_t) buf[p + 2] << 8 | buf[p + 3];
+          if (!memcmp (buf + p + 4, "eXIf", 4))
+            return exif_list_tiff (buf + p + 8, len, collect, NULL);
+          p += 12 + len;
+        }
+      return -1;
+    }
+  if (exif_find_tiff (buf, got, &off, &n))
+    return -1;
+  CHECK (off == 12, "EXIF's APP1 straight after SOI (no JFIF first)");
+  return exif_list_tiff (buf + off, n, collect, NULL);
+}
+
+static void test_export_exif (const char *work)
+{
+  static unsigned char exif[4096], file[400000];
+  char src[700], dst[700], err[200];
+  rgb_image img;
+  recipe r;
+  export_opts o = { EXPORT_JPEG, 90, 0, "Lumen 9.9" };
+  exporter *e;
+  size_t n, got;
+  FILE *f;
+  img_info known;
+  img.w = 120; img.h = 80;
+  img.rgb = calloc (120 * 80, 3);
+  snprintf (src, sizeof src, "%s/exif-src.jpg", work);
+  CHECK (img_save_jpeg (&img, src, 90, err, sizeof err) == 0, "exif: a source");
+  free (img.rgb);
+  /* Splice an APP1 Exif segment in after SOI. */
+  n = make_mm_exif (exif);
+  f = fopen (src, "rb");
+  got = f ? fread (file, 1, sizeof file, f) : 0;
+  if (f)
+    fclose (f);
+  f = fopen (src, "wb");
+  if (f)
+    {
+      unsigned char seg[10];
+      seg[0] = 0xFF; seg[1] = 0xE1; seg[2] = (unsigned char) ((n + 8) >> 8); seg[3] = (unsigned char) (n + 8);
+      memcpy (seg + 4, "Exif\0\0", 6);
+      fwrite (file, 1, 2, f);
+      fwrite (seg, 1, 10, f);
+      fwrite (exif, 1, n, f);
+      fwrite (file + 2, 1, got - 2, f);
+      fclose (f);
+    }
+  recipe_default (&r);
+  recipe_set (&r, P_ROTATE, 1);        /* a quarter turn: 80 x 120 out */
+  snprintf (dst, sizeof dst, "%s/exif-out.jpg", work);
+  e = export_start (src, 120, 80, 1, &r, dst, &o, err, sizeof err);
+  if (e)
+    run_export (e);
+  export_free (e);
+  CHECK (exif_of (dst, 0) > 0, "exif: the export has EXIF");
+  CHECK (strstr (exif_seen, "Camera|Make|NIKON\n") && strstr (exif_seen, "Model|NIKON Z6\n"), "exif: camera kept");
+  CHECK (strstr (exif_seen, "|Copyright|(c) Andy\n") != NULL, "exif: copyright kept");
+  CHECK (strstr (exif_seen, "Orientation|Normal") != NULL && !strstr (exif_seen, "90"), "exif: orientation 1 (it is turned already)");
+  CHECK (strstr (exif_seen, "Software|Lumen 9.9\n") != NULL, "exif: Software is Lumen");
+  CHECK (strstr (exif_seen, "1/250 s") && strstr (exif_seen, "f/5.6") && strstr (exif_seen, "|400\n"),
+         "exif: exposure, aperture, ISO kept");
+  CHECK (strstr (exif_seen, "2024:06:01 10:20:30") != NULL, "exif: date kept");
+  CHECK (strstr (exif_seen, "GPS|") != NULL && strstr (exif_seen, "54") != NULL, "exif: GPS kept");
+  CHECK (!strstr (exif_seen, "Maker") && !strstr (exif_seen, "4000") && !strstr (exif_seen, "Uncalibrated"),
+         "exif: no maker's notes, old size or uncalibrated colour");
+  CHECK (strstr (exif_seen, "sRGB") != NULL, "exif: colour space sRGB");
+  CHECK (strstr (exif_seen, "|80\n") && strstr (exif_seen, "|120\n"), "exif: the export's own size");
+  /* PNG: the same, in eXIf. */
+  o.format = EXPORT_PNG;
+  snprintf (dst, sizeof dst, "%s/exif-out.png", work);
+  e = export_start (src, 120, 80, 1, &r, dst, &o, err, sizeof err);
+  if (e)
+    run_export (e);
+  export_free (e);
+  CHECK (exif_of (dst, 1) > 0 && strstr (exif_seen, "Model|NIKON Z6\n"), "exif: in a PNG's eXIf chunk");
+  /* No EXIF in the original: from what the library knows. */
+  o.format = EXPORT_JPEG;
+  snprintf (src, sizeof src, "%s/source.jpg", work);   /* test_export's, plain */
+  snprintf (dst, sizeof dst, "%s/exif-known.jpg", work);
+  memset (&known, 0, sizeof known);
+  snprintf (known.make, sizeof known.make, "Canon");
+  snprintf (known.model, sizeof known.model, "Canon EOS R5");
+  snprintf (known.taken, sizeof known.taken, "2025:01:02 03:04:05");
+  known.exposure = 0.004; known.fnumber = 2.8; known.iso = 3200; known.focal = 50;
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  if (e)
+    {
+      export_set_known (e, &known);
+      run_export (e);
+    }
+  export_free (e);
+  CHECK (exif_of (dst, 0) > 0 && strstr (exif_seen, "Model|Canon EOS R5\n") && strstr (exif_seen, "1/250 s")
+         && strstr (exif_seen, "f/2.8") && strstr (exif_seen, "3200") && strstr (exif_seen, "2025:01:02 03:04:05"),
+         "exif: made from the library's details");
+  /* Nothing known, no EXIF: none written (and JFIF as before). */
+  snprintf (dst, sizeof dst, "%s/exif-none.jpg", work);
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  if (e)
+    run_export (e);
+  export_free (e);
+  f = fopen (dst, "rb");
+  got = f ? fread (file, 1, 20, f) : 0;
+  if (f)
+    fclose (f);
+  CHECK (got == 20 && file[3] == 0xE0 && !memcmp (file + 6, "JFIF", 4), "exif: none to write: a plain JFIF file");
+  /* Builder limits: rubbish in, nothing out. */
+  CHECK (exif_for_export ((const unsigned char *) "XXXXXXXXXXXX", 12, NULL, 10, 10, "", exif, sizeof exif) == 0,
+         "exif: not TIFF, nothing known: nothing");
+}
+
 static void test_export (const char *work)
 {
   char src[700], dst[700], err[200];
@@ -1127,6 +1326,7 @@ int main (int argc, char **argv)
   test_auto ();
   test_presets (argv[1]);
   test_export (argv[1]);
+  test_export_exif (argv[1]);
   printf ("test_develop: %d checks, %d failed\n", checks, fails);
   return fails != 0;
 }

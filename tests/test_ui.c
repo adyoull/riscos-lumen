@@ -24,6 +24,7 @@
 #define MAINW 0x2e000
 #define INSP 0x2f000
 #define PLUGW 0x30000
+#define CHOICEW 0x31000
 #define FILER 0x9000
 #define TASK 0x1234
 
@@ -48,6 +49,30 @@ static const int *menu_open;
 static char reported[256], asked[256], asked_button[32];
 static int answer = 2;            /* Cancel */
 static int plugw_opens;
+static int other_lumen;
+static int menu_state[4] = { -1, -1, -1, -1 };   /* what Wimp_GetMenuState 1 reports */
+static unsigned choice_icon_flags[32];  /* the Choices window's icons' state (bit 21: selected) */                /* a task handle the fake Task Manager lists as another Lumen */
+
+/* TaskManager_EnumerateTasks: ourselves, a LumenRaw task window, a module
+   task called Lumen, and maybe another Lumen; two records a call. */
+static const _kernel_oserror *tasks (int n, int r[10])
+{
+  static const char *const names[4] = { "Lumen\r", "LumenRaw", "Lumen", "Lumen\0" };
+  int handles[4], flags[4] = { 0, 0, 1, 0 }, *buf = (int *) r[1], k, at = r[0], count = other_lumen ? 4 : 3;
+  (void) n;
+  handles[0] = TASK + 0x20000;          /* ourselves, with other top bits (as in ROL) */
+  handles[1] = 0x2000; handles[2] = 0x3000; handles[3] = other_lumen;
+  for (k = 0; k < 2 && at < count; k++, at++)
+    {
+      buf[4 * k] = handles[at];
+      buf[4 * k + 1] = (int) names[at];
+      buf[4 * k + 2] = 640 * 1024;
+      buf[4 * k + 3] = flags[at];
+    }
+  r[0] = at < count ? at : -1;
+  r[1] = (int) (buf + 4 * k);
+  return NULL;
+}
 static int scroll_y;
 static int closedown;
 static int processed_key;
@@ -106,6 +131,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         r[0] = INSP;
       else if (nwindows == 6)
         r[0] = PLUGW;
+      else if (nwindows == 7)
+        r[0] = CHOICEW;
       else
         r[0] = INFO;
       return NULL;
@@ -142,7 +169,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_GetWindowState:
       CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP
-             || b[0] == PLUGW, "window state: one of ours");
+             || b[0] == PLUGW || b[0] == CHOICEW, "window state: one of ours");
       if (b[0] == EXPORTW)
         {
           b[1] = 600; b[2] = 400; b[3] = 1320; b[4] = 860; b[5] = 0; b[6] = 0;
@@ -150,6 +177,19 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       else
         memcpy (&b[1], &state_of (b[0])[1], 6 * sizeof (int));
       b[7] = -1; b[8] = 0;
+      return NULL;
+    case Wimp_SetIconState:
+      if (b[0] == CHOICEW && b[1] >= 0 && b[1] < 32)
+        choice_icon_flags[b[1]] = (choice_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
+      return NULL;
+    case Wimp_GetIconState:
+      CHECK (b[0] == CHOICEW, "icon state: the Choices window's");
+      if (b[1] >= 0 && b[1] < 32)
+        b[6] = (int) choice_icon_flags[b[1]];
+      return NULL;
+    case Wimp_GetMenuState:
+      CHECK (r[0] == 1, "Wimp_GetMenuState 1: for a window and icon");
+      memcpy (b, menu_state, sizeof menu_state);
       return NULL;
     case Wimp_DragBox:
       memcpy (drag_block, b, sizeof drag_block);
@@ -294,11 +334,13 @@ static void fakes (void)
     { ColourTrans_SelectTable, "ColourTrans_SelectTable", 0 }, { OS_Plot, "OS_Plot", 0 },
     { OS_SpriteOp, "OS_SpriteOp", 0 }, { OS_ReadMonotonicTime, "OS_ReadMonotonicTime", 0 },
     { Wimp_DragBox, "Wimp_DragBox", 1 }, { Wimp_SetIconState, "Wimp_SetIconState", 1 },
-    { Wimp_SpriteOp, "Wimp_SpriteOp", 1 }, { Wimp_ResizeIcon, "Wimp_ResizeIcon", 1 } };
+    { Wimp_SpriteOp, "Wimp_SpriteOp", 1 }, { Wimp_ResizeIcon, "Wimp_ResizeIcon", 1 },
+    { Wimp_GetMenuState, "Wimp_GetMenuState", 1 }, { Wimp_GetIconState, "Wimp_GetIconState", 1 } };
   size_t i;
   fake_reset ();
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
     fake_swi (list[i].swi, list[i].name, list[i].wimp ? wimp : graphics);
+  fake_swi (TaskManager_EnumerateTasks, "TaskManager_EnumerateTasks", tasks);
 }
 
 static void make_jpeg (const char *path, int w, int h)
@@ -429,11 +471,13 @@ int main (int argc, char **argv)
     setenv ("Lumen$PluginChoices", d, 1);
     snprintf (d, sizeof d, "%s/Scratch", work);
     setenv ("Lumen$Scratch", d, 1);
+    snprintf (d, sizeof d, "%s/Choices", work);
+    setenv ("Lumen$ChoicesFile", d, 1);
   }
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 7, "the browser, viewer, Export, main, inspector, Add plug-in and Info windows");
+  CHECK (nwindows == 8, "the browser, viewer, Export, main, inspector, Add plug-in, Choices and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
   CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
@@ -1311,6 +1355,53 @@ int main (int argc, char **argv)
     reported[0] = '\0';
   }
 
+  /* Interactive help. */
+  {
+    int st[9];
+    const char *t;
+    static const int wins[6] = { -2, MAINW, INSP, BROWSER, VIEWER, PLUGW };
+    for (i = 0; i < 6; i++)
+      {
+        t = help_text (wins[i], 0, 0, 0);
+        CHECK (t && t[0] && strlen (t) <= 235, "help: every window has some, short enough for a message");
+      }
+    for (i = 0; i < 14; i++)
+      CHECK (strlen (help_text (EXPORTW, i, 0, 0)) <= 235, "help: the Export box's icons");
+    /* Over the toolbar's Export button: the main window's top right is at (st[3], st[4]). */
+    st[0] = MAINW;
+    memcpy (&st[1], &state_of (MAINW)[1], 6 * sizeof (int));
+    t = help_text (MAINW, -1, st[3] - 16 - 2 * 140 + 60, st[4] - 50);
+    CHECK (strstr (t, "Exports the photos") != NULL, "help: the toolbar's Export button");
+    t = help_text (MAINW, -1, st[1] + 30, st[4] - 50);
+    CHECK (strstr (t, "inspector") != NULL, "help: the toolbar's Inspector button");
+    /* The request and reply. */
+    memset (b, 0, sizeof b);
+    b[0] = 40; b[1] = 0x7777; b[2] = 55; b[4] = Message_HelpRequest;
+    b[5] = 100; b[6] = 100; b[8] = BROWSER; b[9] = -1;
+    app_event (User_Message_Recorded, b, 0);
+    CHECK (sent_block[4] == Message_HelpReply && sent_block[3] == 55 && sent_to == 0x7777
+           && strstr ((const char *) &sent_block[5], "double-click") != NULL
+           && sent_block[0] == (int) ((20 + strlen ((const char *) &sent_block[5]) + 1 + 3) & ~3u),
+           "help: a HelpReply to !Help, your_ref = its my_ref, sized");
+    /* A menu item: the Plug-ins submenu's first entry, from the icon bar menu. */
+    memset (b, 0, sizeof b);
+    b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
+    app_event (Mouse_Click, b, 0);
+    menu_state[0] = 3; menu_state[1] = 0; menu_state[2] = -1;
+    CHECK (strstr (help_text (0x9000, 0, 0, 0), "plug-in is on") != NULL, "help: Plug-ins > LibRaw (on)");
+    menu_state[0] = 4; menu_state[1] = -1;
+    CHECK (strstr (help_text (0x9000, 3, 0, 0), "Leaves Lumen") != NULL, "help: icon bar menu > Quit");
+    menu_state[0] = -1;
+    CHECK (strstr (help_text (0x9000, 3, 0, 0), "") != NULL && help_text (0x9000, 3, 0, 0)[0] == '\0',
+           "help: a window that isn't ours: nothing");
+  }
+
+  /* One Lumen at a time: a second finds the first (not LumenRaw, not a module). */
+  CHECK (app_other_instance () == 0, "single instance: no other Lumen (ourselves, LumenRaw and a module task aren't)");
+  other_lumen = 0x5000;
+  CHECK (app_other_instance () == 0x5000, "single instance: another Lumen found, over several calls");
+  other_lumen = 0;
+
   /* The icon bar menu: Plug-ins. */
   {
     const int *pm;
@@ -1320,23 +1411,24 @@ int main (int argc, char **argv)
     memset (b, 0, sizeof b);
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
-    CHECK (menu_open && strcmp (item_text (menu_open, 2), "Plug-ins") == 0 && strcmp (item_text (menu_open, 3), "Quit") == 0,
-           "icon bar menu: Info, Open library, Plug-ins, Quit");
-    pm = submenu (menu_open, 2);
+    CHECK (menu_open && strcmp (item_text (menu_open, 2), "Choices...") == 0
+           && strcmp (item_text (menu_open, 3), "Plug-ins") == 0 && strcmp (item_text (menu_open, 4), "Quit") == 0,
+           "icon bar menu: Info, Open library, Choices..., Plug-ins, Quit");
+    pm = submenu (menu_open, 3);
     CHECK (strcmp (item_text (pm, 0), "Camera raw (LibRaw) 1.0") == 0 && (item (pm, 0)[0] & 1),
            "Plug-ins: LibRaw, ticked (on)");
     CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0 && strcmp (item_text (pm, 2), "Remove") == 0
            && (item (pm, 2)[0] & 0x80), "Plug-ins: Add plug-in..., Remove");
     CHECK (rawjob_available (), "the raw plug-in is at work");
-    choose (2, 0, -1);
+    choose (3, 0, -1);
     CHECK (!rawjob_available (), "switched off: raw files aren't read");
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 2);
+    pm = submenu (menu_open, 3);
     CHECK (!(item (pm, 0)[0] & 1), "Plug-ins: LibRaw not ticked");
-    choose (2, 0, -1);
+    choose (3, 0, -1);
     CHECK (rawjob_available (), "switched back on");
     /* Add plug-in...: the window to drop one on. */
-    choose (2, 1, -1);
+    choose (3, 1, -1);
     CHECK (plugw_opens == 1, "Add plug-in... opens its window");
     snprintf (d, sizeof d, "%s/Download/Extra", work);
     fsys_mkdirs (d);
@@ -1373,28 +1465,58 @@ int main (int argc, char **argv)
     memset (b, 0, sizeof b);
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 2);
+    pm = submenu (menu_open, 3);
     CHECK (strcmp (item_text (pm, 0), "Camera raw (LibRaw) 1.0") == 0 && strcmp (item_text (pm, 1), "Extra 2") == 0
            && strcmp (item_text (pm, 2), "Add plug-in...") == 0, "Plug-ins: both, by name");
     CHECK (strcmp (item_text (submenu (pm, 3), 1), "Extra...") == 0, "Remove > Extra...");
     /* Remove > LibRaw: Cancel keeps it; it mentions PackMan. */
     answer = 2;
-    choose (2, 3, 0);
+    choose (3, 3, 0);
     CHECK (strstr (asked, "LumenRaw) in PackMan") != NULL && rawjob_available (), "Remove LibRaw: mentions PackMan; Cancel keeps it");
     answer = 3;
-    choose (2, 3, 1);
+    choose (3, 3, 1);
     snprintf (f, sizeof f, "%s/App/Plugins/Extra", work);
     CHECK (fsys_stat (f, &e) != 0, "Remove > Extra: deleted");
     answer = 2;
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 2);
+    pm = submenu (menu_open, 3);
     CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0, "Plug-ins: LibRaw alone again");
   }
   memset (b, 0, sizeof b);
   b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
   app_event (Mouse_Click, b, 0);
   CHECK (submenu (menu_open, 0) == (const int *) INFO, "Info opens the Info box");
-  CHECK (choose (3, -1, -1) == 1, "Quit from the icon bar menu quits");
+  /* Choices... */
+  {
+    char cf[760];
+    prefs p;
+    choose (2, -1, -1);
+    CHECK ((choice_icon_flags[4] & (1u << 21)) && !(choice_icon_flags[5] & (1u << 21))
+           && (choice_icon_flags[15] & (1u << 21)) && (choice_icon_flags[17] & (1u << 21)),
+           "Choices: shows JPEG, Medium thumbnails, checking files: the defaults");
+    CHECK (choicewin_library_text ()[0] == '\0', "Choices: library empty (the usual place)");
+    /* PNG, Large, no checking, a library elsewhere; then Save. */
+    choice_icon_flags[4] = 0; choice_icon_flags[5] = 1u << 21;
+    choice_icon_flags[15] = 0; choice_icon_flags[16] = 1u << 21;
+    choice_icon_flags[17] = 0;
+    choicewin_set_library_text ("  SDFS::Pi.$.Photos.Library  ");
+    memset (b, 0, sizeof b);
+    b[2] = Button_Select; b[3] = CHOICEW; b[4] = 19;
+    app_event (Mouse_Click, b, 0);
+    CHECK (app_prefs ()->export_format == 1 && app_prefs ()->thumb_size == 2 && !app_prefs ()->verify
+           && strcmp (app_prefs ()->library, "SDFS::Pi.$.Photos.Library") == 0, "Choices: saved (the path trimmed)");
+    CHECK (browser_size () == 2, "Choices: Large thumbnails at once");
+    snprintf (cf, sizeof cf, "%s/Choices", work);
+    CHECK (prefs_load (cf, &p) == 0 && p.export_format == 1 && p.thumb_size == 2 && !p.verify
+           && strcmp (p.library, "SDFS::Pi.$.Photos.Library") == 0, "Choices: in the file");
+    /* A directory dropped on it: the library field. */
+    memset (b, 0, sizeof b);
+    b[0] = 256; b[1] = 0x5678; b[2] = 92; b[4] = 3; b[5] = CHOICEW; b[10] = 0x1000;
+    snprintf ((char *) &b[11], 200, "%s/Holiday", work);
+    app_event (User_Message_Recorded, b, 0);
+    CHECK (strstr (choicewin_library_text (), "/Holiday") != NULL, "Choices: a directory dropped sets the library");
+  }
+  CHECK (choose (4, -1, -1) == 1, "Quit from the icon bar menu quits");
   memset (b, 0, sizeof b);
   b[4] = 0;
   CHECK (app_event (User_Message, b, 0) == 1, "Message_Quit quits");

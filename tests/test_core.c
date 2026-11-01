@@ -18,6 +18,7 @@
 #include "../src/core/library.h"
 #include "../src/core/thumbgen.h"
 #include "../src/core/plugins.h"
+#include "../src/core/prefs.h"
 
 static int checks, fails;
 #define CHECK(c, what) do { checks++; if (!(c)) { fails++; fprintf (stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, what); } } while (0)
@@ -1089,6 +1090,30 @@ static void test_raw_names (void)
   CHECK (!img_has_raw_extension ("Photo/nefx"), "raw names: the whole extension");
 }
 
+/* --- Choices: defaults, a round trip, rubbish and limits */
+static void test_prefs (void)
+{
+  char path[700];
+  prefs p, q;
+  FILE *f;
+  fsys_join (path, sizeof path, work, "Prefs/Lumen/Choices");
+  remove (path);
+  CHECK (prefs_load (path, &p) == -1 && p.export_quality == 90 && p.thumb_size == 1 && p.verify == 1
+         && p.library[0] == '\0' && p.export_format == 0 && p.export_size == 0, "prefs: defaults with no file");
+  snprintf (p.library, sizeof p.library, "SDFS::Pi.$.My Photos.Library");
+  p.export_format = 1; p.export_quality = 75; p.export_size = 2048; p.thumb_size = 0; p.verify = 0;
+  CHECK (prefs_save (path, &p) == 0, "prefs: saved (its directory made)");
+  CHECK (prefs_load (path, &q) == 0 && !memcmp (&p, &q, sizeof p), "prefs: read back the same (a space in the path too)");
+  f = fopen (path, "w");
+  if (f)
+    {
+      fputs ("# x\nfuture_thing 7\nexport_quality 400\nexport_size 999\nthumb_size -3\nverify\nexport_format x\n", f);
+      fclose (f);
+    }
+  CHECK (prefs_load (path, &q) == 0 && q.export_quality == 100 && q.export_size == 0 && q.thumb_size == 0
+         && q.verify == 1 && q.export_format == 0, "prefs: unknown keys ignored, values kept in range");
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -1104,6 +1129,7 @@ int main (int argc, char **argv)
   test_raw ();
   test_plugins ();
   test_raw_names ();
+  test_prefs ();
   make_fixtures ();
   test_library ();
   test_time_slicing ();

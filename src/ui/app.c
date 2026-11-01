@@ -169,6 +169,39 @@ static void raw_message (int *b)
    them there: LumenRaw, for instance, into Apps.Graphics.!Lumen.Plugins.
    LibRaw). Which are switched off is kept in <Choices$Write>.Lumen.
    Plugins. A raw plug-in that is on is the one rawjob runs. */
+/* --- Choices (prefs.h) */
+static prefs the_prefs;
+static char prefs_path[700];
+
+const prefs *app_prefs (void) { return &the_prefs; }
+
+void app_load_prefs (void)
+{
+  const char *v = getenv ("Lumen$ChoicesFile");   /* the tests' own */
+  char dir[600];
+  if (v && *v)
+    snprintf (prefs_path, sizeof prefs_path, "%s", v);
+  else if (fsys_canonical ("<Choices$Write>.Lumen", dir, sizeof dir) == 0)
+    fsys_join (prefs_path, sizeof prefs_path, dir, "Choices");
+  else
+    snprintf (prefs_path, sizeof prefs_path, "<Choices$Write>.Lumen.Choices");
+  prefs_load (prefs_path, &the_prefs);
+}
+
+int app_set_prefs (const prefs *p)
+{
+  if (prefs_save (prefs_path, p))
+    {
+      app_report ("Lumen couldn't save its Choices.");
+      return -1;
+    }
+  the_prefs = *p;
+  browser_set_size (p->thumb_size);
+  mainwin_status_changed ();
+  exportbox_use_prefs (p);
+  return 0;
+}
+
 static plugin_info plugin_list[PLUGINS_MAX];
 static int nplugins;
 static char plugins_dir[700], plugins_state[700], raw_helper[1024];
@@ -314,14 +347,65 @@ void app_plugin_add (const char *path)
   plugins_changed ();
 }
 
+/* --- one Lumen at a time
+
+   Two copies would open the same library. So a second copy looks for the
+   first among the desktop's tasks (TaskManager_EnumerateTasks, PRM p658:
+   4-word records of handle, name, slot size, flags), clicks the first's
+   icon bar icon for it (a Mouse_Click event sent with Wimp_SendMessage
+   to its task handle: the first opens its window) and quits. A handle's
+   low 16 bits pick out the task, so only they are compared with our own.
+   (A Lumen just started isn't listed yet: the Task Manager hears of new
+   tasks as it polls.) */
+#ifndef TaskManager_EnumerateTasks
+#define TaskManager_EnumerateTasks 0x42681
+#endif
+
+static int name_is (const char *s, const char *want)
+{
+  size_t k;
+  for (k = 0; want[k]; k++)
+    if (s[k] != want[k])
+      return 0;
+  return (unsigned char) s[k] < 32;    /* control-terminated */
+}
+
+int app_other_instance (void)
+{
+  int next = 0, guard = 0;
+  do
+    {
+      int buf[4 * 16], *end = buf, *r;
+      if (_swix (TaskManager_EnumerateTasks, _INR (0, 2) | _OUT (0) | _OUT (1), next, buf, (int) sizeof buf,
+                 &next, &end))
+        return 0;                      /* no Task Manager: carry on */
+      for (r = buf; r + 4 <= end; r += 4)
+        if ((r[0] & 0xFFFF) != (task & 0xFFFF) && r[1] && !(r[3] & 1) && name_is ((const char *) r[1], APP_NAME))
+          return r[0];
+    }
+  while (next >= 0 && ++guard < 64);
+  return 0;
+}
+
 int app_init (const char *library_path)
 {
-  static const int messages[] = { Message_DataLoad, 2 /* DataSaveAck */, Message_ModeChange,
+  static const int messages[] = { Message_DataLoad, 2 /* DataSaveAck */, Message_ModeChange, Message_HelpRequest,
                                   Message_TaskWindow_Output, Message_TaskWindow_Ego, Message_TaskWindow_Morio, 0 };
   char err[300];
   if (_swix (Wimp_Initialise, _INR (0, 3) | _OUT (1), 380, TASK_WORD, APP_NAME, messages, &task))
     return 1;
   atexit (close_down);
+  {
+    int first = app_other_instance ();
+    if (first)
+      {
+        int b[5];
+        b[0] = 0; b[1] = 0; b[2] = Button_Select; b[3] = -2; b[4] = 0;
+        _swix (Wimp_SendMessage, _INR (0, 2), Mouse_Click, b, first);
+        close_down ();
+        return 2;                      /* not an error: the first Lumen carries on */
+      }
+  }
   ensure_sprites ();
   draw_init_mode ();
   thumbcache_init (64u << 20);
@@ -331,14 +415,19 @@ int app_init (const char *library_path)
       close_down ();
       return 1;
     }
+  if (!prefs_path[0])
+    app_load_prefs ();
   if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ()
-      || plugwin_create ())
+      || plugwin_create () || choicewin_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       close_down ();
       return 1;
     }
   menus_init ();
+  if (the_prefs.thumb_size != browser_size ())
+    browser_set_size (the_prefs.thumb_size);
+  exportbox_use_prefs (&the_prefs);
   app_plugins_rescan ();               /* also retries raw files imported before the plug-in was installed */
   mainwin_open (NULL);
   return 0;
@@ -419,8 +508,17 @@ static void data_load (int *b)
   const char *path = (const char *) &b[11];
   int type = b[10];
   if (b[5] != browser_window () && b[5] != mainwin_window () && b[5] != viewer_window ()
-      && b[5] != mainwin_inspector () && b[5] != -2 && b[5] != plugwin_window ())
+      && b[5] != mainwin_inspector () && b[5] != -2 && b[5] != plugwin_window () && b[5] != choicewin_window ())
     return;
+  if (b[5] == choicewin_window ())
+    {
+      /* A directory for the library. */
+      b[3] = b[2];
+      b[4] = Message_DataLoadAck;
+      _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
+      choicewin_drop (path);
+      return;
+    }
   /* A plug-in, to the Add plug-in window or anywhere else in Lumen. */
   if (b[5] == plugwin_window () || ((type == FT_DIR || type == FT_APP) && app_is_plugin (path)))
     {
@@ -534,6 +632,8 @@ int app_event (int reason, int *b, int sender)
         exportbox_click (b);
       else if (b[3] == plugwin_window ())
         plugwin_click (b);
+      else if (b[3] == choicewin_window ())
+        choicewin_click (b);
       break;
     case User_Drag_Box:
       if (exportbox_dragging ())
@@ -543,6 +643,7 @@ int app_event (int reason, int *b, int sender)
       break;
     case Key_Pressed:
       if (b[0] == exportbox_window () ? !exportbox_key (b[6])
+          : b[0] == choicewin_window () ? !choicewin_key (b[6])
           : b[0] == mainwin_window () && b[1] >= 0 && b[1] == mainwin_search_icon () ? !mainwin_search_key (b[6])
           : !app_key (b[6]))
         _swix (Wimp_ProcessKey, _IN (0), b[6]);
@@ -557,6 +658,9 @@ int app_event (int reason, int *b, int sender)
           return 1;
         case Message_DataLoad:
           data_load (b);
+          break;
+        case Message_HelpRequest:
+          help_request (b);
           break;
         case 2:                        /* Message_DataSaveAck */
           exportbox_save_ack (b);

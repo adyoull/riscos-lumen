@@ -7,6 +7,7 @@
 #include "library.h"
 #include "recipe.h"
 #include "plugins.h"
+#include "prefs.h"
 
 #define APP_NAME "Lumen"
 #ifndef LUMEN_VERSION
@@ -51,7 +52,10 @@ enum { Button_Adjust = 1, Button_Menu = 2, Button_Select = 4 };
 #define KEY_RETURN 0x0D
 
 /* --- app.c: the task, its icon bar icon, the poll dispatch */
+/* 0 started; 1 failed; 2 another Lumen is running (told to open its window). */
 int app_init (const char *library_path);
+/* The task handle of another Lumen already running, 0 if none. */
+int app_other_instance (void);
 /* Handles one Wimp_Poll event. Returns 1 to quit. */
 int app_event (int reason, int *block, int sender);
 /* Background work waiting (null events wanted). */
@@ -62,6 +66,10 @@ int app_confirm (const char *msg, const char *button);   /* 1: the button was ch
 unsigned app_now (void);               /* centiseconds */
 library *app_library (void);
 int app_task (void);
+/* Lumen's Choices (prefs.h), read at start from <Choices$Write>.Lumen.Choices. */
+void app_load_prefs (void);
+const prefs *app_prefs (void);
+int app_set_prefs (const prefs *p);    /* saves and applies them; 0 on success */
 /* Lumen's plug-ins (plugins.h): the list as last read, sorted by name. */
 int app_plugins (const plugin_info **list);
 void app_plugins_rescan (void);        /* reads the Plugins directory again and puts what is on to work */
@@ -247,7 +255,12 @@ void mainwin_force_inspector (int x0, int y0, int x1, int y1);
 void mainwin_library_changed (void);
 void mainwin_info_changed (void);
 void mainwin_status_changed (void);   /* the bottom bar: counts */
-int mainwin_search_icon (void);        /* the search field's icon handle, -1 */
+int mainwin_search_icon (void);
+/* What a screen point (and icon) is over, for interactive help: MW_TOOLBAR + the button
+   (Inspector, Import, New, Browser, Split View, Viewer, Loupe, Export, Full Screen),
+   MW_TAB + the tab, or one of the others. */
+enum { MW_NONE, MW_SEARCH, MW_GRIP, MW_SIZE, MW_RATING, MW_STATUS, MW_TAB, MW_TOOLBAR = MW_TAB + 3 };
+int mainwin_part_at (int x, int y, int icon);        /* the search field's icon handle, -1 */
 int mainwin_search_key (int key);      /* a key in the search field; 1 if used */
 void mainwin_set_search (const char *text);
 
@@ -272,11 +285,26 @@ int exportbox_dragging (void);
 void exportbox_drag_end (void);
 void exportbox_save_ack (int *message);
 int exportbox_save_to (const char *path);
+void exportbox_use_prefs (const prefs *p);   /* the box's starting format, size and quality */
 void exportbox_set_name (const char *s);   /* tests */
 const char *exportbox_name (void);
 int exports_busy (void);
 void exports_idle (unsigned deadline);
 void exports_status (char *out, size_t n);
+
+/* --- help.c: interactive help (Message_HelpRequest, PRM p1016) */
+void help_request (int *message);
+const char *help_text (int window, int icon, int x, int y);   /* "" if none */
+
+/* --- choicewin.c: the Choices window */
+int choicewin_create (void);
+int choicewin_window (void);
+void choicewin_open (void);
+void choicewin_click (int *block);
+int choicewin_key (int key);
+void choicewin_drop (const char *path);
+const char *choicewin_library_text (void);   /* tests */
+void choicewin_set_library_text (const char *s);
 
 /* --- plugwin.c: the Add plug-in window, somewhere to drop one */
 int plugwin_create (void);
@@ -294,5 +322,7 @@ void menus_open_new_menu (int x, int y);
 void menus_open_rating_menu (int x, int y);
 void menus_open_group_menu (int x, int y, int kind, cat_id id);   /* a project or album in the Library tab */
 int menus_selection (const int *choice);   /* 1: quit */
+/* Help for the menu item under the pointer, NULL if window isn't one of Lumen's menus. */
+const char *menus_help (int window, int icon);
 
 #endif

@@ -9,6 +9,7 @@
 #include <png.h>
 #include "develop.h"
 #include "export.h"
+#include "exifout.h"
 #include "fsys.h"
 #include "geometry.h"
 #include "sharpen.h"
@@ -48,7 +49,47 @@ struct exporter
   /* PNG */
   png_structp png;
   png_infop pinfo;
+  /* EXIF */
+  unsigned char *src_tiff;             /* the original's, copied; NULL if none */
+  size_t src_tiff_len;
+  img_info known;
+  int have_known;
 };
+
+#define HEAD_READ (256 * 1024)          /* enough of the original for its EXIF (a NEF's too) */
+
+/* The original's EXIF, kept until the output is opened. */
+static void read_source_exif (exporter *e, const char *src)
+{
+  FILE *f = fopen (src, "rb");
+  unsigned char *buf;
+  size_t got, off, n;
+  if (!f)
+    return;
+  buf = malloc (HEAD_READ);
+  if (!buf)
+    {
+      fclose (f);
+      return;
+    }
+  got = fread (buf, 1, HEAD_READ, f);
+  fclose (f);
+  if (exif_find_tiff (buf, got, &off, &n) == 0 && n >= 8)
+    {
+      if (off)
+        memmove (buf, buf + off, n);
+      e->src_tiff = buf;
+      e->src_tiff_len = n;
+      return;
+    }
+  free (buf);
+}
+
+void export_set_known (exporter *e, const img_info *known)
+{
+  e->known = *known;
+  e->have_known = 1;
+}
 
 static void jerr_exit (j_common_ptr c)
 {
@@ -139,11 +180,22 @@ exporter *export_start (const char *src, int src_w, int src_h, int orientation,
       return NULL;
     }
   develop_prepare (e->dev, r);
+  read_source_exif (e, src);
   return e;
+}
+
+/* The EXIF block for the output, into exif (EXIFOUT_MAX bytes); its length, 0 for none. */
+static size_t make_exif (exporter *e, unsigned char *exif)
+{
+  return exif_for_export (e->src_tiff, e->src_tiff_len, e->have_known ? &e->known : NULL, e->g.ow, e->g.oh,
+                          e->o.software, exif, EXIFOUT_MAX);
 }
 
 static int open_output (exporter *e)
 {
+  static unsigned char exif[6 + EXIFOUT_MAX];
+  size_t exif_len = make_exif (e, exif + 6);
+  memcpy (exif, "Exif\0\0", 6);
   e->f = fopen (e->dst, "wb");
   if (!e->f)
     {
@@ -178,7 +230,11 @@ static int open_output (exporter *e)
       e->jc.density_unit = 1;          /* 72 dpi, as cameras write */
       e->jc.X_density = 72;
       e->jc.Y_density = 72;
+      if (exif_len)
+        e->jc.write_JFIF_header = FALSE;   /* EXIF's APP1 comes straight after SOI */
       jpeg_start_compress (&e->jc, TRUE);
+      if (exif_len)
+        jpeg_write_marker (&e->jc, JPEG_APP0 + 1, exif, (unsigned) (exif_len + 6));
     }
   else
     {
@@ -196,6 +252,8 @@ static int open_output (exporter *e)
                     PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
       png_set_sRGB_gAMA_and_cHRM (e->png, e->pinfo, PNG_sRGB_INTENT_PERCEPTUAL);
       png_set_compression_level (e->png, 6);
+      if (exif_len)
+        png_set_eXIf_1 (e->png, e->pinfo, (png_uint_32) exif_len, exif + 6);
       png_write_info (e->png, e->pinfo);
     }
   return 0;
@@ -394,6 +452,7 @@ void export_free (exporter *e)
   free (e->lin);
   free (e->px);
   free (e->row);
+  free (e->src_tiff);
   free (e->dev);
   free (e);
 }

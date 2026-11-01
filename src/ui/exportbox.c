@@ -45,7 +45,7 @@ static const int size_choice[4] = { 0, 3840, 2048, 1024 };
 
 static int win = -1, is_open;
 static char name[256] = "Photo", quality[4] = "90", sprite_name[16] = "file_c85";
-static export_opts opts = { EXPORT_JPEG, 90, 0 };
+static export_opts opts = { EXPORT_JPEG, 90, 0, APP_NAME " " LUMEN_VERSION };
 static cat_id *box_ids;                /* the photos the box was opened for */
 static int box_n;
 static int dragging, save_ref;
@@ -338,6 +338,20 @@ void exports_idle (unsigned deadline)
             }
           recipe_parse (&rc, text);
           cur = export_start (d.path, d.width, d.height, d.orientation, &rc, jobs[ijob].dst, &job_opts, err, sizeof err);
+          if (cur)
+            {
+              /* For originals with no EXIF of their own (a PNG, a CR3...). */
+              img_info known;
+              memset (&known, 0, sizeof known);
+              snprintf (known.make, sizeof known.make, "%s", d.make);
+              snprintf (known.model, sizeof known.model, "%s", d.model);
+              snprintf (known.taken, sizeof known.taken, "%s", d.taken);
+              known.exposure = d.exposure;
+              known.fnumber = d.fnumber;
+              known.focal = d.focal;
+              known.iso = d.iso;
+              export_set_known (cur, &known);
+            }
           if (!cur)
             {
               job_failed (err);
@@ -488,6 +502,37 @@ void exportbox_save_ack (int *m)
       reply_pending = 1;
     }
   exportbox_save_to (path);
+}
+
+/* The box's radio buttons show opts (Wimp_SetIconState: bit 21, selected). */
+static void show_options (void)
+{
+  static const int radios[6] = { I_JPEG, I_PNG, I_FULL, I_3840, I_2048, I_1024 };
+  int k;
+  for (k = 0; k < 6; k++)
+    {
+      int on = k < 2 ? opts.format == (k == 0 ? EXPORT_JPEG : EXPORT_PNG) : opts.max_side == size_choice[k - 2];
+      int st[4];
+      st[0] = win; st[1] = radios[k];
+      st[2] = on ? 1 << 21 : 0;
+      st[3] = 1 << 21;
+      _swix (Wimp_SetIconState, _IN (1), st);
+    }
+}
+
+/* The Choices' starting format, size and quality. */
+void exportbox_use_prefs (const prefs *p)
+{
+  opts.format = p->export_format == EXPORT_PNG ? EXPORT_PNG : EXPORT_JPEG;
+  opts.max_side = p->export_size;
+  opts.quality = p->export_quality;
+  snprintf (quality, sizeof quality, "%d", p->export_quality);
+  if (win != -1)
+    {
+      show_options ();
+      redraw_icon (I_QUALITY);
+    }
+  update_sprite ();
 }
 
 /* For the tests: what the name icon holds. */

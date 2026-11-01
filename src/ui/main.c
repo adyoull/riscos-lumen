@@ -19,9 +19,25 @@ int main (void)
   static char path[1024];
   const char *v = getenv ("Lumen$Library");
   int quit = 0;
-  snprintf (path, sizeof path, "%s", v && *v ? v : "<Choices$Write>.Lumen.Library");
-  if (app_init (path))
-    return 1;
+  /* The library: Lumen$Library if it is set, else the Choices window's,
+     else the usual place (!Run's Lumen$DefaultLibrary). */
+  snprintf (path, sizeof path, "%s", v ? v : "");
+  if (!path[0])
+    {
+      app_load_prefs ();
+      snprintf (path, sizeof path, "%s", app_prefs ()->library);
+    }
+  if (!path[0])
+    {
+      v = getenv ("Lumen$DefaultLibrary");
+      snprintf (path, sizeof path, "%s", v && *v ? v : "<Choices$Write>.Lumen.Library");
+    }
+  switch (app_init (path))
+    {
+    case 0: break;
+    case 2: return 0;                  /* handed over to the Lumen already running */
+    default: return 1;
+    }
   while (!quit)
     {
       int b[64], reason = 0, sender = 0;
