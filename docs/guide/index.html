@@ -53,7 +53,7 @@ a { color:#1f5fa8; }
 <h1>Lumen User Guide</h1>
 <p>Keeping, sorting and improving your photos on RISC OS</p>
 <p>Start here if you've never used a photo library program before. If you have, the Technical Stuff boxes and Chapter 20 are for you.</p>
-<span class="badge">Lumen 0.0.21</span>
+<span class="badge">Lumen 0.0.22</span>
 </div>
 </header>
 <main>
@@ -65,9 +65,9 @@ a { color:#1f5fa8; }
 <li><a href="#part1">Part I: Getting Started</a>
 <ul><li><a href="#ch1">1. What Lumen does</a></li><li><a href="#ch2">2. Installing and starting</a></li><li><a href="#ch3">3. Finding your way round the window</a></li></ul></li>
 <li><a href="#part2">Part II: Your Photos</a>
-<ul><li><a href="#ch4">4. Bringing photos in</a></li><li><a href="#ch5">5. Looking through, rating and flagging</a></li><li><a href="#ch6">6. Projects and albums</a></li><li><a href="#ch7">7. Finding photos</a></li><li><a href="#ch8">8. Removing photos, and photos that have moved</a></li></ul></li>
+<ul><li><a href="#ch4">4. Bringing photos in</a></li><li><a href="#ch5">5. Looking through, rating and flagging</a></li><li><a href="#ch6">6. Projects, albums and watched folders</a></li><li><a href="#ch7">7. Finding photos</a></li><li><a href="#ch8">8. Removing photos, and photos that have moved</a></li></ul></li>
 <li><a href="#part3">Part III: Making Photos Better</a>
-<ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping and straightening</a></li><li><a href="#ch12">12. Presets, and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
+<ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping and straightening</a></li><li><a href="#ch12">12. Styles, presets, and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
 <li><a href="#part4">Part IV: Sharing and Setting Up</a>
 <ul><li><a href="#ch14">14. Exporting photos</a></li><li><a href="#ch15">15. Camera raw files and plug-ins</a></li><li><a href="#ch16">16. Choices</a></li><li><a href="#ch17">17. Getting help</a></li></ul></li>
 <li><a href="#part5">Part V: The Part of Tens</a>
@@ -89,7 +89,7 @@ a { color:#1f5fa8; }
 <p>The pictures are screenshots of Lumen running on RISC OS 5, with photos of the Lake District by Julian Herzog (see <a href="#credits">Photo credits</a>).</p>
 
 <h4>This is an early version</h4>
-<p>Lumen 0.0.21 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
+<p>Lumen 0.0.22 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>Not much. You should know the three mouse buttons (<b>Select</b> on the left, <b>Menu</b> in the middle, <b>Adjust</b> on the right), and how to drag a file or directory from a Filer window into a program. You don't need to know anything about photography.</p>
@@ -113,7 +113,7 @@ a { color:#1f5fa8; }
 <ul>
 <li><b>Keeping:</b> your photos in one <b>library</b>, sorted into <b>projects</b> (one for each directory you bring in) and <b>albums</b> (your own collections, such as "Favourites" or "Holiday 2026").</li>
 <li><b>Sorting:</b> star ratings from one to five, flags, rejects, searching and filtering, so the good photos are easy to find.</li>
-<li><b>Improving:</b> exposure, white balance, highlights and shadows, levels, curves, contrast, saturation, sharpening, straightening, perspective and cropping.</li>
+<li><b>Improving:</b> exposure, white balance, highlights and shadows, levels, curves, contrast, saturation, split toning, sharpening, straightening, perspective and cropping, or a ready-made <b>style</b> in one click.</li>
 </ul>
 
 <h4>What you can do with it</h4>
@@ -122,7 +122,10 @@ a { color:#1f5fa8; }
 <li><b>Browse</b> thumbnails in three sizes, and look at one photo large, at 100%, or through a round magnifier (the <b>loupe</b>).</li>
 <li><b>Rate, flag and reject</b> photos with one key each.</li>
 <li><b>Find</b> photos by name, camera, date or project, and show only those with enough stars.</li>
-<li><b>Adjust</b> any photo without changing its file, with Undo, a before-and-after view, and presets to use the same look again.</li>
+<li><b>Adjust</b> any photo without changing its file, with Undo and Redo, a before-and-after view, and presets to use the same look again.</li>
+<li><b>Try a style</b>: fourteen ready-made looks, from Faded Film to Cyanotype, shown on the photo as you move down the list.</li>
+<li><b>Watch folders</b>: new photos you put in a folder you imported come into the library on their own, and the folders inside it can become albums.</li>
+<li><b>See what it's doing</b>: the bar at the bottom says what Lumen is busy with, and how far it has got.</li>
 <li><b>Export</b> JPEG or PNG copies at full size or smaller, with the camera's details kept in them.</li>
 <li><b>See everything the camera recorded</b>: camera, lens, exposure, date and place.</li>
 <li><b>Notice when photos have moved</b>, and find them again.</li>
@@ -160,6 +163,7 @@ a { color:#1f5fa8; }
 <tr><td>Help...</td><td>Lumen's short help file.</td></tr>
 <tr><td>User guide</td><td>This guide, in your web browser.</td></tr>
 <tr><td>Open library</td><td>Opens Lumen's window (so does clicking the icon).</td></tr>
+<tr><td>Activity...</td><td>What Lumen is doing now, and what it has done (<a href="#ch3">Chapter 3</a>).</td></tr>
 <tr><td>Choices...</td><td>Lumen's settings (<a href="#ch16">Chapter 16</a>).</td></tr>
 <tr><td>Plug-ins</td><td>Switch plug-ins on and off, add and remove them (<a href="#ch15">Chapter 15</a>).</td></tr>
 <tr><td>Quit</td><td>Leaves Lumen.</td></tr>
@@ -181,16 +185,18 @@ a { color:#1f5fa8; }
 <li><b>The toolbar</b> along the top.</li>
 <li><b>The inspector</b> on the left, with three tabs: <b>Library</b>, <b>Info</b> and <b>Adjustments</b>.</li>
 <li><b>The Browser</b>, the big area of thumbnails on the right.</li>
-<li><b>The bottom bar</b>: how many photos are shown and selected, the rating filter, the search box and the thumbnail size.</li>
+<li><b>The bottom bar</b>: how many photos are shown and selected, what Lumen is doing, the rating filter, the search box and the thumbnail size.</li>
 </ul>
 
 <h4>The toolbar</h4>
-<figure><img src="images/toolbar.png" alt="The toolbar"><figcaption>The toolbar: Inspector, Import and New on the left; the three layouts in the middle; Loupe, Export and Full Screen on the right.</figcaption></figure>
+<figure><img src="images/toolbar.png" alt="The toolbar"><figcaption>The toolbar: Inspector, Import, New, Undo and Redo on the left; the three layouts in the middle; Loupe, Export and Full Screen on the right. Here a change has just been made, so Undo is dark and Redo grey.</figcaption></figure>
 <table>
 <tr><th>Button</th><th>Does</th><th>Key</th></tr>
 <tr><td>Inspector</td><td>Shows or hides the inspector.</td><td><kbd>I</kbd></td></tr>
 <tr><td>Import</td><td>Reminds you how to import (by dragging, <a href="#ch4">Chapter 4</a>).</td><td></td></tr>
 <tr><td>New</td><td>Makes a new album (<a href="#ch6">Chapter 6</a>).</td><td></td></tr>
+<tr><td>Undo</td><td>Takes back the last change to the photo you're adjusting (<a href="#ch10">Chapter 10</a>). Grey when there's nothing to take back, and in the Browser.</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td></tr>
+<tr><td>Redo</td><td>Does again what Undo took back.</td><td><kbd>Ctrl</kbd>+<kbd>Y</kbd></td></tr>
 <tr><td>Browser</td><td>Thumbnails only.</td><td rowspan="3"><kbd>V</kbd> goes round the three</td></tr>
 <tr><td>Split View</td><td>One photo large, with a strip of thumbnails under it.</td></tr>
 <tr><td>Viewer</td><td>One photo, as large as the window.</td></tr>
@@ -201,6 +207,15 @@ a { color:#1f5fa8; }
 
 <h4>The inspector's tabs</h4>
 <p>Click a tab's name to change tab, or press <kbd>W</kbd> to go to the next one. <b>Library</b> chooses which photos the Browser shows (<a href="#ch6">Chapter 6</a>). <b>Info</b> shows everything about the selected photo (<a href="#ch13">Chapter 13</a>). <b>Adjustments</b> is where you change how a photo looks (<a href="#ch10">Chapter 10</a>).</p>
+
+<h4>What Lumen is doing: the bottom bar and the Activity window</h4>
+<p>Some jobs take a while: importing, making thumbnails, exporting, reading a raw photo, checking your photos' files are still there. Lumen does them in the background, so you can carry on working, and the bottom bar says what's going on. The ring beside the words is a <b>progress donut</b>: it fills up as the job goes on. When Lumen can't tell how far it has got (while it's still finding photos, say), a piece of the ring goes round instead. When the job is done, the bar says what happened for a minute, then just <b>Activity</b>.</p>
+<figure><img src="images/status-bar.png" alt="The bottom bar while thumbnails are made"><figcaption>The bottom bar while thumbnails are being made: the donut is the part done.</figcaption></figure>
+<p>Click there (or choose <b>Activity...</b> on the icon bar menu) to open the <b>Activity window</b>. At the top, under <b>Now</b>, is everything that's running, each with its donut and how far it has got. Under <b>Earlier</b> is what Lumen has done, newest first: imports, thumbnails, exports, new photos from watched folders (<a href="#ch6">Chapter 6</a>), and anything that went wrong, in red.</p>
+<figure><img src="images/activity.png" alt="The Activity window"><figcaption>The Activity window: thumbnails being made, and what came before.</figcaption></figure>
+<p>The list is kept from one session to the next. <b>Clear history</b> empties it.</p>
+
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>Lumen makes the thumbnails of the photos on the screen first, then the rest. While Lumen is the program you're using (its window has the input focus), it uses all the time the desktop can spare; while you're using another program, it works in short slices and leaves the time in between to the others. The history is a text file, <code>&lt;Choices$Write&gt;.Lumen.Activity</code>.</div>
 
 <div class="box tip"><b class="label">TIP</b>The window can be any size: drag the grip in its bottom right-hand corner. On a small screen, press <kbd>I</kbd> to hide the inspector when you want more room for the photos.</div>
 
@@ -214,7 +229,7 @@ a { color:#1f5fa8; }
 <li>Open the Filer window with your photos in it.</li>
 <li>Drag a directory of photos (or one photo, or several) into Lumen's window, or onto Lumen's icon on the icon bar.</li>
 </ol>
-<p>Lumen looks through the directory, and the directories inside it, for photos. As it finds them, thumbnails appear in the Browser and the title bar counts them ("Importing: 7 found"). You can carry on working while it does this.</p>
+<p>Lumen looks through the directory, and the directories inside it, for photos. As it finds them, thumbnails appear in the Browser and the bottom bar counts them ("Importing Derwentwater: 7 found"). You can carry on working while it does this.</p>
 <figure><img src="images/first-import.png" alt="Seven photos imported"><figcaption>A directory called Derwentwater, imported. It became a project of the same name.</figcaption></figure>
 
 <p>Each directory you import becomes a <b>project</b>, named after the directory, in the Library tab. The Browser shows the <b>Last Import</b> straight away, so you can see what came in.</p>
@@ -228,6 +243,8 @@ a { color:#1f5fa8; }
 <li><b>Camera raw files</b> (NEF, CR2, CR3, ARW, RAF, ORF, RW2, DNG and many more), with the LumenRaw plug-in (<a href="#ch15">Chapter 15</a>). Without it they're still imported, and their thumbnails come once the plug-in is installed.</li>
 </ul>
 <p>Other files in the directory are left alone. Applications (directories whose names start with <code>!</code>) are skipped.</p>
+
+<div class="box tip"><b class="label">TIP</b>If you keep adding photos to the same directory, Lumen can watch it and bring new ones in by itself: see <a href="#ch6">Chapter 6</a>.</div>
 
 <div class="box rem"><b class="label">REMEMBER</b>Importing the same photos twice doesn't make copies. Lumen recognises photos it already has, by their contents, and skips them.</div>
 
@@ -260,7 +277,7 @@ a { color:#1f5fa8; }
 <h4>Thumbnail size</h4>
 <p>Click <b>Small</b>, <b>Medium</b> or <b>Large</b> at the right of the bottom bar.</p>
 
-<h3 class="chapter" id="ch6"><span>6</span> Projects and albums</h3>
+<h3 class="chapter" id="ch6"><span>6</span> Projects, albums and watched folders</h3>
 
 <p>The <b>Library</b> tab chooses what the Browser shows. Click any line in it.</p>
 <figure><img src="images/library-tab.png" alt="The Library tab"><figcaption>The Library tab with three projects and an album.</figcaption></figure>
@@ -287,6 +304,19 @@ a { color:#1f5fa8; }
 
 <h4>Renaming and deleting</h4>
 <p>Click <b>Menu</b> over a project or album in the Library tab. Its menu lets you rename it, delete the album (its photos stay in the library) or remove the project (see <a href="#ch8">Chapter 8</a>).</p>
+
+<h4>Watched folders</h4>
+<p>If you go on putting photos into a directory after importing it (a camera card copied there every week, say), Lumen can <b>watch</b> it: click Menu over the project in the Library tab and choose <b>Watch for new photos</b>. From then on Lumen looks in the directory, and the ones inside it, when it starts, when you open its window again, and every few minutes, and brings in any photos that are new. It also finds photos that had gone missing and have come back. The project says <b>watched</b> beside its name.</p>
+<figure><img src="images/project-menu.png" alt="The project menu"><figcaption>The project menu, with both of the folder choices ticked.</figcaption></figure>
+
+<h4>Albums from folders</h4>
+<p>If you sort your photos into directories (one for each place, or each day), Lumen can turn them into albums. Choose <b>Albums from its folders</b> on the project's menu: each directory inside the project's directory becomes an album, listed under the project in the Library tab with a folder icon. An album holds the photos in its directory and in the directories inside that, so Wasdale below holds its own photos and Great_Gable's too.</p>
+<figure><img src="images/folder-albums.png" alt="Albums made from folders"><figcaption>The Lake_District project, watched, with an album for each of its folders. Wasdale is showing.</figcaption></figure>
+<p>These albums look after themselves: when a photo comes into a folder, moves to another or goes, the albums follow. You can't add photos to them or rename them yourself (the menu says <b>Follows its folder</b>). Untick <b>Albums from its folders</b> and they go; the photos stay in the project.</p>
+
+<div class="box try"><b class="label">TRY IT</b>Import a directory that has directories inside it. Tick <b>Watch for new photos</b> and <b>Albums from its folders</b> on its menu. Copy a new photo into one of its directories with the Filer, then close Lumen's window and open it again: the photo arrives, in the right album, and the Activity window (<a href="#ch3">Chapter 3</a>) says so.</div>
+
+<div class="box tip"><b class="label">TIP</b>To have every directory you import from now on watched, and turned into albums, tick the Folders choices in Choices (<a href="#ch16">Chapter 16</a>). That's also where you set how often Lumen looks.</div>
 
 <h3 class="chapter" id="ch7"><span>7</span> Finding photos</h3>
 
@@ -367,7 +397,7 @@ a { color:#1f5fa8; }
 
 <div class="pair">
 <figure><img src="images/panel-top.png" alt="The top of the Adjustments tab"><figcaption>White balance, exposure, highlights &amp; shadows, levels.</figcaption></figure>
-<figure><img src="images/panel-bottom.png" alt="The rest of the Adjustments tab"><figcaption>Curves, enhance, sharpen, geometry, and Undo.</figcaption></figure>
+<figure><img src="images/panel-bottom.png" alt="The rest of the Adjustments tab"><figcaption>Curves, enhance, split toning, sharpen, geometry, and Undo.</figcaption></figure>
 </div>
 
 <h4>The groups</h4>
@@ -379,6 +409,7 @@ a { color:#1f5fa8; }
 <tr><td>Levels</td><td>Black point, White point, Midtones</td><td>Set how dark the darkest parts and how light the lightest parts are, and the brightness in between.</td></tr>
 <tr><td>Curves</td><td>(a graph)</td><td>Fine control of brightness from dark to light, for all colours (RGB) or one at a time (Red, Green, Blue). Click the line to add a point and drag it; click a point with Adjust to remove it.</td></tr>
 <tr><td>Enhance</td><td>Contrast, Saturation, Vibrancy</td><td>More (or less) punch. Vibrancy adds colour mostly where there's little, so skin doesn't go orange.</td></tr>
+<tr><td>Split Toning</td><td>Shadow hue, Shadows, Highlight hue, Highlights</td><td>Tint the dark parts one colour and the light parts another: warm highlights and cool shadows for a film look, or brown or blue for a toned black and white print. A hue is a colour round the colour wheel (0 red, 30 orange, 60 yellow, 120 green, 180 cyan, 210 blue, 300 magenta); its strength says how much.</td></tr>
 <tr><td>Sharpen</td><td>Amount, Radius</td><td>Crisper edges. A little goes a long way.</td></tr>
 <tr><td>Geometry</td><td>Straighten, Vertical, Horizontal</td><td>Level a sloping horizon, and correct buildings that lean back (perspective). <b>-90&deg;</b> and <b>+90&deg;</b> turn the photo a quarter.</td></tr>
 </table>
@@ -390,7 +421,7 @@ a { color:#1f5fa8; }
 <h4>Before and after, Undo, and Auto</h4>
 <ul>
 <li><b>Before and after:</b> press <kbd>M</kbd> to see the photo without your adjustments, and again to see them. The photo says "Before" while you're looking at it.</li>
-<li><b>Undo</b> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) and <b>Redo</b> (<kbd>Ctrl</kbd>+<kbd>Y</kbd>), or the buttons at the bottom of the tab.</li>
+<li><b>Undo</b> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) and <b>Redo</b> (<kbd>Ctrl</kbd>+<kbd>Y</kbd>), on the toolbar or at the bottom of the tab. They work on the photo you're adjusting, so they're grey in the Browser.</li>
 <li><b>Reset all</b> removes all your adjustments from the photo.</li>
 <li><b>Auto</b> (or <kbd>A</kbd>) sets white balance, exposure, levels, contrast and vibrancy for you, gently: a good start, which you can then change.</li>
 </ul>
@@ -416,7 +447,34 @@ a { color:#1f5fa8; }
 <h4>Straightening</h4>
 <p>Drag the <b>Straighten</b> slider in the Geometry group. A fine grid appears over the photo while you drag, to line the horizon up with. <kbd>[</kbd> and <kbd>]</kbd> turn the photo a quarter left and right.</p>
 
-<h3 class="chapter" id="ch12"><span>12</span> Presets, and copying adjustments</h3>
+<h3 class="chapter" id="ch12"><span>12</span> Styles, presets, and copying adjustments</h3>
+
+<h4>Styles</h4>
+<p>A <b>style</b> is a ready-made look: Lumen comes with fourteen. Open a photo in the Viewer, click <b>Menu</b> over it, and go to <b>Presets &rarr; Styles</b> (or click <b>Presets</b> in the Adjustments tab). As you move the pointer down the list, the photo shows each style in turn, so you can compare them. Nothing is kept yet: move off the list, or press <kbd>Escape</kbd>, and the photo is as it was. Click a style to keep it.</p>
+<figure><img src="images/styles-preview.png" alt="Styles shown on the photo"><figcaption>The pointer on Sepia: the photo shows it. Nothing is kept until you click.</figcaption></figure>
+<figure><img src="images/styles-sheet.png" alt="Every style on one photo"><figcaption>All fourteen styles on the same photo, made by Lumen itself.</figcaption></figure>
+<table>
+<tr><th>Style</th><th>What it does</th></tr>
+<tr><td>Faded Film</td><td>Lifted blacks and soft contrast, a touch warm: an old print.</td></tr>
+<tr><td>Warm Vintage</td><td>Warm, faded and a little yellow in the highlights.</td></tr>
+<tr><td>Golden Hour</td><td>The warm, glowing light just before sunset.</td></tr>
+<tr><td>Soft Portrait</td><td>Gentle contrast, warm skin, open shadows.</td></tr>
+<tr><td>Vivid Landscape</td><td>Rich colour and depth for skies, water and hills.</td></tr>
+<tr><td>Teal &amp; Orange</td><td>Cinema grading: warm skin and highlights, cool shadows.</td></tr>
+<tr><td>Cross Process</td><td>Strong, shifted colour, as slide film developed as negative.</td></tr>
+<tr><td>Bleach Bypass</td><td>Silvery, low colour and hard contrast.</td></tr>
+<tr><td>Nordic Matte</td><td>Cool and quiet, with soft blacks.</td></tr>
+<tr><td>Classic Black &amp; White</td><td>A neutral black and white with full tones.</td></tr>
+<tr><td>High-Contrast Noir</td><td>Deep blacks and bright whites, for drama.</td></tr>
+<tr><td>Sepia</td><td>The warm brown of a toned print.</td></tr>
+<tr><td>Cyanotype</td><td>The Prussian blue of the sun print.</td></tr>
+<tr><td>Platinum Tone</td><td>Soft, warm grey tones with a long scale.</td></tr>
+</table>
+<p>A style sets ordinary sliders, so it's only a starting point: after choosing one, look in the Adjustments tab and change anything you like. The toned styles (Sepia, Cyanotype, Platinum Tone) use <b>Split Toning</b>:</p>
+<figure><img src="images/split-toning.png" alt="Split Toning after Sepia"><figcaption>The Split Toning group after choosing Sepia.</figcaption></figure>
+<p>A style replaces the photo's look (its colours and tones), but keeps its crop and straightening. <b>Undo</b> takes it off again. To give many photos the same style, select them in the Browser and choose <b>Selection &rarr; Apply preset &rarr; Styles</b> (there the style is used straight away, as there's no single photo to show it on).</p>
+
+<div class="box try"><b class="label">TRY IT</b>Open a photo in the Viewer and go down the Styles list slowly, watching the photo. Pick the one you like best, then open the Adjustments tab and change one of the sliders it set, such as Contrast. Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> twice: first your change goes, then the style.</div>
 
 <h4>Copying adjustments to other photos</h4>
 <p>Photos taken at the same time often need the same changes. Adjust one, then:</p>
@@ -427,7 +485,7 @@ a { color:#1f5fa8; }
 <p>Every selected photo gets the same adjustments. Both are on the Selection menu, and on the Photo menu in the Viewer.</p>
 
 <h4>Presets</h4>
-<p>A <b>preset</b> is a set of adjustments with a name, to use again on any photo. Click <b>Presets</b> in the Adjustments tab (or Menu over the photo, then <b>Presets</b>):</p>
+<p>A <b>preset</b> is your own style: a set of adjustments with a name, to use again on any photo. Click <b>Presets</b> in the Adjustments tab (or Menu over the photo, then <b>Presets</b>). Under <b>Styles</b> come your own presets:</p>
 <ul>
 <li><b>Save current as</b>: type a name and press <kbd>Return</kbd> to keep this photo's adjustments.</li>
 <li>Choose a preset's name to use it on this photo.</li>
@@ -437,7 +495,7 @@ a { color:#1f5fa8; }
 <figure><img src="images/save-preset.png" alt="Saving a preset"><figcaption>Saving a preset called "Evening glow".</figcaption></figure>
 <figure><img src="images/presets-menu.png" alt="The Presets menu"><figcaption>The Photo menu with its Presets submenu.</figcaption></figure>
 </div>
-<p>To use a preset on several photos at once, select them in the Browser and choose <b>Selection &rarr; Apply preset</b>.</p>
+<p>To use a preset on several photos at once, select them in the Browser and choose <b>Selection &rarr; Apply preset</b>. Like a style, a preset keeps each photo's crop and straightening.</p>
 
 <h3 class="chapter" id="ch13"><span>13</span> What the camera recorded: the Info tab</h3>
 
@@ -468,7 +526,7 @@ a { color:#1f5fa8; }
 <tr><td>Quality</td><td>For JPEG, 1 to 100. Higher keeps more detail but makes larger files. 90 suits most photos.</td></tr>
 </table>
 <p>With several photos selected, the icon is a directory: drag it to a Filer window, and Lumen makes a directory with that name and puts one file for each photo in it. You can also type a full pathname in the name box and click <b>Save</b>, or drag the icon into another program (one photo at a time) to send it there.</p>
-<p>Exports happen in the background; the title bar shows how far they've got.</p>
+<p>Exports happen in the background; the bottom bar shows how far they've got ("Exporting 3 of 16", with its donut), and the Activity window lists each export when it's done (<a href="#ch3">Chapter 3</a>).</p>
 
 <div class="box tip"><b class="label">TIP</b>Exported photos keep what the camera recorded: camera, lens, exposure, date, place, author and copyright. Other programs (and websites) can show it. If you'd rather not share where a photo was taken, remember the GPS details go with it.</div>
 
@@ -508,6 +566,7 @@ a { color:#1f5fa8; }
 <tr><td>Export</td><td>The format, size and JPEG quality the Export box starts with.</td></tr>
 <tr><td>Thumbnails</td><td>The thumbnail size Lumen starts with. Saving changes the size at once, too.</td></tr>
 <tr><td>Check the photos' files are still there when Lumen opens</td><td>Switch this off if your photos are on discs that are often away, so they aren't all marked missing (<a href="#ch8">Chapter 8</a>).</td></tr>
+<tr><td>Folders</td><td><b>Watch folders I import for new photos</b> and <b>Make albums from the folders inside them</b> do for every directory you import from now on what the project menu does for one (<a href="#ch6">Chapter 6</a>). <b>Look in watched folders every</b> so many minutes; 0 means only when Lumen starts and when its window opens.</td></tr>
 </table>
 <p>Click <b>Save</b> to keep them, or <b>Cancel</b> to leave them as they were.</p>
 
@@ -515,7 +574,7 @@ a { color:#1f5fa8; }
 
 <h3 class="chapter" id="ch17"><span>17</span> Getting help</h3>
 <p>Lumen works with RISC OS's <b>!Help</b> program. Start !Help (double-click it in the <b>Apps</b> directory on the icon bar), then point at anything in Lumen's windows or menus, and !Help says what it is and what it does.</p>
-<figure><img src="images/help.png" alt="!Help over the Export button"><figcaption>!Help explaining the toolbar's Export button.</figcaption></figure>
+<figure><img src="images/help.png" alt="!Help over the Export button"><figcaption>!Help explaining the toolbar's Undo button.</figcaption></figure>
 <p><b>Help...</b> on the icon bar menu shows Lumen's short help file; <b>User guide</b> opens this guide.</p>
 
 <!-- ======================================================================= -->
@@ -540,15 +599,16 @@ a { color:#1f5fa8; }
 <table>
 <tr><th>Problem</th><th>What to do</th></tr>
 <tr><td>Lumen says it needs SharedUnixLibrary or ARMEABISupport.</td><td>Install them with PackMan, then start Lumen again.</td></tr>
-<tr><td>Double-clicking !Lumen again does nothing new.</td><td>Lumen's already running: it opens its window instead of starting twice. Look on the icon bar.</td></tr>
+<tr><td>New photos I put in an imported directory haven't appeared.</td><td>Lumen only brings them in by itself if the project is watched: tick <b>Watch for new photos</b> on the project's menu (<a href="#ch6">Chapter 6</a>). To have it look now, close and reopen Lumen's window. Or drag the directory in again: only the new photos are added.</td></tr>
 <tr><td>Some files in a directory weren't imported.</td><td>Lumen imports JPEG, PNG and (with LumenRaw) raw files; others are left alone. Photos already in the library aren't added again.</td></tr>
 <tr><td>A raw file has a grey thumbnail, or says to install something.</td><td>Install LumenRaw with PackMan (<a href="#ch15">Chapter 15</a>), then start Lumen again. If it's installed, check it's ticked in the Plug-ins menu: Lumen says when it's switched off.</td></tr>
 <tr><td>Photos show "Missing".</td><td>Their files have moved or their disc isn't there. Put the disc back and reopen the window, or drag the files' new directory into Lumen (<a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Keys don't do anything.</td><td>Click in Lumen's window first, so it has the input focus. If you're typing in the Search box, the keys go there: click on a photo.</td></tr>
 <tr><td>A photo I rejected has disappeared.</td><td>Click <b>Rejected</b> in the Library tab, select it and give it stars again (or press <kbd>0</kbd>): rejecting took its stars away.</td></tr>
+<tr><td>Undo and Redo are grey.</td><td>They work on the photo you're adjusting, in the Viewer or Split View, and only when there's something to take back or do again.</td></tr>
 <tr><td>Fewer photos are shown than I expected.</td><td>Check the rating filter says <b>Any rating</b>, the Search box is empty, and the Library tab has <b>Photos</b> chosen. The title bar shows what's being shown.</td></tr>
 <tr><td>Colours look blotchy or banded.</td><td>The screen is in a mode with too few colours. Choose 16 million colours in Configure &rarr; Screen.</td></tr>
-<tr><td>User guide says there's no web browser.</td><td>Open the directory NetSurf is in, so the Filer sees it, and try again. Or open <code>!Lumen.Guide.index/html</code> yourself.</td></tr>
+
 </table>
 
 <h3 class="chapter" id="ch20"><span>20</span> Ten things for experienced users</h3>
@@ -556,12 +616,12 @@ a { color:#1f5fa8; }
 <li><b>The library</b> is a directory: <code>Catalogue</code> (an SQLite database) and <code>Thumbs</code> (256-pixel JPEGs in 256 subdirectories). Originals are referenced, never copied or written to. Back the directory up as you would any other.</li>
 <li><b>Choosing the library:</b> <code>Lumen$Library</code>, set before Lumen starts, wins over the Choices window. Otherwise it's the Choices setting, else <code>&lt;Choices$Write&gt;.Lumen.Library</code> (or <code>LumenLibrary</code> beside !Lumen if there's no Choices yet).</li>
 <li><b>Recognising photos:</b> each original is identified by a hash of its size and its first and last 64 KB, which is how re-imports are skipped and moved files relinked.</li>
-<li><b>Recipes:</b> adjustments are stored per photo as a short text recipe; the pipeline runs geometry first (quarter turns, straighten, perspective, crop) in 16-bit linear light, then white balance, exposure, local highlights and shadows, levels, curves and enhance, then sharpening at the output size.</li>
+<li><b>Recipes:</b> adjustments are stored per photo as a short text recipe; the pipeline runs geometry first (quarter turns, straighten, perspective, crop) in 16-bit linear light, then white balance, exposure, local highlights and shadows, levels, curves and enhance, then split toning (after saturation, so it tints black and white), then sharpening at the output size. A style is the look part of a recipe; while one is shown from the menu, nothing is written to the catalogue.</li>
 <li><b>Speed:</b> the Viewer works on a proxy of up to 1600 pixels, and a half-size copy while a slider is dragged. JPEGs are decoded with libjpeg-turbo, which uses NEON when the processor has it (set <code>JSIMD_FORCENONE</code> to 1 to compare without).</li>
-<li><b>Background work</b> (imports, thumbnails, exports, checking files) runs in short slices on null events, so the desktop never waits; Lumen asks for null events only while there's work to do.</li>
+<li><b>Background work</b> (imports, thumbnails, exports, checking files, watched folders) runs in short slices on null events, so the desktop never waits; Lumen asks for null events only while there's work to do. Thumbnails nobody is looking at are made with <code>Wimp_PollIdle</code> between slices while another task has the input focus. Watched folders wake Lumen with <code>Wimp_PollIdle</code> when they're due; unchanged files are skipped by size and date without being read. The Styles item asks for <code>Message_MenuWarning</code>, and only while that list is open does Lumen look at the pointer (every 5 cs) to show the style under it.</li>
 <li><b>Colour:</b> Adobe RGB (1998) and Display P3 photos (from their ICC profile, or EXIF's colour space and interoperability index) are converted to sRGB by matrix in linear light. Other profiles are treated as sRGB.</li>
 <li><b>Plug-ins</b> are directories in <code>!Lumen.Plugins</code> with a text <code>Plugin</code> file of <code>Name</code>, <code>Version</code>, <code>Kind</code>, <code>Program</code>, <code>Package</code> and <code>Description</code> lines. LumenRaw runs once per job in a task window and hands back a JPEG or PPM and a few lines of details through <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>. Switched-off plug-ins are listed in <code>&lt;Choices$Write&gt;.Lumen.Plugins</code>.</li>
-<li><b>Choices</b> are a text file, <code>&lt;Choices$Write&gt;.Lumen.Choices</code>, of <code>key value</code> lines.</li>
+<li><b>Choices</b> are a text file, <code>&lt;Choices$Write&gt;.Lumen.Choices</code>, of <code>key value</code> lines; the Activity history is <code>&lt;Choices$Write&gt;.Lumen.Activity</code>, one <code>time kind text</code> line per entry, the last 200 kept.</li>
 <li><b>Single instance:</b> a second Lumen finds the first through the Task Manager, sends it a click on its icon bar icon, and quits.</li>
 </ol>
 
@@ -605,6 +665,8 @@ a { color:#1f5fa8; }
 <tr><td>The curve</td><td>Add a point, or drag one</td><td>Remove a point</td></tr>
 <tr><td>A line in the Library tab</td><td>Show those photos</td><td>&ndash;</td></tr>
 <tr><td>The grip (bottom right)</td><td colspan="2">Drag to change the window's size</td></tr>
+<tr><td>What Lumen is doing (bottom bar)</td><td>Open the Activity window</td><td>&ndash;</td></tr>
+<tr><td>A style in the Styles menu</td><td>Keep it (just pointing at it shows it)</td><td>Keep it, menu stays open</td></tr>
 </table>
 
 <h4>Menus</h4>
@@ -617,18 +679,20 @@ a { color:#1f5fa8; }
 <table>
 <tr><th>Menu</th><th>Items</th></tr>
 <tr><td>Show</td><td>All photos; Flagged; Rejected; Last import; Projects &rarr;; Albums &rarr;; Rating filter &rarr;</td></tr>
-<tr><td>Selection</td><td>Rating &rarr;; Flag / unflag; Reject; Select all; Clear selection; Copy adjustments; Paste adjustments; Apply preset &rarr;; Export...; Remove from library...</td></tr>
+<tr><td>Selection</td><td>Rating &rarr;; Flag / unflag; Reject; Select all; Clear selection; Copy adjustments; Paste adjustments; Apply preset &rarr; (Styles &rarr;, then your presets); Export...; Remove from library...</td></tr>
 <tr><td>Album</td><td>New album from selection &rarr;; Add selection to &rarr;; Remove from this album</td></tr>
 <tr><td>Thumbnail size</td><td>Small; Medium; Large</td></tr>
 <tr><td>Plug-ins</td><td>Each plug-in (ticked when on); Add plug-in...; Remove &rarr;</td></tr>
-<tr><td>Photo (Viewer)</td><td>Before and after; Zoom to 100%; Loupe &rarr;; Undo; Redo; Reset all adjustments; Auto adjust; Pick white balance; Crop; Crop shape &rarr;; Grid &rarr;; Presets &rarr;; Copy adjustments; Paste adjustments; Export...; Back to the Browser; Remove from library...</td></tr>
-<tr><td>A project or album</td><td>Rename &rarr;; Delete album... (albums) or Remove project from library... (projects)</td></tr>
+<tr><td>Photo (Viewer)</td><td>Before and after; Zoom to 100%; Loupe &rarr;; Undo; Redo; Reset all adjustments; Auto adjust; Pick white balance; Crop; Crop shape &rarr;; Grid &rarr;; Presets &rarr; (Styles &rarr;; your presets; Save current as &rarr;; Delete &rarr;); Copy adjustments; Paste adjustments; Export...; Back to the Browser; Remove from library...</td></tr>
+<tr><td>A project</td><td>Rename &rarr;; Watch for new photos; Albums from its folders; Remove project from library...</td></tr>
+<tr><td>An album</td><td>Rename &rarr;; Delete album... (an album made from a folder: Follows its folder)</td></tr>
 </table>
-<p>The icon bar menu: Info &rarr;; Help...; User guide; Open library; Choices...; Plug-ins &rarr;; Quit.</p>
+<p>The icon bar menu: Info &rarr;; Help...; User guide; Open library; Activity...; Choices...; Plug-ins &rarr;; Quit.</p>
+<p>Toolbar: Inspector; Import; New; Undo; Redo; Browser; Split View; Viewer; Loupe; Export; Full Screen. Bottom bar: the photo count; what Lumen is doing (click for the Activity window); the rating filter; Search; thumbnail size.</p>
 
 <!-- ======================================================================= -->
 <h2 class="part" id="credits">Photo credits</h2>
-<p>The photos in this guide are by Julian Herzog, from Wikimedia Commons, shown here smaller than the originals. Thank you.</p>
+<p>The photos in this guide are by Julian Herzog, from Wikimedia Commons, shown here smaller than the originals, and in Chapters 10 to 12 with Lumen's adjustments and styles applied. Thank you.</p>
 <table>
 <tr><th>In the guide</th><th>Original on Wikimedia Commons</th><th>Licence</th></tr>
 <tr><td>Buttermere, Comb_Beck, Fleetwith_Pike</td><td>Buttermere Lake 2022; Comb Beck Waterfall Lake District 2021 01; Buttermere Shore Fleetwith Pike 2021</td><td>CC BY 4.0</td></tr>
