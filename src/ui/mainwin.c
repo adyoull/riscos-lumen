@@ -271,6 +271,7 @@ static void open_main (int *b)
     {
       is_open = 1;
       _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
+      lib_verify_start (app_library ());   /* a disc may be back (or gone) since it was shut */
     }
 }
 
@@ -424,7 +425,7 @@ void mainwin_inspector_changed (void)
     mainwin_inspector_extent (viewer_panel_height ());
   else
     {
-      info_load (0);
+      info_load (1);                   /* read again: the photo may have changed while hidden */
       mainwin_inspector_extent (info_height);
     }
   if (insp != -1)
@@ -513,6 +514,15 @@ static void build_rows (void)
   add_row (SRC_FLAGGED, 0, "Flagged", 0);
   add_row (SRC_REJECTED, 0, "Rejected", 0);
   add_row (SRC_LAST_IMPORT, 0, "Last Import", 0);
+  {
+    /* Only when there are any: photos whose files can't be found. */
+    int miss = cat_count_missing (lib_cat (app_library ()));
+    if (miss)
+      {
+        snprintf (t, sizeof t, "Missing Files (%d)", miss);
+        add_row (SRC_MISSING, 0, t, 0);
+      }
+  }
   if (cat_groups (lib_cat (app_library ()), SRC_PROJECT, &g, &n) == 0)
     {
       add_row (-1, 0, "PROJECTS", 1);
@@ -575,6 +585,10 @@ static void row_icon (int kind, int x, int y, unsigned col)
       draw_line (x + 4, y + 28, x + 28, y + 2, col);
       draw_line (x + 6, y + 2, x + 30, y + 28, col);
       draw_line (x + 6, y + 28, x + 30, y + 2, col);
+      break;
+    case SRC_MISSING:                  /* a frame with a question mark: something gone */
+      draw_frame (x, y, x + 32, y + 26, col);
+      draw_text (x + 10, y + 2, "?", col, col == COL_WHITE ? COL_ACCENT : COL_PANEL);
       break;
     case SRC_LAST_IMPORT:              /* a clock */
       draw_circle (x + 16, y + 15, 14, col);
@@ -795,6 +809,8 @@ static void info_load (int force)
   info_add ("Flag", it.flag ? "Flagged" : "Not flagged", 0);
   info_add ("Adjusted", it.edited ? "Yes" : "No", 0);
   info_add ("File", d.path, 0);
+  if (d.missing)
+    info_add ("Missing", "The file can't be found there. If it has moved, drag the folder it is in now into Lumen.", 0);
   /* The EXIF block is near the start of the file: 256 KB is plenty. */
   {
     FILE *f = fopen (d.path, "rb");
@@ -1254,7 +1270,20 @@ void mainwin_inspector_click (int *b)
       if (tab == TAB_ADJUST)
         menus_open_viewer_menu (b[0], b[1]);
       else
-        menus_open_window_menu (b[0], b[1]);
+        {
+          /* Over a project or album: its own menu (rename, delete). */
+          int i = -1;
+          st[0] = insp;
+          if (tab == TAB_LIBRARY && _swix (Wimp_GetWindowState, _IN (1), st) == NULL)
+            {
+              int wy = b[1] - (st[4] - st[6]);
+              i = wy <= -16 ? (-wy - 16) / LIB_ROW : -1;
+            }
+          if (i >= 0 && i < nrows && (rows[i].kind == SRC_PROJECT || rows[i].kind == SRC_ALBUM))
+            menus_open_group_menu (b[0], b[1], rows[i].kind, rows[i].id);
+          else
+            menus_open_window_menu (b[0], b[1]);
+        }
       return;
     }
   if (tab == TAB_ADJUST)

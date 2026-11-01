@@ -26,7 +26,11 @@ static int which;                      /* 1 window menu, 2 icon bar menu, 3 view
 static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40];
-static int export_after_menu;          /* 1 the selection, 2 the viewer's photo: open the box once the menu is done */
+static int export_after_menu;
+static int remove_after_menu;          /* ask about removing once the menu has gone */
+static int group_kind;                 /* the Library tab's project or album the menu is for */
+static cat_id group_id;
+static char group_name[64];          /* 1 the selection, 2 the viewer's photo: open the box once the menu is done */
 
 /* The presets the open menu was built from. */
 static cat_preset *presets;
@@ -219,7 +223,7 @@ static menu *build_window_menu (void)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
   npresets = looks_presets (&presets);
   apply = preset_list ("Apply preset", nsel == 0);
-  selm = new_menu ("Selection", 9);
+  selm = new_menu ("Selection", 10);
   if (selm)
     {
       set_item (selm, 0, 0, "Rating", 0, (int) rating, nsel == 0);
@@ -230,7 +234,8 @@ static menu *build_window_menu (void)
       set_item (selm, 5, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
       set_item (selm, 6, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
       set_item (selm, 7, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0 || npresets == 0);
-      set_item (selm, 8, 1, "Export...      ^E", 0, -1, nsel == 0);
+      set_item (selm, 8, 0, "Export...      ^E", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, 9, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
     }
 
   newalbum = writable_menu ("Name", album_name, sizeof album_name);
@@ -265,7 +270,7 @@ static menu *build_window_menu (void)
 
 /* Photo > ... (the order menus_selection decodes) */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
-       VM_PRESETS, VM_COPY, VM_PASTE, VM_EXPORT, VM_BACK, VM_COUNT };
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_EXPORT, VM_BACK, VM_REMOVE, VM_COUNT };
 
 static menu *build_viewer_menu (void)
 {
@@ -303,7 +308,8 @@ static menu *build_viewer_menu (void)
       set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
       set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
       set_item (m, VM_EXPORT, 0, "Export...      ^E", MF_DOTTED, -1, 0);
-      set_item (m, VM_BACK, 1, "Back to the Browser      Esc", 0, -1, 0);
+      set_item (m, VM_BACK, 0, "Back to the Browser      Esc", MF_DOTTED, -1, 0);
+      set_item (m, VM_REMOVE, 1, "Remove from library...", 0, -1, 0);
     }
   return m;
 }
@@ -452,6 +458,89 @@ void menus_open_rating_menu (int x, int y)
     _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
 
+/* Menu over a project or album in the Library tab. */
+static menu *build_group_menu (void)
+{
+  menu *m, *ren;
+  used = 0;
+  ren = writable_menu ("Name", group_name, sizeof group_name);
+  m = new_menu (group_kind == SRC_ALBUM ? "Album" : "Project", 2);
+  if (m)
+    {
+      set_item (m, 0, 0, "Rename", 0, (int) ren, 0);
+      set_item (m, 1, 1, group_kind == SRC_ALBUM ? "Delete album..." : "Remove project from library...", 0, -1, 0);
+    }
+  return m;
+}
+
+void menus_open_group_menu (int x, int y, int kind, cat_id id)
+{
+  menu *m;
+  group_kind = kind;
+  group_id = id;
+  cat_group_name (lib_cat (app_library ()), kind, id, group_name, sizeof group_name);
+  m = build_group_menu ();
+  which = 7;
+  open_x = x - 64;
+  open_y = y;
+  if (m)
+    _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
+}
+
+static void group_choice (const int *c)
+{
+  cat *db = lib_cat (app_library ());
+  char q[240], name[64];
+  cat_group_name (db, group_kind, group_id, name, sizeof name);
+  if (c[0] == 0 && c[1] == 0)
+    {
+      if (cat_group_rename (db, group_kind, group_id, group_name))
+        app_report (cat_error (db));
+      browser_update_title ();
+      mainwin_library_changed ();
+    }
+  else if (c[0] == 1 && group_kind == SRC_ALBUM)
+    {
+      snprintf (q, sizeof q, "Delete the album \"%s\"? Its photos stay in the library.", name);
+      if (app_confirm (q, "Delete"))
+        {
+          cat_source all = { SRC_ALL, 0, 0, "" };
+          cat_album_delete (db, group_id);
+          if (browser_source ()->kind == SRC_ALBUM && browser_source ()->id == group_id)
+            {
+              all.min_rating = browser_source ()->min_rating;
+              snprintf (all.search, sizeof all.search, "%s", browser_source ()->search);
+              browser_set_source (&all);
+            }
+          mainwin_library_changed ();
+        }
+    }
+  else if (c[0] == 1)
+    {
+      cat_id *ids;
+      int n;
+      if (cat_group_versions (db, SRC_PROJECT, group_id, &ids, &n))
+        return;
+      snprintf (q, sizeof q, "Remove the project \"%s\" and its %d photo%s from the library? The files "
+                "aren't touched.", name, n, n == 1 ? "" : "s");
+      if (app_confirm (q, "Remove"))
+        {
+          if (lib_remove (app_library (), ids, n))
+            app_report (cat_error (db));
+          else
+            {
+              if (browser_source ()->kind == SRC_PROJECT && browser_source ()->id == group_id)
+                {
+                  cat_source all = { SRC_ALL, 0, 0, "" };
+                  browser_set_source (&all);
+                }
+              browser_removed (ids, n);
+            }
+        }
+      free (ids);
+    }
+}
+
 void menus_open_iconbar_menu (int x)
 {
   menu *m = build_iconbar_menu ();
@@ -541,6 +630,8 @@ static int window_choice (const int *c)
         looks_apply_selection (looks_clip ());
       else if (c[1] == 7 && c[2] >= 0 && c[2] < npresets && c[2] < MAX_LIST)
         looks_apply_selection (presets[c[2]].recipe);
+      else if (c[1] == 9)
+        remove_after_menu = 1;
       else if (c[1] == 8)
         export_after_menu = 1;
       break;
@@ -596,9 +687,20 @@ int menus_selection (const int *choice)
       case VM_PASTE: if (looks_clip ()) viewer_apply_look (looks_clip ()); break;
       case VM_EXPORT: export_after_menu = 2; break;
       case VM_BACK: viewer_close (); return 0;
+      case VM_REMOVE:
+        {
+          /* This photo alone: the Browser's focus is the Viewer's. */
+          int i = viewer_index ();
+          if (i >= 0)
+            browser_focus_on (i);
+          remove_after_menu = 1;
+        }
+        break;
       }
   else if (which == 4)
     presets_choice (choice);
+  else if (which == 7)
+    group_choice (choice);
   else if (which == 6)
     {
       if (choice[0] >= 0 && choice[0] <= 5)
@@ -629,6 +731,13 @@ int menus_selection (const int *choice)
     }
   if (quit_requested)
     return 1;
+  if (remove_after_menu)
+    {
+      /* The question replaces the menu. */
+      remove_after_menu = 0;
+      browser_remove_selection ();
+      return 0;
+    }
   if (export_after_menu)
     {
       /* The Export box replaces the menu, at the pointer (as a menu would open). */
@@ -649,7 +758,8 @@ int menus_selection (const int *choice)
         }
       else
         m = which == 1 ? build_window_menu () : which == 3 ? build_viewer_menu ()
-          : which == 5 ? build_new_menu () : which == 6 ? build_rating_menu () : build_iconbar_menu ();
+          : which == 5 ? build_new_menu () : which == 6 ? build_rating_menu ()
+          : which == 7 ? build_group_menu () : build_iconbar_menu ();
       if (m)
         _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
     }

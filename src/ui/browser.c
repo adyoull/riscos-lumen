@@ -28,6 +28,7 @@
 #define COL_STAR_OFF_SEL 0x8A8A8A00u
 #define COL_FLAG 0xB0E6F200u           /* #F2E6B0 */
 #define COL_REJECT 0x7070F000u
+#define COL_MISSING 0x2020C000u        /* #C02020 */
 
 static const int box_sizes[3] = { 160, 224, 320 };
 
@@ -42,6 +43,7 @@ static int vis_w = 1200, vis_h = 800;
 static int screen_w = 1920, screen_h = 1080;
 
 static void open_nested (int *b);
+static void n_reset (void);
 static int box (void) { return box_sizes[size]; }
 static int min_cell_w (void) { return box () + 32; }
 static int cell_w (void) { return layout_w; }
@@ -177,6 +179,7 @@ void browser_title (char *out, size_t size)
     case SRC_FLAGGED: snprintf (name, sizeof name, "Flagged"); break;
     case SRC_REJECTED: snprintf (name, sizeof name, "Rejected"); break;
     case SRC_LAST_IMPORT: snprintf (name, sizeof name, "Last import"); break;
+    case SRC_MISSING: snprintf (name, sizeof name, "Missing files"); break;
     case SRC_PROJECT:
     case SRC_ALBUM: cat_group_name (lib_cat (app_library ()), src.kind, src.id, name, sizeof name); break;
     default: snprintf (name, sizeof name, "All photos"); break;
@@ -453,6 +456,13 @@ static void draw_cell (int i, int ox, int oy)
       draw_rect (pic[2] - tw - 21, pic[1] + 11, pic[2] - 11, pic[1] + 45, 0xFFFFFF00u);
       draw_text (pic[2] - tw - 16, pic[1] + 18, "Edited", COL_BADGE_TEXT, 0xFFFFFF00u);
     }
+  if (it->missing)                     /* its file can't be found: on the bottom left */
+    {
+      const char *t = box () >= 224 ? "Missing" : "?";
+      int tw = draw_text_width (t);
+      draw_rect (pic[0] + 8, pic[1] + 8, pic[0] + tw + 24, pic[1] + 48, COL_MISSING);
+      draw_text (pic[0] + 16, pic[1] + 18, t, COL_TEXT_SEL, COL_MISSING);
+    }
   if (it->flag)                        /* a flag on the photo's top left corner */
     {
       draw_rect (pic[0] + 8, pic[3] - 40, pic[0] + 36, pic[3] - 8, 0x30303000u);
@@ -604,6 +614,54 @@ void browser_click (int *block)
     }
 }
 
+/* After photos leave the library: thumbnails forgotten, the Viewer let
+   go if its photo went, the list read again. */
+void browser_removed (const cat_id *ids, int n)
+{
+  int k;
+  for (k = 0; k < n; k++)
+    {
+      thumbcache_drop (ids[k]);
+      if (viewer_item () == ids[k])
+        {
+          mainwin_set_mode (LAYOUT_BROWSER);
+          viewer_shutdown ();
+        }
+    }
+  free (sel);
+  sel = NULL;
+  free (items);
+  items = NULL;
+  n_reset ();
+  browser_reload ();
+  mainwin_library_changed ();
+  mainwin_info_changed ();
+}
+
+void browser_remove_selection (void)
+{
+  cat_id *ids;
+  int k = browser_selection (&ids);
+  char q[200];
+  if (k)
+    {
+      if (k == 1)
+        snprintf (q, sizeof q, "Remove this photo from the library? Its file isn't touched, and its "
+                  "adjustments, rating and albums go with it.");
+      else
+        snprintf (q, sizeof q, "Remove these %d photos from the library? Their files aren't touched, and "
+                  "their adjustments, ratings and albums go with them.", k);
+      if (app_confirm (q, "Remove"))
+        {
+          if (lib_remove (app_library (), ids, k))
+            app_report (cat_error (lib_cat (app_library ())));
+          else
+            browser_removed (ids, k);
+        }
+    }
+  free (ids);
+}
+
 static void rate (int rating)
 {
   cat_id *ids;
@@ -615,6 +673,8 @@ static void rate (int rating)
     }
   free (ids);
 }
+
+static void n_reset (void) { n = 0; focus = -1; }
 
 int browser_key (int key)
 {
@@ -679,6 +739,8 @@ int browser_key (int key)
     }
   else if (key == KEY_ESCAPE)
     browser_select_all (0);
+  else if (key == 0x7F)                /* Delete: out of the library (after asking) */
+    browser_remove_selection ();
   else
     return 0;
   return 1;

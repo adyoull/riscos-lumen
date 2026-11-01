@@ -42,7 +42,8 @@ static char texts[64][80];
 static int ntexts;
 static int sent_reason, sent_block[64], sent_to;
 static const int *menu_open;
-static char reported[256];
+static char reported[256], asked[256], asked_button[32];
+static int answer = 2;            /* Cancel */
 static int scroll_y;
 static int closedown;
 static int processed_key;
@@ -198,6 +199,13 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_ReportError:
       snprintf (reported, sizeof reported, "%s", ((const _kernel_oserror *) r[0])->errmess);
+      if (r[1] & 0x100)                /* a question: the answer the test chose */
+        {
+          snprintf (asked, sizeof asked, "%s", reported);
+          snprintf (asked_button, sizeof asked_button, "%s", (const char *) r[5]);
+          reported[0] = '\0';
+          r[1] = answer;
+        }
       return NULL;
     case Wimp_CloseWindow:
       if (b[0] == VIEWER)
@@ -1133,6 +1141,143 @@ int main (int argc, char **argv)
     CHECK (mainwin_is_open () && strstr (title_buf, "All photos") != NULL, "the icon bar icon opens it again, on the Browser");
 #undef TOOL
 #undef LIBROW
+  }
+
+  /* ---- A photo whose file has moved ---- */
+  {
+    char from[760], to[760], dir[760];
+    int k, idx = -1;
+    cat_item it;
+    snprintf (from, sizeof from, "%s/Holiday/IMG_0004.jpg", work);
+    snprintf (dir, sizeof dir, "%s/Elsewhere", work);
+    mkdir (dir, 0777);
+    snprintf (to, sizeof to, "%s/IMG_0004.jpg", dir);
+    CHECK (rename (from, to) == 0, "IMG_0004.jpg moved to Elsewhere");
+    mainwin_set_mode (LAYOUT_BROWSER);
+    mainwin_set_tab (TAB_LIBRARY);
+    lib_verify_start (app_library ());
+    CHECK (app_busy (), "checking the files wants idle time");
+    nulls_until_idle ();
+    for (k = 0; k < browser_count (); k++)
+      if (browser_item (k, &it) && strcmp (it.name, "IMG_0004.jpg") == 0)
+        idx = k;
+    CHECK (idx >= 0 && browser_item (idx, &it) && it.missing, "found missing");
+    redraw ();
+    CHECK (text_drawn ("Missing"), "the Browser marks it");
+    memset (b, 0, sizeof b);
+    b[0] = INSP;
+    ntexts = 0;
+    app_event (Redraw_Window_Request, b, 0);
+    CHECK (text_drawn ("Missing Files (1)"), "the Library tab lists Missing Files (1)");
+    browser_focus_on (idx);
+    mainwin_set_tab (TAB_INFO);
+    b[0] = INSP;
+    ntexts = 0;
+    app_event (Redraw_Window_Request, b, 0);
+    CHECK (text_drawn ("Missing"), "the Info tab says so");
+    viewer_open (idx);
+    nulls_until_idle ();
+    memset (b, 0, sizeof b);
+    b[0] = VIEWER;
+    ntexts = 0;
+    app_event (Redraw_Window_Request, b, 0);
+    {
+      int said = 0;
+      for (k = 0; k < ntexts; k++)
+        if (strstr (texts[k], "can't be found"))
+          said = 1;
+      CHECK (said, "the Viewer says the file can't be found, and what to do");
+    }
+    mainwin_set_mode (LAYOUT_BROWSER);
+    /* Drag Elsewhere in: found again, nothing added. */
+    k = browser_count ();
+    memset (b, 0, sizeof b);
+    b[0] = 256; b[1] = 0x5678; b[2] = 78; b[3] = 0; b[4] = 3;
+    b[5] = BROWSER; b[6] = -1; b[10] = 0x1000;
+    snprintf ((char *) &b[11], 200, "%s", dir);
+    app_event (User_Message_Recorded, b, 0x5678);
+    nulls_until_idle ();
+    CHECK (cat_count_missing (lib_cat (app_library ())) == 0, "dragging its new folder in finds it");
+    {
+      cat_source s = { SRC_ALL, 0, 0, "" };
+      browser_set_source (&s);
+    }
+    CHECK (browser_count () == k, "and adds nothing");
+    mainwin_set_tab (TAB_LIBRARY);
+  }
+
+  /* ---- Removing photos; renaming and deleting albums and projects ---- */
+  {
+    cat_group *g;
+    int ng, before, k;
+    cat_id gone;
+    cat_item it;
+    mainwin_set_mode (LAYOUT_BROWSER);
+    browser_focus_on (5);
+    browser_item (5, &it);
+    gone = it.id;
+    before = browser_count ();
+    answer = 2;
+    caret_window = MAINW; caret_icon = -1;
+    key (0x7F);
+    CHECK (strstr (asked, "Remove this photo from the library?") != NULL && strcmp (asked_button, "Remove") == 0,
+           "Delete asks first, with a Remove button");
+    CHECK (browser_count () == before, "Cancel: nothing removed");
+    answer = 3;
+    key (0x7F);
+    CHECK (browser_count () == before - 1, "Remove: one fewer");
+    for (k = 0; k < browser_count (); k++)
+      if (browser_item (k, &it) && it.id == gone)
+        break;
+    CHECK (k == browser_count (), "and it is the one that went");
+    /* Two at once, from the Selection menu, while one is in the viewer. */
+    browser_focus_on (0);
+    viewer_open (0);
+    CHECK (mainwin_mode () == LAYOUT_VIEWER, "a photo in the Viewer");
+    mainwin_set_mode (LAYOUT_BROWSER);
+    browser_focus_on (0);
+    click (16 + 352 + 60, -16 - 60, Button_Adjust);      /* add the second photo (Large thumbnails) */
+    click (5, -5, Button_Menu);
+    CHECK (strstr (item_text (submenu (menu_open, 1), 9), "Remove from library") != NULL, "Selection > Remove from library");
+    asked[0] = '\0';
+    choose (1, 9, -1);
+    CHECK (strstr (asked, "these 2 photos") != NULL, "it asks about the two");
+    CHECK (browser_count () == before - 3 && viewer_item () == 0, "both gone, and the Viewer let its photo go");
+
+    /* An album: Menu over it in the Library tab. */
+    mainwin_set_tab (TAB_LIBRARY);
+    cat_groups (lib_cat (app_library ()), SRC_ALBUM, &g, &ng);
+    CHECK (ng >= 1, "albums to work on");
+    menus_open_group_menu (500, 500, SRC_ALBUM, g[0].id);
+    CHECK (menu_open && strcmp (item_text (menu_open, 0), "Rename") == 0 && strstr (item_text (menu_open, 1), "Delete album") != NULL,
+           "an album's menu: Rename, Delete album");
+    snprintf ((char *) item (submenu (menu_open, 0), 0)[3], 32, "Lakes trip");
+    choose (0, 0, -1);
+    {
+      char nm[64];
+      cat_group_name (lib_cat (app_library ()), SRC_ALBUM, g[0].id, nm, sizeof nm);
+      CHECK (strcmp (nm, "Lakes trip") == 0, "renamed");
+    }
+    menus_open_group_menu (500, 500, SRC_ALBUM, g[0].id);
+    answer = 3;
+    choose (1, -1, -1);
+    CHECK (strstr (asked, "Delete the album \"Lakes trip\"? Its photos stay") != NULL, "deleting asks");
+    free (g);
+    cat_groups (lib_cat (app_library ()), SRC_ALBUM, &g, &ng);
+    for (k = 0; k < ng; k++)
+      CHECK (strcmp (g[k].name, "Lakes trip") != 0, "the album is gone");
+    free (g);
+    /* A project: rename, then remove it all. */
+    cat_groups (lib_cat (app_library ()), SRC_PROJECT, &g, &ng);
+    CHECK (ng == 1 && strcmp (g[0].name, "Holiday") == 0, "the Holiday project");
+    menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
+    CHECK (strstr (item_text (menu_open, 1), "Remove project") != NULL, "a project's menu: Remove project");
+    answer = 2;
+    choose (1, -1, -1);
+    CHECK (strstr (asked, "\"Holiday\" and its 3 photos") != NULL && browser_count () == 3, "it says how many; Cancel keeps them");
+    free (g);
+    answer = 2;
+    reported[0] = '\0';
   }
 
   /* The icon bar menu: Quit. */

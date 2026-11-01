@@ -36,6 +36,21 @@ void app_report (const char *msg)
   _swix (Wimp_ReportError, _INR (0, 2), &e, 1, APP_NAME);
 }
 
+/* A question with a button for yes (Wimp_ReportError, new style: the
+   question category, Cancel and the given button). 1 if it was chosen. */
+int app_confirm (const char *msg, const char *button)
+{
+  _kernel_oserror e;
+  int chosen = 0;
+  e.errnum = 0;
+  snprintf (e.errmess, sizeof e.errmess, "%s", msg);
+  /* Flags: Cancel (bit 1), title given (4), new style (8), category 4: question (bits 9-11). */
+  if (_swix (Wimp_ReportError, _INR (0, 5) | _OUT (1), &e, 2 | 0x10 | 0x100 | (4 << 9), APP_NAME,
+             "!lumen", 1, button, &chosen))
+    return 0;
+  return chosen == 3;
+}
+
 static int have_sprite (const char *name)
 {
   /* Wimp_SpriteOp 40 (read sprite information): an error if it isn't there. */
@@ -131,7 +146,7 @@ void app_quit (void)
 
 int app_busy (void)
 {
-  return viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy ();
+  return viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib);
 }
 
 static void thumb_made (void *ctx, cat_id v)
@@ -163,6 +178,13 @@ static void idle (void)
     }
   if (!lib_busy (lib))
     {
+      /* Checking the originals are still there, when nothing else is on. */
+      if (lib_verifying (lib) && lib_verify_step (lib, app_now, deadline))
+        {
+          browser_reload ();
+          mainwin_library_changed ();
+          mainwin_info_changed ();
+        }
       browser_update_title ();
       return;
     }

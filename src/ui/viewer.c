@@ -37,6 +37,7 @@
 #include "sharpen.h"
 #include "thumbgen.h"
 #include "ui.h"
+#include "fsys.h"
 
 #define PROXY_SIDE 1600
 #define BAND_ROWS 32
@@ -1304,8 +1305,21 @@ void viewer_show (int i)
            photo_long = d.width > d.height ? d.width : d.height,
            !(tg = thumbgen_start (d.path, NULL, PROXY_SIDE, d.orientation, e, sizeof e)))
     {
+      fsys_entry fe;
       state = V_FAILED;
-      snprintf (err, sizeof err, "%s", e);
+      if (fsys_stat (d.path, &fe) != 0)
+        {
+          /* Gone from where it was: say what to do, and mark it. */
+          snprintf (err, sizeof err, "This photo's file can't be found. If it has moved, drag the folder it is "
+                    "in now into Lumen, and Lumen will find it there.");
+          if (!d.missing)
+            {
+              cat_set_missing (lib_cat (app_library ()), d.original, 1);
+              item.missing = 1;
+            }
+        }
+      else
+        snprintf (err, sizeof err, "%s", e);
     }
   update_title ();
   force_all ();
@@ -2645,7 +2659,35 @@ static void draw_image (int ox, int oy)
         }
     }
   else if (state == V_FAILED)
-    draw_text (ox + r[0] + 24, oy + r[3] - 60, err, COL_LIGHT, COL_GROUND);
+    {
+      /* Wrapped to the window, at spaces. */
+      const char *p = err;
+      int y = oy + r[3] - 60, width = r[2] - r[0] - 48;
+      while (*p)
+        {
+          char line[200];
+          int n = 0, brk = 0;
+          while (p[n] && n < (int) sizeof line - 1)
+            {
+              line[n] = p[n];
+              line[n + 1] = '\0';
+              if (draw_text_width (line) > width)
+                break;
+              if (p[n] == ' ')
+                brk = n + 1;
+              n++;
+            }
+          if (p[n] && brk)
+            n = brk;
+          if (!n)
+            n = 1;
+          memcpy (line, p, (size_t) n);
+          line[n] = '\0';
+          draw_text (ox + r[0] + 24, y, line, COL_LIGHT, COL_GROUND);
+          y -= 44;
+          p += n;
+        }
+    }
 }
 
 void viewer_redraw (int *b)

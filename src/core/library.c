@@ -31,7 +31,10 @@ struct library
   char dirpath[1024];
   cat_id project;
   long long batch;
-  int found, added, skipped, importing;
+  int found, added, skipped, importing, relinked;
+  /* checking that originals are still there */
+  int verifying;
+  cat_id verify_after;
   unsigned char *head;
   /* thumbnails */
   thumbgen *tg;
@@ -79,8 +82,50 @@ int lib_open (library **out, const char *root, char *err, size_t errlen)
       return -1;
     }
   l->thumbs_pending = -1;
+  lib_verify_start (l);
   *out = l;
   return 0;
+}
+
+/* --- checking the originals are there ---------------------------------- */
+
+void lib_verify_start (library *l)
+{
+  cat_id id;
+  char path[1024];
+  int missing;
+  l->verify_after = 0;
+  /* Nothing to check in an empty library: no idle time wanted. */
+  l->verifying = cat_original_next (l->db, 0, &id, path, sizeof path, &missing) == 1;
+}
+
+int lib_verifying (library *l) { return l->verifying; }
+
+int lib_verify_step (library *l, unsigned (*now) (void), unsigned deadline)
+{
+  int changed = 0;
+  do
+    {
+      cat_id id;
+      char path[1024];
+      int missing, r = cat_original_next (l->db, l->verify_after, &id, path, sizeof path, &missing);
+      fsys_entry e;
+      int gone;
+      if (r != 1)
+        {
+          l->verifying = 0;
+          break;
+        }
+      l->verify_after = id;
+      gone = fsys_stat (path, &e) != 0;
+      if (gone != missing)
+        {
+          cat_set_missing (l->db, id, gone);
+          changed = 1;
+        }
+    }
+  while ((int) (now () - deadline) < 0);
+  return changed;
 }
 
 void lib_close (library *l)
@@ -136,6 +181,7 @@ void lib_get_progress (library *l, lib_progress *p)
   p->found = l->found;
   p->added = l->added;
   p->skipped = l->skipped;
+  p->relinked = l->relinked;
   if (l->thumbs_pending < 0)
     l->thumbs_pending = cat_count_thumbs_pending (l->db);
   p->thumbs_pending = l->thumbs_pending;
@@ -155,6 +201,21 @@ void lib_thumb_path (library *l, cat_id v, char *out, size_t n)
   snprintf (dir, sizeof dir, "%s", out);
   snprintf (leaf, sizeof leaf, "%lld", v);
   fsys_join (out, n, dir, leaf);
+}
+
+int lib_remove (library *l, const cat_id *v, int n)
+{
+  int i;
+  if (cat_remove_versions (l->db, v, n))
+    return -1;
+  for (i = 0; i < n; i++)
+    {
+      char path[1100];
+      lib_thumb_path (l, v[i], path, sizeof path);
+      remove (path);
+    }
+  lib_thumbs_changed (l);
+  return 0;
 }
 
 /* --- import ------------------------------------------------------------ */
@@ -268,7 +329,20 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
         l->thumbs_pending++;
     }
   else if (v == 0)
-    l->skipped++;
+    {
+      /* Already known. If the one we know has gone from its old place,
+         this is it, moved: its new place (no duplicate). */
+      cat_details d;
+      fsys_entry old;
+      if (cat_get_details (l->db, existing, &d) == 0 && strcmp (d.path, path) != 0
+          && fsys_stat (d.path, &old) != 0 && cat_relink (l->db, existing, path, e->mtime) == 0)
+        {
+          l->relinked++;
+          l->thumbs_pending = -1;
+        }
+      else
+        l->skipped++;
+    }
   else
     snprintf (l->err, sizeof l->err, "%s", cat_error (l->db));
 }
@@ -348,6 +422,7 @@ static int import_step (library *l)
   if (l->importing)
     {
       l->importing = 0;
+      cat_tidy (l->db);                  /* a project made for photos that were all relinked */
       return 1;                          /* finished: the counts are final */
     }
   return -1;

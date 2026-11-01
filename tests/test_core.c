@@ -620,6 +620,147 @@ static void test_library (void)
   CHECK (n == 5, "5 in All photos after reopening (6 minus the reject)");
   CHECK (!lib_busy (l), "nothing to do after reopening");
   free (items);
+
+  /* A photo moved elsewhere: marked missing, then found again by
+     importing the folder it is in now (no duplicate). */
+  {
+    char old[1024], moved[1024];
+    cat_source miss = { SRC_MISSING, 0, 0, "" };
+    cat_details d;
+    cat_group *g;
+    int ng, k, guard = 0;
+    cat_id wide = 0;
+    p (old, "Lakes/wide.png");
+    p (moved, "Moved");
+    mkdir (moved, 0777);
+    p (moved, "Moved/wide.png");
+    CHECK (rename (old, moved) == 0, "wide.png moved to Moved/");
+    CHECK (lib_verifying (l), "checking the originals started when the library opened");
+    while (lib_verifying (l) && guard++ < 100)
+      lib_verify_step (l, frozen_now, 0);
+    lib_verify_start (l);
+    guard = 0;
+    while (lib_verifying (l) && guard++ < 100)
+      k = lib_verify_step (l, frozen_now, 0);
+    cat_list (lib_cat (l), &miss, &items, &n);
+    CHECK (n == 1 && strcmp (items[0].name, "wide.png") == 0 && items[0].missing, "wide.png is missing");
+    CHECK (cat_count_missing (lib_cat (l)) == 1, "one missing");
+    CHECK (cat_get_details (lib_cat (l), items[0].id, &d) == 0 && d.missing, "its details say so");
+    wide = items[0].id;
+    free (items);
+    p (path, "Moved");
+    lib_import (l, path);
+    while (lib_busy (l))
+      lib_work (l, fake_now, clock_cs + 3, NULL, NULL);
+    lib_get_progress (l, &pr);
+    CHECK (pr.relinked == 1 && pr.added == 0, "importing Moved: found again, nothing added");
+    CHECK (cat_count_missing (lib_cat (l)) == 0, "no longer missing");
+    cat_list (lib_cat (l), &all, &items, &n);
+    CHECK (n == 5 && cat_get_details (lib_cat (l), wide, &d) == 0 && strcmp (d.path, moved) == 0 && !d.missing,
+           "nothing new in All photos; wide.png (rejected) is at its new place");
+    free (items);
+    cat_groups (lib_cat (l), SRC_PROJECT, &g, &ng);
+    for (k = 0; k < ng; k++)
+      CHECK (strcmp (g[k].name, "Moved") != 0, "no empty Moved project left behind");
+    free (g);
+    /* Moved back by hand: the check finds it there again. */
+    CHECK (rename (moved, old) == 0, "moved back");
+    lib_verify_start (l);
+    guard = 0;
+    while (lib_verifying (l) && guard++ < 100)
+      lib_verify_step (l, frozen_now, 0);
+    CHECK (cat_count_missing (lib_cat (l)) == 1, "at the old place it's missing from the new one");
+    lib_import (l, old);
+    while (lib_busy (l))
+      lib_work (l, fake_now, clock_cs + 3, NULL, NULL);
+    CHECK (cat_count_missing (lib_cat (l)) == 0, "and importing it puts it right");
+  }
+
+  /* Removing, deleting and renaming. */
+  {
+    cat_group *g;
+    int ng, k, before_files;
+    cat_id album = cat_album_create (lib_cat (l), "Keep"), *vs;
+    cat_source albsrc = { SRC_ALBUM, 0, 0, "" };
+    FILE *f;
+    cat_list (lib_cat (l), &all, &items, &n);
+    k = find_item (items, n, "catbells.jpg");
+    cat_album_add (lib_cat (l), album, &items[k].id, 1);
+    lib_thumb_path (l, items[k].id, path, sizeof path);
+    f = fopen (path, "rb");
+    before_files = f != NULL;
+    if (f) fclose (f);
+    CHECK (before_files, "catbells has a thumbnail file");
+    k = lib_remove (l, &items[k].id, 1);
+    CHECK (k == 0, "remove catbells from the library");
+    f = fopen (path, "rb");
+    CHECK (!f, "its thumbnail file went");
+    if (f) fclose (f);
+    p (path, "Lakes/Day1/catbells.jpg");
+    f = fopen (path, "rb");
+    CHECK (f != NULL, "the photo's own file is still there");
+    if (f) fclose (f);
+    free (items);
+    cat_list (lib_cat (l), &all, &items, &n);
+    CHECK (n == 4 && find_item (items, n, "catbells.jpg") < 0, "4 left in All photos");
+    free (items);
+    albsrc.id = album;
+    cat_list (lib_cat (l), &albsrc, &items, &n);
+    CHECK (n == 0, "and out of the album");
+    free (items);
+    /* It can be imported again (its record went with it). */
+    lib_import (l, path);
+    while (lib_busy (l))
+      lib_work (l, fake_now, clock_cs + 3, NULL, NULL);
+    cat_list (lib_cat (l), &all, &items, &n);
+    CHECK (n == 5 && find_item (items, n, "catbells.jpg") >= 0, "imported again");
+    free (items);
+
+    /* Renaming: projects' names are their own. */
+    cat_groups (lib_cat (l), SRC_PROJECT, &g, &ng);
+    CHECK (ng == 3, "three projects: Day1 (catbells, back alone), Lakes, the single photo's");
+    for (k = 0; k < ng && strcmp (g[k].name, "Lakes") != 0; k++)
+      ;
+    CHECK (k < ng && cat_group_rename (lib_cat (l), SRC_PROJECT, g[k].id, "Lake District") == 0, "rename a project");
+    CHECK (cat_group_rename (lib_cat (l), SRC_PROJECT, g[k == 0 ? 1 : 0].id, "Lake District") == -1
+           && strstr (cat_error (lib_cat (l)), "already") != NULL, "not to another's name");
+    CHECK (cat_group_rename (lib_cat (l), SRC_ALBUM, album, "  ") == -1, "nor to nothing");
+    CHECK (cat_group_rename (lib_cat (l), SRC_ALBUM, album, "Favourites") == 0, "rename an album");
+    {
+      char nm[64];
+      cat_group_name (lib_cat (l), SRC_ALBUM, album, nm, sizeof nm);
+      CHECK (strcmp (nm, "Favourites") == 0, "the album's new name");
+    }
+    free (g);
+
+    /* Delete an album: its photos stay. */
+    cat_list (lib_cat (l), &all, &items, &n);
+    cat_album_add (lib_cat (l), album, &items[0].id, 2);
+    free (items);
+    CHECK (cat_album_delete (lib_cat (l), album) == 0, "delete the album");
+    cat_groups (lib_cat (l), SRC_ALBUM, &g, &ng);
+    for (k = 0; k < ng; k++)
+      CHECK (g[k].id != album, "it is gone");
+    free (g);
+    cat_list (lib_cat (l), &all, &items, &n);
+    CHECK (n == 5, "its photos are still in the library");
+    free (items);
+
+    /* Remove a whole project: its versions, then the project itself. */
+    cat_groups (lib_cat (l), SRC_PROJECT, &g, &ng);
+    for (k = 0; k < ng; k++)
+      if (strcmp (g[k].name, "Lake District") == 0)
+        break;
+    if (k < ng) cat_group_versions (lib_cat (l), SRC_PROJECT, g[k].id, &vs, &n);
+    CHECK (k < ng && n == 4,
+           "the project's versions, its reject too (catbells came back alone, into Day1)");
+    CHECK (lib_remove (l, vs, n) == 0, "removed");
+    free (vs);
+    free (g);
+    cat_groups (lib_cat (l), SRC_PROJECT, &g, &ng);
+    CHECK (ng == 2, "the emptied project went; Day1 and the single photo's stay");
+    free (g);
+  }
   lib_close (l);
 }
 

@@ -44,7 +44,7 @@ int cat_set_rating (cat *c, const cat_id *versions, int n, int rating);  /* 0-5 
 int cat_set_flag (cat *c, const cat_id *versions, int n, int flag);      /* 0, 1, or -1 to toggle */
 
 /* What the browser shows. */
-enum { SRC_ALL, SRC_FLAGGED, SRC_REJECTED, SRC_LAST_IMPORT, SRC_PROJECT, SRC_ALBUM };
+enum { SRC_ALL, SRC_FLAGGED, SRC_REJECTED, SRC_LAST_IMPORT, SRC_PROJECT, SRC_ALBUM, SRC_MISSING };
 typedef struct
 {
   int kind;                   /* SRC_* */
@@ -61,6 +61,7 @@ typedef struct
   int thumb_state;            /* THUMB_* */
   int filetype;
   int edited;                 /* has a recipe */
+  int missing;                /* its file can't be found */
 } cat_item;
 
 enum { THUMB_NONE = 0, THUMB_READY = 1, THUMB_FAILED = 2 };
@@ -90,6 +91,28 @@ int cat_preset_delete (cat *c, cat_id id);
    keeping its own geometry; thumbnails are made again. */
 int cat_apply_look (cat *c, const cat_id *versions, int n, const char *look);
 
+/* Originals whose files have gone (moved, renamed, a disc not there).
+   cat_original_next walks them in id order (after 0 for the first): 1 and
+   the next, 0 at the end. */
+int cat_original_next (cat *c, cat_id after, cat_id *id, char *path, size_t n, int *missing);
+int cat_set_missing (cat *c, cat_id original, int missing);
+/* A version's original is at path now: no longer missing. */
+int cat_relink (cat *c, cat_id version, const char *path, long long mtime);
+int cat_count_missing (cat *c);        /* versions */
+int cat_tidy (cat *c);                 /* projects with no photos go */
+
+/* Takes versions out of the library: their album places, their originals'
+   records when no other version uses them, and projects left empty. The
+   files on disc are never touched. 0 on success. */
+int cat_remove_versions (cat *c, const cat_id *versions, int n);
+/* The versions in a project or album (malloc'd). */
+int cat_group_versions (cat *c, int kind, cat_id id, cat_id **out, int *count);
+/* An album goes (its photos stay in the library). */
+int cat_album_delete (cat *c, cat_id album);
+/* A project's or album's new name; project names are unique (-1, with a
+   message in cat_error, if taken or empty). */
+int cat_group_rename (cat *c, int kind, cat_id id, const char *name);
+
 typedef struct { cat_id id; char name[64]; int count; } cat_group;
 /* Projects (kind SRC_PROJECT) or albums (SRC_ALBUM), sorted by name. */
 int cat_groups (cat *c, int kind, cat_group **out, int *count);
@@ -104,6 +127,8 @@ typedef struct
   char taken[20], make[32], model[48];
   double exposure, fnumber, focal;
   cat_id project;
+  int missing;                /* the file can't be found (cat_set_missing) */
+  cat_id original;
 } cat_details;
 int cat_get_details (cat *c, cat_id version, cat_details *d);
 

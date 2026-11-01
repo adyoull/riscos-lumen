@@ -57,6 +57,7 @@ int app_event (int reason, int *block, int sender);
 int app_busy (void);
 void app_quit (void);
 void app_report (const char *msg);
+int app_confirm (const char *msg, const char *button);   /* 1: the button was chosen */
 unsigned app_now (void);               /* centiseconds */
 library *app_library (void);
 int app_task (void);
@@ -140,6 +141,8 @@ void browser_after_change (void);      /* ratings etc. changed: reload and redra
 int browser_item (int i, cat_item *out);   /* 1 if i is in the list */
 int browser_focus (void);
 void browser_focus_on (int i);         /* select and show item i, alone */
+void browser_remove_selection (void);  /* asks, then takes them out of the library */
+void browser_removed (const cat_id *ids, int n);   /* the photos left the library */
 
 /* --- viewer.c: one photo and the adjustments panel */
 int viewer_create (void);
@@ -275,6 +278,7 @@ void menus_open_viewer_menu (int x, int y);
 void menus_open_presets_menu (int x, int y);
 void menus_open_new_menu (int x, int y);
 void menus_open_rating_menu (int x, int y);
+void menus_open_group_menu (int x, int y, int kind, cat_id id);   /* a project or album in the Library tab */
 int menus_selection (const int *choice);   /* 1: quit */
 
 #endif

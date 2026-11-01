@@ -58,6 +58,24 @@ static int exec (cat *c, const char *sql)
   return 0;
 }
 
+static sqlite3_stmt *prep (cat *c, const char *sql);
+
+/* Schema 2 (0.0.16): originals whose files can't be found are marked. */
+static int upgrade (cat *c)
+{
+  sqlite3_stmt *s = prep (c, "SELECT value FROM meta WHERE key = 'schema'");
+  int v = 1;
+  if (!s)
+    return -1;
+  if (sqlite3_step (s) == SQLITE_ROW)
+    v = sqlite3_column_int (s, 0);
+  sqlite3_finalize (s);
+  if (v < 2 && exec (c, "ALTER TABLE original ADD COLUMN missing INTEGER NOT NULL DEFAULT 0;"
+                        "UPDATE meta SET value = 2 WHERE key = 'schema';"))
+    return -1;
+  return 0;
+}
+
 int cat_open (cat **out, const char *path, char *err, size_t errlen)
 {
   cat *c = calloc (1, sizeof *c);
@@ -77,7 +95,8 @@ int cat_open (cat **out, const char *path, char *err, size_t errlen)
   if (exec (c, "PRAGMA locking_mode=EXCLUSIVE; PRAGMA journal_mode=TRUNCATE;"
                "PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;")
       || exec (c, schema)
-      || exec (c, "INSERT OR IGNORE INTO meta VALUES ('schema', 1);"))
+      || exec (c, "INSERT OR IGNORE INTO meta VALUES ('schema', 1);")
+      || upgrade (c))
     {
       snprintf (err, errlen, "%s", c->err);
       cat_close (c);
@@ -203,6 +222,211 @@ int cat_set_flag (cat *c, const cat_id *v, int n, int flag)
     "UPDATE version SET flag = ?3, modified = ?1 WHERE id = ?2", (cat_id) time (NULL), v, n, flag ? 1 : 0);
 }
 
+/* --- removing and renaming */
+
+int cat_remove_versions (cat *c, const cat_id *v, int n)
+{
+  static const char *const steps[] = {
+    "DELETE FROM album_item WHERE version = ?1",
+    "DELETE FROM version WHERE id = ?1",
+  };
+  size_t k;
+  int i, rc = 0;
+  exec (c, "SAVEPOINT removing");
+  for (k = 0; k < sizeof steps / sizeof steps[0] && !rc; k++)
+    {
+      sqlite3_stmt *s = prep (c, steps[k]);
+      if (!s)
+        {
+          rc = -1;
+          break;
+        }
+      for (i = 0; i < n; i++)
+        {
+          sqlite3_reset (s);
+          sqlite3_bind_int64 (s, 1, v[i]);
+          if (sqlite3_step (s) != SQLITE_DONE)
+            {
+              rc = fail (c, "remove");
+              break;
+            }
+        }
+      sqlite3_finalize (s);
+    }
+  /* Originals no version uses any more go (so they can be imported
+     again), and projects left empty. */
+  if (!rc && exec (c, "DELETE FROM original WHERE id NOT IN (SELECT DISTINCT original FROM version)"))
+    rc = -1;
+  if (!rc && exec (c, "DELETE FROM project WHERE id NOT IN (SELECT DISTINCT project FROM version)"))
+    rc = -1;
+  exec (c, rc ? "ROLLBACK TO removing; RELEASE removing" : "RELEASE removing");
+  return rc;
+}
+
+/* --- originals that moved */
+
+int cat_original_next (cat *c, cat_id after, cat_id *id, char *path, size_t n, int *missing)
+{
+  sqlite3_stmt *s = prep (c, "SELECT id, path, missing FROM original WHERE id > ?1 ORDER BY id LIMIT 1");
+  int r = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, after);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    {
+      *id = sqlite3_column_int64 (s, 0);
+      col_text (s, 1, path, n);
+      *missing = sqlite3_column_int (s, 2);
+      r = 1;
+    }
+  sqlite3_finalize (s);
+  return r;
+}
+
+int cat_set_missing (cat *c, cat_id original, int missing)
+{
+  sqlite3_stmt *s = prep (c, "UPDATE original SET missing = ?2 WHERE id = ?1");
+  int rc = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, original);
+  sqlite3_bind_int (s, 2, missing);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    rc = fail (c, "missing");
+  sqlite3_finalize (s);
+  return rc;
+}
+
+int cat_relink (cat *c, cat_id version, const char *path, long long mtime)
+{
+  /* The original's new place; its thumbnail is made again if it failed. */
+  sqlite3_stmt *s = prep (c, "UPDATE original SET path = ?2, mtime = ?3, missing = 0"
+                             " WHERE id = (SELECT original FROM version WHERE id = ?1)");
+  int rc = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, version);
+  sqlite3_bind_text (s, 2, path, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64 (s, 3, mtime);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    rc = fail (c, "relink");
+  sqlite3_finalize (s);
+  if (!rc)
+    {
+      s = prep (c, "UPDATE version SET thumb = 0 WHERE original = (SELECT original FROM version WHERE id = ?1)"
+                   " AND thumb = 2");
+      if (s)
+        {
+          sqlite3_bind_int64 (s, 1, version);
+          sqlite3_step (s);
+          sqlite3_finalize (s);
+        }
+    }
+  return rc;
+}
+
+int cat_tidy (cat *c)
+{
+  return exec (c, "DELETE FROM project WHERE id NOT IN (SELECT DISTINCT project FROM version)");
+}
+
+int cat_count_missing (cat *c)
+{
+  sqlite3_stmt *s = prep (c, "SELECT COUNT(*) FROM version v JOIN original o ON o.id = v.original WHERE o.missing = 1");
+  int n = 0;
+  if (!s)
+    return 0;
+  if (sqlite3_step (s) == SQLITE_ROW)
+    n = sqlite3_column_int (s, 0);
+  sqlite3_finalize (s);
+  return n;
+}
+
+int cat_group_versions (cat *c, int kind, cat_id id, cat_id **out, int *count)
+{
+  sqlite3_stmt *s = prep (c, kind == SRC_ALBUM ? "SELECT version FROM album_item WHERE album = ?1"
+                                               : "SELECT id FROM version WHERE project = ?1");
+  int n = 0, cap = 64;
+  cat_id *a = malloc (sizeof *a * (size_t) cap);
+  if (!s || !a)
+    {
+      free (a);
+      if (s)
+        sqlite3_finalize (s);
+      return -1;
+    }
+  sqlite3_bind_int64 (s, 1, id);
+  while (sqlite3_step (s) == SQLITE_ROW)
+    {
+      if (n == cap)
+        {
+          cat_id *b = realloc (a, sizeof *a * (size_t) cap * 2);
+          if (!b)
+            break;
+          a = b;
+          cap *= 2;
+        }
+      a[n++] = sqlite3_column_int64 (s, 0);
+    }
+  sqlite3_finalize (s);
+  *out = a;
+  *count = n;
+  return 0;
+}
+
+int cat_album_delete (cat *c, cat_id album)
+{
+  sqlite3_stmt *s;
+  int rc = 0;
+  exec (c, "SAVEPOINT album_delete");
+  s = prep (c, "DELETE FROM album_item WHERE album = ?1");
+  if (s)
+    {
+      sqlite3_bind_int64 (s, 1, album);
+      if (sqlite3_step (s) != SQLITE_DONE)
+        rc = fail (c, "album");
+      sqlite3_finalize (s);
+    }
+  s = rc ? NULL : prep (c, "DELETE FROM album WHERE id = ?1");
+  if (s)
+    {
+      sqlite3_bind_int64 (s, 1, album);
+      if (sqlite3_step (s) != SQLITE_DONE)
+        rc = fail (c, "album");
+      sqlite3_finalize (s);
+    }
+  exec (c, rc ? "ROLLBACK TO album_delete; RELEASE album_delete" : "RELEASE album_delete");
+  return rc;
+}
+
+int cat_group_rename (cat *c, int kind, cat_id id, const char *name)
+{
+  sqlite3_stmt *s;
+  int rc = 0;
+  while (*name == ' ')
+    name++;
+  if (!*name)
+    {
+      snprintf (c->err, sizeof c->err, "A name is needed.");
+      return -1;
+    }
+  s = prep (c, kind == SRC_ALBUM ? "UPDATE album SET name = ?2 WHERE id = ?1" : "UPDATE project SET name = ?2 WHERE id = ?1");
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, id);
+  sqlite3_bind_text (s, 2, name, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    {
+      if (sqlite3_errcode (c->db) == SQLITE_CONSTRAINT)
+        snprintf (c->err, sizeof c->err, "There is already a project called \"%s\".", name);
+      else
+        fail (c, "rename");
+      rc = -1;
+    }
+  sqlite3_finalize (s);
+  return rc;
+}
+
 static void bind_text_or_null (sqlite3_stmt *s, int i, const char *t)
 {
   if (t && t[0])
@@ -296,6 +520,7 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
     case SRC_LAST_IMPORT: where = "o.batch = (SELECT MAX(batch) FROM original) AND v.rating >= ?2"; break;
     case SRC_PROJECT:     where = "v.project = ?1 AND v.rating >= ?2"; break;
     case SRC_ALBUM:       where = "v.id IN (SELECT version FROM album_item WHERE album = ?1) AND v.rating >= ?2"; break;
+    case SRC_MISSING:     where = "o.missing = 1 AND (v.rating >= ?2 OR v.rating = -1)"; break;
     default:              where = "v.rating >= ?2"; break;
     }
   /* Search: up to four words, each as a pattern ?3.. that the name, the
@@ -332,7 +557,7 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
       }
   }
   snprintf (sql, sizeof sql,
-            "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '' FROM version v"
+            "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '', o.missing FROM version v"
             " JOIN original o ON o.id = v.original WHERE %s%s"
             " ORDER BY IFNULL(o.taken, '9999'), v.name, v.id", where, match);
   s = prep (c, sql);
@@ -366,6 +591,7 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
       a[n].thumb_state = sqlite3_column_int (s, 4);
       a[n].filetype = sqlite3_column_int (s, 5);
       a[n].edited = sqlite3_column_int (s, 6);
+      a[n].missing = sqlite3_column_int (s, 7);
       n++;
     }
   sqlite3_finalize (s);
@@ -595,7 +821,7 @@ static void col_text (sqlite3_stmt *s, int i, char *out, size_t n)
 int cat_get_details (cat *c, cat_id version, cat_details *d)
 {
   sqlite3_stmt *s = prep (c, "SELECT o.path, o.width, o.height, o.orientation, o.iso, o.taken, o.make,"
-                             " o.model, o.exposure, o.fnumber, o.focal, v.project FROM version v"
+                             " o.model, o.exposure, o.fnumber, o.focal, v.project, o.missing, o.id FROM version v"
                              " JOIN original o ON o.id = v.original WHERE v.id = ?1");
   int r = -1;
   memset (d, 0, sizeof *d);
@@ -616,6 +842,8 @@ int cat_get_details (cat *c, cat_id version, cat_details *d)
       d->fnumber = sqlite3_column_double (s, 9);
       d->focal = sqlite3_column_double (s, 10);
       d->project = sqlite3_column_int64 (s, 11);
+      d->missing = sqlite3_column_int (s, 12);
+      d->original = sqlite3_column_int64 (s, 13);
       r = 0;
     }
   sqlite3_finalize (s);

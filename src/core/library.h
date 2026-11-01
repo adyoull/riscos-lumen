@@ -42,11 +42,24 @@ typedef struct
 {
   int importing;               /* an import is running */
   int found, added, skipped;   /* this import: images found, new, already there or unreadable */
+  int relinked;                /* already known, but missing from their old place: found again here */
   int thumbs_pending;
 } lib_progress;
 void lib_get_progress (library *l, lib_progress *p);
 
 void lib_thumb_path (library *l, cat_id version, char *out, size_t n);
+
+/* Checking that the originals are still where they were (they are marked
+   missing if not, and found again if they come back). Starts on opening;
+   lib_verify_start starts again (a disc put back in). Each step checks
+   files until now() >= deadline; 1 if any changed. */
+void lib_verify_start (library *l);
+int lib_verifying (library *l);
+int lib_verify_step (library *l, unsigned (*now) (void), unsigned deadline);
+
+/* Removes versions from the library (cat_remove_versions) and their
+   thumbnails. The photos' files are not touched. 0 on success. */
+int lib_remove (library *l, const cat_id *versions, int n);
 
 /* Thumbnails were marked to be made again (cat_set_recipe): count again. */
 void lib_thumbs_changed (library *l);
