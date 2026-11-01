@@ -386,6 +386,12 @@ int main (int argc, char **argv)
   }
   key ('x');
   CHECK (processed_key == 'x', "keys Lumen doesn't use are passed on");
+  /* Adjust-click on another photo: both cells redrawn (the old focus frame goes). */
+  key (KEY_ESCAPE);
+  click (16 + 256 + 40, -16 - 40, Button_Select);   /* not the photo clicked earlier: that would be a double click */
+  force_redraws = 0;
+  click (16 + 2 * 256 + 40, -16 - 40, Button_Adjust);
+  CHECK (force_redraws >= 2, "Adjust: the old focus cell and the new one are redrawn");
 
   /* The window menu. */
   click (5, -5, Button_Menu);

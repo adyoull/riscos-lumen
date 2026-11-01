@@ -546,6 +546,9 @@ static void commit (void)
   undo_stack[++undo_i] = current;
   undo_n = undo_i + 1;
   save ();
+  /* Undo, Redo, Reset all and the groups' Reset change with it (found in
+     the ROL 5.31-5 test: only the slider's row was redrawn). */
+  force_panel ();
 }
 
 static void changed_everything (void)

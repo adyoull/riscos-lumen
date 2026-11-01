@@ -560,8 +560,10 @@ void browser_click (int *block)
     }
   else if (buttons == Button_Adjust && i >= 0)
     {
+      int old = focus;
       sel[i] = !sel[i];
       focus = i;
+      redraw_cell (old);               /* its focus frame goes (found in the ROL 5.31-5 test) */
       redraw_cell (i);
     }
 }

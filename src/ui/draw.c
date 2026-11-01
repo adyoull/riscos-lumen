@@ -14,6 +14,7 @@
 #define SPRITE_MODE_32BPP 0x301680B5   /* type 6 (32bpp), 90 x 90 dpi */
 
 static int xeig = 1, yeig = 1;
+static int plot_flags;                 /* OS_SpriteOp 52's R5: dither in modes of 256 colours or fewer */
 static void *table;                    /* translation table for 32bpp sprites, or NULL */
 static int table_known;
 
@@ -24,6 +25,12 @@ void draw_init_mode (void)
     xeig = v;
   if (_swix (OS_ReadModeVariable, _INR (0, 1) | _OUT (2), -1, 5, &v) == NULL)
     yeig = v;
+  /* Log2BPP (mode variable 9) 3 or less: 256 colours or fewer. Plotting a
+     32bpp photo there without dithering bands badly, so ask SpriteExtend
+     to dither (R5 bit 6). */
+  plot_flags = 0;
+  if (_swix (OS_ReadModeVariable, _INR (0, 1) | _OUT (2), -1, 9, &v) == NULL && v <= 3)
+    plot_flags = 1 << 6;
   free (table);
   table = NULL;
   table_known = 0;
@@ -132,7 +139,7 @@ void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
   out[1] = by0 + (bh - dh) / 2;
   out[2] = out[0] + dw;
   out[3] = out[1] + dh;
-  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, out[0], out[1], 0, scale, table);
+  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, out[0], out[1], plot_flags, scale, table);
 }
 
 void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
@@ -157,5 +164,5 @@ void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
   out[1] = by0;
   out[2] = out[0] + dw;
   out[3] = by0 + dh;
-  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, out[0], out[1], 0, scale, table);
+  _swix (OS_SpriteOp, _INR (0, 7), 52 + 512, area, sprite, out[0], out[1], plot_flags, scale, table);
 }
