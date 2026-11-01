@@ -32,7 +32,7 @@ static const char *const tabs[3] = {
   "Your original is never changed.",
 };
 
-static const char *const exportbox[14] = {
+static const char *const exportbox[31] = {
   "Drag this icon to a directory display to save the export there (or to another program to send it).",
   "The file's name. Type a full pathname and click Save, or drag the icon.",
   NULL,
@@ -47,6 +47,24 @@ static const char *const exportbox[14] = {
   "JPEG quality, 1-100: higher keeps more detail and makes larger files. 90 is good for most.",
   "Closes the box without exporting.",
   "Exports to the pathname typed in the box.",
+  "Shrinks the photo so it fits inside the width and height beside it, keeping its shape (a screen, a website's limit...).",
+  "The width of the box the photo must fit in, in pixels.",
+  NULL,
+  "The height of the box the photo must fit in, in pixels.",
+  NULL,
+  NULL,
+  "sRGB: right for screens, the web and most printing services. Use it if unsure.",
+  "Adobe RGB: a wider range of colours, for printing and editing programs that understand it (a profile goes in the file).",
+  "Display P3: the wider colours of recent Apple screens and phones (a profile goes in the file).",
+  NULL,
+  "No extra sharpening (the photo's own Sharpen adjustment still applies).",
+  "A little sharpening for the export's size: for screens.",
+  "Moderate sharpening for the export's size: for most uses.",
+  "Strong sharpening for the export's size: for printing, where ink softens detail.",
+  NULL,
+  "How files are named when several photos are exported: {name}, {n}, {nnn}, {date}, {year}, {month}, {day}, {time}, "
+  "{project}, {camera}, {rating}, and any text of your own.",
+  "An example name pattern. The parts a pattern can use: {name}, {n} (1, 2, 3...), {nnn} (001, 002...), {date}, {year}, {month}, {day}, {time}, {project}, {camera}, {rating}.",
 };
 
 static const char *main_part (int part)
@@ -93,7 +111,7 @@ const char *help_text (int window, int icon, int x, int y)
     return "The photo, with its adjustments. Keys: arrows next or previous photo, Z 100%, M before and after, "
            "A auto, C crop, G grid, [ and ] turn, Escape back. Menu has the rest.";
   if (window == exportbox_window ())
-    return icon >= 0 && icon < 14 && exportbox[icon] ? exportbox[icon] : "Exports photos with their adjustments.";
+    return icon >= 0 && icon < 31 && exportbox[icon] ? exportbox[icon] : "Exports photos with their adjustments.";
   if (window == choicewin_window ())
     switch (icon)
       {

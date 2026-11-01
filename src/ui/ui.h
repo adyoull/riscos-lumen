@@ -58,6 +58,7 @@ int app_init (const char *library_path);
 void app_watch_now (void);
 int app_next_wake (unsigned *when);
 int app_has_focus (void);
+void app_keep_prefs (const prefs *p);
 int app_background_wait (unsigned *when);
 /* The task handle of another Lumen already running, 0 if none. */
 int app_other_instance (void);
@@ -311,7 +312,9 @@ void exportbox_drag_end (void);
 void exportbox_save_ack (int *message);
 int exportbox_save_to (const char *path);
 void exportbox_use_prefs (const prefs *p);   /* the box's starting format, size and quality */
-void exportbox_set_name (const char *s);   /* tests */
+void exportbox_set_name (const char *s);
+void exportbox_set_names (const char *s);
+void exportbox_set_box (int w, int h);   /* tests */
 const char *exportbox_name (void);
 int exports_busy (void);
 void exports_idle (unsigned deadline);

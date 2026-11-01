@@ -12,6 +12,9 @@ void prefs_default (prefs *p)
   p->export_format = 0;
   p->export_quality = 90;
   p->export_size = 0;
+  p->export_box_w = 1920;
+  p->export_box_h = 1080;
+  snprintf (p->export_names, sizeof p->export_names, "{name}");
   p->thumb_size = 1;
   p->verify = 1;
   p->watch_new = 0;
@@ -43,6 +46,8 @@ int prefs_load (const char *path, prefs *p)
       *v++ = '\0';
       if (!strcmp (line, "library"))
         snprintf (p->library, sizeof p->library, "%s", v);
+      else if (!strcmp (line, "export_names"))
+        snprintf (p->export_names, sizeof p->export_names, "%s", v);
       else
         {
           long n = strtol (v, &end, 10);
@@ -53,7 +58,15 @@ int prefs_load (const char *path, prefs *p)
           else if (!strcmp (line, "export_quality"))
             p->export_quality = clamp ((int) n, 1, 100);
           else if (!strcmp (line, "export_size"))
-            p->export_size = n == 3840 || n == 2048 || n == 1024 ? (int) n : 0;
+            p->export_size = n == 3840 || n == 2048 || n == 1024 || n == -1 ? (int) n : 0;
+          else if (!strcmp (line, "export_box_w"))
+            p->export_box_w = clamp ((int) n, 16, 65535);
+          else if (!strcmp (line, "export_box_h"))
+            p->export_box_h = clamp ((int) n, 16, 65535);
+          else if (!strcmp (line, "export_colour"))
+            p->export_colour = clamp ((int) n, 0, 2);
+          else if (!strcmp (line, "export_sharpen"))
+            p->export_sharpen = clamp ((int) n, 0, 3);
           else if (!strcmp (line, "thumb_size"))
             p->thumb_size = clamp ((int) n, 0, 2);
           else if (!strcmp (line, "verify"))
@@ -96,6 +109,10 @@ int prefs_save (const char *path, const prefs *p)
   fprintf (f, "export_format %d\nexport_quality %d\nexport_size %d\nthumb_size %d\nverify %d\n",
            p->export_format, p->export_quality, p->export_size, p->thumb_size, p->verify);
   fprintf (f, "watch_new %d\nalbums_new %d\nwatch_minutes %d\n", p->watch_new, p->albums_new, p->watch_minutes);
+  fprintf (f, "export_box_w %d\nexport_box_h %d\nexport_colour %d\nexport_sharpen %d\n", p->export_box_w,
+           p->export_box_h, p->export_colour, p->export_sharpen);
+  if (p->export_names[0])
+    fprintf (f, "export_names %s\n", p->export_names);
   if (fclose (f) != 0)
     return -1;
   remove (path);

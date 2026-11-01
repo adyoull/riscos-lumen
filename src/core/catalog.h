@@ -160,6 +160,8 @@ typedef struct
   cat_id project;
   int missing;                /* the file can't be found (cat_set_missing) */
   cat_id original;
+  int rating;                 /* 0-5, or RATING_REJECT */
+  char project_name[64];
 } cat_details;
 int cat_get_details (cat *c, cat_id version, cat_details *d);
 

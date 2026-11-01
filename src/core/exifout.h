@@ -28,8 +28,10 @@ int exif_find_tiff (const unsigned char *buf, size_t len, size_t *off, size_t *n
 /* Builds the block into out (cap bytes, EXIFOUT_MAX is enough). src is
    the original's TIFF data (NULL if none); known fills in for it when it
    is NULL (and may be NULL itself). w x h is the exported size. Returns
-   the length, 0 if there is nothing worth writing. */
+   the length, 0 if there is nothing worth writing. colour_space is EXIF's
+   ColorSpace: 1 for sRGB, 0xFFFF (uncalibrated) for another space, whose
+   ICC profile then goes in the file too. */
 size_t exif_for_export (const unsigned char *src, size_t src_len, const img_info *known,
-                        int w, int h, const char *software, unsigned char *out, size_t cap);
+                        int w, int h, const char *software, int colour_space, unsigned char *out, size_t cap);
 
 #endif

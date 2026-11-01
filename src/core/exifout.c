@@ -327,7 +327,7 @@ static int write_ifd (const builder *b, const ifd *d, unsigned char *out, size_t
 static builder bld;                    /* 62 KB: not on the stack */
 
 size_t exif_for_export (const unsigned char *src, size_t src_len, const img_info *known,
-                        int w, int h, const char *software, unsigned char *out, size_t cap)
+                        int w, int h, const char *software, int colour_space, unsigned char *out, size_t cap)
 {
   builder *b = &bld;
   size_t off_exif, off_gps, total;
@@ -374,7 +374,7 @@ size_t exif_for_export (const unsigned char *src, size_t src_len, const img_info
     add_ascii (b, &b->ifd0, 0x0131, software);
   if (!find (&b->exif, 0x9000))
     add (b, &b->exif, 0x9000, 7, 4, "0232", 4);
-  add_short (b, &b->exif, 0xA001, 1);
+  add_short (b, &b->exif, 0xA001, (unsigned) (colour_space == 0xFFFF ? 0xFFFF : 1));
   add_long (b, &b->exif, 0xA002, (unsigned long) (w > 0 ? w : 0));
   add_long (b, &b->exif, 0xA003, (unsigned long) (h > 0 ? h : 0));
   /* The pointers, as placeholders: sizes are fixed once they are in. */

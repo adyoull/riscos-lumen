@@ -216,6 +216,14 @@ void app_load_prefs (void)
   prefs_load (prefs_path, &the_prefs);
 }
 
+/* Keeps p as the Choices without anything else changing (the Export box
+   remembering what it used). */
+void app_keep_prefs (const prefs *p)
+{
+  if (prefs_save (prefs_path, p) == 0)
+    the_prefs = *p;
+}
+
 int app_set_prefs (const prefs *p)
 {
   if (prefs_save (prefs_path, p))

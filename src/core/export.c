@@ -7,6 +7,7 @@
 #include <string.h>
 #include <jpeglib.h>
 #include <png.h>
+#include "colour.h"
 #include "develop.h"
 #include "export.h"
 #include "exifout.h"
@@ -36,6 +37,8 @@ struct exporter
   int y;                               /* next output row */
   int band, margin, sharp;             /* rows written a step; extra rows each side for sharpening */
   double sigma;
+  int osharp;                          /* output sharpening amount, 0 for none */
+  double osigma;
   int done, file_open, created;
   int full_w, full_h;                  /* the original as shown, full size */
   uint16_t *lin;                       /* BAND rows after geometry */
@@ -135,6 +138,24 @@ void export_plan_size (int w, int h, const recipe *r, int max_side, int *ow, int
     }
 }
 
+void export_plan_opts (int w, int h, const recipe *r, const export_opts *o, int *ow, int *oh)
+{
+  export_plan_size (w, h, r, o->max_side, ow, oh);
+  if (o->box_w > 0 && o->box_h > 0 && (*ow > o->box_w || *oh > o->box_h))
+    {
+      /* The largest that fits both ways, the shape kept. */
+      double s = (double) o->box_w / *ow, t = (double) o->box_h / *oh;
+      if (t < s)
+        s = t;
+      *ow = (int) lround (*ow * s);
+      *oh = (int) lround (*oh * s);
+      if (*ow < 1) *ow = 1;
+      if (*oh < 1) *oh = 1;
+      if (*ow > o->box_w) *ow = o->box_w;
+      if (*oh > o->box_h) *oh = o->box_h;
+    }
+}
+
 exporter *export_start (const char *src, int src_w, int src_h, int orientation,
                         const recipe *r, const char *dst, const export_opts *o,
                         char *err, size_t errlen)
@@ -162,11 +183,11 @@ exporter *export_start (const char *src, int src_w, int src_h, int orientation,
   /* Decode only as large as the output needs: the output's scale relative
      to the full-size picture, applied to the original's longer side. */
   decode_side = longer (src_w, src_h);
-  if (e->o.max_side > 0 && full_w > 0 && full_h > 0)
+  if ((e->o.max_side > 0 || (e->o.box_w > 0 && e->o.box_h > 0)) && full_w > 0 && full_h > 0)
     {
       int fw, fh;
       export_plan_size (full_w, full_h, r, 0, &fw, &fh);
-      export_plan_size (full_w, full_h, r, e->o.max_side, &ow, &oh);
+      export_plan_opts (full_w, full_h, r, &e->o, &ow, &oh);
       if (longer (ow, oh) < longer (fw, fh))
         decode_side = (int) ceil ((double) longer (src_w, src_h) * longer (ow, oh) / longer (fw, fh)) + 2;
     }
@@ -188,7 +209,8 @@ exporter *export_start (const char *src, int src_w, int src_h, int orientation,
 static size_t make_exif (exporter *e, unsigned char *exif)
 {
   return exif_for_export (e->src_tiff, e->src_tiff_len, e->have_known ? &e->known : NULL, e->g.ow, e->g.oh,
-                          e->o.software, exif, EXIFOUT_MAX);
+                          e->o.software, e->o.colour == CS_ADOBE || e->o.colour == CS_P3 ? 0xFFFF : 1, exif,
+                          EXIFOUT_MAX);
 }
 
 static int open_output (exporter *e)
@@ -235,6 +257,14 @@ static int open_output (exporter *e)
       jpeg_start_compress (&e->jc, TRUE);
       if (exif_len)
         jpeg_write_marker (&e->jc, JPEG_APP0 + 1, exif, (unsigned) (exif_len + 6));
+      if (e->o.colour == CS_ADOBE || e->o.colour == CS_P3)
+        {
+          /* The profile, in APP2 ICC_PROFILE segments (libjpeg-turbo writes them). */
+          static unsigned char icc[COLOUR_ICC_MAX];
+          size_t n = colour_icc_profile (e->o.colour, icc, sizeof icc);
+          if (n)
+            jpeg_write_icc_profile (&e->jc, icc, (unsigned) n);
+        }
     }
   else
     {
@@ -250,7 +280,16 @@ static int open_output (exporter *e)
       png_init_io (e->png, e->f);
       png_set_IHDR (e->png, e->pinfo, (png_uint_32) e->g.ow, (png_uint_32) e->g.oh, 8, PNG_COLOR_TYPE_RGB,
                     PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-      png_set_sRGB_gAMA_and_cHRM (e->png, e->pinfo, PNG_sRGB_INTENT_PERCEPTUAL);
+      if (e->o.colour == CS_ADOBE || e->o.colour == CS_P3)
+        {
+          static unsigned char icc[COLOUR_ICC_MAX];
+          size_t n = colour_icc_profile (e->o.colour, icc, sizeof icc);
+          if (n)
+            png_set_iCCP (e->png, e->pinfo, e->o.colour == CS_ADOBE ? "Adobe RGB (1998)" : "Display P3",
+                          PNG_COMPRESSION_TYPE_BASE, icc, (png_uint_32) n);
+        }
+      else
+        png_set_sRGB_gAMA_and_cHRM (e->png, e->pinfo, PNG_sRGB_INTENT_PERCEPTUAL);
       png_set_compression_level (e->png, 6);
       if (exif_len)
         png_set_eXIf_1 (e->png, e->pinfo, (png_uint_32) exif_len, exif + 6);
@@ -272,6 +311,7 @@ static int write_rows (exporter *e, int y0, int y1, const uint32_t *band)
           e->row[3 * x + 1] = (unsigned char) (p[x] >> 8);
           e->row[3 * x + 2] = (unsigned char) (p[x] >> 16);
         }
+      colour_row_from_srgb (e->o.colour, e->row, e->g.ow);
       if (e->o.format == EXPORT_JPEG)
         {
           JSAMPROW r = e->row;
@@ -346,7 +386,7 @@ int export_step (exporter *e, int rows)
       e->tg = NULL;
       {
         int ow, oh, fw, fh;
-        export_plan_size (e->img.w, e->img.h, &e->r, e->o.max_side, &ow, &oh);
+        export_plan_opts (e->img.w, e->img.h, &e->r, &e->o, &ow, &oh);
         geom_plan_make (&e->g, &e->r, e->img.w, e->img.h, 1, ow, oh);
         /* Highlights & Shadows: the lightness map of the whole picture. */
         if (develop_needs_mask (e->dev))
@@ -373,6 +413,21 @@ int export_step (exporter *e, int rows)
             e->margin = sharpen_margin (e->sigma);
             e->band = 48;              /* so the margins cost less */
           }
+        /* Output sharpening: in output pixels, whatever the size. */
+        {
+          static const int amounts[4] = { 0, 35, 70, 110 };
+          int k = e->o.out_sharpen;
+          e->osharp = k > 0 && k < 4 ? amounts[k] : 0;
+          if (e->osharp)
+            {
+              int m;
+              e->osigma = 0.7;
+              m = sharpen_margin (e->osigma);
+              if (m > e->margin)
+                e->margin = m;
+              e->band = 48;
+            }
+        }
       }
       e->lin = malloc ((size_t) e->g.ow * (e->band + 2 * e->margin) * 6);
       e->px = malloc ((size_t) e->g.ow * (e->band + 2 * e->margin) * 4);
@@ -398,6 +453,8 @@ int export_step (exporter *e, int rows)
       develop_rows (e->dev, e->lin, e->g.ow, 0, b - a, e->px, NULL);
       if (e->sharp > 0)
         sharpen32 (e->px, e->g.ow, b - a, e->sharp, e->sigma);
+      if (e->osharp > 0)
+        sharpen32 (e->px, e->g.ow, b - a, e->osharp, e->osigma);
       if (write_rows (e, e->y, y1, e->px + (size_t) (e->y - a) * e->g.ow))
         return e->done = -1;
       rows -= y1 - e->y;

@@ -20,6 +20,8 @@
 #include "../src/core/recipe.h"
 #include "../src/core/thumbgen.h"
 #include "../src/core/styles.h"
+#include "../src/core/naming.h"
+#include "../src/core/colour.h"
 
 static int checks, fails;
 #define CHECK(c, what) do { checks++; if (!(c)) { fails++; fprintf (stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, what); } } while (0)
@@ -897,7 +899,7 @@ static void test_export_exif (const char *work)
     fclose (f);
   CHECK (got == 20 && file[3] == 0xE0 && !memcmp (file + 6, "JFIF", 4), "exif: none to write: a plain JFIF file");
   /* Builder limits: rubbish in, nothing out. */
-  CHECK (exif_for_export ((const unsigned char *) "XXXXXXXXXXXX", 12, NULL, 10, 10, "", exif, sizeof exif) == 0,
+  CHECK (exif_for_export ((const unsigned char *) "XXXXXXXXXXXX", 12, NULL, 10, 10, "", 1, exif, sizeof exif) == 0,
          "exif: not TIFF, nothing known: nothing");
 }
 
@@ -1354,6 +1356,154 @@ static void test_toning (void)
     }
 }
 
+/* Export options: fit in a box, colour spaces, output sharpening; names. */
+static void test_export_options (const char *work)
+{
+  char src[700], dst[700], err[200];
+  rgb_image img, back, plain;
+  recipe r;
+  export_opts o = { EXPORT_JPEG, 95, 0, "", 0, 0, CS_SRGB, EXPORT_SHARP_NONE };
+  exporter *e;
+  int x, y, cs, k;
+  FILE *f;
+  img.w = 400; img.h = 300;
+  img.rgb = malloc (400 * 300 * 3);
+  for (y = 0; y < 300; y++)
+    for (x = 0; x < 400; x++)
+      {
+        unsigned char *p = img.rgb + (y * 400 + x) * 3;
+        int square = x >= 150 && x < 250 && y >= 100 && y < 200;
+        p[0] = (unsigned char) (square ? 200 : 60);
+        p[1] = (unsigned char) (square ? 120 : 110);
+        p[2] = (unsigned char) (square ? 60 : 150);
+      }
+  snprintf (src, sizeof src, "%s/opts-src.jpg", work);
+  img_save_jpeg (&img, src, 98, err, sizeof err);
+  recipe_default (&r);
+
+  /* A box: the largest that fits both ways. */
+  o.box_w = 150; o.box_h = 150;
+  {
+    int ow, oh;
+    export_plan_opts (400, 300, &r, &o, &ow, &oh);
+    CHECK (ow == 150 && oh == 113, "box 150x150: 400x300 becomes 150x113");
+    o.box_w = 1000; o.box_h = 120;
+    export_plan_opts (400, 300, &r, &o, &ow, &oh);
+    CHECK (ow == 160 && oh == 120, "box 1000x120: the height decides, 160x120");
+    o.box_w = 2000; o.box_h = 2000;
+    export_plan_opts (400, 300, &r, &o, &ow, &oh);
+    CHECK (ow == 400 && oh == 300, "a box bigger than the photo: full size (never enlarged)");
+    o.max_side = 200; o.box_w = 1000; o.box_h = 100;
+    export_plan_opts (400, 300, &r, &o, &ow, &oh);
+    CHECK (ow == 133 && oh == 100, "longer side 200 and a box 1000x100: both apply");
+  }
+  o.max_side = 0; o.box_w = 200; o.box_h = 200;
+  snprintf (dst, sizeof dst, "%s/opts-box.jpg", work);
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  CHECK (e && run_export (e) >= 0, "box export runs");
+  export_free (e);
+  CHECK (read_back (dst, &back) == 0 && back.w == 200 && back.h == 150, "written 200x150");
+  free (back.rgb);
+  o.box_w = o.box_h = 0;
+
+  /* Colour spaces: the file says what it is, and Lumen reading it back
+     (converting to sRGB) gets the colours it started with. */
+  for (cs = CS_ADOBE; cs <= CS_P3; cs++)
+    {
+      unsigned char head[65536];
+      size_t got;
+      char name[64];
+      unsigned char icc[COLOUR_ICC_MAX];
+      size_t n = colour_icc_profile (cs, icc, sizeof icc);
+      CHECK (n > 300 && colour_from_icc (icc, n, name, sizeof name) == cs, "our ICC profile is recognised as itself");
+      o.colour = cs;
+      snprintf (dst, sizeof dst, "%s/opts-cs%d.jpg", work, cs);
+      e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+      run_export (e);
+      export_free (e);
+      f = fopen (dst, "rb");
+      got = f ? fread (head, 1, sizeof head, f) : 0;
+      if (f)
+        fclose (f);
+      CHECK (got > 0 && colour_from_jpeg (head, got, name, sizeof name) == cs,
+             cs == CS_ADOBE ? "Adobe RGB export: tagged Adobe RGB" : "Display P3 export: tagged Display P3");
+      CHECK (read_back (dst, &back) == 0, "read back");
+      {
+        int worst = 0, c;
+        unsigned char *a = back.rgb + (150 * 400 + 200) * 3, *b = img.rgb + (150 * 400 + 200) * 3;
+        unsigned char *a2 = back.rgb + (40 * 400 + 40) * 3, *b2 = img.rgb + (40 * 400 + 40) * 3;
+        for (c = 0; c < 3; c++)
+          {
+            int d = abs (a[c] - b[c]), d2 = abs (a2[c] - b2[c]);
+            worst = d > worst ? d : worst;
+            worst = d2 > worst ? d2 : worst;
+          }
+        CHECK (worst <= 6, "and its colours come back as they were (within 6)");
+      }
+      free (back.rgb);
+    }
+  /* PNG too. */
+  o.format = EXPORT_PNG;
+  o.colour = CS_ADOBE;
+  snprintf (dst, sizeof dst, "%s/opts-adobe.png", work);
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  run_export (e);
+  export_free (e);
+  CHECK (read_back (dst, &back) == 0 && abs (back.rgb[(150 * 400 + 200) * 3] - 200) <= 4,
+         "Adobe RGB PNG: read back right too");
+  free (back.rgb);
+  o.format = EXPORT_JPEG;
+  o.colour = CS_SRGB;
+
+  /* Output sharpening: the edge of the square gets crisper. */
+  snprintf (dst, sizeof dst, "%s/opts-plain.png", work);
+  o.format = EXPORT_PNG;
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  run_export (e);
+  export_free (e);
+  read_back (dst, &plain);
+  o.out_sharpen = EXPORT_SHARP_HIGH;
+  snprintf (dst, sizeof dst, "%s/opts-sharp.png", work);
+  e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+  run_export (e);
+  export_free (e);
+  read_back (dst, &back);
+  {
+    /* Just inside and just outside the square's left edge, red channel. */
+    int in_p = plain.rgb[(150 * 400 + 150) * 3], out_p = plain.rgb[(150 * 400 + 149) * 3];
+    int in_s = back.rgb[(150 * 400 + 150) * 3], out_s = back.rgb[(150 * 400 + 149) * 3];
+    CHECK (in_s - out_s > in_p - out_p + 10, "output sharpening: more contrast at the edge");
+    CHECK (abs (back.rgb[(40 * 400 + 40) * 3] - plain.rgb[(40 * 400 + 40) * 3]) <= 1, "and flat areas unchanged");
+  }
+  free (back.rgb);
+  free (plain.rgb);
+  free (img.rgb);
+
+  /* Names from a pattern. */
+  {
+    char out[NAMING_MAX];
+    naming_info ni = { "Friars_Crag", 7, "2022:08:14 06:12:30", "Lake District", "NIKON D850", 4 };
+    naming_expand ("{date}_{name}_{nnn}", &ni, out);
+    CHECK (!strcmp (out, "2022-08-14_Friars_Crag_007"), "pattern: {date}_{name}_{nnn}");
+    naming_expand ("{project} {n} ({rating} stars) {camera}", &ni, out);
+    CHECK (!strcmp (out, "Lake_District_7_(4_stars)_NIKON_D850"), "pattern: spaces become _");
+    naming_expand ("{year}/{month}.{day}-{time}", &ni, out);
+    CHECK (!strcmp (out, "2022/08/14-06-12-30"), "pattern: a full stop becomes /");
+    naming_expand ("", &ni, out);
+    CHECK (!strcmp (out, "Friars_Crag"), "empty pattern: the name");
+    naming_expand ("{nope}{name", &ni, out);
+    CHECK (!strcmp (out, "{nope}{name"), "unknown tokens kept as typed");
+    ni.taken = "";
+    naming_expand ("{date}", &ni, out);
+    CHECK (!strcmp (out, "undated"), "no date: undated");
+    CHECK (naming_varies ("{date}_{n}") && naming_varies ("x{name}") && !naming_varies ("{date}") && !naming_varies ("Holiday"),
+           "which patterns give each photo its own name");
+    for (k = 0; naming_tokens[k]; k++)
+      ;
+    CHECK (k >= 10, "the tokens for the menu");
+  }
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -1374,6 +1524,7 @@ int main (int argc, char **argv)
   test_auto ();
   test_presets (argv[1]);
   test_export (argv[1]);
+  test_export_options (argv[1]);
   test_export_exif (argv[1]);
   printf ("test_develop: %d checks, %d failed\n", checks, fails);
   return fails != 0;

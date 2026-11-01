@@ -9,7 +9,11 @@ typedef struct
   char library[512];                   /* "" = the usual place; used from the next start */
   int export_format;                   /* EXPORT_JPEG or EXPORT_PNG */
   int export_quality;                  /* 1-100 */
-  int export_size;                     /* longer side, 0 = full size */
+  int export_size;                     /* longer side, 0 = full size, -1 = fit in the box below */
+  int export_box_w, export_box_h;      /* the box */
+  int export_colour;                   /* CS_SRGB, CS_ADOBE, CS_P3 */
+  int export_sharpen;                  /* EXPORT_SHARP_* */
+  char export_names[128];              /* name pattern for several photos */
   int thumb_size;                      /* 0 small, 1 medium, 2 large */
   int verify;                          /* check originals are still there at start */
   int watch_new;                       /* folders imported are watched for new photos */

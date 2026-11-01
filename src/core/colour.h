@@ -30,5 +30,11 @@ const char *colour_name (int cs);      /* "sRGB", "Adobe RGB (1998)", ... */
 /* Converts w pixels of 8-bit RGB in place from cs to sRGB (nothing for
    CS_SRGB and CS_OTHER). */
 void colour_row_to_srgb (int cs, unsigned char *rgb, int w);
+/* The other way, for exports: w pixels of 8-bit sRGB to cs. */
+void colour_row_from_srgb (int cs, unsigned char *rgb, int w);
+/* An ICC profile for cs (CS_SRGB, CS_ADOBE or CS_P3) in out; its length,
+   or 0 if cap is too small. COLOUR_ICC_MAX is always enough. */
+#define COLOUR_ICC_MAX 3072
+size_t colour_icc_profile (int cs, unsigned char *out, size_t cap);
 
 #endif

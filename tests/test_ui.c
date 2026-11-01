@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <math.h>
 #include <stdint.h>
 #include "thumbgen.h"
@@ -16,6 +17,8 @@
 #include "fsys.h"
 #include "rawjob.h"
 #include "styles.h"
+#include "colour.h"
+#include "export.h"
 #include "ui.h"
 
 #define BROWSER 0x2a000
@@ -1232,6 +1235,51 @@ int main (int argc, char **argv)
           }
         CHECK (all, "six files in the new directory, named after the photos");
       }
+      /* Several again: named from a pattern, fitted in a box, Adobe RGB, sharpened. */
+      browser_select_all (1);
+      caret_window = BROWSER;
+      key (0x05);
+      memset (eb, 0, sizeof eb);
+      eb[2] = Button_Select; eb[3] = EXPORTW;
+      eb[4] = 14; app_event (Mouse_Click, eb, 0);                   /* Fit in */
+      eb[4] = 21; app_event (Mouse_Click, eb, 0);                   /* Adobe RGB */
+      eb[4] = 26; app_event (Mouse_Click, eb, 0);                   /* Standard sharpening */
+      exportbox_set_box (200, 100);
+      exportbox_set_names ("{project}_{nnn}");
+      snprintf (path, sizeof path, "%s/Batch2", work);
+      exportbox_set_name (path);
+      key (KEY_RETURN);
+      nulls_until_idle ();
+      {
+        char p2[760];
+        unsigned char hd[4096];
+        size_t got = 0;
+        char cname[64];
+        snprintf (p2, sizeof p2, "%s/Batch2/Holiday_006.png", work);
+        f = fopen (p2, "rb");
+        if (f) { got = fread (hd, 1, sizeof hd, f); fclose (f); }
+        CHECK (got > 0, "named from the pattern: Holiday_001 ... Holiday_006");
+        t = thumbgen_start (p2, NULL, 1 << 20, 1, err, sizeof err);
+        while (t && (r = thumbgen_step (t, 64)) == 0)
+          ;
+        w = h = 0;
+        if (t) thumbgen_size (t, &w, &h);
+        thumbgen_free (t);
+        CHECK (h == 100 && w > 100 && w <= 200, "fitted inside 200 x 100 (photo 6 is cropped wide: 175 x 100)");
+        CHECK (got > 0 && memmem (hd, got, "iCCP", 4) != NULL, "with an Adobe RGB profile");
+        (void) cname;
+        CHECK (app_prefs ()->export_size == -1 && app_prefs ()->export_colour == CS_ADOBE
+               && app_prefs ()->export_sharpen == EXPORT_SHARP_STANDARD && !strcmp (app_prefs ()->export_names, "{project}_{nnn}")
+               && app_prefs ()->export_box_w == 200, "and these are what the next export starts with (kept in Choices)");
+      }
+      /* Back as it was, for what follows. */
+      key (0x05);
+      eb[4] = 4; app_event (Mouse_Click, eb, 0);                    /* PNG */
+      eb[4] = 6; app_event (Mouse_Click, eb, 0);                    /* Full */
+      eb[4] = 20; app_event (Mouse_Click, eb, 0);                   /* sRGB */
+      eb[4] = 24; app_event (Mouse_Click, eb, 0);                   /* no sharpening */
+      exportbox_set_names ("{name}");
+      eb[4] = 12; app_event (Mouse_Click, eb, 0);                   /* Cancel */
 
       /* Dragging the icon to a directory display: DataSave, then the Filer's DataSaveAck. */
       browser_focus_on (1);
@@ -1769,9 +1817,9 @@ int main (int argc, char **argv)
     char cf[760];
     prefs p;
     choose (5, -1, -1);
-    CHECK ((choice_icon_flags[4] & (1u << 21)) && !(choice_icon_flags[5] & (1u << 21))
+    CHECK (!(choice_icon_flags[4] & (1u << 21)) && (choice_icon_flags[5] & (1u << 21))
            && (choice_icon_flags[15] & (1u << 21)) && (choice_icon_flags[17] & (1u << 21)),
-           "Choices: shows JPEG, Medium thumbnails, checking files: the defaults");
+           "Choices: PNG (what the last export used), Medium thumbnails, checking files");
     CHECK (choicewin_library_text ()[0] == '\0', "Choices: library empty (the usual place)");
     /* PNG, Large, no checking, a library elsewhere; then Save. */
     choice_icon_flags[4] = 0; choice_icon_flags[5] = 1u << 21;

@@ -2,9 +2,12 @@
    queue of exports it starts.
 
    The box (opened as a transient dialogue with Wimp_CreateMenu) has the
-   file's icon to drag, its name, the format (JPEG or PNG), the size
-   (Full, or the longer side at 3840, 2048 or 1024 pixels) and the JPEG
-   quality. Drag the icon to a directory viewer, or to another program,
+   file's icon to drag, its name, the format (JPEG or PNG) and JPEG
+   quality, the size (Full, the longer side at 3840, 2048 or 1024 pixels,
+   or fitting inside a box), the colour space (sRGB, Adobe RGB, Display
+   P3), sharpening for the output, and the pattern that names the files
+   when several photos are exported (naming.h). What was used last is
+   kept in Choices. Drag the icon to a directory viewer, or to another program,
    or type a full pathname and click Save. Several photos at once go into
    a new directory of that name, one file each.
 
@@ -26,7 +29,9 @@
 #include <strings.h>
 #include <kernel.h>
 #include <swis.h>
+#include "colour.h"
 #include "export.h"
+#include "naming.h"
 #include "fsys.h"
 #include "ui.h"
 
@@ -36,16 +41,22 @@
 enum
 {
   I_FILE, I_NAME, I_FORMAT_LABEL, I_JPEG, I_PNG, I_SIZE_LABEL, I_FULL, I_3840, I_2048, I_1024,
-  I_QUALITY_LABEL, I_QUALITY, I_CANCEL, I_SAVE, I_COUNT
+  I_QUALITY_LABEL, I_QUALITY, I_CANCEL, I_SAVE,
+  I_FIT, I_BOX_W, I_BOX_X, I_BOX_H, I_BOX_PX,
+  I_COLOUR_LABEL, I_SRGB, I_ADOBE, I_P3,
+  I_SHARP_LABEL, I_SH_NONE, I_SH_LOW, I_SH_STD, I_SH_HIGH,
+  I_NAMES_LABEL, I_NAMES, I_NAMES_HINT, I_COUNT
 };
 static const int size_choice[4] = { 0, 3840, 2048, 1024 };
 
-#define BOX_W 780
-#define BOX_H 460
+#define BOX_W 880
+#define BOX_H 724
 
 static int win = -1, is_open;
 static char name[256] = "Photo", quality[4] = "90", sprite_name[16] = "file_c85";
-static export_opts opts = { EXPORT_JPEG, 90, 0, APP_NAME " " LUMEN_VERSION };
+static char box_w_text[6] = "1920", box_h_text[6] = "1080", names[128] = "{name}";
+static int fit_on;                     /* Size: Fit in the box */
+static export_opts opts = { EXPORT_JPEG, 90, 0, APP_NAME " " LUMEN_VERSION, 0, 0, CS_SRGB, EXPORT_SHARP_NONE };
 static cat_id *box_ids;                /* the photos the box was opened for */
 static int box_n;
 static int dragging, save_ref;
@@ -101,18 +112,41 @@ int exportbox_create (void)
   icon_at (ic + 8 * I_FILE, BOX_W / 2 - 60, -128, BOX_W / 2 + 60, -20, 0x0000611Au, sprite_name, (const char *) 1,
            (int) sizeof sprite_name);
   icon_at (ic + 8 * I_NAME, 24, -192, BOX_W - 24, -140, T_WRITE, name, v_name, (int) sizeof name);
+  /* Format and quality */
   icon_at (ic + 8 * I_FORMAT_LABEL, 24, -252, 176, -208, T_LABEL, "Format", NULL, 7);
-  icon_at (ic + 8 * I_JPEG, 196, -252, 380, -208, T_RADIO | (1u << 16) | (1u << 21), "JPEG", v_radio, 5);
-  icon_at (ic + 8 * I_PNG, 400, -252, 580, -208, T_RADIO | (1u << 16), "PNG", v_radio, 4);
+  icon_at (ic + 8 * I_JPEG, 196, -252, 330, -208, T_RADIO | (1u << 16) | (1u << 21), "JPEG", v_radio, 5);
+  icon_at (ic + 8 * I_PNG, 344, -252, 470, -208, T_RADIO | (1u << 16), "PNG", v_radio, 4);
+  icon_at (ic + 8 * I_QUALITY_LABEL, 480, -252, 620, -208, T_LABEL, "Quality", NULL, 8);
+  icon_at (ic + 8 * I_QUALITY, 636, -252, 736, -208, T_WRITE, quality, v_num, (int) sizeof quality);
+  /* Size: full, a longer side, or fit inside a box */
   icon_at (ic + 8 * I_SIZE_LABEL, 24, -312, 176, -268, T_LABEL, "Size", NULL, 5);
   icon_at (ic + 8 * I_FULL, 196, -312, 316, -268, T_RADIO | (2u << 16) | (1u << 21), "Full", v_radio, 5);
   icon_at (ic + 8 * I_3840, 330, -312, 450, -268, T_RADIO | (2u << 16), "3840", v_radio, 5);
   icon_at (ic + 8 * I_2048, 464, -312, 584, -268, T_RADIO | (2u << 16), "2048", v_radio, 5);
   icon_at (ic + 8 * I_1024, 598, -312, 718, -268, T_RADIO | (2u << 16), "1024", v_radio, 5);
-  icon_at (ic + 8 * I_QUALITY_LABEL, 24, -372, 176, -328, T_LABEL, "Quality", NULL, 8);
-  icon_at (ic + 8 * I_QUALITY, 196, -372, 296, -328, T_WRITE, quality, v_num, (int) sizeof quality);
-  icon_at (ic + 8 * I_CANCEL, BOX_W - 384, -440, BOX_W - 220, -384, T_BUTTON, "Cancel", v_cancel, 7);
-  icon_at (ic + 8 * I_SAVE, BOX_W - 200, -444, BOX_W - 24, -380, T_BUTTON, "Save", v_save, 5);
+  icon_at (ic + 8 * I_FIT, 196, -372, 330, -328, T_RADIO | (2u << 16), "Fit in", v_radio, 7);
+  icon_at (ic + 8 * I_BOX_W, 344, -372, 454, -328, T_WRITE, box_w_text, v_num, (int) sizeof box_w_text);
+  icon_at (ic + 8 * I_BOX_X, 454, -372, 494, -328, 0x17000119u, "\xD7", NULL, 2);   /* centred */
+  icon_at (ic + 8 * I_BOX_H, 494, -372, 604, -328, T_WRITE, box_h_text, v_num, (int) sizeof box_h_text);
+  icon_at (ic + 8 * I_BOX_PX, 612, -372, 760, -328, 0x17000111u, "pixels", NULL, 7);
+  /* Colour space */
+  icon_at (ic + 8 * I_COLOUR_LABEL, 24, -432, 176, -388, T_LABEL, "Colour", NULL, 7);
+  icon_at (ic + 8 * I_SRGB, 196, -432, 330, -388, T_RADIO | (3u << 16) | (1u << 21), "sRGB", v_radio, 5);
+  icon_at (ic + 8 * I_ADOBE, 330, -432, 570, -388, T_RADIO | (3u << 16), "Adobe RGB", v_radio, 10);
+  icon_at (ic + 8 * I_P3, 584, -432, 830, -388, T_RADIO | (3u << 16), "Display P3", v_radio, 11);
+  /* Sharpening for the output */
+  icon_at (ic + 8 * I_SHARP_LABEL, 24, -492, 176, -448, T_LABEL, "Sharpen", NULL, 8);
+  icon_at (ic + 8 * I_SH_NONE, 196, -492, 330, -448, T_RADIO | (4u << 16) | (1u << 21), "None", v_radio, 5);
+  icon_at (ic + 8 * I_SH_LOW, 344, -492, 454, -448, T_RADIO | (4u << 16), "Low", v_radio, 4);
+  icon_at (ic + 8 * I_SH_STD, 464, -492, 680, -448, T_RADIO | (4u << 16), "Standard", v_radio, 9);
+  icon_at (ic + 8 * I_SH_HIGH, 694, -492, 830, -448, T_RADIO | (4u << 16), "High", v_radio, 5);
+  /* Names, for several photos */
+  icon_at (ic + 8 * I_NAMES_LABEL, 24, -552, 176, -508, T_LABEL, "Names", NULL, 6);
+  icon_at (ic + 8 * I_NAMES, 196, -552, BOX_W - 24, -508, T_WRITE, names, v_name, (int) sizeof names);
+  icon_at (ic + 8 * I_NAMES_HINT, 196, -592, BOX_W - 24, -556, 0x17000111u,
+           "For example {date}_{name}_{nnn}", NULL, 32);
+  icon_at (ic + 8 * I_CANCEL, BOX_W - 384, -700, BOX_W - 220, -644, T_BUTTON, "Cancel", v_cancel, 7);
+  icon_at (ic + 8 * I_SAVE, BOX_W - 200, -704, BOX_W - 24, -640, T_BUTTON, "Save", v_save, 5);
   return _swix (Wimp_CreateWindow, _IN (1) | _OUT (0), b, &win) ? -1 : 0;
 }
 
@@ -272,7 +306,19 @@ static int queue (const char *dst)
           int j, n = 1, clash;
           if (cat_get_details (lib_cat (app_library ()), box_ids[k], &d))
             continue;
-          leaf_from (fsys_leaf (d.path), leaf, sizeof leaf);
+          {
+            /* The name from the pattern ({name} by default). */
+            char base[200];
+            naming_info ni;
+            leaf_from (fsys_leaf (d.path), base, sizeof base);
+            ni.name = base;
+            ni.n = k + 1;
+            ni.taken = d.taken;
+            ni.project = d.project_name;
+            ni.camera = d.model;
+            ni.rating = d.rating;
+            naming_expand (names, &ni, leaf);
+          }
           do
             {
               char l2[220];
@@ -413,10 +459,20 @@ static int is_full_path (const char *s)
 #endif
 }
 
+static void save_as_prefs (void);
+
 static void read_options (void)
 {
-  int q = atoi (quality);
+  int q = atoi (quality), w = atoi (box_w_text), h = atoi (box_h_text);
   opts.quality = q < 1 ? 1 : q > 100 ? 100 : q;
+  w = w < 16 ? 16 : w;
+  h = h < 16 ? 16 : h;
+  snprintf (box_w_text, sizeof box_w_text, "%d", w);
+  snprintf (box_h_text, sizeof box_h_text, "%d", h);
+  opts.box_w = fit_on ? w : 0;
+  opts.box_h = fit_on ? h : 0;
+  if (fit_on)
+    opts.max_side = 0;
 }
 
 /* Save to a full pathname (typed, or from the receiver). */
@@ -425,6 +481,7 @@ int exportbox_save_to (const char *path)
   read_options ();
   if (queue (path))
     return -1;
+  save_as_prefs ();                    /* the next export (and Choices) start from these */
   close_box ();
   return 0;
 }
@@ -439,6 +496,8 @@ static void save_clicked (void)
   exportbox_save_to (name);
 }
 
+static void show_options (void);
+
 void exportbox_click (int *b)
 {
   int i = b[4];
@@ -448,7 +507,23 @@ void exportbox_click (int *b)
     {
     case I_JPEG: opts.format = EXPORT_JPEG; update_sprite (); break;
     case I_PNG: opts.format = EXPORT_PNG; update_sprite (); break;
-    case I_FULL: case I_3840: case I_2048: case I_1024: opts.max_side = size_choice[i - I_FULL]; break;
+    case I_FULL: case I_3840: case I_2048: case I_1024:
+      opts.max_side = size_choice[i - I_FULL];
+      fit_on = 0;
+      break;
+    case I_FIT: fit_on = 1; opts.max_side = 0; break;
+    case I_BOX_W: case I_BOX_H:        /* typing a size chooses Fit in */
+      if (!fit_on)
+        {
+          fit_on = 1;
+          opts.max_side = 0;
+          show_options ();
+        }
+      break;
+    case I_SRGB: opts.colour = CS_SRGB; break;
+    case I_ADOBE: opts.colour = CS_ADOBE; break;
+    case I_P3: opts.colour = CS_P3; break;
+    case I_SH_NONE: case I_SH_LOW: case I_SH_STD: case I_SH_HIGH: opts.out_sharpen = i - I_SH_NONE; break;
     case I_CANCEL: close_box (); break;
     case I_SAVE: save_clicked (); break;
     case I_FILE:
@@ -539,32 +614,81 @@ void exportbox_save_ack (int *m)
 /* The box's radio buttons show opts (Wimp_SetIconState: bit 21, selected). */
 static void show_options (void)
 {
-  static const int radios[6] = { I_JPEG, I_PNG, I_FULL, I_3840, I_2048, I_1024 };
+  static const int radios[] = { I_JPEG, I_PNG, I_FULL, I_3840, I_2048, I_1024, I_FIT, I_SRGB, I_ADOBE, I_P3,
+                                I_SH_NONE, I_SH_LOW, I_SH_STD, I_SH_HIGH };
   int k;
-  for (k = 0; k < 6; k++)
+  for (k = 0; k < (int) (sizeof radios / sizeof radios[0]); k++)
     {
-      int on = k < 2 ? opts.format == (k == 0 ? EXPORT_JPEG : EXPORT_PNG) : opts.max_side == size_choice[k - 2];
-      int st[4];
-      st[0] = win; st[1] = radios[k];
+      int i = radios[k], on, st[4];
+      if (i == I_JPEG || i == I_PNG)
+        on = opts.format == (i == I_JPEG ? EXPORT_JPEG : EXPORT_PNG);
+      else if (i == I_FIT)
+        on = fit_on;
+      else if (i >= I_FULL && i <= I_1024)
+        on = !fit_on && opts.max_side == size_choice[i - I_FULL];
+      else if (i >= I_SRGB && i <= I_P3)
+        on = opts.colour == (i == I_SRGB ? CS_SRGB : i == I_ADOBE ? CS_ADOBE : CS_P3);
+      else
+        on = opts.out_sharpen == i - I_SH_NONE;
+      st[0] = win; st[1] = i;
       st[2] = on ? 1 << 21 : 0;
       st[3] = 1 << 21;
       _swix (Wimp_SetIconState, _IN (1), st);
     }
 }
 
-/* The Choices' starting format, size and quality. */
+/* The Choices' starting settings (what was used last). */
 void exportbox_use_prefs (const prefs *p)
 {
   opts.format = p->export_format == EXPORT_PNG ? EXPORT_PNG : EXPORT_JPEG;
-  opts.max_side = p->export_size;
+  fit_on = p->export_size == -1;
+  opts.max_side = fit_on ? 0 : p->export_size;
   opts.quality = p->export_quality;
+  opts.colour = p->export_colour == CS_ADOBE || p->export_colour == CS_P3 ? p->export_colour : CS_SRGB;
+  opts.out_sharpen = p->export_sharpen >= 0 && p->export_sharpen <= 3 ? p->export_sharpen : 0;
   snprintf (quality, sizeof quality, "%d", p->export_quality);
+  snprintf (box_w_text, sizeof box_w_text, "%d", p->export_box_w > 0 ? p->export_box_w : 1920);
+  snprintf (box_h_text, sizeof box_h_text, "%d", p->export_box_h > 0 ? p->export_box_h : 1080);
+  snprintf (names, sizeof names, "%s", p->export_names[0] ? p->export_names : "{name}");
   if (win != -1)
     {
+      int k;
       show_options ();
-      redraw_icon (I_QUALITY);
+      for (k = I_QUALITY; k <= I_QUALITY; k++)
+        redraw_icon (k);
+      redraw_icon (I_BOX_W);
+      redraw_icon (I_BOX_H);
+      redraw_icon (I_NAMES);
     }
   update_sprite ();
+}
+
+/* What was used goes into Choices, quietly (only if it changed). */
+static void save_as_prefs (void)
+{
+  prefs p = *app_prefs ();
+  p.export_format = opts.format;
+  p.export_size = fit_on ? -1 : opts.max_side;
+  p.export_quality = opts.quality;
+  p.export_box_w = atoi (box_w_text);
+  p.export_box_h = atoi (box_h_text);
+  p.export_colour = opts.colour;
+  p.export_sharpen = opts.out_sharpen;
+  snprintf (p.export_names, sizeof p.export_names, "%s", names);
+  if (memcmp (&p, app_prefs (), sizeof p))
+    app_keep_prefs (&p);
+}
+
+/* For the tests: the name pattern and the box's size icons. */
+void exportbox_set_names (const char *s)
+{
+  snprintf (names, sizeof names, "%s", s);
+}
+
+void exportbox_set_box (int w, int h)
+{
+  snprintf (box_w_text, sizeof box_w_text, "%d", w);
+  snprintf (box_h_text, sizeof box_h_text, "%d", h);
 }
 
 /* For the tests: what the name icon holds. */

@@ -890,8 +890,9 @@ static void col_text (sqlite3_stmt *s, int i, char *out, size_t n)
 int cat_get_details (cat *c, cat_id version, cat_details *d)
 {
   sqlite3_stmt *s = prep (c, "SELECT o.path, o.width, o.height, o.orientation, o.iso, o.taken, o.make,"
-                             " o.model, o.exposure, o.fnumber, o.focal, v.project, o.missing, o.id FROM version v"
-                             " JOIN original o ON o.id = v.original WHERE v.id = ?1");
+                             " o.model, o.exposure, o.fnumber, o.focal, v.project, o.missing, o.id, v.rating, p.name"
+                             " FROM version v JOIN original o ON o.id = v.original"
+                             " LEFT JOIN project p ON p.id = v.project WHERE v.id = ?1");
   int r = -1;
   memset (d, 0, sizeof *d);
   if (!s)
@@ -913,6 +914,8 @@ int cat_get_details (cat *c, cat_id version, cat_details *d)
       d->project = sqlite3_column_int64 (s, 11);
       d->missing = sqlite3_column_int (s, 12);
       d->original = sqlite3_column_int64 (s, 13);
+      d->rating = sqlite3_column_int (s, 14);
+      col_text (s, 15, d->project_name, sizeof d->project_name);
       r = 0;
     }
   sqlite3_finalize (s);
