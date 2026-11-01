@@ -123,6 +123,18 @@ static uint16_t *zlin;
 static int pan_dx, pan_dy;             /* while dragging the view: how far, in OS units */
 static int pan_start_x, pan_start_y;
 #define DRAG_PAN (-3)
+
+/* The loupe: a round magnifier that follows the pointer over the photo,
+   showing the full-size original there at 100%, 200% or 400%. */
+#define LOUPE_PX 300                   /* its diameter in screen pixels */
+static int loupe_on, loupe_pinned, loupe_mag = 1, loupe_shown, loupe_dirty;
+static int loupe_wx, loupe_wy;         /* its centre, work area coordinates */
+static double loupe_fx, loupe_fy;      /* the point of the photo under it */
+static geom_plan lplan;
+static int lplan_ok;
+static unsigned *loupe_area;           /* a sprite with a round mask */
+static uint16_t *loupe_lin;
+static uint32_t *loupe_px;
 static recipe crop_saved;
 static double crop_ax, crop_ay, crop_start[4], crop_px, crop_py;
 
@@ -185,8 +197,14 @@ static void free_geo (void)
   geo_pending = 0;
 }
 
+static void loupe_force (void);
+
 static void free_zoom (void)
 {
+  if (loupe_shown)
+    loupe_force ();
+  loupe_shown = 0;
+  lplan_ok = 0;
   thumbgen_free (zgen);
   zgen = NULL;
   free (zfull.rgb);
@@ -865,6 +883,8 @@ static void zoom_idle (unsigned deadline)
         }
       thumbgen_free (zgen);
       zgen = NULL;
+      lplan_ok = 0;
+      loupe_dirty = 1;
       if (zoom == 1)
         {
           zoom = 2;
@@ -875,6 +895,197 @@ static void zoom_idle (unsigned deadline)
     }
   if (zoom == 2 && zy >= 0)
     zoom_render_until (deadline);
+}
+
+/* --- the loupe */
+static int loupe_os_w (void) { return LOUPE_PX << draw_xeig (); }
+static int loupe_os_h (void) { return LOUPE_PX << draw_yeig (); }
+
+static void loupe_force (void)
+{
+  int hw = loupe_os_w () / 2 + 8, hh = loupe_os_h () / 2 + 8;
+  force (loupe_wx - hw, loupe_wy - hh, loupe_wx + hw, loupe_wy + hh);
+}
+
+/* The sprite: LOUPE_PX square, 32bpp, with a 1bpp mask that is a disc. */
+static int loupe_make (void)
+{
+  int d = LOUPE_PX, mw = (d + 31) / 32, x, y;
+  size_t img = (size_t) d * d * 4, msk = (size_t) mw * 4 * d, bytes = 16 + 44 + img + msk;
+  unsigned *a, *sp, *m;
+  double r = d / 2.0;
+  if (loupe_area)
+    return 0;
+  a = calloc (1, bytes);
+  loupe_lin = malloc ((size_t) d * d * 6);
+  loupe_px = malloc ((size_t) d * d * 4);
+  if (!a || !loupe_lin || !loupe_px)
+    {
+      free (a); free (loupe_lin); free (loupe_px);
+      loupe_lin = NULL; loupe_px = NULL;
+      return -1;
+    }
+  a[0] = (unsigned) bytes; a[1] = 1; a[2] = 16; a[3] = (unsigned) bytes;
+  sp = a + 4;
+  sp[0] = (unsigned) (44 + img + msk);
+  memcpy (sp + 1, "loupe", 5);
+  sp[4] = (unsigned) (d - 1); sp[5] = (unsigned) (d - 1);
+  sp[6] = 0; sp[7] = 31;
+  sp[8] = 44; sp[9] = (unsigned) (44 + img);
+  sp[10] = 0x301680B5u;
+  m = sp + 11 + img / 4;               /* words: the header is 11, the image d*d */
+  for (y = 0; y < d; y++)
+    for (x = 0; x < d; x++)
+      {
+        double dx = x + 0.5 - r, dy = y + 0.5 - r;
+        if (dx * dx + dy * dy <= r * r)
+          m[y * mw + x / 32] |= 1u << (x % 32);
+      }
+  loupe_area = a;
+  return 0;
+}
+
+/* Renders what the loupe shows round loupe_fx, loupe_fy. */
+static void loupe_render (void)
+{
+  int d = LOUPE_PX, n = (d + loupe_mag - 1) / loupe_mag, x, y;
+  int cx, cy, rx, ry, x0, y0, x1, y1, w, h;
+  uint32_t *out, ground = 0x2A2A2A;
+  loupe_dirty = 0;
+  if (!zfull.rgb || loupe_make ())
+    return;
+  if (!lplan_ok)
+    {
+      recipe r;
+      effective (&r);
+      geom_plan_make (&lplan, &r, zfull.w, zfull.h, 1, 0, 0);
+      lplan_ok = 1;
+    }
+  out = (uint32_t *) (loupe_area + 4 + 11);
+  cx = (int) (loupe_fx * lplan.ow);
+  cy = (int) (loupe_fy * lplan.oh);
+  rx = cx - n / 2;
+  ry = cy - n / 2;
+  x0 = rx < 0 ? 0 : rx; y0 = ry < 0 ? 0 : ry;
+  x1 = rx + n > lplan.ow ? lplan.ow : rx + n;
+  y1 = ry + n > lplan.oh ? lplan.oh : ry + n;
+  w = x1 - x0;
+  h = y1 - y0;
+  if (w > 0 && h > 0)
+    {
+      geom_region_rgb8 (&lplan, zfull.rgb, dev_srgb_to_linear (), loupe_lin, x0, y0, w, h);
+      develop_rows (dev, loupe_lin, w, 0, h, loupe_px, NULL);
+      sharpen_pixels (loupe_px, w, h, photo_long);
+    }
+  /* Each photo pixel becomes loupe_mag x loupe_mag screen pixels. */
+  for (y = 0; y < d; y++)
+    {
+      int sy = ry + y / loupe_mag;
+      for (x = 0; x < d; x++)
+        {
+          int sx = rx + x / loupe_mag;
+          out[(size_t) y * d + x] = sx >= x0 && sx < x1 && sy >= y0 && sy < y1
+            ? loupe_px[(size_t) (sy - y0) * w + (sx - x0)] : ground;
+        }
+    }
+}
+
+/* Follows the pointer (unless pinned): called on null events. */
+static void loupe_track (void)
+{
+  int ptr[5], st[9], r[4], wx, wy, over;
+  if (!loupe_on || loupe_pinned || zoom || crop_mode || picking)
+    return;
+  st[0] = win;
+  if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) || _swix (Wimp_GetWindowState, _IN (1), st))
+    return;
+  wx = ptr[0] - st[1];
+  wy = ptr[1] - st[4];
+  over = ptr[3] == win && photo_rect (r) && wx >= r[0] && wx < r[2] && wy >= r[1] && wy < r[3];
+  if (!over)
+    {
+      if (loupe_shown)
+        {
+          loupe_shown = 0;
+          loupe_force ();
+        }
+      return;
+    }
+  if (loupe_shown && wx == loupe_wx && wy == loupe_wy && !loupe_dirty)
+    return;
+  if (loupe_shown)
+    loupe_force ();                    /* where it was */
+  loupe_wx = wx;
+  loupe_wy = wy;
+  loupe_fx = (double) (wx - r[0]) / (r[2] - r[0]);
+  loupe_fy = (double) (r[3] - wy) / (r[3] - r[1]);
+  loupe_shown = 1;
+  loupe_render ();
+  loupe_force ();
+}
+
+/* Reads the full-size original if it isn't in memory yet. */
+static void loupe_need_full (void)
+{
+  char e[200];
+  if (zfull.rgb || zgen)
+    return;
+  if (!(zgen = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, sizeof e)))
+    {
+      loupe_on = 0;
+      app_report (e);
+    }
+}
+
+void viewer_toggle_loupe (void)
+{
+  if (!src)
+    return;
+  loupe_on = !loupe_on;
+  loupe_pinned = 0;
+  if (loupe_shown)
+    loupe_force ();
+  loupe_shown = 0;
+  if (loupe_on)
+    {
+      if (zoom)
+        zoom_to (0, 0);
+      loupe_need_full ();
+    }
+  force_panel ();
+}
+
+int viewer_loupe (void) { return loupe_on ? loupe_mag : 0; }
+
+void viewer_set_loupe_mag (int mag)
+{
+  loupe_mag = mag == 2 || mag == 4 ? mag : 1;
+  if (loupe_shown)
+    {
+      loupe_render ();
+      loupe_force ();
+    }
+}
+
+static void draw_loupe (int ox, int oy)
+{
+  int cx = ox + loupe_wx, cy = oy + loupe_wy, rad = loupe_os_w () / 2, k;
+  char t[16];
+  if (!loupe_shown || !loupe_area || zoom)
+    return;
+  draw_sprite_masked (loupe_area, loupe_area + 4, cx - loupe_os_w () / 2, cy - loupe_os_h () / 2);
+  /* A bezel, as Aperture's: dark edges round a light grey ring. */
+  {
+    int px = 1 << draw_xeig ();
+    for (k = 0; k <= 7; k++)
+      draw_circle (cx, cy, rad + k * px, k == 0 || k == 7 ? 0x20202000u : k < 3 ? 0xF0F0F000u : 0xC4C4C400u);
+  }
+  snprintf (t, sizeof t, "%d%%%s", loupe_mag * 100, loupe_pinned ? " \xB7 pinned" : "");
+  {
+    int tw = draw_text_width (t);
+    draw_rect (cx - tw / 2 - 12, cy - rad + 8, cx + tw / 2 + 12, cy - rad + 48, 0x20202000u);
+    draw_text (cx - tw / 2, cy - rad + 18, t, COL_LIGHT, 0x20202000u);
+  }
 }
 
 static void refresh (int full)
@@ -892,6 +1103,12 @@ static void refresh (int full)
     restart_full ();
   if (zoom == 2)
     zoom_layout (1);                   /* geometry may have changed the output */
+  lplan_ok = 0;
+  if (loupe_shown)
+    {
+      loupe_render ();                 /* follows the sliders */
+      loupe_force ();
+    }
 }
 
 /* Proxy decoded: linear copies and the half-size copy. */
@@ -1000,7 +1217,8 @@ void viewer_close (void)
 
 int viewer_busy (void)
 {
-  return is_open && (dragging != -1 || (state == V_LOADING && tg) || full_y >= 0 || zgen || (zoom == 2 && zy >= 0));
+  return is_open && (dragging != -1 || (state == V_LOADING && tg) || full_y >= 0 || zgen || (zoom == 2 && zy >= 0)
+                     || (loupe_on && !loupe_pinned && zfull.rgb));
 }
 
 static void crop_follow (double fx, double fy);
@@ -1054,6 +1272,7 @@ void viewer_idle (void)
       if (zgen)
         return;
     }
+  loupe_track ();
   if (state == V_LOADING && tg)
     {
       int r;
@@ -1579,10 +1798,22 @@ void viewer_click (int *b)
       start_drag (b[0], b[1], st[1] + track_x0 () - 4, st[4] + row_top (what) - ROW_H + 4,
                   st[1] + track_x1 () + 4, st[4] + row_top (what) - 4, what);
     }
+  else if (h == HIT_IMAGE && b[2] == Button_Adjust && loupe_on)
+    viewer_set_loupe_mag (loupe_mag == 4 ? 1 : loupe_mag * 2);
   else if (h == HIT_IMAGE && b[2] == Button_Select)
     {
       int r[4];
       double fx, fy;
+      if (loupe_on && !crop_mode && !picking && zoom == 0)
+        {
+          if (b[2] == Button_Select)
+            {
+              loupe_pinned = !loupe_pinned;
+              if (loupe_shown)
+                loupe_force ();
+            }
+          return;
+        }
       if (zoom == 2)
         {
           /* Drag the view about (anywhere on the screen). */
@@ -1678,6 +1909,11 @@ int viewer_key (int key)
       zoom_to (0, 0);
       return 1;
     }
+  if (loupe_on && key == KEY_ESCAPE)
+    {
+      viewer_toggle_loupe ();
+      return 1;
+    }
   switch (key)
     {
     case KEY_LEFT:
@@ -1713,7 +1949,12 @@ int viewer_key (int key)
       return 1;
     case 'z':
     case 'Z':
+      if (loupe_on)
+        viewer_toggle_loupe ();
       viewer_toggle_zoom ();
+      return 1;
+    case '`':
+      viewer_toggle_loupe ();
       return 1;
     case 'w':
     case 'W':
@@ -2079,9 +2320,10 @@ static void draw_image (int ox, int oy)
           else
             draw_text (ox + r[0] + 24, oy + r[3] - 60, "Opening...", COL_LIGHT, COL_GROUND);
         }
-      if (before || picking || crop_mode || zoom == 1)
+      draw_loupe (ox, oy);
+      if (before || picking || crop_mode || zoom == 1 || (loupe_on && !zfull.rgb))
         {
-          const char *t = zoom == 1 ? "Reading the full-size photo..." : before ? "Before" : picking ? "Click something that should be grey or white"
+          const char *t = zoom == 1 || (loupe_on && !zfull.rgb) ? "Reading the full-size photo..." : before ? "Before" : picking ? "Click something that should be grey or white"
             : "Drag the corners or edges; Return to crop, Escape to cancel";
           int tw = draw_text_width (t);
           draw_rect (ox + r[0] + 16, oy + r[3] - 64, ox + r[0] + 56 + tw, oy + r[3] - 16, 0x00000000u);

@@ -87,6 +87,10 @@ that no empty corners show.
   Z             100%: the full-size photo, a pixel a pixel (or click the
                 photo). Drag to move about; click, Z or Escape for the
                 whole photo again
+  `             the loupe: a round magnifier that follows the pointer
+                over the photo (100%, 200% or 400% of the full-size
+                photo; Adjust-click on the photo to change, Select to
+                pin it in place, ` or Escape to put it away)
   A             Auto
   C             crop (Return to crop, Escape to cancel)
   [ ]           turn 90 degrees anticlockwise, clockwise

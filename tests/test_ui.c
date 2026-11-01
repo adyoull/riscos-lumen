@@ -33,7 +33,7 @@ static int opened[8], open_calls;
 static int extent[4];
 static int caret_window;
 static int force_redraws, title_redraws;
-static int sprite_plots, smooth_plots, last_scale[4];
+static int sprite_plots, smooth_plots, masked_plots, last_scale[4];
 static int stars;
 static char texts[64][80];
 static int ntexts;
@@ -209,6 +209,8 @@ static const _kernel_oserror *graphics (int swi, int r[10])
         last_plot_h = (int) sp[5] + 1;
       }
       sprite_plots++;
+      if (r[5] & 8)
+        masked_plots++;
       return NULL;
     }
   return NULL;
@@ -632,8 +634,8 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      CHECK (strstr (item_text (menu_open, 8), "Crop shape") != NULL, "Photo > Crop shape");
-      choose (8, 2, -1);
+      CHECK (strstr (item_text (menu_open, 9), "Crop shape") != NULL, "Photo > Crop shape");
+      choose (9, 2, -1);
       CHECK (viewer_crop_mode () && fabsf ((viewer_recipe ()->v[P_CROP_X1] - viewer_recipe ()->v[P_CROP_X0]) * 640
                                            - (viewer_recipe ()->v[P_CROP_Y1] - viewer_recipe ()->v[P_CROP_Y0]) * 480) < 2,
              "Square: the crop becomes square");
@@ -673,11 +675,11 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      pm = submenu (menu_open, 10);
+      pm = submenu (menu_open, 11);
       CHECK (pm && strstr (item_text (pm, 0), "No presets") != NULL, "Presets: none yet");
       save = submenu (pm, 1);
       strcpy ((char *) item (save, 0)[3], "Bright");
-      choose (10, 1, 0);
+      choose (11, 1, 0);
       {
         cat_preset *ps;
         int np;
@@ -688,9 +690,9 @@ int main (int argc, char **argv)
       }
       viewer_reset_all ();
       app_event (Mouse_Click, b, 0);
-      pm = submenu (menu_open, 10);
+      pm = submenu (menu_open, 11);
       CHECK (strcmp (item_text (pm, 0), "Bright") == 0, "Presets lists it");
-      choose (10, 0, -1);
+      choose (11, 0, -1);
       CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f && viewer_recipe ()->v[P_CROP_X0] == 0,
              "applying it brings the look back (not the crop)");
 
@@ -720,6 +722,28 @@ int main (int argc, char **argv)
       CHECK (drag_calls == k + 1, "at 100% a click starts dragging the view");
       app_event (User_Drag_Box, b, 0);
       CHECK (viewer_zoomed () == 0, "let go without moving: back to fit");
+
+      /* The loupe: ` turns it on; it follows the pointer over the photo. */
+      key ('`');
+      CHECK (viewer_loupe () == 1, "`: the loupe, at 100%");
+      PHOTO_RECT ();
+      ptr_window = VIEWER; ptr_x = (pr[0] + pr[2]) / 2; ptr_y = (pr[1] + pr[3]) / 2;
+      memset (b, 0, sizeof b);
+      app_event (Null_Reason, b, 0);
+      b[0] = VIEWER;
+      sprite_plots = 0; masked_plots = 0;
+      app_event (Redraw_Window_Request, b, 0);
+      CHECK (masked_plots == 1 && last_plot_w == 300, "drawn over the photo: a round (masked) 300-pixel sprite");
+      memset (b, 0, sizeof b);
+      b[0] = ptr_x; b[1] = ptr_y; b[2] = Button_Adjust; b[3] = VIEWER; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      CHECK (viewer_loupe () == 2, "Adjust on the photo: 200%");
+      b[2] = Button_Select;
+      app_event (Mouse_Click, b, 0);
+      CHECK (viewer_zoomed () == 0 && !app_busy (), "Select pins it (no zoom, no more following)");
+      key (KEY_ESCAPE);
+      CHECK (viewer_loupe () == 0 && vclosed == 0, "Escape: the loupe goes, the viewer stays");
+      ptr_window = -1;
 
       /* Copy here, paste on photo 2 from the library. */
       key (0x03);
@@ -853,8 +877,8 @@ int main (int argc, char **argv)
     b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
-    CHECK (strstr (item_text (menu_open, 14), "Back to the library") != NULL, "Back to the library");
-    choose (14, -1, -1);
+    CHECK (strstr (item_text (menu_open, 15), "Back to the library") != NULL, "Back to the library");
+    choose (15, -1, -1);
     CHECK (vclosed == 2, "Back to the library closes the viewer");
   }
 
