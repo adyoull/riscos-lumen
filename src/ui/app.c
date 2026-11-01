@@ -426,7 +426,8 @@ int app_other_instance (void)
 int app_init (const char *library_path)
 {
   static const int messages[] = { Message_DataLoad, 2 /* DataSaveAck */, Message_ModeChange, Message_HelpRequest,
-                                  Message_TaskWindow_Output, Message_TaskWindow_Ego, Message_TaskWindow_Morio, 0 };
+                                  Message_TaskWindow_Output, Message_TaskWindow_Ego, Message_TaskWindow_Morio,
+                                  Message_MenusDeleted, Message_MenuWarning, 0 };
   char err[300];
   if (_swix (Wimp_Initialise, _INR (0, 3) | _OUT (1), 380, TASK_WORD, APP_NAME, messages, &task))
     return 1;
@@ -504,6 +505,12 @@ void app_watch_now (void)
    next look at the watched folders. 0 if never. */
 int app_next_wake (unsigned *when)
 {
+  /* A Styles list open over the photo: a look at the pointer every 5 cs. */
+  if (menus_watching ())
+    {
+      *when = app_now () + 5;
+      return 1;
+    }
   if (!lib || the_prefs.watch_minutes <= 0)
     return 0;
   if (nwatched < 0)
@@ -546,6 +553,7 @@ static void idle (void)
 {
   unsigned start, deadline, wake;
   int changed;
+  menus_idle ();
   if (app_next_wake (&wake) && (int) (app_now () - wake) >= 0 && !lib_busy (lib))
     app_watch_now ();
   /* The photo being edited comes first. */
@@ -789,6 +797,12 @@ static int app_event_1 (int reason, int *b, int sender)
           exportbox_save_ack (b);
           break;
         case Message_TaskWindow_Ego:
+        case Message_MenusDeleted:
+          menus_closed ();
+          break;
+        case Message_MenuWarning:
+          menus_warning (b);
+          break;
         case Message_TaskWindow_Morio:
           raw_message (b);
           break;

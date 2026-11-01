@@ -14,6 +14,7 @@
 #define MF_TICK 0x01
 #define MF_DOTTED 0x02
 #define MF_WRITABLE 0x04
+#define MF_WARN 0x08                   /* Message_MenuWarning before its submenu opens (classic PRM; the 2026 one omits the flags) */
 #define MF_LAST 0x80
 #define MF_TITLE_INDIRECTED 0x100
 #define IF_SHADED 0x00400000
@@ -149,7 +150,7 @@ static menu *build_presets (void)
   m = new_menu ("Presets", 1 + (count ? count : 1) + 2);
   if (!m)
     return NULL;
-  set_item (m, 0, 0, "Styles", MF_DOTTED, (int) sty, 0);
+  set_item (m, 0, 0, "Styles", MF_DOTTED | MF_WARN, (int) sty, 0);
   if (!count)
     set_item (m, 1, 0, "No presets yet", MF_DOTTED, -1, 1);
   for (k = 0; k < count; k++)
@@ -377,6 +378,76 @@ static menu *build_window_menu (void)
 /* Photo > ... (the order menus_selection decodes) */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
        VM_PRESETS, VM_COPY, VM_PASTE, VM_EXPORT, VM_BACK, VM_REMOVE, VM_COUNT };
+
+/* --- styles shown as the pointer goes down the list
+   The Styles item asks for Message_MenuWarning (&400C0, PRM p1017): Lumen
+   opens the list itself (Wimp_CreateSubMenu, PRM p721) and only from then
+   on, while the photo is in the Viewer, does menus_idle look at the
+   pointer, every 5 cs: Wimp_GetMenuState 1 says which item is under it,
+   and that style is shown on the photo. Off the list, or when the menu goes
+   (Message_MenusDeleted, &400C9), the photo's own look returns. In case
+   that message is ever missed, Wimp_GetMenuState 0 saying no menu of ours
+   is open ends it too. */
+static int watching_styles, previewed = -1;
+
+static int style_in_path (const int *c)
+{
+  int k = -1;
+  if (which == 4 && c[0] == 0)
+    k = c[1];
+  else if (which == 3 && c[0] == VM_PRESETS && c[1] == 0)
+    k = c[2];
+  return k >= 0 && k < styles_count () ? k : -1;
+}
+
+static void watch_styles (void)
+{
+  watching_styles = viewer_has_photo () && !viewer_crop_mode ();
+}
+
+int menus_watching (void) { return watching_styles; }
+
+void menus_closed (void);
+
+/* Message_MenuWarning: open the submenu as the Wimp would; if it is a
+   Styles list, start watching the pointer. */
+void menus_warning (const int *b)
+{
+  const int *path = &b[8];
+  if ((which == 4 && path[0] == 0) || (which == 3 && path[0] == VM_PRESETS && path[1] == 0))
+    watch_styles ();
+  _swix (Wimp_CreateSubMenu, _INR (1, 3), b[5], b[6], b[7]);
+}
+
+void menus_idle (void)
+{
+  int ptr[5], c[16], k = -1;
+  if (!watching_styles)
+    return;
+  if (_swix (Wimp_GetMenuState, _INR (0, 1), 0, c) == NULL && c[0] == -1)
+    {
+      menus_closed ();                 /* gone (or not ours any more) without a word */
+      return;
+    }
+  if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL && ptr[3] >= 0
+      && _swix (Wimp_GetMenuState, _INR (0, 3), 1, c, ptr[3], ptr[4]) == NULL && c[0] >= 0)
+    k = style_in_path (c);
+  if (k != previewed)
+    {
+      previewed = k;
+      viewer_preview_look (k >= 0 ? styles_get (k)->recipe : NULL);
+    }
+}
+
+void menus_closed (void)
+{
+  watching_styles = 0;
+  if (previewed >= 0)
+    {
+      previewed = -1;
+      viewer_preview_look (NULL);
+    }
+}
 
 static menu *build_viewer_menu (void)
 {
@@ -814,7 +885,16 @@ static int window_choice (const int *c)
 /* Returns 1 to quit. */
 int menus_selection (const int *choice)
 {
-  int ptr[5] = { 0 }, quit_requested = 0;
+  int ptr[5] = { 0 }, quit_requested = 0, was_style = watching_styles && style_in_path (choice) >= 0;
+  if (watching_styles)
+    {
+      /* A style chosen replaces the preview (viewer_apply_look starts from
+         the photo's own recipe); anything else puts the photo back first. */
+      if (previewed >= 0 && style_in_path (choice) < 0)
+        viewer_preview_look (NULL);
+      watching_styles = 0;
+      previewed = -1;
+    }
   if (which == 1)
     quit_requested = window_choice (choice);
   else if (which == 3)
@@ -943,6 +1023,8 @@ int menus_selection (const int *choice)
           : which == 7 ? build_group_menu () : build_iconbar_menu ();
       if (m)
         _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
+      if (was_style)
+        watch_styles ();               /* Adjust on a style: the list is open again */
     }
   return 0;
 }

@@ -54,6 +54,7 @@ static int plugw_opens;
 static char started[300];               /* the last Wimp_StartTask command */
 static int other_lumen;
 static int menu_state[4] = { -1, -1, -1, -1 };   /* what Wimp_GetMenuState 1 reports */
+static int getmenustate0, submenu_opened;
 static unsigned choice_icon_flags[32];  /* the Choices window's icons' state (bit 21: selected) */                /* a task handle the fake Task Manager lists as another Lumen */
 
 /* TaskManager_EnumerateTasks: ourselves, a LumenRaw task window, a module
@@ -196,8 +197,19 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       snprintf (started, sizeof started, "%s", (const char *) r[0]);
       return NULL;
     case Wimp_GetMenuState:
+      if (r[0] == 0)
+        {
+          /* Is a menu of ours open? -1 when closed. */
+          b[0] = (intptr_t) menu_open == -1 || !menu_open ? -1 : 0;
+          b[1] = -1;
+          getmenustate0++;
+          return NULL;
+        }
       CHECK (r[0] == 1, "Wimp_GetMenuState 1: for a window and icon");
       memcpy (b, menu_state, sizeof menu_state);
+      return NULL;
+    case Wimp_CreateSubMenu:
+      submenu_opened = r[1];
       return NULL;
     case Wimp_DragBox:
       memcpy (drag_block, b, sizeof drag_block);
@@ -341,6 +353,7 @@ static void fakes (void)
     { Wimp_GetWindowState, "Wimp_GetWindowState", 1 }, { Wimp_SetExtent, "Wimp_SetExtent", 1 },
     { Wimp_ForceRedraw, "Wimp_ForceRedraw", 1 }, { Wimp_SetCaretPosition, "Wimp_SetCaretPosition", 1 },
     { Wimp_GetCaretPosition, "Wimp_GetCaretPosition", 1 },
+    { Wimp_CreateSubMenu, "Wimp_CreateSubMenu", 1 },
     { Wimp_RedrawWindow, "Wimp_RedrawWindow", 1 }, { Wimp_GetRectangle, "Wimp_GetRectangle", 1 },
     { Wimp_TextOp, "Wimp_TextOp", 1 }, { Wimp_SendMessage, "Wimp_SendMessage", 1 },
     { Wimp_CreateMenu, "Wimp_CreateMenu", 1 }, { Wimp_GetPointerInfo, "Wimp_GetPointerInfo", 1 },
@@ -969,6 +982,103 @@ int main (int argc, char **argv)
         CHECK (viewer_recipe ()->v[P_TONE_SH] > 0, "toolbar Redo: Sepia again");
         toolbar (3);
         CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f, "and Undo again: Bright");
+      }
+      {
+        /* Styles shown as the pointer goes down the list, kept only when clicked. */
+        int k, sepia = -1, cyan = -1;
+        char before_text[2048], now_text[2048];
+        unsigned wake_at;
+        float ev0 = viewer_recipe ()->v[P_EV];
+        for (k = 0; k < styles_count (); k++)
+          {
+            if (!strcmp (styles_get (k)->name, "Sepia")) sepia = k;
+            if (!strcmp (styles_get (k)->name, "Cyanotype")) cyan = k;
+          }
+        cat_get_recipe (lib_cat (app_library ()), viewer_item (), before_text, sizeof before_text);
+        memset (b, 0, sizeof b);
+        b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
+        app_event (Mouse_Click, b, 0);
+        CHECK (!menus_watching () && !app_next_wake (&wake_at), "Photo menu open: nothing to watch yet, no extra null events");
+        /* The pointer reaches Styles' arrow: the Wimp sends Message_MenuWarning. */
+        {
+          int w[64];
+          memset (w, 0, sizeof w);
+          w[0] = 44; w[4] = Message_MenuWarning;
+          w[5] = 0x5151; w[6] = 900; w[7] = 700;
+          w[8] = 11; w[9] = 0; w[10] = -1;          /* Presets > Styles */
+          app_event (User_Message, w, 0);
+          CHECK (submenu_opened == 0x5151 && menus_watching () && app_next_wake (&wake_at),
+                 "Styles opened by Lumen (Wimp_CreateSubMenu); now it looks at the pointer every 5 cs");
+          w[8] = 10; w[9] = -1;     /* another submenu: opened, not watched */
+          submenu_opened = 0;
+          menus_closed ();
+          app_event (User_Message, w, 0);
+          CHECK (submenu_opened == 0x5151 && !menus_watching (), "Grid's submenu: opened, nothing watched");
+          w[8] = 11; w[9] = 0; w[10] = -1;
+          app_event (User_Message, w, 0);
+        }
+        ptr_window = 0x7777; ptr_icon = 3;                  /* a menu's window and item */
+        menu_state[0] = 11; menu_state[1] = 0; menu_state[2] = cyan; menu_state[3] = -1;
+        app_event (Null_Reason, b, 0);
+        cat_get_recipe (lib_cat (app_library ()), viewer_item (), now_text, sizeof now_text);
+        CHECK (viewer_previewing () && viewer_recipe ()->v[P_TONE_SH_HUE] == 212, "pointer over Cyanotype: the photo shows it");
+        {
+          char vt[200];
+          viewer_title (vt, sizeof vt);
+          CHECK ((strstr (vt, "edited") != NULL) == (strstr (before_text, "exposure") != NULL),
+                 "the title says edited only if the photo really is");
+        }
+        CHECK (!strcmp (before_text, now_text), "and nothing is saved");
+        menu_state[2] = sepia;
+        app_event (Null_Reason, b, 0);
+        CHECK (viewer_recipe ()->v[P_TONE_SH_HUE] == 30, "down to Sepia: Sepia shown");
+        menu_state[0] = 3; menu_state[1] = -1; menu_state[2] = -1;
+        app_event (Null_Reason, b, 0);
+        CHECK (!viewer_previewing () && fabsf (viewer_recipe ()->v[P_EV] - ev0) < 0.01f
+               && viewer_recipe ()->v[P_TONE_SH] == 0, "off the list: the photo's own look again");
+        menu_state[0] = 11; menu_state[1] = 0; menu_state[2] = cyan;
+        app_event (Null_Reason, b, 0);
+        memset (b, 0, sizeof b);
+        b[0] = 20; b[4] = Message_MenusDeleted;
+        app_event (User_Message, b, 0);
+        CHECK (!viewer_previewing () && !menus_watching () && viewer_recipe ()->v[P_TONE_SH] == 0,
+               "menu closed without a choice: the photo's own look");
+        /* The menu gone without a message: Wimp_GetMenuState 0 notices. */
+        memset (b, 0, sizeof b);
+        b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
+        app_event (Mouse_Click, b, 0);
+        {
+          int w[64];
+          memset (w, 0, sizeof w);
+          w[0] = 44; w[4] = Message_MenuWarning; w[5] = 0x5151; w[8] = 11; w[9] = 0; w[10] = -1;
+          app_event (User_Message, w, 0);
+        }
+        app_event (Null_Reason, b, 0);
+        CHECK (viewer_previewing (), "shown");
+        menu_open = (void *) -1;
+        app_event (Null_Reason, b, 0);
+        CHECK (!menus_watching () && !viewer_previewing () && viewer_recipe ()->v[P_TONE_SH] == 0,
+               "menu closed with no message: noticed, the photo's own look back, watching stops");
+        /* Clicked while shown: kept, as one undo step. */
+        memset (b, 0, sizeof b);
+        b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
+        app_event (Mouse_Click, b, 0);
+        {
+          int w[64];
+          memset (w, 0, sizeof w);
+          w[0] = 44; w[4] = Message_MenuWarning; w[5] = 0x5151; w[8] = 11; w[9] = 0; w[10] = -1;
+          app_event (User_Message, w, 0);
+        }
+        app_event (Null_Reason, b, 0);
+        CHECK (viewer_previewing (), "shown again");
+        choose (11, 0, cyan);
+        cat_get_recipe (lib_cat (app_library ()), viewer_item (), now_text, sizeof now_text);
+        CHECK (!viewer_previewing () && strstr (now_text, "shadow_hue=212") != NULL, "clicking it keeps it");
+        viewer_undo ();
+        CHECK (fabsf (viewer_recipe ()->v[P_EV] - ev0) < 0.01f && viewer_recipe ()->v[P_TONE_SH] == 0,
+               "and one Undo takes it off");
+        ptr_window = -1; ptr_icon = -1;
+        menu_state[0] = menu_state[1] = menu_state[2] = menu_state[3] = -1;
       }
 
       /* 100%: Z reads the full-size original, then shows it a pixel a pixel. */

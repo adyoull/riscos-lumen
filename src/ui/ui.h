@@ -275,6 +275,15 @@ int mainwin_search_icon (void);
 enum { MW_NONE, MW_SEARCH, MW_GRIP, MW_SIZE, MW_RATING, MW_STATUS, MW_ACTIVITY, MW_TAB, MW_TOOLBAR = MW_TAB + 3 };
 int mainwin_status_at (int wx);
 void mainwin_tick (void);
+/* Styles shown as the pointer goes down the list (menus.c). */
+int menus_watching (void);
+void menus_idle (void);
+void menus_closed (void);
+void menus_warning (const int *b);
+#define Message_MenuWarning 0x400C0
+void viewer_preview_look (const char *look);
+int viewer_previewing (void);
+#define Message_MenusDeleted 0x400C9
 void mainwin_toolbar_button (int k, int r[4]);   /* work area coordinates */
 int mainwin_part_at (int x, int y, int icon);        /* the search field's icon handle, -1 */
 int mainwin_search_key (int key);      /* a key in the search field; 1 if used */

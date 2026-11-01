@@ -223,8 +223,12 @@ static void free_zoom (void)
 static dev_lummap *lummap;
 static int lummap_ok;
 
+static int previewing;                 /* a style shown from the menu, not yet chosen */
+static recipe preview_saved;           /* the photo's own recipe meanwhile */
+
 static void free_photo (void)
 {
+  previewing = 0;
   lummap_ok = 0;
   free_zoom ();
   thumbgen_free (tg);
@@ -624,7 +628,7 @@ static void force_hist (void)
 void viewer_title (char *out, size_t n)
 {
   snprintf (out, n, "%s (%d of %d)%s%s", item.name, index_in_list + 1,
-            browser_count (), recipe_is_default (&current) ? "" : "  \xB7  edited",
+            browser_count (), recipe_is_default (previewing ? &preview_saved : &current) ? "" : "  \xB7  edited",
             crop_mode ? "  \xB7  cropping" : "");
 }
 
@@ -1554,11 +1558,46 @@ void viewer_apply_look (const char *look)
   recipe r;
   if (state == V_CLOSED)
     return;
+  if (previewing)
+    {
+      current = preview_saved;         /* chosen after a preview: from the photo's own recipe */
+      previewing = 0;
+    }
   recipe_parse (&r, look);
   recipe_copy_look (&current, &r);
   commit ();
   changed_everything ();
 }
+
+/* Shows a look on the photo without keeping it (a style under the pointer
+   in the Presets menu): nothing is saved and nothing goes on the undo
+   list. NULL puts the photo's own recipe back. */
+void viewer_preview_look (const char *look)
+{
+  recipe r;
+  if (state == V_CLOSED || crop_mode)
+    return;
+  if (!look)
+    {
+      if (!previewing)
+        return;
+      previewing = 0;
+      current = preview_saved;
+      changed_everything ();
+      return;
+    }
+  if (!previewing)
+    {
+      preview_saved = current;
+      previewing = 1;
+    }
+  current = preview_saved;
+  recipe_parse (&r, look);
+  recipe_copy_look (&current, &r);
+  changed_everything ();
+}
+
+int viewer_previewing (void) { return previewing; }
 
 /* The look as text (what a preset or Copy keeps). */
 void viewer_look (char *out, size_t n)

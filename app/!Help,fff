@@ -152,6 +152,10 @@ Matte; Classic Black & White, High-Contrast Noir, Sepia, Cyanotype and
 Platinum Tone. A style is a starting point: every slider it sets can be
 changed afterwards, and Undo takes it off again.
 
+In the Viewer, the photo shows each style as the pointer goes down the
+Styles list, so you can compare them; nothing is kept until you click
+one. Move off the list, or close the menu, and the photo is as it was.
+
 Split Toning colours the shadows and the highlights: a hue (0 red, 30
 orange, 60 yellow, 120 green, 180 cyan, 210 blue, 300 magenta) and how
 strong for each. It comes after Saturation, so it tones black and white
