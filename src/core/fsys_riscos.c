@@ -72,9 +72,11 @@ int fsys_readdir (fsys_dir *d, fsys_entry *e)
       d->pos = 0;
       d->offset = next;
     }
-  rec = (const unsigned char *) d->buf + d->pos;
   {
-    const int *w = (const int *) rec;          /* word aligned, as the PRM says */
+    /* Records are word aligned (PRM: OS_GBPB 10 Buffer), so pos is a
+       multiple of 4 and the record starts at buf[pos / 4]. */
+    const int *w = d->buf + d->pos / 4;
+    rec = (const unsigned char *) w;
     decode (e, (unsigned) w[0], (unsigned) w[1], (unsigned) w[2], w[4]);
   }
   snprintf (e->name, sizeof e->name, "%s", (const char *) rec + 20);

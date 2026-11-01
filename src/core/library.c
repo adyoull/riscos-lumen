@@ -305,8 +305,8 @@ static int import_step (library *l)
         {
           l->found = l->added = l->skipped = 0;
           l->importing = 1;
+          l->batch = (long long) time (NULL) * 100 + (++counter % 100);
         }
-      l->batch = (long long) time (NULL) * 100 + (++counter % 100);
       if (fsys_stat (r->path, &e) != 0)
         {
           snprintf (l->err, sizeof l->err, "Can't find %s", r->path);
@@ -386,7 +386,7 @@ static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
     l->thumbs_pending--;
   thumbgen_free (l->tg);
   l->tg = NULL;
-  if (done)
+  if (done && r > 0)
     done (ctx, l->tg_version);
   return 1;
 }

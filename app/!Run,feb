@@ -1,0 +1,13 @@
+| !Run for !Lumen, a photo library and editor
+| !RunImage is a UnixLib program converted to Absolute (AIF), so it needs
+| SharedUnixLibrary and ARMEABISupport (both from PackMan).
+Set Lumen$Dir <Obey$Dir>
+IconSprites <Lumen$Dir>.!Sprites
+RMEnsure SharedUnixLibrary 1.16 IfThere System:Modules.SharedULib Then RMLoad System:Modules.SharedULib
+RMEnsure SharedUnixLibrary 1.16 Error Lumen needs SharedUnixLibrary 1.16 or later. Install it with PackMan.
+RMEnsure ARMEABISupport 0 IfThere System:Modules.ARMEABISupport Then RMLoad System:Modules.ARMEABISupport
+RMEnsure ARMEABISupport 0 Error Lumen needs the ARMEABISupport module. Install it with PackMan.
+| The library: set Lumen$Library before running to use another one.
+If "<Lumen$Library>"="" Then Set Lumen$Library <Choices$Write>.Lumen.Library
+WimpSlot -min 5120K -max 5120K
+Run <Lumen$Dir>.!RunImage

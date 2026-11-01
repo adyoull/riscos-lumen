@@ -1,0 +1,3 @@
+| !Boot for !Lumen: the Filer runs this when it first sees the application
+If "<Lumen$Dir>"="" Then Set Lumen$Dir <Obey$Dir>
+IconSprites <Obey$Dir>.!Sprites

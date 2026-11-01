@@ -1,0 +1,50 @@
+Lumen 0.0.1 (01 Nov 2026) - test build
+=====================================
+
+A photo library for RISC OS 5, in the spirit of Aperture. This first
+build is milestone 0: importing, browsing, rating, flagging and albums.
+Editing comes in milestone 1.
+
+Getting started
+---------------
+Double-click !Lumen. Its library window opens. Drag a folder of photos
+(JPEG or PNG) from the Filer onto the window or the icon bar icon. Lumen
+reads them in the background and makes thumbnails; the desktop stays
+usable while it works. Your photos are never changed or moved: the
+library only refers to them.
+
+The library lives in <Choices$Write>.Lumen.Library (normally inside
+!Boot.Choices). To keep it elsewhere, set Lumen$Library before running
+!Lumen, e.g.  *Set Lumen$Library SDFS::RISCOSpi.$.Photos.Library
+
+Keys (with the library window focused)
+--------------------------------------
+  0 to 5        set the rating of the selected photos
+  9             reject (rejected photos leave All photos)
+  /             flag or unflag
+  Cursor keys   move to the next photo; Page Up/Down, Home, End too
+  Ctrl-A        select all
+  Escape        clear the selection
+
+Mouse
+-----
+  Select        select a photo (click on space to clear)
+  Adjust        add a photo to the selection or take it out
+  Menu          the Lumen menu
+
+The Lumen menu
+--------------
+  Show            All photos, Flagged, Rejected, Last import, a project
+                  (one per imported folder), an album, or a rating filter
+  Selection       rating, flag, reject, select all, clear
+  Album           make a new album from the selection, add to one,
+                  or remove from the album shown
+  Thumbnail size  Small, Medium, Large
+
+Needs
+-----
+RISC OS 5.30 or later on a Raspberry Pi 4, 400 or CM4 (other ARMv7
+machines should work), and the SharedUnixLibrary 1.16+ and ARMEABISupport
+modules from PackMan.
+
+Andrew Youll, 2026
