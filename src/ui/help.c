@@ -61,6 +61,9 @@ static const char *main_part (int part)
       return "Click to show only photos with at least this many stars.";
     case MW_STATUS:
       return "How many photos are shown and how many selected.";
+    case MW_ACTIVITY:
+      return "What Lumen is doing: the ring fills as the job goes on (it turns when Lumen can't tell how far "
+             "it has got). Click to see everything running and what Lumen has done.";
     default:
       if (part >= MW_TOOLBAR && part < MW_TOOLBAR + 9)
         return toolbar[part - MW_TOOLBAR];
@@ -89,6 +92,27 @@ const char *help_text (int window, int icon, int x, int y)
            "A auto, C crop, G grid, [ and ] turn, Escape back. Menu has the rest.";
   if (window == exportbox_window ())
     return icon >= 0 && icon < 14 && exportbox[icon] ? exportbox[icon] : "Exports photos with their adjustments.";
+  if (window == choicewin_window ())
+    switch (icon)
+      {
+      case 1: return "Where the library is kept, from the next start. Empty: the usual place. Drag a directory here to use it.";
+      case 4: case 5: return "The format the Export box starts with.";
+      case 7: return "The JPEG quality the Export box starts with, 1-100.";
+      case 9: case 10: case 11: case 12: return "The size the Export box starts with.";
+      case 14: case 15: case 16: return "The thumbnail size Lumen starts with.";
+      case 17: return "Ticked: Lumen checks that every photo's file is still there when it opens.";
+      case 18: return "Closes the window without saving. Adjust: puts back what is saved.";
+      case 19: return "Saves these choices.";
+      case 21: return "Ticked: folders you drag in from now on are watched: Lumen brings in new photos put in them.";
+      case 22: return "Ticked: the folders inside the folders you drag in become albums, under their project.";
+      case 24: return "How often Lumen looks in watched folders for new photos, in minutes. 0: only when it starts "
+                      "and when its window opens.";
+      default: return "Lumen's Choices.";
+      }
+  if (window == activitywin_window ())
+    return activitywin_part_at (x, y) ? "Clears the list of what Lumen has done (the file in Lumen's Choices too)."
+                                      : "What Lumen is doing now, each with how far it has got, and what it has "
+                                        "done, newest first. The list is kept between sessions.";
   if (window == plugwin_window ())
     return icon == 4 ? "Starts PackMan, where Lumen's plug-ins (such as LumenRaw, for camera raw files) are installed from."
                      : "Drag a plug-in's directory here to add it to Lumen.";

@@ -25,6 +25,7 @@
 #define INSP 0x2f000
 #define PLUGW 0x30000
 #define CHOICEW 0x31000
+#define ACTW 0x32000
 #define FILER 0x9000
 #define TASK 0x1234
 
@@ -134,6 +135,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         r[0] = PLUGW;
       else if (nwindows == 7)
         r[0] = CHOICEW;
+      else if (nwindows == 8)
+        r[0] = ACTW;
       else
         r[0] = INFO;
       return NULL;
@@ -170,7 +173,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_GetWindowState:
       CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP
-             || b[0] == PLUGW || b[0] == CHOICEW, "window state: one of ours");
+             || b[0] == PLUGW || b[0] == CHOICEW || b[0] == ACTW, "window state: one of ours");
       if (b[0] == EXPORTW)
         {
           b[1] = 600; b[2] = 400; b[3] = 1320; b[4] = 860; b[5] = 0; b[6] = 0;
@@ -212,6 +215,13 @@ static const _kernel_oserror *wimp (int swi, int r[10])
     case Wimp_SetCaretPosition:
       caret_window = r[0];
       caret_icon = r[1];
+      return NULL;
+    case Wimp_GetCaretPosition:
+      b[0] = caret_window;
+      b[1] = caret_icon;
+      b[2] = b[3] = 0;
+      b[4] = -1;
+      b[5] = -1;
       return NULL;
     case Wimp_RedrawWindow:
       /* The whole visible area, one rectangle. */
@@ -329,6 +339,7 @@ static void fakes (void)
     { Wimp_CreateWindow, "Wimp_CreateWindow", 1 }, { Wimp_OpenWindow, "Wimp_OpenWindow", 1 },
     { Wimp_GetWindowState, "Wimp_GetWindowState", 1 }, { Wimp_SetExtent, "Wimp_SetExtent", 1 },
     { Wimp_ForceRedraw, "Wimp_ForceRedraw", 1 }, { Wimp_SetCaretPosition, "Wimp_SetCaretPosition", 1 },
+    { Wimp_GetCaretPosition, "Wimp_GetCaretPosition", 1 },
     { Wimp_RedrawWindow, "Wimp_RedrawWindow", 1 }, { Wimp_GetRectangle, "Wimp_GetRectangle", 1 },
     { Wimp_TextOp, "Wimp_TextOp", 1 }, { Wimp_SendMessage, "Wimp_SendMessage", 1 },
     { Wimp_CreateMenu, "Wimp_CreateMenu", 1 }, { Wimp_GetPointerInfo, "Wimp_GetPointerInfo", 1 },
@@ -428,6 +439,15 @@ static const int *item (const int *menu, int i) { return menu + 7 + 6 * i; }
 static const char *item_text (const int *menu, int i) { return (const char *) item (menu, i)[3]; }
 static const int *submenu (const int *menu, int i) { return (const int *) item (menu, i)[1]; }
 
+static int history_has (const char *text)
+{
+  int k;
+  for (k = 0; k < activity_history_count (); k++)
+    if (strstr (activity_history (k, NULL, NULL), text))
+      return 1;
+  return 0;
+}
+
 static int choose (int a, int b, int c)
 {
   int blk[64];
@@ -478,11 +498,13 @@ int main (int argc, char **argv)
     setenv ("Lumen$Scratch", d, 1);
     snprintf (d, sizeof d, "%s/Choices", work);
     setenv ("Lumen$ChoicesFile", d, 1);
+    snprintf (d, sizeof d, "%s/Activity", work);
+    setenv ("Lumen$ActivityFile", d, 1);
   }
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 8, "the browser, viewer, Export, main, inspector, Add plug-in, Choices and Info windows");
+  CHECK (nwindows == 9, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
   CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
@@ -506,8 +528,22 @@ int main (int argc, char **argv)
   CHECK (strstr (title_buf, "Last import") != NULL, "the window switches to Last import");
   CHECK (app_busy (), "busy: null events wanted");
 
+  {
+    /* Imported first; then thumbnails nobody is looking at yet. With another
+       program in front they're made only in the Wimp's spare time. */
+    unsigned w;
+    int saved = caret_window, k = 0, waits = 0;
+    caret_window = -1;
+    while (app_busy () && !(waits = app_background_wait (&w)) && k++ < 20000)
+      app_event (Null_Reason, b, 0);
+    CHECK (waits, "imported; thumbnails left, Lumen not in front: made in the Wimp's spare time");
+    CHECK (waits && (int) (w - clock_cs) > 0, "Wimp_PollIdle a moment between slices");
+    caret_window = MAINW;
+    CHECK (!app_background_wait (&w), "Lumen in front: on every null event");
+    caret_window = saved;
+  }
   i = nulls_until_idle ();
-  CHECK (i > 6, "imported over many null events");
+  CHECK (i >= 1, "imported and thumbnails made on null events");
   CHECK (!app_busy (), "and finished");
   CHECK (strstr (title_buf, "Last import (6)") != NULL, "title: 6 photos");
   CHECK (title_redraws > 0, "the title bar was redrawn");
@@ -518,10 +554,12 @@ int main (int argc, char **argv)
   CHECK (sprite_plots == 0, "first redraw: no sprites yet");
   CHECK (text_drawn ("IMG_0001.jpg") && text_drawn ("IMG_0006.jpg"), "names drawn");
   CHECK (stars == 6 * 5 * 10, "five stars of ten triangles under each photo");
-  CHECK (app_busy (), "thumbnails queued for loading");
+  CHECK (app_busy (), "thumbnails shown: loaded on null events");
   force_redraws = 0;
   nulls_until_idle ();
-  CHECK (force_redraws >= 6, "each loaded thumbnail's cell redrawn");
+  CHECK (force_redraws >= 6, "each new thumbnail's cell redrawn");
+  redraw ();                            /* now loaded for display */
+  nulls_until_idle ();
   redraw ();
   CHECK (sprite_plots == 6, "second redraw: six thumbnails");
   CHECK (last_scale[0] == 1 && last_plot_w == 112, "a smoothed copy 112 pixels wide: the 224-unit box at eig 1, plotted 1:1");
@@ -599,6 +637,8 @@ int main (int argc, char **argv)
   }
   /* Thumbnail size: Large. */
   choose (3, 2, -1);
+  redraw ();
+  nulls_until_idle ();
   redraw ();
   CHECK (last_plot_w == 160, "Large: a 320-unit box, 160 pixels");
 
@@ -749,6 +789,7 @@ int main (int argc, char **argv)
     key ('5');
     browser_item (0, &it);
     CHECK (it.rating == 5, "5 in the viewer: rated 5");
+    redraw ();                          /* the Browser asks for its new thumbnail */
     nulls_until_idle ();
     browser_item (0, &it);
     CHECK (it.edited && it.thumb_state == THUMB_READY, "the thumbnail is made again, marked edited");
@@ -962,6 +1003,7 @@ int main (int argc, char **argv)
       browser_item (2, &it2);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "exposure") != NULL, "photo 3 gets Bright");
+      redraw ();
       nulls_until_idle ();
       browser_item (2, &it2);
       CHECK (it2.edited && it2.thumb_state == THUMB_READY, "and a new thumbnail");
@@ -996,9 +1038,9 @@ int main (int argc, char **argv)
       app_event (Mouse_Click, eb, 0);
       CHECK ((intptr_t) menu_open == -1 && exports_busy (), "Save with a full path: the box closes, the export runs");
       browser_update_title ();
-      CHECK (strstr (title_buf, "Exporting 1 of 1") != NULL, "the library's title shows it");
+      CHECK (activity_busy (), "the status area shows it");
       nulls_until_idle ();
-      CHECK (!exports_busy () && strstr (title_buf, "Exporting") == NULL, "done, and the title says so");
+            CHECK (!exports_busy () && history_has ("Exported IMG_0001-export.png"), "done, and in the history");
       f = fopen (path, "rb");
       memset (head, 0, sizeof head);
       if (f) { if (fread (head, 1, 8, f) != 8) head[0] = 0; fclose (f); }
@@ -1357,10 +1399,61 @@ int main (int argc, char **argv)
     cat_groups (lib_cat (app_library ()), SRC_PROJECT, &g, &ng);
     CHECK (ng == 1 && strcmp (g[0].name, "Holiday") == 0, "the Holiday project");
     menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
-    CHECK (strstr (item_text (menu_open, 1), "Remove project") != NULL, "a project's menu: Remove project");
+    CHECK (strcmp (item_text (menu_open, 1), "Watch for new photos") == 0 && strcmp (item_text (menu_open, 2), "Albums from its folders") == 0
+           && strstr (item_text (menu_open, 3), "Remove project") != NULL, "a project's menu: Watch, Albums from its folders, Remove project");
+    CHECK (!(item (menu_open, 1)[0] & 1) && !(item (menu_open, 2)[0] & 1), "neither ticked to start with");
     answer = 2;
-    choose (1, -1, -1);
+    choose (3, -1, -1);
     CHECK (strstr (asked, "\"Holiday\" and its 3 photos") != NULL && browser_count () == 3, "it says how many; Cancel keeps them");
+    /* Watch it: a photo put in a new folder inside it comes in; albums from its folders. */
+    {
+      char d[760], f2[800];
+      cat_folder *fa;
+      int nfa, w = 0, al = 0;
+      snprintf (d, sizeof d, "%s/Holiday/Day2", work);
+      mkdir (d, 0777);
+      snprintf (f2, sizeof f2, "%s/IMG_0100.jpg", d);
+      make_jpeg (f2, 900, 600);
+      menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
+      choose (1, -1, -1);
+      nulls_until_idle ();
+      cat_project_watching (lib_cat (app_library ()), g[0].id, &w, &al);
+      CHECK (w == 1 && al == 0, "Watch for new photos: ticked");
+      menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
+      CHECK ((item (menu_open, 1)[0] & 1) != 0, "the menu shows it ticked");
+      choose (2, -1, -1);
+      nulls_until_idle ();
+      CHECK (cat_folder_albums (lib_cat (app_library ()), g[0].id, &fa, &nfa) == 0 && nfa == 1
+             && strcmp (fa[0].name, "Day2") == 0 && fa[0].count == 1, "Albums from its folders: Day2, with the new photo");
+      if (nfa == 1)
+        {
+          menus_open_group_menu (500, 500, SRC_ALBUM, fa[0].id);
+          CHECK (strcmp (item_text (menu_open, 0), "Follows its folder") == 0, "a folder album's menu: it follows its folder");
+        }
+      free (fa);
+      /* Off again, and the photo goes, so the counts below stay as they were. */
+      menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
+      choose (1, -1, -1);
+      menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
+      choose (2, -1, -1);
+      CHECK (cat_folder_albums (lib_cat (app_library ()), g[0].id, &fa, &nfa) == 0 && nfa == 0, "albums off: gone");
+      free (fa);
+      {
+        cat_source src = { SRC_PROJECT, 0, 0, "" };
+        cat_item *it;
+        int ni, k2;
+        src.id = g[0].id;
+        cat_list (lib_cat (app_library ()), &src, &it, &ni);
+        for (k2 = 0; k2 < ni; k2++)
+          if (!strcmp (it[k2].name, "IMG_0100.jpg"))
+            {
+              cat_id one = it[k2].id;
+              lib_remove (app_library (), &one, 1);
+            }
+        free (it);
+      }
+      browser_reload ();
+    }
     free (g);
     answer = 2;
     reported[0] = '\0';
@@ -1398,9 +1491,9 @@ int main (int argc, char **argv)
     memset (b, 0, sizeof b);
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
-    menu_state[0] = 5; menu_state[1] = 0; menu_state[2] = -1;
+    menu_state[0] = 6; menu_state[1] = 0; menu_state[2] = -1;
     CHECK (strstr (help_text (0x9000, 0, 0, 0), "plug-in is on") != NULL, "help: Plug-ins > LibRaw (on)");
-    menu_state[0] = 6; menu_state[1] = -1;
+    menu_state[0] = 7; menu_state[1] = -1;
     CHECK (strstr (help_text (0x9000, 3, 0, 0), "Leaves Lumen") != NULL, "help: icon bar menu > Quit");
     menu_state[0] = -1;
     CHECK (strstr (help_text (0x9000, 3, 0, 0), "") != NULL && help_text (0x9000, 3, 0, 0)[0] == '\0',
@@ -1423,24 +1516,24 @@ int main (int argc, char **argv)
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strcmp (item_text (menu_open, 1), "Help...") == 0 && strcmp (item_text (menu_open, 2), "User guide") == 0
-           && strcmp (item_text (menu_open, 4), "Choices...") == 0
-           && strcmp (item_text (menu_open, 5), "Plug-ins") == 0 && strcmp (item_text (menu_open, 6), "Quit") == 0,
-           "icon bar menu: Info, Help..., User guide, Open library, Choices..., Plug-ins, Quit");
-    pm = submenu (menu_open, 5);
+           && strcmp (item_text (menu_open, 4), "Activity...") == 0 && strcmp (item_text (menu_open, 5), "Choices...") == 0
+           && strcmp (item_text (menu_open, 6), "Plug-ins") == 0 && strcmp (item_text (menu_open, 7), "Quit") == 0,
+           "icon bar menu: Info, Help..., User guide, Open library, Activity..., Choices..., Plug-ins, Quit");
+    pm = submenu (menu_open, 6);
     CHECK (strcmp (item_text (pm, 0), "Camera raw (LibRaw) 1.0") == 0 && (item (pm, 0)[0] & 1),
            "Plug-ins: LibRaw, ticked (on)");
     CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0 && strcmp (item_text (pm, 2), "Remove") == 0
            && (item (pm, 2)[0] & 0x80), "Plug-ins: Add plug-in..., Remove");
     CHECK (rawjob_available (), "the raw plug-in is at work");
-    choose (5, 0, -1);
+    choose (6, 0, -1);
     CHECK (!rawjob_available (), "switched off: raw files aren't read");
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 5);
+    pm = submenu (menu_open, 6);
     CHECK (!(item (pm, 0)[0] & 1), "Plug-ins: LibRaw not ticked");
-    choose (5, 0, -1);
+    choose (6, 0, -1);
     CHECK (rawjob_available (), "switched back on");
     /* Add plug-in...: the window to drop one on. */
-    choose (5, 1, -1);
+    choose (6, 1, -1);
     CHECK (plugw_opens == 1, "Add plug-in... opens its window");
     snprintf (d, sizeof d, "%s/Download/Extra", work);
     fsys_mkdirs (d);
@@ -1477,21 +1570,21 @@ int main (int argc, char **argv)
     memset (b, 0, sizeof b);
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 5);
+    pm = submenu (menu_open, 6);
     CHECK (strcmp (item_text (pm, 0), "Camera raw (LibRaw) 1.0") == 0 && strcmp (item_text (pm, 1), "Extra 2") == 0
            && strcmp (item_text (pm, 2), "Add plug-in...") == 0, "Plug-ins: both, by name");
     CHECK (strcmp (item_text (submenu (pm, 3), 1), "Extra...") == 0, "Remove > Extra...");
     /* Remove > LibRaw: Cancel keeps it; it mentions PackMan. */
     answer = 2;
-    choose (5, 3, 0);
+    choose (6, 3, 0);
     CHECK (strstr (asked, "LumenRaw) in PackMan") != NULL && rawjob_available (), "Remove LibRaw: mentions PackMan; Cancel keeps it");
     answer = 3;
-    choose (5, 3, 1);
+    choose (6, 3, 1);
     snprintf (f, sizeof f, "%s/App/Plugins/Extra", work);
     CHECK (fsys_stat (f, &e) != 0, "Remove > Extra: deleted");
     answer = 2;
     app_event (Mouse_Click, b, 0);
-    pm = submenu (menu_open, 5);
+    pm = submenu (menu_open, 6);
     CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0, "Plug-ins: LibRaw alone again");
   }
   memset (b, 0, sizeof b);
@@ -1502,7 +1595,7 @@ int main (int argc, char **argv)
   {
     char cf[760];
     prefs p;
-    choose (4, -1, -1);
+    choose (5, -1, -1);
     CHECK ((choice_icon_flags[4] & (1u << 21)) && !(choice_icon_flags[5] & (1u << 21))
            && (choice_icon_flags[15] & (1u << 21)) && (choice_icon_flags[17] & (1u << 21)),
            "Choices: shows JPEG, Medium thumbnails, checking files: the defaults");
@@ -1538,7 +1631,24 @@ int main (int argc, char **argv)
   CHECK (strstr (started, ".Guide.index") != NULL && !strncmp (started, "Filer_Run ", 10), "User guide: Filer_Run the guide");
   choose (1, -1, -1);
   CHECK (strstr (started, ".!Help") != NULL, "Help...: Filer_Run !Help");
-  CHECK (choose (6, -1, -1) == 1, "Quit from the icon bar menu quits");
+  choose (4, -1, -1);
+  CHECK (activitywin_is_open (), "Activity...: the Activity window opens");
+  {
+    int n = activity_history_count ();
+    long when;
+    int kind;
+    const char *t = activity_history (0, &when, &kind);
+    char newest[200];
+    snprintf (newest, sizeof newest, "%s", t ? t : "");
+    CHECK (n > 0 && history_has ("Imported Holiday: 6 new photos") && history_has ("Made "), "history: the import and thumbnails");
+    activity_init ();                  /* as at the next start: read back from the file */
+    CHECK (activity_history_count () == n && !strcmp (activity_history (0, NULL, NULL), newest),
+           "history kept between sessions");
+    activity_clear ();
+    activity_init ();
+    CHECK (activity_history_count () == 0, "Clear history: the file too");
+  }
+  CHECK (choose (7, -1, -1) == 1, "Quit from the icon bar menu quits");
   memset (b, 0, sizeof b);
   b[4] = 0;
   CHECK (app_event (User_Message, b, 0) == 1, "Message_Quit quits");

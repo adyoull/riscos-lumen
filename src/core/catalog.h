@@ -74,6 +74,8 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count);
 int cat_next_thumb (cat *c, cat_id *version, char *path, size_t n, int *orientation,
                     char *recipe, size_t rn);
 
+/* The same for one version, if it still needs its thumbnail: 1 if so. */
+int cat_thumb_source (cat *c, cat_id version, char *path, size_t n, int *orientation, char *recipe, size_t rn);
 /* A version's recipe text ("" for none). 0 on success. */
 int cat_get_recipe (cat *c, cat_id version, char *out, size_t n);
 /* Stores a recipe and marks the thumbnail to be made again. */
@@ -117,10 +119,36 @@ int cat_album_delete (cat *c, cat_id album);
 int cat_group_rename (cat *c, int kind, cat_id id, const char *name);
 
 typedef struct { cat_id id; char name[64]; int count; } cat_group;
-/* Projects (kind SRC_PROJECT) or albums (SRC_ALBUM), sorted by name. */
+/* Projects (kind SRC_PROJECT) or albums (SRC_ALBUM, your own, not folder albums), sorted by name. */
 int cat_groups (cat *c, int kind, cat_group **out, int *count);
 /* Name of a project or album, or "" */
 void cat_group_name (cat *c, int kind, cat_id id, char *out, size_t n);
+
+/* --- A project's folder (the directory it was imported from), watching it
+   for new photos, and albums made from the folders inside it. */
+/* Records the folder a project came from (if it has none yet). */
+int cat_project_set_root (cat *c, cat_id project, const char *root);
+/* A project's folder: the one recorded, or else the directory all its
+   photos are in. 0 if there is one. */
+int cat_project_root (cat *c, cat_id project, char *out, size_t n);
+int cat_project_watching (cat *c, cat_id project, int *watch, int *folder_albums);
+/* Sets both (the folder is recorded first); albums turned off go at once. */
+int cat_project_set_watching (cat *c, cat_id project, int watch, int folder_albums);
+typedef struct { cat_id project; char root[1024]; } cat_watch;
+int cat_watched (cat *c, cat_watch **out, int *count);   /* the watched projects (malloc'd) */
+/* A file already in the library, unchanged (same path, size and date):
+   1, its original and whether it was marked missing. */
+int cat_known_file (cat *c, const char *path, long long size, long long mtime, cat_id *original, int *missing);
+/* The project's folder albums made again from where its files are: one
+   album for each folder inside the project's folder that has photos in it
+   or below it, holding all of those. With folder albums off, they go. */
+int cat_sync_folder_albums (cat *c, cat_id project);
+int cat_sync_all_folder_albums (cat *c);
+/* A project's folder albums, in folder order (nested ones after their
+   parent), with their depth (1 for a folder in the project's own). */
+typedef struct { cat_id id; char name[64]; int count, depth; } cat_folder;
+int cat_folder_albums (cat *c, cat_id project, cat_folder **out, int *count);
+int cat_album_is_folder (cat *c, cat_id album);   /* made from a folder (not edited by hand) */
 
 /* Details for the info line and tests. */
 typedef struct

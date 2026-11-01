@@ -208,10 +208,10 @@ static void close_box (void)
 /* --- the queue */
 int exports_busy (void)
 {
-  return ijob < njobs || cur != NULL;
+  return njobs > 0 || cur != NULL;     /* until all_done has reported and tidied up */
 }
 
-/* "Exporting 2 of 5 (40%)" while busy, else "". */
+/* "Exporting 2 of 5" while busy, else "". */
 void exports_status (char *out, size_t n)
 {
   if (!exports_busy ())
@@ -219,13 +219,22 @@ void exports_status (char *out, size_t n)
       out[0] = '\0';
       return;
     }
-  snprintf (out, n, "Exporting %d of %d (%d%%)", ijob + (cur ? 0 : 1), njobs, cur ? export_progress (cur) : 0);
+  /* The photo being exported (or about to be); how far the whole queue
+     has got is the status area's donut (exports_percent). */
+  snprintf (out, n, "Exporting %d of %d", ijob + 1 < njobs ? ijob + 1 : njobs, njobs);
 }
 
 static int exists (const char *path)
 {
   fsys_entry e;
   return fsys_stat (path, &e) == 0;
+}
+
+int exports_percent (void)
+{
+  if (!exports_busy () || njobs <= 0)
+    return 0;
+  return (ijob * 100 + (cur ? export_progress (cur) : 0)) / njobs;
 }
 
 /* Queues the box's photos for dst: one file, or (several) a directory of them. */
@@ -291,6 +300,22 @@ static int queue (const char *dst)
 
 static void all_done (void)
 {
+  /* Into the Activity history. */
+  if (njobs > 0)
+    {
+      char dir[1024];
+      snprintf (dir, sizeof dir, "%s", jobs[0].dst);
+      if (fsys_leaf (dir) > dir)
+        ((char *) fsys_leaf (dir))[-1] = '\0';
+      if (failed)
+        ;                              /* app_report below puts it in the history */
+      else if (reply_pending)
+        activity_log (ACT_EXPORT, "Exported a photo to another program");
+      else if (njobs == 1)
+        activity_log (ACT_EXPORT, "Exported %s to %s", fsys_leaf (jobs[0].dst), dir);
+      else
+        activity_log (ACT_EXPORT, "Exported %d photos to %s", njobs, dir);
+    }
   if (failed)
     {
       char m[400];

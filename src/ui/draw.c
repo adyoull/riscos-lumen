@@ -297,6 +297,46 @@ void draw_circle (int cx, int cy, int r, unsigned rgb)
   _swix (OS_Plot, _INR (0, 2), 149, cx + r, cy);
 }
 
+static void filled_circle (int cx, int cy, int r, unsigned rgb)
+{
+  /* OS_Plot 157: a filled circle, centre at the last point, through this one. */
+  gcol (rgb);
+  _swix (OS_Plot, _INR (0, 2), 4, cx, cy);
+  _swix (OS_Plot, _INR (0, 2), 157, cx + r, cy);
+}
+
+void draw_donut (int cx, int cy, int ro, int ri, int pct, int spin, unsigned fg, unsigned track, unsigned bg)
+{
+  double from, span;
+  int steps, i;
+  filled_circle (cx, cy, ro, track);
+  if (pct < 0)
+    {
+      from = M_PI / 2 - spin * M_PI / 4;
+      span = M_PI / 2;
+    }
+  else
+    {
+      from = M_PI / 2;
+      span = 2 * M_PI * (pct > 100 ? 100 : pct) / 100.0;
+    }
+  if (span > 0)
+    {
+      /* A fan of thin triangles from the centre, clockwise. */
+      steps = (int) (span / (2 * M_PI) * 48) + 1;
+      gcol (fg);
+      for (i = 0; i < steps; i++)
+        {
+          double a0 = from - span * i / steps, a1 = from - span * (i + 1) / steps;
+          _swix (OS_Plot, _INR (0, 2), 4, cx, cy);
+          _swix (OS_Plot, _INR (0, 2), 4, cx + (int) (ro * cos (a0)), cy + (int) (ro * sin (a0)));
+          _swix (OS_Plot, _INR (0, 2), 85, cx + (int) (ro * cos (a1)), cy + (int) (ro * sin (a1)));
+        }
+    }
+  if (ri > 0)
+    filled_circle (cx, cy, ri, bg);
+}
+
 void draw_sprite_fit (const void *area, const void *sprite, int w, int h,
                       int bx0, int by0, int bx1, int by1, int out[4])
 {

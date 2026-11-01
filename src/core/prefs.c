@@ -14,6 +14,9 @@ void prefs_default (prefs *p)
   p->export_size = 0;
   p->thumb_size = 1;
   p->verify = 1;
+  p->watch_new = 0;
+  p->albums_new = 0;
+  p->watch_minutes = 5;
 }
 
 static int clamp (int v, int lo, int hi)
@@ -55,6 +58,12 @@ int prefs_load (const char *path, prefs *p)
             p->thumb_size = clamp ((int) n, 0, 2);
           else if (!strcmp (line, "verify"))
             p->verify = n != 0;
+          else if (!strcmp (line, "watch_new"))
+            p->watch_new = n != 0;
+          else if (!strcmp (line, "albums_new"))
+            p->albums_new = n != 0;
+          else if (!strcmp (line, "watch_minutes"))
+            p->watch_minutes = clamp ((int) n, 0, 1440);
         }
     }
   fclose (f);
@@ -86,6 +95,7 @@ int prefs_save (const char *path, const prefs *p)
     fprintf (f, "library %s\n", p->library);
   fprintf (f, "export_format %d\nexport_quality %d\nexport_size %d\nthumb_size %d\nverify %d\n",
            p->export_format, p->export_quality, p->export_size, p->thumb_size, p->verify);
+  fprintf (f, "watch_new %d\nalbums_new %d\nwatch_minutes %d\n", p->watch_new, p->albums_new, p->watch_minutes);
   if (fclose (f) != 0)
     return -1;
   remove (path);

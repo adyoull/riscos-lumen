@@ -1114,6 +1114,167 @@ static void test_prefs (void)
          && q.verify == 1 && q.export_format == 0, "prefs: unknown keys ignored, values kept in range");
 }
 
+/* --- watched folders and albums from their folders */
+static void drain (library *l)
+{
+  int guard = 0;
+  clock_cs = 0;
+  while (lib_busy (l) && guard++ < 100000)
+    lib_work (l, fake_now, clock_cs + 3, NULL, NULL);
+}
+
+static int folder_count (cat *c, cat_id project, const char *name, int depth)
+{
+  cat_folder *f;
+  int n, k, r = -1;
+  if (cat_folder_albums (c, project, &f, &n))
+    return -1;
+  for (k = 0; k < n; k++)
+    if (!strcmp (f[k].name, name) && f[k].depth == depth)
+      r = f[k].count;
+  free (f);
+  return r;
+}
+
+static void test_watch (void)
+{
+  library *l;
+  char err[256], path[1024], libdir[1024], dst[1024];
+  cat_group *g;
+  int ng, w, a, nf;
+  cat_id proj;
+  cat_folder *f;
+  cat *c;
+  p (libdir, "WatchLibrary");
+  p (path, "Watched/2024/Summer");
+  fsys_mkdirs (path);
+  p (path, "Watched/2023");
+  fsys_mkdirs (path);
+  p (path, "Watched/top.jpg");          make_jpeg (path, 64, 48, 1, "2024:01:01 10:00:00");
+  p (path, "Watched/2024/spring.jpg");  make_jpeg (path, 66, 48, 1, "2024:04:01 10:00:00");
+  p (path, "Watched/2024/Summer/beach.jpg"); make_jpeg (path, 68, 48, 1, "2024:07:01 10:00:00");
+  p (path, "Watched/2023/winter.jpg");  make_jpeg (path, 70, 48, 1, "2023:12:01 10:00:00");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "watch: library");
+  c = lib_cat (l);
+  lib_set_new_folders (l, 1, 1);         /* Choices: watch what's imported, albums from its folders */
+  p (path, "Watched");
+  lib_import (l, path);
+  drain (l);
+  cat_groups (c, SRC_PROJECT, &g, &ng);
+  proj = ng == 1 ? g[0].id : 0;
+  CHECK (ng == 1 && g[0].count == 4 && !strcmp (g[0].name, "Watched"), "watch: one project of 4");
+  free (g);
+  CHECK (cat_project_watching (c, proj, &w, &a) == 0 && w == 1 && a == 1, "watch: watched, with folder albums");
+  CHECK (cat_project_root (c, proj, dst, sizeof dst) == 0 && !strcmp (dst, path), "watch: its folder recorded");
+  CHECK (folder_count (c, proj, "2024", 1) == 2 && folder_count (c, proj, "Summer", 2) == 1
+         && folder_count (c, proj, "2023", 1) == 1, "watch: albums 2024 (2: its own and Summer's), Summer (1), 2023 (1)");
+  CHECK (cat_folder_albums (c, proj, &f, &nf) == 0 && nf == 3 && !strcmp (f[0].name, "2023") && !strcmp (f[1].name, "2024")
+         && !strcmp (f[2].name, "Summer"), "watch: in folder order, nested after their parent");
+  CHECK (nf == 3 && cat_album_is_folder (c, f[0].id), "watch: folder albums are marked");
+  free (f);
+  cat_groups (c, SRC_ALBUM, &g, &ng);
+  CHECK (ng == 0, "watch: folder albums aren't among your own albums");
+  free (g);
+  /* New photos, a new folder, a photo moved between folders, and one deleted. */
+  p (path, "Watched/2024/Summer/sunset.jpg"); make_jpeg (path, 72, 48, 1, "2024:07:02 20:00:00");
+  p (path, "Watched/2025");
+  fsys_mkdirs (path);
+  p (path, "Watched/2025/new.jpg");      make_jpeg (path, 74, 48, 1, "2025:01:01 10:00:00");
+  p (path, "Watched/2024/spring.jpg");   p (dst, "Watched/2023/spring.jpg");
+  CHECK (rename (path, dst) == 0, "watch: a photo moved to another folder");
+  p (path, "Watched/top.jpg");
+  remove (path);
+  CHECK (lib_watch_start (l) == 1, "watch: one folder watched");
+  drain (l);
+  cat_groups (c, SRC_PROJECT, &g, &ng);
+  CHECK (ng == 1 && g[0].count == 6, "watch: two new photos in the same project (the deleted one is still known, missing)");
+  free (g);
+  CHECK (folder_count (c, proj, "2025", 1) == 1 && folder_count (c, proj, "Summer", 2) == 2
+         && folder_count (c, proj, "2024", 1) == 2 && folder_count (c, proj, "2023", 1) == 2,
+         "watch: a new album 2025; Summer 2; spring moved from 2024 to 2023");
+  /* Renamed project: still the one its folder goes into. */
+  CHECK (cat_group_rename (c, SRC_PROJECT, proj, "Holidays") == 0, "watch: project renamed");
+  p (path, "Watched/2025/later.jpg");    make_jpeg (path, 76, 48, 1, "2025:02:01 10:00:00");
+  lib_watch_start (l);
+  drain (l);
+  cat_groups (c, SRC_PROJECT, &g, &ng);
+  CHECK (ng == 1 && !strcmp (g[0].name, "Holidays") && g[0].count == 7, "watch: a renamed project still gets its folder's photos");
+  free (g);
+  /* Folder albums off: they go; watching off: nothing more comes in. */
+  CHECK (cat_project_set_watching (c, proj, 0, 0) == 0, "watch: both off");
+  CHECK (cat_folder_albums (c, proj, &f, &nf) == 0 && nf == 0, "watch: folder albums gone");
+  free (f);
+  p (path, "Watched/2025/ignored.jpg");  make_jpeg (path, 78, 48, 1, "2025:03:01 10:00:00");
+  CHECK (lib_watch_start (l) == 0, "watch: nothing watched");
+  drain (l);
+  cat_groups (c, SRC_PROJECT, &g, &ng);
+  CHECK (ng == 1 && g[0].count == 7, "watch: unwatched, so nothing new");
+  free (g);
+  /* Albums back on (without watching): made again from the files. */
+  CHECK (cat_project_set_watching (c, proj, 0, 1) == 0 && cat_sync_folder_albums (c, proj) == 0
+         && folder_count (c, proj, "2025", 1) == 2, "watch: albums from folders again");
+  lib_close (l);
+}
+
+/* --- lazy thumbnails: only the ones asked for; and they go with their photos */
+static cat_id first_made;
+static void note_made (void *ctx, cat_id v)
+{
+  (void) ctx;
+  if (!first_made)
+    first_made = v;
+}
+
+static void test_lazy_thumbs (void)
+{
+  library *l;
+  char err[256], path[1024], libdir[1024], th[1100];
+  cat_item *items;
+  int n, k, made = 0, guard = 0;
+  fsys_entry e;
+  cat_source all = { SRC_ALL, 0, 0, "" };
+  p (libdir, "LazyLibrary");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "lazy: library");
+  lib_set_lazy_thumbs (l, 1);
+  p (path, "Watched");                   /* test_watch's photos */
+  lib_import (l, path);
+  clock_cs = 0;
+  while (lib_busy (l) && !lib_background_only (l) && guard++ < 100000)
+    lib_work (l, fake_now, clock_cs + 3, NULL, NULL);
+  CHECK (lib_background_only (l), "lazy: imported, only thumbnails nobody is looking at left");
+  cat_list (lib_cat (l), &all, &items, &n);
+  for (k = 0; k < n; k++)
+    made += items[k].thumb_state == THUMB_READY;
+  CHECK (n >= 5 && made < n, "lazy: not all made yet");
+  if (n >= 5)
+    {
+      /* The last one comes on screen: made next, before the rest. */
+      cat_id last = items[n - 1].id;
+      lib_want_thumb (l, last);
+      lib_want_thumb (l, last);          /* asked twice: made once */
+      CHECK (!lib_background_only (l), "lazy: one on screen wanted");
+      first_made = 0;
+      guard = 0;
+      while (!first_made && guard++ < 100000)
+        lib_work (l, fake_now, clock_cs + 3, note_made, NULL);
+      CHECK (first_made == last, "lazy: the one on screen made first");
+      CHECK (lib_background_only (l) || !lib_busy (l), "lazy: then back to the background");
+      drain (l);
+      free (items);
+      cat_list (lib_cat (l), &all, &items, &n);
+      made = 0;
+      for (k = 0; k < n; k++)
+        made += items[k].thumb_state == THUMB_READY;
+      CHECK (made == n && !lib_busy (l), "lazy: the rest made in the background");
+      lib_thumb_path (l, items[1].id, th, sizeof th);
+      CHECK (fsys_stat (th, &e) == 0, "lazy: its file is in the library's Thumbs");
+      CHECK (strncmp (th, libdir, strlen (libdir)) == 0, "lazy: inside the library's own directory");
+      CHECK (lib_remove (l, &items[1].id, 1) == 0 && fsys_stat (th, &e) != 0, "removed from the library: its thumbnail goes too");
+    }
+  free (items);
+  lib_close (l);
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -1137,6 +1298,8 @@ int main (int argc, char **argv)
   make_fixtures ();
   test_library ();
   test_time_slicing ();
+  test_watch ();
+  test_lazy_thumbs ();
   printf ("test_core: %d checks, %d failed\n", checks, fails);
   return fails != 0;
 }

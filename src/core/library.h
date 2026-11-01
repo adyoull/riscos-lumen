@@ -25,6 +25,21 @@ const char *lib_root (library *l);
    directories are skipped) for import. 0 if queued. */
 int lib_import (library *l, const char *path);
 
+/* Folders imported from now on are watched, and/or get albums from the
+   folders inside them (Choices). */
+void lib_set_new_folders (library *l, int watch, int folder_albums);
+/* Looks through the watched folders again (queued as quiet imports into
+   their own projects; unchanged files aren't read). The number watched. */
+int lib_watch_start (library *l);
+
+/* Thumbnails on screen first: the ones asked for with lib_want_thumb (the
+   photos on screen) are made first, the latest first, and then the rest.
+   The front end decides when there is time for them. */
+void lib_set_lazy_thumbs (library *l, int lazy);
+void lib_want_thumb (library *l, cat_id version);
+/* All that is left to do is thumbnails no one is looking at yet. */
+int lib_background_only (library *l);
+
 /* Anything left to do? */
 int lib_busy (library *l);
 
@@ -44,6 +59,8 @@ typedef struct
   int found, added, skipped;   /* this import: images found, new, already there or unreadable */
   int relinked;                /* already known, but missing from their old place: found again here */
   int thumbs_pending;
+  int watched_only;            /* this import is only of watched folders (a routine look) */
+  char what[200];              /* this import: the first file or folder's name */
 } lib_progress;
 void lib_get_progress (library *l, lib_progress *p);
 
@@ -56,6 +73,9 @@ void lib_thumb_path (library *l, cat_id version, char *out, size_t n);
 void lib_verify_start (library *l);
 int lib_verifying (library *l);
 int lib_verify_step (library *l, unsigned (*now) (void), unsigned deadline);
+/* The last (or current) check: originals looked at, gone since the last
+   check, and back again. */
+void lib_verify_counts (library *l, int *checked, int *gone, int *back);
 
 /* Thumbnails that failed are tried again (the raw plug-in is installed now). */
 void lib_retry_failed_thumbs (library *l);

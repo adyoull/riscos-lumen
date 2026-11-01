@@ -12,11 +12,13 @@
 #define HEAD_BYTES (128 * 1024)       /* enough for EXIF in nearly every camera's files */
 #define HASH_BYTES (64 * 1024)
 #define ROWS_PER_STEP 16
+#define LIB_WANT_MAX 256
 
 typedef struct root_req
 {
   struct root_req *next;
   char path[1024];
+  cat_id project;                      /* a watched project's folder; 0: a project named after it */
 } root_req;
 
 struct library
@@ -32,6 +34,7 @@ struct library
   cat_id project;
   long long batch;
   int found, added, skipped, importing, relinked;
+  int watch_new, albums_new;           /* folders imported from now on are watched / get folder albums */
   /* checking that originals are still there */
   int verifying;
   cat_id verify_after;
@@ -42,6 +45,16 @@ struct library
   char tg_recipe[2048];               /* applied when the thumbnail is finished */
   char tg_dst[1100];
   int thumbs_pending;                 /* cached count; -1 to recount */
+  /* Thumbnails on screen first: the ones asked for (the photos on screen),
+     newest request first, then the rest. The front end decides when (and
+     how much) to call lib_work. */
+  int lazy;
+  int tg_wanted;
+  int watched_only;
+  char what[200];
+  int checked, gone_now, back_now;                      /* the one being made was asked for */
+  cat_id want[LIB_WANT_MAX];
+  int nwant;
   unsigned char shard_made[256];
   char err[256];
 };
@@ -95,11 +108,19 @@ void lib_verify_start (library *l)
   char path[1024];
   int missing;
   l->verify_after = 0;
+  l->checked = l->gone_now = l->back_now = 0;
   /* Nothing to check in an empty library: no idle time wanted. */
   l->verifying = cat_original_next (l->db, 0, &id, path, sizeof path, &missing) == 1;
 }
 
 int lib_verifying (library *l) { return l->verifying; }
+
+void lib_verify_counts (library *l, int *checked, int *gone, int *back)
+{
+  *checked = l->checked;
+  *gone = l->gone_now;
+  *back = l->back_now;
+}
 
 int lib_verify_step (library *l, unsigned (*now) (void), unsigned deadline)
 {
@@ -117,9 +138,14 @@ int lib_verify_step (library *l, unsigned (*now) (void), unsigned deadline)
           break;
         }
       l->verify_after = id;
+      l->checked++;
       gone = fsys_stat (path, &e) != 0;
       if (gone != missing)
         {
+          if (gone)
+            l->gone_now++;
+          else
+            l->back_now++;
           cat_set_missing (l->db, id, gone);
           changed = 1;
         }
@@ -152,12 +178,13 @@ cat *lib_cat (library *l) { return l->db; }
 const char *lib_root (library *l) { return l->root; }
 const char *lib_last_error (library *l) { return l->err; }
 
-int lib_import (library *l, const char *path)
+static int queue_root (library *l, const char *path, cat_id project)
 {
   root_req *r = calloc (1, sizeof *r);
   if (!r)
     return -1;
   snprintf (r->path, sizeof r->path, "%s", path);
+  r->project = project;
   if (l->roots_tail)
     l->roots_tail->next = r;
   else
@@ -166,9 +193,81 @@ int lib_import (library *l, const char *path)
   return 0;
 }
 
+int lib_import (library *l, const char *path)
+{
+  return queue_root (l, path, 0);
+}
+
+void lib_set_new_folders (library *l, int watch, int folder_albums)
+{
+  l->watch_new = watch;
+  l->albums_new = folder_albums;
+}
+
+int lib_watch_start (library *l)
+{
+  cat_watch *w;
+  int n = 0, k;
+  root_req *r;
+  if (cat_watched (l->db, &w, &n))
+    return 0;
+  for (k = 0; k < n; k++)
+    {
+      /* Not if it is waiting already (a slow disc, a long import). */
+      for (r = l->roots; r; r = r->next)
+        if (r->project == w[k].project)
+          break;
+      if (!r)
+        queue_root (l, w[k].root, w[k].project);
+    }
+  free (w);
+  return n;
+}
+
+void lib_set_lazy_thumbs (library *l, int lazy)
+{
+  l->lazy = lazy;
+  l->thumbs_pending = -1;
+}
+
+void lib_want_thumb (library *l, cat_id v)
+{
+  int k;
+  if (!l->lazy || v <= 0 || (l->tg && l->tg_version == v))
+    return;
+  for (k = 0; k < l->nwant; k++)
+    if (l->want[k] == v)
+      {
+        /* Asked again: to the front (it is on screen now). */
+        memmove (&l->want[k], &l->want[k + 1], sizeof *l->want * (size_t) (l->nwant - k - 1));
+        l->want[l->nwant - 1] = v;
+        return;
+      }
+  if (l->nwant == LIB_WANT_MAX)
+    {
+      /* The oldest request goes: it has scrolled out of sight long ago. */
+      memmove (&l->want[0], &l->want[1], sizeof *l->want * (LIB_WANT_MAX - 1));
+      l->nwant--;
+    }
+  l->want[l->nwant++] = v;
+}
+
+int lib_background_only (library *l)
+{
+  if (!l->lazy || l->roots || l->nstack || l->dir || l->nwant > 0)
+    return 0;
+  if (l->tg)
+    return !l->tg_wanted;
+  if (l->thumbs_pending < 0)
+    l->thumbs_pending = cat_count_thumbs_pending (l->db);
+  return l->thumbs_pending > 0;
+}
+
 int lib_busy (library *l)
 {
   if (l->roots || l->nstack || l->dir || l->tg)
+    return 1;
+  if (l->lazy && l->nwant > 0)
     return 1;
   if (l->thumbs_pending < 0)
     l->thumbs_pending = cat_count_thumbs_pending (l->db);
@@ -182,6 +281,8 @@ void lib_get_progress (library *l, lib_progress *p)
   p->added = l->added;
   p->skipped = l->skipped;
   p->relinked = l->relinked;
+  p->watched_only = l->watched_only;
+  snprintf (p->what, sizeof p->what, "%s", l->what);
   if (l->thumbs_pending < 0)
     l->thumbs_pending = cat_count_thumbs_pending (l->db);
   p->thumbs_pending = l->thumbs_pending;
@@ -275,6 +376,23 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   unsigned long long h = 14695981039346656037ULL;
   if (!likely_image_type (e->filetype, path))
     return;
+  {
+    /* Known and unchanged: nothing to read (looking through a watched
+       folder again is quick). Back in its place if it was missing. */
+    cat_id orig;
+    int missing;
+    if (cat_known_file (l->db, path, e->size, e->mtime, &orig, &missing))
+      {
+        if (missing)
+          {
+            cat_set_missing (l->db, orig, 0);
+            l->relinked++;
+          }
+        else
+          l->skipped++;                /* already there */
+        return;
+      }
+  }
   f = fopen (path, "rb");
   if (!f)
     {
@@ -406,18 +524,33 @@ static int import_step (library *l)
         l->roots_tail = NULL;
       if (!l->importing)
         {
-          l->found = l->added = l->skipped = 0;
+          l->found = l->added = l->skipped = l->relinked = 0;
           l->importing = 1;
+          l->watched_only = 1;
+          snprintf (l->what, sizeof l->what, "%s", fsys_leaf (r->path));
           l->batch = (long long) time (NULL) * 100 + (++counter % 100);
         }
+      if (!r->project)
+        l->watched_only = 0;
       if (fsys_stat (r->path, &e) != 0)
         {
-          snprintf (l->err, sizeof l->err, "Can't find %s", r->path);
+          if (!r->project)              /* a watched folder's disc may simply be away */
+            snprintf (l->err, sizeof l->err, "Can't find %s", r->path);
           l->project = 0;
         }
       else if (e.is_dir)
         {
-          l->project = cat_project_ensure (l->db, fsys_leaf (r->path));
+          if (r->project)
+            l->project = r->project;   /* a watched folder: into its own project, whatever it is called now */
+          else
+            {
+              int watch = 0, albums = 0;
+              l->project = cat_project_ensure (l->db, fsys_leaf (r->path));
+              cat_project_set_root (l->db, l->project, r->path);
+              cat_project_watching (l->db, l->project, &watch, &albums);
+              if ((l->watch_new && !watch) || (l->albums_new && !albums))
+                cat_project_set_watching (l->db, l->project, watch || l->watch_new, albums || l->albums_new);
+            }
           push_dir (l, r->path);
         }
       else
@@ -435,6 +568,7 @@ static int import_step (library *l)
     {
       l->importing = 0;
       cat_tidy (l->db);                  /* a project made for photos that were all relinked */
+      cat_sync_all_folder_albums (l->db);   /* folder albums follow what came in (and what moved) */
       return 1;                          /* finished: the counts are final */
     }
   return -1;
@@ -447,12 +581,32 @@ static int import_step (library *l)
 static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
 {
   int r;
+  if (l->tg && l->lazy && !l->tg_wanted && l->nwant > 0)
+    {
+      /* A photo has come on screen: put the background one down (it is
+         still wanted, so it is picked up again later). */
+      thumbgen_free (l->tg);
+      l->tg = NULL;
+    }
   if (!l->tg)
     {
       char src[1024], dst[1100], e[200];
-      int orient = 1;
-      cat_id v;
-      if (cat_next_thumb (l->db, &v, src, sizeof src, &orient, l->tg_recipe, sizeof l->tg_recipe) != 1)
+      int orient = 1, found = 0;
+      cat_id v = 0;
+      l->tg_wanted = 0;
+      if (l->lazy)
+        {
+          /* The newest request that still needs one. */
+          while (l->nwant > 0 && !found)
+            {
+              v = l->want[--l->nwant];
+              found = cat_thumb_source (l->db, v, src, sizeof src, &orient, l->tg_recipe, sizeof l->tg_recipe) == 1;
+            }
+          l->tg_wanted = found;
+        }
+      if (found)
+        ;
+      else if (cat_next_thumb (l->db, &v, src, sizeof src, &orient, l->tg_recipe, sizeof l->tg_recipe) != 1)
         {
           l->thumbs_pending = 0;
           return -1;

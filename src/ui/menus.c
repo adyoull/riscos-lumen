@@ -394,16 +394,17 @@ static menu *build_iconbar_menu (void)
   menu *m, *plugm;
   used = 0;
   plugm = build_plugins_menu ();
-  m = new_menu (APP_NAME, 7);
+  m = new_menu (APP_NAME, 8);
   if (m)
     {
       set_item (m, 0, 0, "Info", 0, info_window, info_window == -1);
       set_item (m, 1, 0, "Help...", 0, -1, 0);
       set_item (m, 2, 0, "User guide", MF_DOTTED, -1, 0);
-      set_item (m, 3, 0, "Open library", MF_DOTTED, -1, 0);
-      set_item (m, 4, 0, "Choices...", 0, -1, 0);
-      set_item (m, 5, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
-      set_item (m, 6, 1, "Quit", 0, -1, 0);
+      set_item (m, 3, 0, "Open library", 0, -1, 0);
+      set_item (m, 4, 0, "Activity...", MF_DOTTED, -1, 0);
+      set_item (m, 5, 0, "Choices...", 0, -1, 0);
+      set_item (m, 6, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
+      set_item (m, 7, 1, "Quit", 0, -1, 0);
     }
   return m;
 }
@@ -522,12 +523,38 @@ static menu *build_group_menu (void)
   menu *m, *ren;
   used = 0;
   ren = writable_menu ("Name", group_name, sizeof group_name);
-  m = new_menu (group_kind == SRC_ALBUM ? "Album" : "Project", 2);
-  if (m)
+  if (group_kind == SRC_ALBUM && cat_album_is_folder (lib_cat (app_library ()), group_id))
     {
-      set_item (m, 0, 0, "Rename", 0, (int) ren, 0);
-      set_item (m, 1, 1, group_kind == SRC_ALBUM ? "Delete album..." : "Remove project from library...", 0, -1, 0);
+      /* Made from a folder: it follows the folder, so nothing to change here. */
+      m = new_menu ("Folder", 1);
+      if (m)
+        set_item (m, 0, 1, "Follows its folder", 0, -1, 1);
+      return m;
     }
+  if (group_kind == SRC_ALBUM)
+    {
+      m = new_menu ("Album", 2);
+      if (m)
+        {
+          set_item (m, 0, 0, "Rename", 0, (int) ren, 0);
+          set_item (m, 1, 1, "Delete album...", 0, -1, 0);
+        }
+      return m;
+    }
+  {
+    int w = 0, al = 0;
+    char root[1024];
+    int has_root = cat_project_root (lib_cat (app_library ()), group_id, root, sizeof root) == 0;
+    cat_project_watching (lib_cat (app_library ()), group_id, &w, &al);
+    m = new_menu ("Project", 4);
+    if (m)
+      {
+        set_item (m, 0, 0, "Rename", MF_DOTTED, (int) ren, 0);
+        set_item (m, 1, 0, "Watch for new photos", w ? MF_TICK : 0, -1, !has_root);
+        set_item (m, 2, 0, "Albums from its folders", (al ? MF_TICK : 0) | MF_DOTTED, -1, !has_root);
+        set_item (m, 3, 1, "Remove project from library...", 0, -1, 0);
+      }
+  }
   return m;
 }
 
@@ -557,6 +584,21 @@ static void group_choice (const int *c)
       browser_update_title ();
       mainwin_library_changed ();
     }
+  else if (group_kind == SRC_PROJECT && (c[0] == 1 || c[0] == 2))
+    {
+      int w = 0, al = 0;
+      cat_project_watching (db, group_id, &w, &al);
+      if (c[0] == 1)
+        w = !w;
+      else
+        al = !al;
+      if (cat_project_set_watching (db, group_id, w, al))
+        app_report (cat_error (db));
+      if (al)
+        cat_sync_folder_albums (db, group_id);
+      app_watch_now ();                /* look now (and count what is watched) */
+      mainwin_library_changed ();
+    }
   else if (c[0] == 1 && group_kind == SRC_ALBUM)
     {
       snprintf (q, sizeof q, "Delete the album \"%s\"? Its photos stay in the library.", name);
@@ -573,7 +615,7 @@ static void group_choice (const int *c)
           mainwin_library_changed ();
         }
     }
-  else if (c[0] == 1)
+  else if (c[0] == 3 && group_kind == SRC_PROJECT)
     {
       cat_id *ids;
       int n;
@@ -792,10 +834,12 @@ int menus_selection (const int *choice)
       else if (choice[0] == 3)
         mainwin_open (NULL);
       else if (choice[0] == 4)
-        choicewin_open ();
+        activitywin_open ();
       else if (choice[0] == 5)
-        plugins_choice (choice + 1);
+        choicewin_open ();
       else if (choice[0] == 6)
+        plugins_choice (choice + 1);
+      else if (choice[0] == 7)
         quit_requested = 1;
     }
   if (quit_requested)
@@ -862,7 +906,7 @@ const char *menus_help (int window, int icon)
     n = MAX_LIST;
   base = n ? n : 1;
   /* The Plug-ins submenu, from the icon bar menu (2) or the window menu (4). */
-  if ((which == 2 && c[0] == 5) || (which == 1 && c[0] == 4))
+  if ((which == 2 && c[0] == 6) || (which == 1 && c[0] == 4))
     {
       if (c[1] < 0)
         return "Lumen's plug-ins: switch them on or off, add or remove them.";
@@ -882,8 +926,9 @@ const char *menus_help (int window, int icon)
       case 1: return "Shows Lumen's short help file.";
       case 2: return "Opens the Lumen User Guide in your web browser.";
       case 3: return "Opens Lumen's window.";
-      case 4: return "Where the library is, how exports and thumbnails start, and checking for missing files.";
-      case 6: return "Leaves Lumen. Everything is saved as you go.";
+      case 4: return "What Lumen is doing now and what it has done: imports, thumbnails, exports, watched folders.";
+      case 5: return "Where the library is, how exports and thumbnails start, and checking for missing files.";
+      case 7: return "Leaves Lumen. Everything is saved as you go.";
       }
   if (which == 1)
     switch (c[0])
@@ -901,5 +946,18 @@ const char *menus_help (int window, int icon)
       }
   if (which == 3)
     return "What can be done to this photo. Many have keys, shown beside them.";
+  if (which == 7)
+    switch (c[0])
+      {
+      case 0: return group_kind == SRC_ALBUM && cat_album_is_folder (lib_cat (app_library ()), group_id)
+                     ? "This album is made from a folder: it holds the photos in that folder and the folders inside it, "
+                       "and follows them as they change."
+                     : "Gives it a new name.";
+      case 1: return group_kind == SRC_PROJECT ? "Ticked: Lumen looks in this project's folder for new photos at start, "
+                                                 "when its window opens and every few minutes (Choices)."
+                                               : "Deletes the album. Its photos stay in the library.";
+      case 2: return "Ticked: each folder inside this project's folder is an album, under the project in the Library tab.";
+      case 3: return "Takes the project and its photos out of the library, after asking. The files aren't touched.";
+      }
   return "";
 }

@@ -438,6 +438,8 @@ static void draw_cell (int i, int ox, int oy)
   by1 = y1 - 16; by0 = by1 - box ();
   /* A thumbnail being made again (after an edit) keeps showing the old one. */
   s = thumbcache_get (it->id, it->thumb_state == THUMB_READY);
+  if (it->thumb_state == THUMB_NONE)
+    lib_want_thumb (app_library (), it->id);   /* on screen: made now (thumbnails are made lazily) */
   if (selected || i == focus)
     {
       /* Highlight up to just above the photo, not the empty box above a wide one. */

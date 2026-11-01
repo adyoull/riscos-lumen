@@ -96,6 +96,12 @@ static const _kernel_oserror *swi (int n, int r[10])
     case Wimp_SetCaretPosition:
       caret = r[0];
       return NULL;
+    case Wimp_GetCaretPosition:
+      b[0] = caret;
+      b[1] = -1;
+      b[2] = b[3] = 0;
+      b[4] = b[5] = -1;
+      return NULL;
     case Wimp_TextOp:
       if ((r[0] & 0xFF) == 1)
         {
@@ -204,7 +210,7 @@ static void fakes (void)
 {
   static const int list[] = {
     Wimp_Initialise, Wimp_CreateIcon, Wimp_CreateWindow, Wimp_OpenWindow, Wimp_GetWindowState,
-    Wimp_SetExtent, Wimp_ForceRedraw, Wimp_SetCaretPosition, Wimp_RedrawWindow, Wimp_GetRectangle,
+    Wimp_SetExtent, Wimp_ForceRedraw, Wimp_SetCaretPosition, Wimp_GetCaretPosition, Wimp_RedrawWindow, Wimp_GetRectangle,
     Wimp_TextOp, Wimp_SendMessage, Wimp_CreateMenu, Wimp_GetPointerInfo, Wimp_ProcessKey,
     Wimp_ReportError, Wimp_CloseWindow, Wimp_CloseDown, OS_ReadModeVariable, ColourTrans_SetGCOL,
     ColourTrans_SelectTable, OS_Plot, OS_SpriteOp, OS_ReadMonotonicTime };

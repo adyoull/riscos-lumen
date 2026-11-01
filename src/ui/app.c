@@ -19,6 +19,8 @@
 static int task;
 static library *lib;
 static unsigned last_reload, last_title;
+static unsigned last_watch;            /* when the watched folders were last looked through */
+static int nwatched = -1;              /* how many there are (-1: not counted yet) */
 static int list_dirty;
 
 library *app_library (void) { return lib; }
@@ -36,6 +38,7 @@ void app_report (const char *msg)
   _kernel_oserror e;
   e.errnum = 0;
   snprintf (e.errmess, sizeof e.errmess, "%s", msg);
+  activity_log (ACT_PROBLEM, "%s", msg);
   _swix (Wimp_ReportError, _INR (0, 2), &e, 1, APP_NAME);
 }
 
@@ -221,6 +224,7 @@ int app_set_prefs (const prefs *p)
       return -1;
     }
   the_prefs = *p;
+  lib_set_new_folders (lib, p->watch_new, p->albums_new);
   browser_set_size (p->thumb_size);
   mainwin_status_changed ();
   exportbox_use_prefs (p);
@@ -449,8 +453,9 @@ int app_init (const char *library_path)
     }
   if (!prefs_path[0])
     app_load_prefs ();
+  activity_init ();
   if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ()
-      || plugwin_create () || choicewin_create ())
+      || plugwin_create () || choicewin_create () || activitywin_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       close_down ();
@@ -460,6 +465,8 @@ int app_init (const char *library_path)
   if (the_prefs.thumb_size != browser_size ())
     browser_set_size (the_prefs.thumb_size);
   exportbox_use_prefs (&the_prefs);
+  lib_set_lazy_thumbs (lib, 1);        /* thumbnails for what is on screen first */
+  lib_set_new_folders (lib, the_prefs.watch_new, the_prefs.albums_new);
   app_plugins_rescan ();               /* also retries raw files imported before the plug-in was installed */
   mainwin_open (NULL);
   return 0;
@@ -481,13 +488,66 @@ int app_busy (void)
 static void thumb_made (void *ctx, cat_id v)
 {
   (void) ctx;
+  activity_thumb_made ();
   browser_thumb_ready (v);
+}
+
+/* Looks through the watched folders now (at start, when the window opens
+   again, and every so many minutes). */
+void app_watch_now (void)
+{
+  last_watch = app_now ();
+  nwatched = lib_watch_start (lib);
+}
+
+/* When Lumen next wants a null event though it has nothing to do: the
+   next look at the watched folders. 0 if never. */
+int app_next_wake (unsigned *when)
+{
+  if (!lib || the_prefs.watch_minutes <= 0)
+    return 0;
+  if (nwatched < 0)
+    {
+      cat_watch *w;
+      int n = 0;
+      if (cat_watched (lib_cat (lib), &w, &n) == 0)
+        free (w);
+      nwatched = n;
+    }
+  if (nwatched == 0)
+    return 0;
+  *when = last_watch + (unsigned) the_prefs.watch_minutes * 6000u;
+  return 1;
+}
+
+/* Lumen is in front: one of its windows has the input focus. */
+int app_has_focus (void)
+{
+  int c[6];
+  if (_swix (Wimp_GetCaretPosition, _IN (1), c) || c[0] == -1)
+    return 0;
+  return c[0] == mainwin_window () || c[0] == browser_window () || c[0] == viewer_window ()
+         || c[0] == mainwin_inspector ();
+}
+
+/* Only thumbnails nobody is looking at are left to make, and Lumen isn't
+   in front: Lumen makes them a little at a time and gives the rest of the
+   desktop the computer in between (Wimp_PollIdle until *when). */
+int app_background_wait (unsigned *when)
+{
+  if (!lib || viewer_busy () || thumbcache_pending () || exports_busy () || rawjob_busy ()
+      || !lib_background_only (lib) || app_has_focus ())
+    return 0;
+  *when = app_now () + 4;
+  return 1;
 }
 
 static void idle (void)
 {
-  unsigned start, deadline;
+  unsigned start, deadline, wake;
   int changed;
+  if (app_next_wake (&wake) && (int) (app_now () - wake) >= 0 && !lib_busy (lib))
+    app_watch_now ();
   /* The photo being edited comes first. */
   if (viewer_busy ())
     viewer_idle ();
@@ -517,9 +577,16 @@ static void idle (void)
       browser_update_title ();
       return;
     }
+  /* Thumbnails off screen while another program is in front: a short
+     slice (main gives the others the time between slices). */
+  if (lib_background_only (lib) && !app_has_focus ())
+    deadline = start + 1;
   changed = lib_work (lib, app_now, deadline, thumb_made, NULL);
   if (changed & LIB_LIST_CHANGED)
-    list_dirty = 1;
+    {
+      list_dirty = 1;
+      nwatched = -1;                   /* an import may have added a watched folder */
+    }
   /* Reload the list at most twice a second while importing: reading it
      back is the slow part on a large library. */
   if (list_dirty && ((int) (app_now () - last_reload) > 50 || !lib_busy (lib)))
@@ -601,7 +668,19 @@ static int app_key (int key)
   return viewer_key (key) || browser_key (key);
 }
 
+static int app_event_1 (int reason, int *b, int sender);
+
+/* Every event; then the status area and the Activity window catch up with
+   what is going on (jobs started and finished go into the history). */
 int app_event (int reason, int *b, int sender)
+{
+  int r = app_event_1 (reason, b, sender);
+  if (!r && reason != Redraw_Window_Request)
+    activity_tick ();
+  return r;
+}
+
+static int app_event_1 (int reason, int *b, int sender)
 {
   (void) sender;
   switch (reason)
@@ -618,6 +697,8 @@ int app_event (int reason, int *b, int sender)
         mainwin_inspector_redraw (b);
       else if (b[0] == viewer_window ())
         viewer_redraw (b);
+      else if (b[0] == activitywin_window ())
+        activitywin_redraw (b);
       else
         {
           int more = 0;
@@ -641,6 +722,11 @@ int app_event (int reason, int *b, int sender)
     case Close_Window_Request:
       if (b[0] == mainwin_window ())
         mainwin_close ();
+      else if (b[0] == activitywin_window ())
+        {
+          activitywin_closed ();
+          _swix (Wimp_CloseWindow, _IN (1), b);
+        }
       else
         _swix (Wimp_CloseWindow, _IN (1), b);
       break;
@@ -666,6 +752,8 @@ int app_event (int reason, int *b, int sender)
         plugwin_click (b);
       else if (b[3] == choicewin_window ())
         choicewin_click (b);
+      else if (b[3] == activitywin_window ())
+        activitywin_click (b);
       break;
     case User_Drag_Box:
       if (exportbox_dragging ())

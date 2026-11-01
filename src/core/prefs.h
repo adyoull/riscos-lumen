@@ -12,6 +12,9 @@ typedef struct
   int export_size;                     /* longer side, 0 = full size */
   int thumb_size;                      /* 0 small, 1 medium, 2 large */
   int verify;                          /* check originals are still there at start */
+  int watch_new;                       /* folders imported are watched for new photos */
+  int albums_new;                      /* and get albums from the folders inside them */
+  int watch_minutes;                   /* how often watched folders are looked through (0: only at start) */
 } prefs;
 
 void prefs_default (prefs *p);

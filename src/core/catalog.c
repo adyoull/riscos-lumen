@@ -74,6 +74,15 @@ static int upgrade (cat *c)
   if (v < 2 && exec (c, "ALTER TABLE original ADD COLUMN missing INTEGER NOT NULL DEFAULT 0;"
                         "UPDATE meta SET value = 2 WHERE key = 'schema';"))
     return -1;
+  /* Schema 3 (0.0.19): a project's folder, whether it is watched and has
+     albums from its folders; a folder album's project and folder. */
+  if (v < 3 && exec (c, "ALTER TABLE project ADD COLUMN root TEXT;"
+                        "ALTER TABLE project ADD COLUMN watch INTEGER NOT NULL DEFAULT 0;"
+                        "ALTER TABLE project ADD COLUMN folder_albums INTEGER NOT NULL DEFAULT 0;"
+                        "ALTER TABLE album ADD COLUMN project INTEGER;"
+                        "ALTER TABLE album ADD COLUMN folder TEXT;"
+                        "UPDATE meta SET value = 3 WHERE key = 'schema';"))
+    return -1;
   return 0;
 }
 
@@ -364,7 +373,11 @@ int cat_retry_failed_thumbs (cat *c)
 
 int cat_tidy (cat *c)
 {
-  return exec (c, "DELETE FROM project WHERE id NOT IN (SELECT DISTINCT project FROM version)");
+  /* Empty projects go, and with them their folder albums. */
+  return exec (c, "DELETE FROM project WHERE id NOT IN (SELECT DISTINCT project FROM version);"
+                  "DELETE FROM album_item WHERE album IN (SELECT id FROM album WHERE folder IS NOT NULL"
+                  "  AND project NOT IN (SELECT id FROM project));"
+                  "DELETE FROM album WHERE folder IS NOT NULL AND project NOT IN (SELECT id FROM project)");
 }
 
 int cat_count_missing (cat *c)
@@ -658,6 +671,25 @@ int cat_next_thumb (cat *c, cat_id *version, char *path, size_t n, int *orientat
   return r;
 }
 
+int cat_thumb_source (cat *c, cat_id version, char *path, size_t n, int *orientation, char *recipe, size_t rn)
+{
+  sqlite3_stmt *s = prep (c, "SELECT o.path, o.orientation, v.recipe FROM version v"
+                             " JOIN original o ON o.id = v.original WHERE v.id = ?1 AND v.thumb = 0");
+  int r = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, version);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    {
+      snprintf (path, n, "%s", (const char *) sqlite3_column_text (s, 0));
+      *orientation = sqlite3_column_int (s, 1);
+      snprintf (recipe, rn, "%s", sqlite3_column_text (s, 2) ? (const char *) sqlite3_column_text (s, 2) : "");
+      r = 1;
+    }
+  sqlite3_finalize (s);
+  return r;
+}
+
 int cat_set_thumb (cat *c, cat_id version, int state)
 {
   sqlite3_stmt *s = prep (c, "UPDATE version SET thumb = ?2 WHERE id = ?1");
@@ -809,7 +841,7 @@ int cat_groups (cat *c, int kind, cat_group **out, int *count)
       ? "SELECT p.id, p.name, (SELECT COUNT(*) FROM version v WHERE v.project = p.id AND v.rating >= 0)"
         " FROM project p ORDER BY p.name COLLATE NOCASE"
       : "SELECT a.id, a.name, (SELECT COUNT(*) FROM album_item i WHERE i.album = a.id)"
-        " FROM album a ORDER BY a.name COLLATE NOCASE, a.id");
+        " FROM album a WHERE a.folder IS NULL ORDER BY a.name COLLATE NOCASE, a.id");
   int n = 0, cap = 32;
   cat_group *g;
   if (!s)
@@ -883,6 +915,352 @@ int cat_get_details (cat *c, cat_id version, cat_details *d)
       d->original = sqlite3_column_int64 (s, 13);
       r = 0;
     }
+  sqlite3_finalize (s);
+  return r;
+}
+
+/* --- projects' folders: watching them, and albums from their layout */
+
+static char sep_of (const char *path)
+{
+  const char *leaf = fsys_leaf (path);
+  return leaf > path ? leaf[-1] : '.';
+}
+
+int cat_project_set_root (cat *c, cat_id project, const char *root)
+{
+  sqlite3_stmt *s = prep (c, "UPDATE project SET root = ?2 WHERE id = ?1 AND root IS NULL");
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, project);
+  sqlite3_bind_text (s, 2, root, -1, SQLITE_TRANSIENT);
+  sqlite3_step (s);
+  sqlite3_finalize (s);
+  return 0;
+}
+
+int cat_project_root (cat *c, cat_id project, char *out, size_t n)
+{
+  sqlite3_stmt *s = prep (c, "SELECT root FROM project WHERE id = ?1");
+  out[0] = '\0';
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, project);
+  if (sqlite3_step (s) == SQLITE_ROW && sqlite3_column_type (s, 0) != SQLITE_NULL)
+    col_text (s, 0, out, n);
+  sqlite3_finalize (s);
+  if (out[0])
+    return 0;
+  /* Imported before Lumen kept it: the directory all its photos are in. */
+  s = prep (c, "SELECT o.path FROM version v JOIN original o ON o.id = v.original WHERE v.project = ?1");
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, project);
+  while (sqlite3_step (s) == SQLITE_ROW)
+    {
+      const char *p = (const char *) sqlite3_column_text (s, 0);
+      size_t l = (size_t) (fsys_leaf (p) - p);
+      if (!p || l < 2)
+        continue;
+      if (!out[0])
+        {
+          if (l - 1 < n)
+            {
+              memcpy (out, p, l - 1);
+              out[l - 1] = '\0';
+            }
+        }
+      else
+        {
+          /* The common part, back to a whole directory name. */
+          size_t k = 0, ol = strlen (out), dl = l - 1;
+          char sep = sep_of (p);
+          while (k < ol && k < dl && out[k] == p[k])
+            k++;
+          if (!(k == ol && (k == dl || p[k] == sep)))
+            {
+              if (!(k == dl && out[k] == sep))
+                while (k > 0 && out[k] != sep)
+                  k--;
+              out[k] = '\0';
+            }
+        }
+    }
+  sqlite3_finalize (s);
+  return out[0] ? 0 : -1;
+}
+
+int cat_project_watching (cat *c, cat_id project, int *watch, int *folder_albums)
+{
+  sqlite3_stmt *s = prep (c, "SELECT watch, folder_albums FROM project WHERE id = ?1");
+  int rc = -1;
+  *watch = *folder_albums = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, project);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    {
+      *watch = sqlite3_column_int (s, 0);
+      *folder_albums = sqlite3_column_int (s, 1);
+      rc = 0;
+    }
+  sqlite3_finalize (s);
+  return rc;
+}
+
+int cat_project_set_watching (cat *c, cat_id project, int watch, int folder_albums)
+{
+  char root[1024];
+  sqlite3_stmt *s;
+  /* Watching needs the folder: kept now, if it wasn't. */
+  if ((watch || folder_albums) && cat_project_root (c, project, root, sizeof root) == 0)
+    cat_project_set_root (c, project, root);
+  s = prep (c, "UPDATE project SET watch = ?2, folder_albums = ?3 WHERE id = ?1");
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, project);
+  sqlite3_bind_int (s, 2, watch != 0);
+  sqlite3_bind_int (s, 3, folder_albums != 0);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    {
+      sqlite3_finalize (s);
+      return fail (c, "project");
+    }
+  sqlite3_finalize (s);
+  return folder_albums ? 0 : cat_sync_folder_albums (c, project);
+}
+
+int cat_watched (cat *c, cat_watch **out, int *count)
+{
+  sqlite3_stmt *s = prep (c, "SELECT id, root FROM project WHERE watch = 1 AND root IS NOT NULL ORDER BY id");
+  int n = 0, cap = 8;
+  cat_watch *w;
+  *out = NULL;
+  *count = 0;
+  if (!s)
+    return -1;
+  w = malloc (sizeof *w * cap);
+  while (w && sqlite3_step (s) == SQLITE_ROW)
+    {
+      if (n == cap)
+        {
+          cat_watch *x = realloc (w, sizeof *w * cap * 2);
+          if (!x)
+            break;
+          w = x;
+          cap *= 2;
+        }
+      w[n].project = sqlite3_column_int64 (s, 0);
+      col_text (s, 1, w[n].root, sizeof w[n].root);
+      n++;
+    }
+  sqlite3_finalize (s);
+  *out = w;
+  *count = n;
+  return w ? 0 : -1;
+}
+
+int cat_known_file (cat *c, const char *path, long long size, long long mtime, cat_id *original, int *missing)
+{
+  sqlite3_stmt *s = prep (c, "SELECT id, missing FROM original WHERE path = ?1 AND size = ?2 AND mtime = ?3");
+  int found = 0;
+  if (!s)
+    return 0;
+  sqlite3_bind_text (s, 1, path, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64 (s, 2, size);
+  sqlite3_bind_int64 (s, 3, mtime);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    {
+      found = 1;
+      *original = sqlite3_column_int64 (s, 0);
+      *missing = sqlite3_column_int (s, 1);
+    }
+  sqlite3_finalize (s);
+  return found;
+}
+
+/* One folder album (project, folder): its id, made if need be. */
+static cat_id folder_album (cat *c, cat_id project, const char *folder, const char *name)
+{
+  sqlite3_stmt *s = prep (c, "SELECT id FROM album WHERE project = ?1 AND folder = ?2");
+  cat_id id = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, project);
+  sqlite3_bind_text (s, 2, folder, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    id = sqlite3_column_int64 (s, 0);
+  sqlite3_finalize (s);
+  if (id)
+    return id;
+  s = prep (c, "INSERT INTO album (name, created, project, folder) VALUES (?1, ?2, ?3, ?4)");
+  if (!s)
+    return -1;
+  sqlite3_bind_text (s, 1, name, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64 (s, 2, (sqlite3_int64) time (NULL));
+  sqlite3_bind_int64 (s, 3, project);
+  sqlite3_bind_text (s, 4, folder, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    id = -1;
+  else
+    id = sqlite3_last_insert_rowid (c->db);
+  sqlite3_finalize (s);
+  return id;
+}
+
+int cat_sync_folder_albums (cat *c, cat_id project)
+{
+  char root[1024];
+  int watch = 0, albums = 0, rc = 0;
+  size_t rl;
+  sqlite3_stmt *s, *ins;
+  cat_project_watching (c, project, &watch, &albums);
+  exec (c, "SAVEPOINT folders");
+  /* Every folder album of the project is made again from the files. */
+  s = prep (c, "DELETE FROM album_item WHERE album IN (SELECT id FROM album WHERE project = ?1 AND folder IS NOT NULL)");
+  if (s)
+    {
+      sqlite3_bind_int64 (s, 1, project);
+      sqlite3_step (s);
+      sqlite3_finalize (s);
+    }
+  if (albums && cat_project_root (c, project, root, sizeof root) == 0 && (rl = strlen (root)) > 0)
+    {
+      s = prep (c, "SELECT v.id, o.path FROM version v JOIN original o ON o.id = v.original WHERE v.project = ?1");
+      ins = prep (c, "INSERT OR IGNORE INTO album_item (album, version) VALUES (?1, ?2)");
+      if (s && ins)
+        {
+          sqlite3_bind_int64 (s, 1, project);
+          while (sqlite3_step (s) == SQLITE_ROW)
+            {
+              cat_id v = sqlite3_column_int64 (s, 0);
+              const char *p = (const char *) sqlite3_column_text (s, 1);
+              const char *leaf;
+              char sep, rel[1024];
+              size_t k;
+              if (!p || strncmp (p, root, rl) != 0)
+                continue;
+              sep = sep_of (p);
+              if (p[rl] != sep)
+                continue;
+              leaf = fsys_leaf (p);
+              if (leaf <= p + rl + 1)
+                continue;                  /* in the folder itself: the project is its album */
+              snprintf (rel, sizeof rel, "%.*s", (int) (leaf - 1 - (p + rl + 1)), p + rl + 1);
+              /* The folder and each folder above it, up to the project's. */
+              for (k = strlen (rel); k > 0; )
+                {
+                  char folder[1024];
+                  const char *name;
+                  cat_id a;
+                  snprintf (folder, sizeof folder, "%.*s", (int) k, rel);
+                  name = strrchr (folder, sep);
+                  name = name ? name + 1 : folder;
+                  a = folder_album (c, project, folder, name);
+                  if (a > 0)
+                    {
+                      sqlite3_reset (ins);
+                      sqlite3_bind_int64 (ins, 1, a);
+                      sqlite3_bind_int64 (ins, 2, v);
+                      sqlite3_step (ins);
+                    }
+                  while (k > 0 && rel[k - 1] != sep)
+                    k--;
+                  if (k > 0)
+                    k--;               /* past the separator */
+                }
+            }
+        }
+      else
+        rc = -1;
+      sqlite3_finalize (s);
+      sqlite3_finalize (ins);
+    }
+  /* Folder albums with nothing in them go. */
+  s = prep (c, "DELETE FROM album WHERE project = ?1 AND folder IS NOT NULL"
+               " AND id NOT IN (SELECT DISTINCT album FROM album_item)");
+  if (s)
+    {
+      sqlite3_bind_int64 (s, 1, project);
+      sqlite3_step (s);
+      sqlite3_finalize (s);
+    }
+  exec (c, rc ? "ROLLBACK TO folders; RELEASE folders" : "RELEASE folders");
+  return rc;
+}
+
+int cat_sync_all_folder_albums (cat *c)
+{
+  sqlite3_stmt *s = prep (c, "SELECT id FROM project WHERE folder_albums = 1");
+  cat_id ids[256];
+  int n = 0, k, rc = 0;
+  if (!s)
+    return -1;
+  while (n < 256 && sqlite3_step (s) == SQLITE_ROW)
+    ids[n++] = sqlite3_column_int64 (s, 0);
+  sqlite3_finalize (s);
+  for (k = 0; k < n; k++)
+    if (cat_sync_folder_albums (c, ids[k]))
+      rc = -1;
+  return rc;
+}
+
+int cat_folder_albums (cat *c, cat_id project, cat_folder **out, int *count)
+{
+  char root[1024];
+  sqlite3_stmt *s;
+  if (cat_project_root (c, project, root, sizeof root))
+    snprintf (root, sizeof root, "x.x");
+  s = prep (c, "SELECT a.id, a.name, a.folder,"
+                             " (SELECT COUNT(*) FROM album_item i JOIN version v ON v.id = i.version"
+                             "   WHERE i.album = a.id AND v.rating >= 0)"
+                             " FROM album a WHERE a.project = ?1 AND a.folder IS NOT NULL ORDER BY a.folder COLLATE NOCASE");
+  int n = 0, cap = 16;
+  cat_folder *f;
+  *out = NULL;
+  *count = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, project);
+  f = malloc (sizeof *f * cap);
+  while (f && sqlite3_step (s) == SQLITE_ROW)
+    {
+      const char *folder = (const char *) sqlite3_column_text (s, 2), *q;
+      char sep;
+      if (n == cap)
+        {
+          cat_folder *x = realloc (f, sizeof *f * cap * 2);
+          if (!x)
+            break;
+          f = x;
+          cap *= 2;
+        }
+      f[n].id = sqlite3_column_int64 (s, 0);
+      col_text (s, 1, f[n].name, sizeof f[n].name);
+      f[n].count = sqlite3_column_int (s, 3);
+      f[n].depth = 1;
+      /* Its depth: the folder's separators (as the filing system's paths use them). */
+      sep = sep_of (root);
+      for (q = folder; q && *q; q++)
+        if (*q == sep)
+          f[n].depth++;
+      n++;
+    }
+  sqlite3_finalize (s);
+  *out = f;
+  *count = n;
+  return f ? 0 : -1;
+}
+
+int cat_album_is_folder (cat *c, cat_id album)
+{
+  sqlite3_stmt *s = prep (c, "SELECT folder IS NOT NULL FROM album WHERE id = ?1");
+  int r = 0;
+  if (!s)
+    return 0;
+  sqlite3_bind_int64 (s, 1, album);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    r = sqlite3_column_int (s, 0);
   sqlite3_finalize (s);
   return r;
 }

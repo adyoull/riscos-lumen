@@ -40,10 +40,24 @@ int main (void)
     }
   while (!quit)
     {
-      int b[64], reason = 0, sender = 0;
-      /* Mask Pointer_Leaving/Entering (bits 4, 5); nulls (bit 0) when idle. */
-      int mask = 0x30 | (app_busy () ? 0 : 1);
-      if (_swix (Wimp_Poll, _INR (0, 1) | _OUT (0) | _OUT (2), mask, b, &reason, &sender))
+      int b[64], reason = 0, sender = 0, busy = app_busy ();
+      unsigned wake;
+      /* Mask Pointer_Leaving/Entering (bits 4, 5); nulls (bit 0) when idle,
+         unless a watched folder is due a look: then Wimp_PollIdle (PRM
+         p741) wakes Lumen at that time. Thumbnails nobody is looking at,
+         while another program is in front, are made only in the Wimp's
+         spare time: Wimp_PollIdle between slices. */
+      if (busy && app_background_wait (&wake))
+        {
+          if (_swix (Wimp_PollIdle, _INR (0, 2) | _OUT (0) | _OUT (2), 0x30, b, (int) wake, &reason, &sender))
+            continue;
+        }
+      else if (!busy && app_next_wake (&wake))
+        {
+          if (_swix (Wimp_PollIdle, _INR (0, 2) | _OUT (0) | _OUT (2), 0x30, b, (int) wake, &reason, &sender))
+            continue;
+        }
+      else if (_swix (Wimp_Poll, _INR (0, 1) | _OUT (0) | _OUT (2), 0x30 | (busy ? 0 : 1), b, &reason, &sender))
         continue;
       quit = app_event (reason, b, sender);
     }

@@ -54,6 +54,11 @@ enum { Button_Adjust = 1, Button_Menu = 2, Button_Select = 4 };
 /* --- app.c: the task, its icon bar icon, the poll dispatch */
 /* 0 started; 1 failed; 2 another Lumen is running (told to open its window). */
 int app_init (const char *library_path);
+/* Watched folders: look through them now; when to wake next (0: no need). */
+void app_watch_now (void);
+int app_next_wake (unsigned *when);
+int app_has_focus (void);
+int app_background_wait (unsigned *when);
 /* The task handle of another Lumen already running, 0 if none. */
 int app_other_instance (void);
 /* Handles one Wimp_Poll event. Returns 1 to quit. */
@@ -106,6 +111,10 @@ void draw_set_smoothing (int on);
 void draw_sprite_at (const void *area, const void *sprite, int x, int y);
 void draw_sprite_masked (const void *area, const void *sprite, int x, int y);   /* using its mask */
 void draw_circle (int cx, int cy, int r, unsigned rgb);
+/* A progress donut: a ring ro across with a hole ri across, filled
+   clockwise from the top to pct (0-100); pct < 0: a quarter of the ring
+   turned spin eighths of a turn (for a job whose progress isn't known). */
+void draw_donut (int cx, int cy, int ro, int ri, int pct, int spin, unsigned fg, unsigned track, unsigned bg);
 void draw_line (int x0, int y0, int x1, int y1, unsigned rgb);                          /* an outline */
 /* A sprite's pixels changed, or it is about to be freed. */
 void draw_forget (const void *sprite);
@@ -263,7 +272,8 @@ int mainwin_search_icon (void);
 /* What a screen point (and icon) is over, for interactive help: MW_TOOLBAR + the button
    (Inspector, Import, New, Browser, Split View, Viewer, Loupe, Export, Full Screen),
    MW_TAB + the tab, or one of the others. */
-enum { MW_NONE, MW_SEARCH, MW_GRIP, MW_SIZE, MW_RATING, MW_STATUS, MW_TAB, MW_TOOLBAR = MW_TAB + 3 };
+enum { MW_NONE, MW_SEARCH, MW_GRIP, MW_SIZE, MW_RATING, MW_STATUS, MW_ACTIVITY, MW_TAB, MW_TOOLBAR = MW_TAB + 3 };
+int mainwin_status_at (int wx);
 int mainwin_part_at (int x, int y, int icon);        /* the search field's icon handle, -1 */
 int mainwin_search_key (int key);      /* a key in the search field; 1 if used */
 void mainwin_set_search (const char *text);
@@ -295,6 +305,7 @@ const char *exportbox_name (void);
 int exports_busy (void);
 void exports_idle (unsigned deadline);
 void exports_status (char *out, size_t n);
+int exports_percent (void);            /* the whole queue, 0-100 */
 
 /* --- help.c: interactive help (Message_HelpRequest, PRM p1016) */
 void help_request (int *message);
@@ -313,6 +324,38 @@ void choicewin_set_library_text (const char *s);
 /* --- plugwin.c: the Add plug-in window, somewhere to drop one */
 int plugwin_create (void);
 int plugwin_window (void);
+
+/* activity.c: what Lumen is doing (the status area and the Activity
+   window) and what it has done (the history, kept in Choices). */
+enum { ACT_IMPORT, ACT_THUMBS, ACT_EXPORT, ACT_WATCH, ACT_CHECK, ACT_PROBLEM, ACT_OTHER };
+typedef struct
+{
+  char text[160];
+  int pct;                             /* 0-100, or -1 if it can't be known */
+} act_job;
+void activity_init (void);
+void activity_log (int kind, const char *fmt, ...);
+void activity_clear (void);
+void activity_tick (void);
+void activity_thumb_made (void);
+int activity_now (act_job *jobs, int max);
+int activity_busy (void);
+void activity_status (char *text, size_t n, int *pct, int *busy);
+int activity_spin (void);
+int activity_watch_info (char *out, size_t n);
+int activity_history_count (void);
+const char *activity_history (int k, long *when, int *kind);    /* 0 = newest */
+void activity_fit (const char *s, int width, char *out, size_t n);
+int activitywin_create (void);
+int activitywin_window (void);
+int activitywin_is_open (void);
+void activitywin_open (void);
+void activitywin_closed (void);
+void activitywin_changed (void);
+void activitywin_now_changed (void);
+void activitywin_redraw (int *b);
+void activitywin_click (int *b);
+int activitywin_part_at (int x, int y);
 void plugwin_open (void);
 void plugwin_click (int *block);
 

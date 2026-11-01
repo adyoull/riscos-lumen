@@ -1,4 +1,4 @@
-Lumen 0.0.18 (01 Nov 2026) - test build
+Lumen 0.0.19 (01 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -42,7 +42,8 @@ Lumen has one window, laid out as Aperture 3's:
   Viewer        one photo, as large as it fits
   Split View    the Viewer above the Browser: move about the Browser and
                 the Viewer follows
-  Bottom bar    how many photos, how many selected; the rating filter
+  Bottom bar    how many photos, how many selected; what Lumen is doing
+                (see Activity); the rating filter
                 (Any rating, 1 star and up ... 5 stars); Search; the
                 thumbnail size; drag the grip in the corner to resize the
                 window
@@ -58,6 +59,41 @@ rating filter stay as you choose other projects and albums.
   F             Full Screen: only the photo, nothing else on the screen
                 (F or Escape to come back; Left and Right still move
                 through the photos)
+
+Activity
+--------
+The bottom bar says what Lumen is doing: importing, making thumbnails,
+exporting, reading a raw photo, checking the photos' files. The ring
+beside it fills as the job goes on; it turns when Lumen can't tell how
+far it has got. When the job is done the bar says what happened, for a
+minute.
+
+Click it (or choose Activity... on the icon bar menu) for the Activity
+window: everything running now, each with how far it has got, and then
+what Lumen has done, newest first: imports, thumbnails, exports, new
+photos in watched folders, and any problems (in red). The list is kept
+between sessions in <Choices$Write>.Lumen.Activity, a text file; Clear
+history empties it.
+
+Thumbnails are made in the background: the photos on screen first, then
+the rest. While Lumen is in front it uses the desktop's spare time
+freely; while another program is in front it works in short slices and
+gives the others the time in between.
+
+Watched folders
+---------------
+Menu on a project in the Library tab:
+  Watch for new photos     Lumen looks in the project's folder for new
+                           photos (and ones moved back) when it starts,
+                           when its window opens again, and every so many
+                           minutes (Choices)
+  Albums from its folders  each folder inside the project's folder
+                           becomes an album under the project, holding
+                           the photos in it and the folders below it;
+                           they follow the folders as photos come and go
+Choices sets whether folders you import from now on are watched and get
+folder albums, and how often Lumen looks (0: only at start and when the
+window opens).
 
 Keys in the Browser
 -------------------
@@ -220,6 +256,9 @@ Choices... on the icon bar menu sets:
   Thumbnails  the size Lumen starts with
   Check the photos' files are still there when Lumen opens: switch off
               for a big library on discs that are often away.
+  Folders     whether folders imported from now on are watched and get
+              albums from their folders, and how often watched folders
+              are looked through (in minutes)
 They are kept in <Choices$Write>.Lumen.Choices.
 
 Help

@@ -65,7 +65,7 @@ static char search_valid[] = "Pptr_write;KN";
 static int insp_extent = 2000, insp_content = 400, insp_vis = 400;
 
 /* The Library tab's rows: what each shows. */
-typedef struct { int kind; cat_id id; char text[80]; int heading; } lib_row;
+typedef struct { int kind; cat_id id; char text[80]; int heading, depth, watched; } lib_row;   /* depth: a folder album's */
 static lib_row *rows;
 static int nrows;
 static void build_rows (void);
@@ -286,6 +286,7 @@ static void open_main (int *b)
       _swix (Wimp_SetCaretPosition, _INR (0, 5), win, -1, 0, 0, 1 << 25, -1);
       if (app_prefs ()->verify)
         lib_verify_start (app_library ());   /* a disc may be back (or gone) since it was shut */
+      app_watch_now ();                /* and anything new in the watched folders */
     }
 }
 
@@ -504,8 +505,7 @@ const char *mainwin_title (void) { return title; }
 
 void mainwin_update_title (void)
 {
-  char t[220], status[160];
-  browser_status (status, sizeof status);
+  char t[220], status[1] = "";        /* what is going on is in the status area now */
   if (mode != LAYOUT_BROWSER && viewer_has_photo ())
     {
       char v[160];
@@ -531,6 +531,8 @@ static void add_row (int kind, cat_id id, const char *text, int heading)
   rows[nrows].kind = kind;
   rows[nrows].id = id;
   rows[nrows].heading = heading;
+  rows[nrows].depth = 0;
+  rows[nrows].watched = 0;
   snprintf (rows[nrows].text, sizeof rows[nrows].text, "%s", text);
   nrows++;
 }
@@ -562,8 +564,25 @@ static void build_rows (void)
         add_row (-1, 0, "Drag a folder of photos in", 0);
       for (k = 0; k < n; k++)
         {
+          cat_folder *f;
+          int nf, j, w = 0, al = 0;
           snprintf (t, sizeof t, "%s (%d)", g[k].name, g[k].count);
           add_row (SRC_PROJECT, g[k].id, t, 0);
+          cat_project_watching (lib_cat (app_library ()), g[k].id, &w, &al);
+          if (nrows)
+            rows[nrows - 1].watched = w;
+          /* Its folders' albums, nested under it. */
+          if (al && cat_folder_albums (lib_cat (app_library ()), g[k].id, &f, &nf) == 0)
+            {
+              for (j = 0; j < nf; j++)
+                {
+                  snprintf (t, sizeof t, "%s (%d)", f[j].name, f[j].count);
+                  add_row (SRC_ALBUM, f[j].id, t, 0);
+                  if (nrows)
+                    rows[nrows - 1].depth = f[j].depth;
+                }
+              free (f);
+            }
         }
       free (g);
     }
@@ -631,6 +650,10 @@ static void row_icon (int kind, int x, int y, unsigned col)
       draw_frame (x + 6, y + 6, x + 32, y + 28, col);
       draw_frame (x, y, x + 26, y + 22, col);
       break;
+    case -2:                           /* a folder (an album made from one) */
+      draw_frame (x, y, x + 32, y + 22, col);
+      draw_rect (x, y + 22, x + 12, y + 26, col);
+      break;
     case SRC_ALBUM:                    /* an album: a book */
       draw_frame (x + 2, y, x + 28, y + 30, col);
       draw_rect (x + 2, y, x + 7, y + 30, col);
@@ -647,18 +670,24 @@ static void draw_library (int ox, int oy, int cy0, int cy1)
       const lib_row *r = &rows[i];
       if (y1 < cy0 - oy || y0 > cy1 - oy)
         continue;
+      int in = r->depth * 32;           /* folder albums sit under their project */
+      int kind = r->depth ? -2 : r->kind;   /* -2: a folder's icon */
       if (r->heading)
         draw_text (ox + 16, oy + y0 + 12, r->text, COL_QUIET, COL_PANEL);
       else if (row_selected (r))
         {
           draw_rect (ox + 8, oy + y0 + 4, ox + INSP_W - 8, oy + y1 - 4, COL_ACCENT);
-          row_icon (r->kind, ox + 32, oy + y0 + 12, COL_WHITE);
-          draw_text (ox + 80, oy + y0 + 16, r->text, COL_WHITE, COL_ACCENT);
+          row_icon (kind, ox + 32 + in, oy + y0 + 12, COL_WHITE);
+          draw_text (ox + 80 + in, oy + y0 + 16, r->text, COL_WHITE, COL_ACCENT);
+          if (r->watched)
+            draw_text (ox + INSP_W - 24 - draw_text_width ("watched"), oy + y0 + 16, "watched", COL_WHITE, COL_ACCENT);
         }
       else
         {
-          row_icon (r->kind, ox + 32, oy + y0 + 12, COL_ACCENT);
-          draw_text (ox + (r->kind < 0 ? 32 : 80), oy + y0 + 16, r->text, r->kind < 0 ? COL_QUIET : COL_TEXT, COL_PANEL);
+          row_icon (kind, ox + 32 + in, oy + y0 + 12, COL_ACCENT);
+          draw_text (ox + (r->kind < 0 ? 32 : 80 + in), oy + y0 + 16, r->text, r->kind < 0 ? COL_QUIET : COL_TEXT, COL_PANEL);
+          if (r->watched)
+            draw_text (ox + INSP_W - 24 - draw_text_width ("watched"), oy + y0 + 16, "watched", COL_QUIET, COL_PANEL);
         }
     }
 }
@@ -1115,6 +1144,39 @@ int mainwin_search_key (int key)
   return 0;
 }
 
+/* The status area: what Lumen is doing, with a progress donut; from
+   after the photo count to the rating button. Click: the Activity window. */
+static int stat_x0 = -1, stat_x1 = -1;
+
+static void draw_status (int ox, int y0, int x0, int x1)
+{
+  char text[200], fit[220];
+  int pct, busy, cx = x0 + 20, cy = y0 + BB_H / 2;
+  stat_x0 = x0;
+  stat_x1 = x1;
+  if (x1 - x0 < 48)
+    {
+      stat_x0 = stat_x1 = -1;
+      return;
+    }
+  activity_status (text, sizeof text, &pct, &busy);
+  if (busy)
+    draw_donut (ox + cx, cy, 18, 10, pct, pct < 0 ? activity_spin () : 0, 0xCC770000u, COL_WHITE, COL_TOOLBAR);
+  else
+    {
+      /* Nothing running: an empty ring, a quiet label. */
+      draw_donut (ox + cx, cy, 18, 10, 0, 0, COL_QUIET, 0xB8B8B800u, COL_TOOLBAR);
+    }
+  activity_fit (text, x1 - (x0 + 52), fit, sizeof fit);
+  if (fit[0])
+    draw_text (ox + x0 + 52, y0 + 16, fit, busy ? COL_TEXT : COL_QUIET, COL_TOOLBAR);
+}
+
+int mainwin_status_at (int wx)
+{
+  return stat_x0 >= 0 && wx >= stat_x0 && wx <= stat_x1;
+}
+
 static void draw_bottom (int ox, int oy)
 {
   static const char *const sizes[3] = { "Small", "Medium", "Large" };
@@ -1131,17 +1193,22 @@ static void draw_bottom (int ox, int oy)
   {
     /* As much as fits left of the rating button: then without the
        selection, then nothing (a narrow window). */
-    int r[4], room;
+    int r[4], room, used = 0;
     char full[140];
     rating_rect (r);
     room = r[0] - 24 - 24;
     snprintf (full, sizeof full, "%s", t);
     if (nsel)
       snprintf (full + strlen (full), sizeof full - strlen (full), "  \xB7  %d selected", nsel);
-    if (draw_text_width (full) <= room)
-      draw_text (ox + 24, y0 + 16, full, COL_TEXT, COL_TOOLBAR);
-    else if (draw_text_width (t) <= room)
-      draw_text (ox + 24, y0 + 16, t, COL_TEXT, COL_TOOLBAR);
+    /* The count and selection, leaving the status area at least 360 (it
+       has the rest); then without the selection; then nothing. */
+    if (draw_text_width (full) <= room - 360)
+      used = draw_text_width (full), draw_text (ox + 24, y0 + 16, full, COL_TEXT, COL_TOOLBAR);
+    else if (draw_text_width (t) <= room - 200)
+      used = draw_text_width (t), draw_text (ox + 24, y0 + 16, t, COL_TEXT, COL_TOOLBAR);
+    if (used)
+      draw_rect (ox + 24 + used + 22, y0 + 12, ox + 24 + used + 24, y0 + BB_H - 12, COL_TOOLBAR_EDGE);
+    draw_status (ox, y0, used ? 24 + used + 46 : 16, r[0] - 24);
   }
   {
     int r[4], q[4];
@@ -1290,6 +1357,8 @@ void mainwin_click (int *b)
         if (wx >= r[0] && wx <= r[2])
           menus_open_rating_menu (b[0] - 64, st[4] - st[6] + r[3] + 4);
       }
+      if (mainwin_status_at (wx))
+        activitywin_open ();
       return;
     }
   if (insp_on && !full_screen)
@@ -1337,7 +1406,7 @@ int mainwin_part_at (int x, int y, int icon)
       rating_rect (r);
       if (wx >= r[0] && wx <= r[2])
         return MW_RATING;
-      return MW_STATUS;
+      return mainwin_status_at (wx) ? MW_ACTIVITY : MW_STATUS;
     }
   if (insp_on && !full_screen)
     for (k = 0; k < 3; k++)
