@@ -74,6 +74,12 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
   luminance (`dev_hist`).
 - The accent is the Wimp's dark blue (colour 8, #004499), light blue
   (colour 15) on dark cells, instead of orange.
+
+## 0.0.6
+
+- New icon: the aperture redrawn in the desktop's own colours (Wimp blues
+  for the blades, cream light through the opening, a bevelled grey
+  barrel, lit from the top left, outlined), `app/make-icons.py`.
 - Still to come in milestone 1: the loupe, a curves editor, several
   versions of one original, full-resolution rendering.
 
