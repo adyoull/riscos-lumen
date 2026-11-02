@@ -618,6 +618,29 @@ static void test_library (void)
     (void) v1;
   }
 
+  /* Colour labels: set on two, found by search (by the label's name), shown in the list. */
+  {
+    cat_id both[2] = { items[0].id, items[1].id };
+    cat_source q = { SRC_ALL, 0, 0, "orange" };
+    cat_item *found;
+    int nf, k2, labelled = 0;
+    CHECK (cat_set_label (lib_cat (l), both, 2, CAT_LABEL_ORANGE) == 0, "two given the orange label");
+    cat_list (lib_cat (l), &q, &found, &nf);
+    CHECK (nf == 2 && found[0].label == CAT_LABEL_ORANGE, "search \"orange\" finds them, with their label");
+    free (found);
+    strcpy (q.search, "");
+    cat_list (lib_cat (l), &q, &found, &nf);
+    for (k2 = 0; k2 < nf; k2++)
+      labelled += found[k2].label != 0;
+    CHECK (labelled == 2, "the others have none");
+    free (found);
+    CHECK (cat_set_label (lib_cat (l), both, 2, 99) == 0, "a label out of range: none");
+    cat_list (lib_cat (l), &q, &found, &nf);
+    CHECK (found[0].label == 0, "none");
+    free (found);
+    CHECK (!strcmp (cat_label_names[CAT_LABEL_GREY], "Grey"), "the names");
+  }
+
   /* Dates as typed, for smart albums. */
   {
     static const struct { const char *in; int end; const char *out; } d[] = {

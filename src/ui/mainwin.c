@@ -892,6 +892,8 @@ static void info_load (int force)
     snprintf (v, sizeof v, "Not rated");
   info_add ("Rating", v, 0);
   info_add ("Flag", it.flag ? "Flagged" : "Not flagged", 0);
+  if (it.label > 0 && it.label < CAT_LABELS)
+    info_add ("Label", cat_label_names[it.label], 0);
   info_add ("Adjusted", it.edited ? "Yes" : "No", 0);
   {
     char cap[CAT_CAPTION_MAX], kw[CAT_KEYWORDS_MAX];

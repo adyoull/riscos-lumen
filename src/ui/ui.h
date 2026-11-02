@@ -196,6 +196,11 @@ void viewer_unplace (void);
 void viewer_close (void);              /* back to the Browser */
 void viewer_shutdown (void);           /* the main window closed */
 void viewer_list_changed (void);       /* the Browser's list was read again */
+void viewer_compare (void);            /* O: the photo shown pinned, the next beside it */
+void viewer_compare_pair (int a, int b);   /* Browser indexes: a pinned, b beside it */
+int viewer_comparing (void);
+cat_id viewer_compared_item (void);    /* the pinned photo, 0 if not comparing */
+void browser_compare (void);           /* the two selected side by side, or the focused one with the next */
 int viewer_has_photo (void);
 int viewer_index (void);               /* the browser index shown, -1 */
 void viewer_title (char *out, size_t n);

@@ -28,7 +28,7 @@ static int which;                      /* 1 window menu, 2 icon bar menu, 3 view
 static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40], stack_secs[6] = "2";
-static int export_after_menu, print_after_menu;
+static int export_after_menu, print_after_menu, compare_after_menu;
 static int tags_after_menu;            /* 1: the selection's caption and keywords, 2: the Viewer's photo */
 static int smart_after_menu;           /* open the Smart album window: 1 a new one, 2 the group menu's album */
 static cat_keyword *keywords;          /* the keyword menu's list */
@@ -248,6 +248,21 @@ static void load_groups (void)
   cat_groups (lib_cat (app_library ()), SRC_ALBUM, &albums, &nalbums);
 }
 
+/* Selection > ... (the order menus_selection decodes) */
+enum { SEL_RATING, SEL_LABEL, SEL_FLAG, SEL_REJECT, SEL_TAGS, SEL_ALL, SEL_CLEAR, SEL_COPY, SEL_PASTE, SEL_PRESET,
+       SEL_COMPARE, SEL_EXPORT, SEL_PRINT, SEL_REMOVE, SEL_COUNT };
+
+/* None, Red ... Grey; ticked: the label now (-1: none ticked). */
+static menu *label_menu (const char *title, int now)
+{
+  int k;
+  menu *m = new_menu (title, CAT_LABELS);
+  for (k = 0; m && k < CAT_LABELS; k++)
+    set_item (m, k, k == CAT_LABELS - 1, k ? cat_label_names[k] : "None", (k == now ? MF_TICK : 0) | (k == 0 ? MF_DOTTED : 0),
+              -1, 0);
+  return m;
+}
+
 /* Lumen > Show, Selection, Album, Size, Quit */
 /* Plug-ins: each one, ticked if it is on (choosing it switches it);
    Add plug-in...; Remove > each one. */
@@ -332,21 +347,23 @@ static menu *build_window_menu (void)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
   npresets = looks_presets (&presets);
   apply = apply_menu (nsel == 0);
-  selm = new_menu ("Selection", 12);
+  selm = new_menu ("Selection", SEL_COUNT);
   if (selm)
     {
-      set_item (selm, 0, 0, "Rating", 0, (int) rating, nsel == 0);
-      set_item (selm, 1, 0, "Flag / unflag      /", 0, -1, nsel == 0);
-      set_item (selm, 2, 0, "Reject      9", 0, -1, nsel == 0);
-      set_item (selm, 3, 0, "Caption and keywords...      ^K", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, 4, 0, "Select all      ^A", 0, -1, browser_count () == 0);
-      set_item (selm, 5, 0, "Clear selection      Esc", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, 6, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
-      set_item (selm, 7, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
-      set_item (selm, 8, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0);
-      set_item (selm, 9, 0, "Export...      ^E", 0, -1, nsel == 0);
-      set_item (selm, 10, 0, "Print...      ^P", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, 11, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
+      set_item (selm, SEL_RATING, 0, "Rating", 0, (int) rating, nsel == 0);
+      set_item (selm, SEL_LABEL, 0, "Colour label", 0, (int) label_menu ("Colour label", -1), nsel == 0);
+      set_item (selm, SEL_FLAG, 0, "Flag / unflag      /", 0, -1, nsel == 0);
+      set_item (selm, SEL_REJECT, 0, "Reject      9", 0, -1, nsel == 0);
+      set_item (selm, SEL_TAGS, 0, "Caption and keywords...      ^K", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, SEL_ALL, 0, "Select all      ^A", 0, -1, browser_count () == 0);
+      set_item (selm, SEL_CLEAR, 0, "Clear selection      Esc", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, SEL_COPY, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
+      set_item (selm, SEL_PASTE, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
+      set_item (selm, SEL_PRESET, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0);
+      set_item (selm, SEL_COMPARE, 0, "Compare      O", MF_DOTTED, -1, nsel != 2);
+      set_item (selm, SEL_EXPORT, 0, "Export...      ^E", 0, -1, nsel == 0);
+      set_item (selm, SEL_PRINT, 0, "Print...      ^P", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, SEL_REMOVE, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
     }
 
   newalbum = writable_menu ("Name", album_name, sizeof album_name);
@@ -413,7 +430,7 @@ static menu *build_window_menu (void)
 
 /* Photo > ... (the order menus_selection decodes) */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
-       VM_PRESETS, VM_COPY, VM_PASTE, VM_TAGS, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_LABEL, VM_TAGS, VM_COMPARE, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
 
 /* --- styles shown as the pointer goes down the list
    The Styles item asks for Message_MenuWarning (&400C0, PRM p1017): Lumen
@@ -520,7 +537,14 @@ static menu *build_viewer_menu (void)
       set_item (m, VM_PRESETS, 0, "Presets", 0, (int) pre, 0);
       set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
       set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
-      set_item (m, VM_TAGS, 0, "Caption and keywords...      ^K", MF_DOTTED, -1, 0);
+      {
+        cat_item vi;
+        int now = viewer_index () >= 0 && browser_item (viewer_index (), &vi) ? vi.label : -1;
+        set_item (m, VM_LABEL, 0, "Colour label", 0, (int) label_menu ("Colour label", now), 0);
+      }
+      set_item (m, VM_TAGS, 0, "Caption and keywords...      ^K", 0, -1, 0);
+      set_item (m, VM_COMPARE, 0, viewer_comparing () ? "Stop comparing      O" : "Compare with the next      O",
+                MF_DOTTED, -1, 0);
       set_item (m, VM_DUP, 0, "Duplicate version      ^D", 0, -1, 0);
       set_item (m, VM_NEW_ORIG, 0, "New version from original", MF_DOTTED, -1, 0);
       set_item (m, VM_EXPORT, 0, "Export...      ^E", 0, -1, 0);
@@ -861,6 +885,7 @@ static void with_selection (int action, int arg)
         case 1: cat_set_flag (c, ids, k, -1); break;
         case 2: cat_album_add (c, (cat_id) arg, ids, k); break;
         case 3: cat_album_remove (c, browser_source ()->id, ids, k); break;
+        case 5: cat_set_label (c, ids, k, arg); break;
         case 4:
           {
             cat_id a;
@@ -911,32 +936,28 @@ static int window_choice (const int *c)
         }
       break;
     case 1:                            /* Selection */
-      if (c[1] == 0 && c[2] >= 0 && c[2] <= 5)
-        with_selection (0, c[2]);
-      else if (c[1] == 1)
-        with_selection (1, 0);
-      else if (c[1] == 2)
-        with_selection (0, RATING_REJECT);
-      else if (c[1] == 3)
-        tags_after_menu = 1;
-      else if (c[1] == 4)
-        browser_select_all (1);
-      else if (c[1] == 5)
-        browser_select_all (0);
-      else if (c[1] == 6)
-        looks_copy_selection ();
-      else if (c[1] == 7 && looks_clip ())
-        looks_apply_selection (looks_clip ());
-      else if (c[1] == 8 && c[2] == 0 && styles_get (c[3]))
-        looks_apply_selection (styles_get (c[3])->recipe);
-      else if (c[1] == 8 && c[2] >= 1 && c[2] <= npresets && c[2] <= MAX_LIST)
-        looks_apply_selection (presets[c[2] - 1].recipe);
-      else if (c[1] == 11)
-        remove_after_menu = 1;
-      else if (c[1] == 9)
-        export_after_menu = 1;
-      else if (c[1] == 10)
-        print_after_menu = 1;
+      switch (c[1])
+        {
+        case SEL_RATING: if (c[2] >= 0 && c[2] <= 5) with_selection (0, c[2]); break;
+        case SEL_LABEL: if (c[2] >= 0 && c[2] < CAT_LABELS) with_selection (5, c[2]); break;
+        case SEL_FLAG: with_selection (1, 0); break;
+        case SEL_REJECT: with_selection (0, RATING_REJECT); break;
+        case SEL_TAGS: tags_after_menu = 1; break;
+        case SEL_ALL: browser_select_all (1); break;
+        case SEL_CLEAR: browser_select_all (0); break;
+        case SEL_COPY: looks_copy_selection (); break;
+        case SEL_PASTE: if (looks_clip ()) looks_apply_selection (looks_clip ()); break;
+        case SEL_PRESET:
+          if (c[2] == 0 && styles_get (c[3]))
+            looks_apply_selection (styles_get (c[3])->recipe);
+          else if (c[2] >= 1 && c[2] <= npresets && c[2] <= MAX_LIST)
+            looks_apply_selection (presets[c[2] - 1].recipe);
+          break;
+        case SEL_COMPARE: compare_after_menu = 1; break;
+        case SEL_EXPORT: export_after_menu = 1; break;
+        case SEL_PRINT: print_after_menu = 1; break;
+        case SEL_REMOVE: remove_after_menu = 1; break;
+        }
       break;
     case 2:                            /* Album */
       if (c[1] == 0 && c[2] == 0)
@@ -1025,6 +1046,16 @@ int menus_selection (const int *choice)
       case VM_COPY: looks_copy_viewer (); break;
       case VM_PASTE: if (looks_clip ()) viewer_apply_look (looks_clip ()); break;
       case VM_TAGS: tags_after_menu = 2; break;
+      case VM_LABEL:
+        if (choice[1] >= 0 && choice[1] < CAT_LABELS && viewer_item ())
+          {
+            cat_id v = viewer_item ();
+            cat_set_label (lib_cat (app_library ()), &v, 1, choice[1]);
+            browser_after_change ();
+            mainwin_info_changed ();
+          }
+        break;
+      case VM_COMPARE: if (viewer_comparing ()) viewer_key ('O'); else viewer_compare (); break;
       case VM_DUP: viewer_new_version (1); break;
       case VM_NEW_ORIG: viewer_new_version (0); break;
       case VM_EXPORT: export_after_menu = 2; break;
@@ -1109,6 +1140,12 @@ int menus_selection (const int *choice)
       /* The question replaces the menu. */
       remove_after_menu = 0;
       browser_remove_selection ();
+      return 0;
+    }
+  if (compare_after_menu)
+    {
+      compare_after_menu = 0;
+      browser_compare ();
       return 0;
     }
   if (tags_after_menu)
@@ -1215,16 +1252,20 @@ const char *menus_help (int window, int icon)
       {
       case 0: return "Which photos the Browser shows: all, flagged, rejected, the last import, a project or album, by rating.";
       case 1:
-        if (c[1] == 11)
+        if (c[1] == SEL_REMOVE)
           return "Takes the selected photos out of the library, after asking. Their files are not deleted.";
-        if (c[1] == 10)
+        if (c[1] == SEL_PRINT)
           return "Prints the selected photos, one to a page, on the printer chosen in !Printers.";
-        if (c[1] == 9)
+        if (c[1] == SEL_EXPORT)
           return "Exports the selected photos as new JPEG or PNG files.";
-        if (c[1] == 8 && c[2] >= 0)
+        if (c[1] == SEL_PRESET && c[2] >= 0)
           return presets_help (c + 2, 1);
-        if (c[1] == 3)
+        if (c[1] == SEL_TAGS)
           return "Gives the selected photos a caption and keywords, which search and smart albums find.";
+        if (c[1] == SEL_LABEL)
+          return "Gives the selected photos a colour label (or None). Search and smart albums find labels by name.";
+        if (c[1] == SEL_COMPARE)
+          return "Shows the two selected photos side by side in the Viewer, to choose between them.";
         return "Rate, flag, reject, caption, select, copy and paste adjustments, export or remove the selected photos.";
       case 2:
         if (c[1] == 3)

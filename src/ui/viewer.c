@@ -110,6 +110,15 @@ static int dragging = -1, drag_x = -1, drag_y = -1; /* the parameter (or DRAG_CR
 
 static int crop_mode, crop_edges, crop_shape, grid_mode, picking;
 
+/* Compare: a photo pinned on the left (its render kept as it was), the
+   one being looked at on the right; Left and Right change the right one. */
+static int comparing;
+static sprite32 cmp_spr;
+static cat_item cmp_item;
+static int compare_pending = -1;       /* pin when this render is done, then show this index (-2: the next) */
+static void compare_stop (void);
+static void compare_pin_now (void);
+
 /* 100%: the full-size original (8-bit, decoded on first use), and the
    part of the output that fits the window, rendered into zspr. zcx, zcy
    is the output pixel at the middle of the view. */
@@ -254,7 +263,7 @@ static int track_x1 (void) { return panel_x0 () + PANEL_W - 132; }
 
 static void image_rect (int r[4])
 {
-  r[0] = 0; r[1] = -vis_h; r[2] = vis_w; r[3] = 0;
+  r[0] = comparing ? vis_w / 2 : 0; r[1] = -vis_h; r[2] = vis_w; r[3] = 0;
 }
 
 /* Top of each part of the panel. */
@@ -676,6 +685,11 @@ static void force_hist (void)
 /* For the main window's title: the photo, its place in the list. */
 void viewer_title (char *out, size_t n)
 {
+  if (comparing)
+    {
+      snprintf (out, n, "%s, compared with %s (%d of %d)", cmp_item.name, item.name, index_in_list + 1, browser_count ());
+      return;
+    }
   snprintf (out, n, "%s (%d of %d)%s%s", item.name, index_in_list + 1,
             browser_count (), recipe_is_default (previewing ? &preview_saved : &current) ? "" : "  \xB7  edited",
             crop_mode ? "  \xB7  cropping" : "");
@@ -930,6 +944,8 @@ static void render_full_until (unsigned deadline)
       hist = hist_acc;
       force_image ();
       force_hist ();
+      if (compare_pending != -1)
+        compare_pin_now ();
     }
 }
 
@@ -1015,6 +1031,8 @@ static void zoom_render_until (unsigned deadline)
 static void zoom_to (double fx, double fy)
 {
   char e[200];
+  if (comparing)
+    compare_stop ();
   if (zoom)
     {
       zoom = 0;
@@ -1233,6 +1251,8 @@ void viewer_toggle_loupe (void)
 {
   if (!src)
     return;
+  if (comparing && !loupe_on)
+    compare_stop ();
   loupe_on = !loupe_on;
   loupe_pinned = 0;
   if (loupe_shown)
@@ -1398,6 +1418,81 @@ void viewer_show (int i)
   fit_panel ();
 }
 
+/* --- compare */
+
+static void compare_stop (void)
+{
+  comparing = 0;
+  compare_pending = -1;
+  sprite_free (&cmp_spr);
+  update_title ();
+  force_all ();
+}
+
+/* The render shown is done: pin it, then show the photo asked for. */
+static void compare_pin_now (void)
+{
+  int next = compare_pending, n = browser_count ();
+  compare_pending = -1;
+  if (state != V_READY || !full_spr.area || full_y >= 0)
+    return;
+  sprite_free (&cmp_spr);
+  if (sprite_make (&cmp_spr, full_spr.w, full_spr.h))
+    {
+      app_report ("There isn't enough memory to compare photos.");
+      return;
+    }
+  memcpy (cmp_spr.pixels, full_spr.pixels, (size_t) full_spr.w * full_spr.h * 4);
+  cmp_item = item;
+  comparing = 1;
+  if (next == -2)                      /* the next photo (or the one before, at the end) */
+    next = index_in_list + 1 < n ? index_in_list + 1 : index_in_list - 1;
+  if (next >= 0 && next < n && next != index_in_list)
+    {
+      browser_focus_on (next);
+      if (index_in_list != next)
+        viewer_show (next);
+    }
+  update_title ();
+  force_all ();
+}
+
+/* O: the photo shown pinned on the left, the next beside it to compare. */
+void viewer_compare (void)
+{
+  if (state == V_CLOSED || browser_count () < 2)
+    {
+      app_report ("Comparing needs two photos or more in the Browser.");
+      return;
+    }
+  if (crop_mode)
+    viewer_crop_finish (1);
+  if (zoom)
+    zoom_to (0, 0);
+  if (loupe_on)
+    viewer_toggle_loupe ();
+  compare_pending = -2;
+  if (state == V_READY && full_y < 0 && full_spr.area)
+    compare_pin_now ();                /* else when its render is done */
+}
+
+/* Two photos (the Browser's indexes) side by side: a pinned, b beside it. */
+void viewer_compare_pair (int a, int b)
+{
+  if (comparing)
+    compare_stop ();
+  browser_focus_on (a);                /* the Viewer shows the focused photo */
+  viewer_open (a);
+  if (state == V_CLOSED)
+    return;
+  compare_pending = b;
+  if (state == V_READY && full_y < 0 && full_spr.area)
+    compare_pin_now ();
+}
+
+int viewer_comparing (void) { return comparing; }
+cat_id viewer_compared_item (void) { return comparing ? cmp_item.id : 0; }
+
 /* The Browser's list changed (a stack closed, a search, a smart album):
    the photo shown keeps its place in it; if it has gone from the list, the
    one standing for its stack, or the one at its old place, is shown; with
@@ -1453,6 +1548,8 @@ void viewer_open (int i)
 void viewer_close (void)
 {
   int i = index_in_list;
+  if (comparing)
+    compare_stop ();
   if (mainwin_full_screen ())
     {
       mainwin_toggle_full_screen ();   /* Escape in full screen: back to the layout before */
@@ -1468,6 +1565,9 @@ void viewer_close (void)
 /* The main window closed: let the photo go. */
 void viewer_shutdown (void)
 {
+  if (comparing)
+    compare_stop ();
+  compare_pending = -1;
   viewer_unplace ();
   free_photo ();
   state = V_CLOSED;
@@ -1869,6 +1969,8 @@ void viewer_crop_start (void)
 {
   if (!src || crop_mode)
     return;
+  if (comparing)
+    compare_stop ();
   if (zoom)
     zoom_to (0, 0);
   crop_saved = current;
@@ -2317,8 +2419,25 @@ int viewer_key (int key)
       viewer_toggle_loupe ();
       return 1;
     }
+  if (comparing && key == KEY_ESCAPE)
+    {
+      compare_stop ();
+      return 1;
+    }
+  if (comparing && key == KEY_RETURN)
+    {
+      viewer_compare ();               /* this one pinned instead, the next beside it */
+      return 1;
+    }
   switch (key)
     {
+    case 'o':
+    case 'O':
+      if (comparing)
+        compare_stop ();
+      else
+        viewer_compare ();
+      return 1;
     case KEY_LEFT:
     case KEY_RIGHT:
       {
@@ -2809,9 +2928,28 @@ static void draw_overlays (int ox, int oy, const int out[4])
     draw_grid (out[0], out[1], out[2], out[3], n, COL_GRID);
 }
 
+/* Compare: the pinned photo in the left half, named, with a line between. */
+static void draw_compared (int ox, int oy)
+{
+  int x1 = vis_w / 2, out[4];
+  char t[90];
+  draw_rect (ox, oy - vis_h, ox + x1, oy, COL_GROUND);
+  if (cmp_spr.area)
+    {
+      draw_set_smoothing (1);
+      draw_sprite_rect (cmp_spr.area, (const unsigned *) cmp_spr.area + 4, cmp_spr.w, cmp_spr.h,
+                        ox + PAD, oy - vis_h + PAD + 40, ox + x1 - PAD, oy - PAD, out);
+    }
+  snprintf (t, sizeof t, "Compare: %s", cmp_item.name);
+  draw_text (ox + PAD, oy - vis_h + 20, t, COL_LIGHT, COL_GROUND);
+  draw_rect (ox + x1 - 2, oy - vis_h, ox + x1 + 2, oy, 0x55555500u);
+}
+
 static void draw_image (int ox, int oy)
 {
   int r[4], out[4];
+  if (comparing)
+    draw_compared (ox, oy);
   image_rect (r);
   draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + r[3], COL_GROUND);
   r[0] += PAD; r[1] += PAD; r[2] -= PAD; r[3] -= PAD;

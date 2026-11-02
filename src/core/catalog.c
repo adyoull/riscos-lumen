@@ -116,6 +116,10 @@ static int upgrade (cat *c)
                         "CREATE INDEX IF NOT EXISTS version_stack ON version (stack);"
                         "UPDATE meta SET value = 5 WHERE key = 'schema';"))
     return -1;
+  /* Schema 6 (0.0.25): colour labels. */
+  if (v < 6 && step (c, "ALTER TABLE version ADD COLUMN label INTEGER NOT NULL DEFAULT 0;"
+                        "UPDATE meta SET value = 6 WHERE key = 'schema';"))
+    return -1;
   return 0;
 }
 
@@ -262,6 +266,16 @@ int cat_set_rating (cat *c, const cat_id *v, int n, int rating)
 {
   return for_each_version (c,
     "UPDATE version SET rating = ?3, modified = ?1 WHERE id = ?2", (cat_id) time (NULL), v, n, rating);
+}
+
+const char *const cat_label_names[CAT_LABELS] = { "", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Grey" };
+
+int cat_set_label (cat *c, const cat_id *v, int n, int label)
+{
+  if (label < 0 || label >= CAT_LABELS)
+    label = 0;
+  return for_each_version (c, "UPDATE version SET label = ?3, modified = ?1 WHERE id = ?2", (cat_id) time (NULL),
+                           v, n, label);
 }
 
 int cat_set_flag (cat *c, const cat_id *v, int n, int flag)
@@ -665,9 +679,11 @@ static int add_words (const char *q, char words[][70], int nw, int max, char *ma
                 " OR IFNULL(o.taken, '') LIKE ?%d ESCAPE '\\'"
                 " OR (SELECT name FROM project WHERE id = v.project) LIKE ?%d ESCAPE '\\'"
                 " OR v.caption LIKE ?%d ESCAPE '\\'"
+                " OR CASE v.label WHEN 1 THEN 'Red' WHEN 2 THEN 'Orange' WHEN 3 THEN 'Yellow' WHEN 4 THEN 'Green'"
+                " WHEN 5 THEN 'Blue' WHEN 6 THEN 'Purple' WHEN 7 THEN 'Grey' ELSE '' END LIKE ?%d ESCAPE '\\'"
                 " OR EXISTS (SELECT 1 FROM version_keyword vk JOIN keyword k ON k.id = vk.keyword"
                 " WHERE vk.version = v.id AND k.name LIKE ?%d ESCAPE '\\'))",
-                p, p, p, p, p, p, p, p);
+                p, p, p, p, p, p, p, p, p);
       nw++;
     }
   return nw;
@@ -675,7 +691,7 @@ static int add_words (const char *q, char words[][70], int nw, int max, char *ma
 
 int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
 {
-  char sql[10000];
+  char sql[16000];
   const char *where;
   sqlite3_stmt *s;
   int n = 0, cap = 256, smart = 0, min_rating = src->min_rating;
@@ -696,7 +712,7 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
     }
   /* Search: up to four words (?3..?6); a smart album's rule adds up to
      eight of its own (?7..?14), and its other limits (?15, ?16 for the dates). */
-  char words[12][70], match[8800];
+  char words[12][70], match[12000];
   int nw = 0, k;
   match[0] = '\0';
   nw = add_words (src->search, words, 0, 4, match, sizeof match);
@@ -723,7 +739,7 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
             "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '', o.missing,"
             " IFNULL(v.stack, 0), (SELECT COUNT(*) FROM version m WHERE m.stack = v.stack),"
             " IFNULL((SELECT s.pick = v.id FROM stack s WHERE s.id = v.stack), 0),"
-            " IFNULL((SELECT s.open FROM stack s WHERE s.id = v.stack), 0)"
+            " IFNULL((SELECT s.open FROM stack s WHERE s.id = v.stack), 0), v.label"
             " FROM version v JOIN original o ON o.id = v.original WHERE %s%s"
             /* by date, then name: a stack's photos by their pick's, together, the pick first */
             " ORDER BY IFNULL((SELECT IFNULL(po.taken, '9999') FROM stack s JOIN version pv ON pv.id = s.pick"
@@ -772,6 +788,7 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
       a[n].stack_count = a[n].stack ? sqlite3_column_int (s, 9) : 0;
       a[n].stack_pick = sqlite3_column_int (s, 10);
       a[n].stack_open = sqlite3_column_int (s, 11);
+      a[n].label = sqlite3_column_int (s, 12);
       /* A stack's rows come together, its pick first: a closed stack keeps
          the first of them shown here. */
       if (collapse && a[n].stack && !a[n].stack_open && n > 0)

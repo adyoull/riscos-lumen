@@ -516,6 +516,13 @@ static void draw_cell (int i, int ox, int oy)
       draw_frame (pic[2] - 30, pic[3] - 30, pic[2] - 16, pic[3] - 16, COL_TEXT_SEL);
       draw_frame (pic[2] - 26, pic[3] - 26, pic[2] - 12, pic[3] - 12, COL_TEXT_SEL);
     }
+  if (it->label > 0 && it->label < CAT_LABELS)
+    {
+      /* The colour label: a bar under the photo, as wide as it. */
+      static const unsigned label_rgb[CAT_LABELS] = { 0, 0x3030D800u, 0x1C8CF000u, 0x20D0F000u, 0x40A83C00u,
+                                                      0xD8782800u, 0xB0409000u, 0x90909000u };
+      draw_rect (pic[0], pic[1] - 12, pic[2], pic[1] - 4, label_rgb[it->label]);
+    }
   if (it->flag)                        /* a flag on the photo's top left corner */
     {
       draw_rect (pic[0] + 8, pic[3] - 40, pic[0] + 36, pic[3] - 8, 0x30303000u);
@@ -693,6 +700,42 @@ void browser_toggle_select (int i)
   redraw_cell (old);                   /* its focus frame goes (found in the ROL 5.31-5 test) */
   redraw_cell (i);
   mainwin_status_changed ();
+}
+
+/* Compare: the two selected photos side by side in the Viewer, or the
+   focused one with the one after it. */
+void browser_compare (void)
+{
+  int i, a = -1, b = -1, k = 0;
+  for (i = 0; i < n; i++)
+    if (sel[i])
+      {
+        if (k == 0) a = i;
+        else if (k == 1) b = i;
+        k++;
+      }
+  if (k == 2)
+    {
+      if (focus == b)                  /* the one clicked last goes on the right */
+        viewer_compare_pair (a, b);
+      else if (focus == a)
+        viewer_compare_pair (b, a);
+      else
+        viewer_compare_pair (a, b);
+      return;
+    }
+  if (k > 2)
+    {
+      app_report ("Select two photos to compare them (or one, to compare it with the next).");
+      return;
+    }
+  i = focus >= 0 ? focus : a;
+  if (i < 0 || n < 2)
+    {
+      app_report ("Comparing needs two photos or more in the Browser.");
+      return;
+    }
+  viewer_compare_pair (i, i + 1 < n ? i + 1 : i - 1);
 }
 
 /* --- versions and stacks */
@@ -952,6 +995,8 @@ int browser_key (int key)
       if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
         exportbox_open (0, ptr[0], ptr[1]);
     }
+  else if (key == 'o' || key == 'O')   /* compare */
+    browser_compare ();
   else if (key == 0x04)                /* Ctrl-D: a duplicate version */
     browser_new_version (1);
   else if (key == 0x07)                /* Ctrl-G: stack the selection */

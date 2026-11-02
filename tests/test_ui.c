@@ -1319,14 +1319,14 @@ int main (int argc, char **argv)
       /* Selection > Apply preset > Bright, on photo 3. */
       browser_focus_on (2);
       click (16 + 352 + 60, -16 - 60, Button_Menu);
-      CHECK (strstr (item_text (submenu (menu_open, 1), 8), "Apply preset") != NULL, "Selection > Apply preset");
-      choose (1, 8, 1);
+      CHECK (strstr (item_text (submenu (menu_open, 1), 9), "Apply preset") != NULL, "Selection > Apply preset");
+      choose (1, 9, 1);
       browser_item (2, &it2);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "exposure") != NULL, "photo 3 gets Bright");
       browser_focus_on (3);
       click (16 + 352 + 60, -16 - 60, Button_Menu);
-      choose4 (1, 8, 0, 12);             /* Apply preset > Styles > Cyanotype */
+      choose4 (1, 9, 0, 12);             /* Apply preset > Styles > Cyanotype */
       browser_item (3, &it2);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "tone shadow_hue=212") != NULL && strstr (text, "saturation=-100") != NULL,
@@ -1622,6 +1622,60 @@ int main (int argc, char **argv)
         cat_remove_keywords (lib_cat (app_library ()), two, nall, "Ferry, Keswick");
         free (two);
       }
+      /* Colour labels from the Selection menu; compare two photos. */
+      {
+        cat_item ci, cj;
+        int closed0 = vclosed;
+        browser_select_all (0);
+        browser_focus_on (2);
+        click (5, -5, Button_Menu);
+        CHECK (!strcmp (item_text (submenu (menu_open, 1), 1), "Colour label")
+               && !strcmp (item_text (submenu (submenu (menu_open, 1), 1), 3), "Yellow"), "Selection > Colour label > Yellow");
+        choose (1, 1, 3);
+        browser_item (2, &ci);
+        CHECK (ci.label == CAT_LABEL_YELLOW, "the photo labelled yellow");
+        mainwin_set_tab (TAB_INFO);
+        mainwin_info_changed ();
+        CHECK (strstr (mainwin_info_text (), "Label: Yellow") != NULL, "the Info tab says so");
+        mainwin_set_tab (TAB_LIBRARY);
+        /* Two selected, O: the first pinned on the left, the second beside it. */
+        browser_focus_on (0);
+        browser_toggle_select (3);
+        caret_window = BROWSER;
+        key ('o');
+        nulls_until_idle ();
+        browser_item (0, &ci);
+        browser_item (3, &cj);
+        CHECK (mainwin_mode () == LAYOUT_VIEWER && viewer_comparing () && viewer_compared_item () == ci.id
+               && viewer_item () == cj.id, "O with two selected: compared side by side, the last clicked on the right");
+        CHECK (strstr (vtitle, "compared with") != NULL, "the title says so");
+        caret_window = MAINW;
+        key (KEY_RIGHT);
+        nulls_until_idle ();
+        CHECK (viewer_comparing () && viewer_index () == 4 && viewer_compared_item () == ci.id,
+               "Right: the next on the right, the pinned one stays");
+        key (KEY_RETURN);
+        nulls_until_idle ();
+        browser_item (4, &cj);
+        CHECK (viewer_compared_item () == cj.id && viewer_index () == 5, "Return: this one pinned, the next beside it");
+        key (KEY_ESCAPE);
+        CHECK (!viewer_comparing () && mainwin_mode () == LAYOUT_VIEWER, "Escape: comparing ends, still in the Viewer");
+        key ('o');
+        nulls_until_idle ();
+        CHECK (viewer_comparing (), "O in the Viewer: compare with the next");
+        key ('z');
+        CHECK (!viewer_comparing (), "100% ends comparing");
+        key (KEY_ESCAPE);
+        key (KEY_ESCAPE);
+        CHECK (mainwin_mode () == LAYOUT_BROWSER, "back to the Browser");
+        cat_set_label (lib_cat (app_library ()), &ci.id, 1, 0);
+        browser_item (2, &ci);
+        cat_set_label (lib_cat (app_library ()), &ci.id, 1, 0);
+        browser_after_change ();
+        browser_select_all (0);
+        vclosed = closed0;
+      }
+
       /* Versions and stacks. */
       {
         cat_item vi;
@@ -1773,11 +1827,13 @@ int main (int argc, char **argv)
     b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
-    CHECK (strstr (item_text (menu_open, 14), "Caption and keywords") != NULL, "Photo menu: Caption and keywords...");
-    CHECK (strstr (item_text (menu_open, 15), "Duplicate version") != NULL, "Photo menu: Duplicate version");
-    CHECK (strstr (item_text (menu_open, 18), "Print...") != NULL, "Photo menu: Print...");
-    CHECK (strstr (item_text (menu_open, 19), "Back to the Browser") != NULL, "Back to the Browser");
-    choose (19, -1, -1);
+    CHECK (strstr (item_text (menu_open, 14), "Colour label") != NULL, "Photo menu: Colour label");
+    CHECK (strstr (item_text (menu_open, 15), "Caption and keywords") != NULL, "Photo menu: Caption and keywords...");
+    CHECK (strstr (item_text (menu_open, 16), "Compare") != NULL, "Photo menu: Compare");
+    CHECK (strstr (item_text (menu_open, 17), "Duplicate version") != NULL, "Photo menu: Duplicate version");
+    CHECK (strstr (item_text (menu_open, 20), "Print...") != NULL, "Photo menu: Print...");
+    CHECK (strstr (item_text (menu_open, 21), "Back to the Browser") != NULL, "Back to the Browser");
+    choose (21, -1, -1);
     CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
     {
       /* Undo and Redo shaded in the Browser: the toolbar draws them grey and a click does nothing. */
@@ -2045,9 +2101,9 @@ int main (int argc, char **argv)
     browser_focus_on (0);
     click (16 + 352 + 60, -16 - 60, Button_Adjust);      /* add the second photo (Large thumbnails) */
     click (5, -5, Button_Menu);
-    CHECK (strstr (item_text (submenu (menu_open, 1), 11), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 10), "Print") != NULL, "Selection > Print..., Remove from library");
+    CHECK (strstr (item_text (submenu (menu_open, 1), 13), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 12), "Print") != NULL, "Selection > Print..., Remove from library");
     asked[0] = '\0';
-    choose (1, 11, -1);
+    choose (1, 13, -1);
     CHECK (strstr (asked, "these 2 photos") != NULL, "it asks about the two");
     CHECK (browser_count () == before - 3 && viewer_item () == 0, "both gone, and the Viewer let its photo go");
 
