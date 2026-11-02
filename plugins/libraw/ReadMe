@@ -1,10 +1,10 @@
-LibRaw plug-in for Lumen 1.0
+LibRaw plug-in for Lumen 1.1
 ============================
 
 Lets Lumen import, show, adjust and export camera raw files: Canon (CR2,
 CR3, CRW), Nikon (NEF, NRW), Sony (ARW, SRF, SR2), Fujifilm (RAF),
 Olympus (ORF), Panasonic (RW2), Pentax (PEF), Adobe DNG, and the many
-other cameras LibRaw 0.21.4 knows.
+other cameras LibRaw 0.22.3 knows.
 
 It is a small program, LumenRaw, which Lumen runs in the background for
 each raw file it needs: for a thumbnail it takes the camera's own preview
@@ -23,7 +23,7 @@ plug-in and lists every camera it knows (1,181, from LibRaw).
 Raw files need memory while they are developed: a 24 megapixel one takes
 about 300 MB for a few seconds.
 
-LibRaw is copyright (C) 2008-2024 LibRaw LLC and used under the GNU
+LibRaw is copyright (C) 2008-2025 LibRaw LLC and used under the GNU
 Lesser General Public License 2.1 (see Licence). LumenRaw is copyright
 (C) 2026 Andrew Youll; its source (plugins.libraw.lumenraw/cpp) and the
 LibRaw source it was built from are published with Lumen.

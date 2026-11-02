@@ -224,6 +224,10 @@ Fixes from a review of 0.0.23:
   raw; now everything bigger than a thumbnail is developed.
 - The Info tab says when the LibRaw plug-in is switched off, rather than
   that it needs installing.
+- LumenRaw 1.1: LibRaw 0.22.3 (was 0.21.4): 1,258 cameras (77 more, to
+  2024: Canon R8/R50/R6 II/R5 II, Nikon Z 8/Z f/Z 6 III, Sony A7R V/A7C II/
+  A6700, Fujifilm X-T5/X-H2/X100VI, OM-5, GH6/GH7, iPhone 15...), and
+  0.22.x's fixes for damaged files. Data callback offsets are 64-bit.
 - The LumenRaw User Guide (docs/lumenraw-guide, built by
   tools/lumenraw-guide/build.py from LibRaw's camera list), packaged in
   the plug-in as !Lumen.Plugins.LibRaw.Guide.
@@ -272,7 +276,7 @@ under QEMU). Not yet run on a Pi.
 Lumen is copyright (c) 2026 Andrew Youll and is released under the MIT
 licence: see `LICENSE`. The LumenRaw plug-in's own code is MIT too; the
 LibRaw library it is built with is under the LGPL 2.1 (or CDDL), and its
-source ships with each release (`LibRaw-0.21.4-source.zip`). The
+source ships with each release (`LibRaw-0.22.3-source.zip`). The
 libraries built into Lumen keep their own licences, collected in
 `app/Licences` (installed as `!Lumen.Licences`): SQLite (public domain),
 libjpeg-turbo, libpng, zlib and UnixLib (BSD-style, with LGPL parts:

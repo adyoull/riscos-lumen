@@ -1,7 +1,7 @@
 # Lumen plug-in description (see Lumen's !Help, Plug-ins)
 Name: Camera raw (LibRaw)
-Version: 1.0
+Version: 1.1
 Kind: raw
 Program: LumenRaw
 Package: LumenRaw
-Description: Reads camera raw files with LibRaw 0.21.4
+Description: Reads camera raw files with LibRaw 0.22.3

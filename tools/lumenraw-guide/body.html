@@ -3,7 +3,7 @@
 <h1>LumenRaw User Guide</h1>
 <p>Camera raw files in Lumen, on RISC OS</p>
 <p>Everything about the plug-in that lets Lumen open, show, adjust and export the raw files from your camera, and a list of every camera it knows.</p>
-<span class="badge">LumenRaw 1.0 &middot; LibRaw 0.21.4</span>
+<span class="badge">LumenRaw 1.1 &middot; LibRaw 0.22.3</span>
 </div>
 </header>
 <main>
@@ -34,12 +34,15 @@
 <h2 class="part" id="intro">Introduction</h2>
 
 <p>Most cameras can save their photos in two ways. A <b>JPEG</b> is a finished picture: the camera has already decided the colours, the brightness and the sharpness, and thrown away whatever it didn't need. A <b>raw file</b> is what the sensor actually recorded, before any of those decisions. It holds more detail in the bright and dark parts of a scene, and leaves the decisions to you.</p>
-<p>The catch is that every camera maker has its own raw format, and most have several. Lumen doesn't read raw files itself. It hands them to a small separate program, <b>LumenRaw</b>, which is built on <b>LibRaw</b>, a free library that knows the raw files of 1,181 cameras. LumenRaw is Lumen's <b>plug-in</b> for camera raw files.</p>
+<p>The catch is that every camera maker has its own raw format, and most have several. Lumen doesn't read raw files itself. It hands them to a small separate program, <b>LumenRaw</b>, which is built on <b>LibRaw</b>, a free library that knows the raw files of 1,258 cameras. LumenRaw is Lumen's <b>plug-in</b> for camera raw files.</p>
 <p>Once it's installed, you won't often notice it: raw photos simply appear in Lumen's library beside your JPEGs, and you rate, adjust, export and print them in the same way. This guide explains what happens behind the scenes, how to install and look after the plug-in, and which cameras it works with.</p>
 
 <h4>About this guide</h4>
 <p>This guide is about the plug-in. Everything else about Lumen (the library, the adjustments, exporting) is in the <b>Lumen User Guide</b>, which comes with Lumen: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
-<p>The pictures are screenshots of Lumen 0.0.25 with LumenRaw 1.0 on RISC OS 5. The raw photos in them were taken by astronauts on the International Space Station and are published by NASA.</p>
+<p>The pictures are screenshots of Lumen 0.0.26 with LumenRaw on RISC OS 5. The raw photos in them were taken by astronauts on the International Space Station and are published by NASA.</p>
+
+<h4>New in LumenRaw 1.1</h4>
+<p>LumenRaw 1.1 is built on LibRaw 0.22.3, the newest LibRaw (October 2026), in place of 0.21.4. It knows 77 more cameras, mostly from 2023 and 2024: among them the Canon EOS R8, R50, R6 Mark II and R5 Mark II, the Nikon Z 8, Z f and Z 6 III, the Sony A7R V, A7C II and A6700, the Fujifilm X-T5, X-H2 and X100VI, the OM System OM-5, Panasonic's GH6 and GH7, and iPhones up to the 15 Pro Max. LibRaw's 0.22 releases also fix many ways a damaged or deliberately broken raw file could upset it.</p>
 
 <h4>What we assume you know</h4>
 <p>That you have Lumen and know your way round it a little: how to import photos and open one in the Viewer. You should know the three mouse buttons (<b>Select</b>, <b>Menu</b> and <b>Adjust</b>) and how to drag a directory from a Filer window. You don't need to know anything about raw files.</p>
@@ -103,7 +106,7 @@
 <p>Lumen's <b>Add plug-in</b> window has an <b>Open PackMan</b> button that starts PackMan for you.</p>
 
 <h4>By hand, from the zip file</h4>
-<p>LumenRaw also comes as a zip file, <code>LumenRaw-1.0.zip</code>. Inside it, the plug-in is laid out as it goes into Lumen: <code>!Lumen.Plugins.LibRaw</code>.</p>
+<p>LumenRaw also comes as a zip file, <code>LumenRaw-1.1.zip</code>. Inside it, the plug-in is laid out as it goes into Lumen: <code>!Lumen.Plugins.LibRaw</code>.</p>
 <ol class="steps">
 <li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
 <li>Open the <code>!Lumen</code> directory inside it: hold <kbd>Shift</kbd> and double-click it, then double-click <code>Plugins</code>. You'll see a directory called <code>LibRaw</code>.</li>
@@ -114,7 +117,7 @@
 <p>You can also drag the <code>LibRaw</code> directory straight onto Lumen's main window.</p>
 
 <h4>Checking it's working</h4>
-<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenRaw is listed as <b>Camera raw (LibRaw) 1.0</b>, with a tick when it's on.</p>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenRaw is listed as <b>Camera raw (LibRaw) 1.1</b>, with a tick when it's on.</p>
 <figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw installed and on.</figcaption></figure>
 
 <div class="box try"><b class="label">TRY IT</b>Find a raw file from your camera (its name usually ends in <code>/NEF</code>, <code>/CR2</code>, <code>/CR3</code>, <code>/ARW</code>, <code>/RAF</code>, <code>/ORF</code>, <code>/RW2</code> or <code>/DNG</code>) and drag it into Lumen's window. A thumbnail should appear within a second or two. Double-click it: after a moment the photo sharpens as LumenRaw develops it.</div>
@@ -195,7 +198,7 @@
 <p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon (or from the main menu over the Browser).</p>
 
 <h4>Switching it off and on</h4>
-<p>Choose <b>Camera raw (LibRaw) 1.0</b> to switch it off: the tick goes. LumenRaw stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
+<p>Choose <b>Camera raw (LibRaw) 1.1</b> to switch it off: the tick goes. LumenRaw stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
 <p>While it's off, raw photos keep their thumbnails, stars, albums and adjustments, but opening one shows a message instead of the photo:</p>
 <figure><img src="images/switched-off.png" alt="A raw photo with the plug-in switched off"><figcaption>With LumenRaw switched off. The Info tab says so too.</figcaption></figure>
 <p>A raw photo that's already showing in the Viewer stays as it is when you switch; the change shows from the next photo you open.</p>
@@ -214,20 +217,20 @@
 
 <h3 class="chapter" id="ch8"><span>8</span> Which cameras work</h3>
 
-<p>LumenRaw 1.0 uses LibRaw 0.21.4, which lists <b>1,181 cameras</b> from about 80 makers, from early digital cameras to models released around 2022. The whole list is in <a href="#appA">Appendix A</a>. Here's a summary of the makers with the most:</p>
+<p>LumenRaw 1.1 uses LibRaw 0.22.3, which lists <b>1,258 cameras</b> from about 80 makers, from early digital cameras to models released in 2024. The whole list is in <a href="#appA">Appendix A</a>. Here's a summary of the makers with the most:</p>
 <table>
 <tr><th>Maker</th><th>Models</th><th>For example</th></tr>
-<tr><td>Canon</td><td>163</td><td>EOS R3, EOS R5, EOS R10, EOS 5D Mark IV, EOS 90D, EOS M50 Mark II; many PowerShots</td></tr>
-<tr><td>Nikon</td><td>106</td><td>Z 9, Z 6 II, Z 50, D850, D7500, D3500; Coolpix</td></tr>
-<tr><td>Sony</td><td>104</td><td>A1, A7 IV, A7R IV, A7S III, A6600; RX100 series</td></tr>
-<tr><td>Fujifilm</td><td>81</td><td>X-H2S, X-T4, X-T30 II, X-S10, X100V, GFX 100S</td></tr>
-<tr><td>Panasonic</td><td>76</td><td>DC-GH5 Mark II, DC-S1R, DMC-LX100</td></tr>
-<tr><td>Olympus / OM System</td><td>76</td><td>OM-1, E-M1 Mark III, E-M5 Mark III, E-M10 Mark IV</td></tr>
-<tr><td>Leica</td><td>56</td><td>M11, Q2, SL2</td></tr>
-<tr><td>Pentax</td><td>42</td><td>K-3 Mark III, K-1 Mark II, KP</td></tr>
-<tr><td>Samsung, Kodak, Casio</td><td>41, 42, 53</td><td>Galaxy phones, NX cameras; older compacts and DSLRs</td></tr>
-<tr><td>Medium format</td><td>120</td><td>Hasselblad, Phase One, Leaf, Mamiya, Sinar, Imacon</td></tr>
-<tr><td>Phones and drones</td><td>&ndash;</td><td>Apple iPhone (up to the 13 Pro), Google Pixel (up to the 5), Huawei, Xiaomi, OnePlus, DJI Mavic 3</td></tr>
+<tr><td>Canon</td><td>171</td><td>EOS R1, EOS R5 Mark II, EOS R6 Mark II, EOS R8, EOS R50, EOS R10, EOS 5D Mark IV, EOS 90D; many PowerShots</td></tr>
+<tr><td>Sony</td><td>115</td><td>A1, A9 III, A7R V, A7 IV, A7C II, A6700, ZV-E1; RX100 series</td></tr>
+<tr><td>Nikon</td><td>110</td><td>Z 9, Z 8, Z f, Z 6 III, Z 30, D850, D7500, D3500; Coolpix</td></tr>
+<tr><td>Fujifilm</td><td>88</td><td>X-T5, X-H2, X-H2S, X100VI, X-T50, X-S20, GFX 100 II</td></tr>
+<tr><td>Panasonic</td><td>82</td><td>DC-GH7, DC-GH6, DC-S5 MkII, DC-G9 Mark II, DC-S9, DMC-LX100</td></tr>
+<tr><td>Olympus / OM System</td><td>79</td><td>OM-1 Mark II, OM-5, E-M1 Mark III, E-M10 Mark IV, TG-7</td></tr>
+<tr><td>Leica</td><td>61</td><td>M11, Q3, SL3, D-Lux8</td></tr>
+<tr><td>Pentax</td><td>44</td><td>K-3 Mark III (and Monochrome), K-1 Mark II, KF, KP</td></tr>
+<tr><td>Samsung, Kodak, Casio</td><td>44, 42, 53</td><td>Galaxy phones, NX cameras; older compacts and DSLRs</td></tr>
+<tr><td>Medium format</td><td>123</td><td>Hasselblad (to the X2D 100C), Phase One, Leaf, Mamiya, Sinar, Imacon</td></tr>
+<tr><td>Phones and drones</td><td>&ndash;</td><td>Apple iPhone (up to the 15 Pro Max), Google Pixel (up to the 9 Pro), Samsung Galaxy S23, Xiaomi 13 Pro, DJI Mavic 3 Pro and Mini 3 Pro</td></tr>
 <tr><td>Raspberry Pi</td><td>2</td><td>The Raspberry Pi Camera and Camera V2</td></tr>
 </table>
 <div class="box tip"><b class="label">TIP</b><b>DNG</b> (Adobe's Digital Negative) is a common raw format that many cameras and phones save, and that other programs can convert to. LumenRaw reads DNG files generally, so a DNG from a camera that isn't in the list usually opens too.</div>
@@ -236,14 +239,15 @@
 
 <h3 class="chapter" id="ch9"><span>9</span> If your camera isn't listed</h3>
 
-<p>Camera makers bring out new models, and new raw formats, every year, and LibRaw 0.21.4's list stops at cameras from around 2022. A camera that's newer than the list, or a format this build of LibRaw doesn't include, may not open at all, or may open with colours that look wrong.</p>
+<p>Camera makers bring out new models, and new raw formats, every year, and LibRaw 0.22.3's list stops at cameras from 2024. A camera that's newer than the list, or a format this build of LibRaw doesn't include, may not open at all, or may open with colours that look wrong.</p>
 
-<h4>Known not to work in LumenRaw 1.0</h4>
+<h4>Known not to work in LumenRaw 1.1</h4>
 <ul>
-<li><b>Newer cameras</b>, for example the Canon EOS R8, R50 and R6 Mark II, Nikon Z 8 and Z f, Sony A7R V, A7C II and A6700, Fujifilm X-T5, X-H2 and X100VI, OM System OM-5 and Panasonic GH6. If your camera came out in 2023 or later, it probably isn't in the list.</li>
-<li><b>Nikon's High Efficiency raw</b> (the HE and HE* settings on the Z 9 and later). Set the camera to <b>lossless compressed</b> raw instead.</li>
+<li><b>Newer cameras</b>, for example the Nikon Z50 II and Z5 II, Sony A1 II, Fujifilm X-M5, X-E5 and GFX100RF, Panasonic S1R II, OM System OM-3 and the iPhone 16. If your camera came out late in 2024 or later, it may not be in the list.</li>
+<li><b>Nikon's High Efficiency raw</b> (the HE and HE* settings on the Z 9, Z 8, Z f and Z 6 III). Set the camera to <b>lossless compressed</b> raw instead.</li>
 <li><b>Sigma's Foveon cameras</b> (X3F files: SD9 to SD1 Merrill, DP Merrill and Quattro). LibRaw can read these only with an extra part that LumenRaw doesn't include. The Sigma dp0 Quattro's DNG files and the Sigma fp do work.</li>
 <li><b>GoPro raw</b> (GPR files), for the same reason.</li>
+<li><b>DNG files compressed with JPEG XL</b> (DNG 1.7, which some newer phones and converters write). LibRaw reads these only with Adobe's DNG SDK built in, which LumenRaw doesn't include.</li>
 </ul>
 
 <h4>What you'll see</h4>
@@ -285,13 +289,13 @@
 <li><b>How Lumen runs it:</b> <code>TaskWindow "&lt;command&gt;" -wimpslot 8000K -name LumenRaw -quit</code>, one job at a time. The slot starts small and UnixLib grows it as LibRaw needs. Job files live in <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>, which Lumen clears up.</li>
 <li><b>Recognising raw files:</b> Lumen checks the start of each file (Canon CR2 and CR3, Fujifilm RAF, Olympus ORF and Panasonic RW2 have signatures of their own), and for TIFF-based formats the name's ending as well (<a href="#appB">Appendix B</a>). The EXIF in TIFF-based raws (NEF, CR2, ARW, DNG, PEF and others) is read by Lumen itself, so the Info tab is full even with the plug-in switched off.</li>
 <li><b>The plug-in description</b> is the text file <code>!Lumen.Plugins.LibRaw.Plugin</code>: <code>Name</code>, <code>Version</code>, <code>Kind: raw</code>, <code>Program: LumenRaw</code>, <code>Package: LumenRaw</code> and <code>Description</code> lines. Switched-off plug-ins are listed in <code>&lt;Choices$Write&gt;.Lumen.Plugins</code>.</li>
-<li><b>This build of LibRaw</b> (0.21.4) has no threads and no OpenMP, uses zlib and libjpeg for DNG's deflate and lossy compression, and leaves out the X3F (Foveon), GoPro GPR and old video-camera decoders, and LittleCMS. It's built with GCCSDK for ARMv7 with VFPv3 and hard float.</li>
-<li><b>Source and licences:</b> LumenRaw is &copy; Andrew Youll, 2026, under the MIT licence; its source (<code>plugins.libraw.lumenraw/cpp</code>) is part of Lumen's source. LibRaw is &copy; 2008&ndash;2024 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the exact LibRaw source it was built from is published beside each release (<code>LibRaw-0.21.4-source.zip</code>), so you can rebuild LumenRaw against a changed LibRaw.</li>
+<li><b>This build of LibRaw</b> (0.22.3) has no threads and no OpenMP, uses zlib and libjpeg for DNG's deflate and lossy compression, and leaves out the X3F (Foveon) and GoPro GPR decoders, Adobe's DNG SDK (JPEG XL DNGs) and LittleCMS. It's built with GCCSDK for ARMv7 with VFPv3 and hard float.</li>
+<li><b>Source and licences:</b> LumenRaw is &copy; Andrew Youll, 2026, under the MIT licence; its source (<code>plugins.libraw.lumenraw/cpp</code>) is part of Lumen's source. LibRaw is &copy; 2008&ndash;2025 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the exact LibRaw source it was built from is published beside each release (<code>LibRaw-0.22.3-source.zip</code>), so you can rebuild LumenRaw against a changed LibRaw.</li>
 </ol>
 
 <!-- ======================================================================= -->
 <h2 class="part" id="appA">Appendix A: Every camera LumenRaw knows</h2>
-<p>This is LibRaw 0.21.4's own list, as built into LumenRaw 1.0: 1,181 entries, under their makers' names as LibRaw gives them. Where a camera is sold under several names, they're listed together. Notes in brackets are LibRaw's: <i>CHDK hack</i> means the camera saves raw files only with the free CHDK firmware add-on; <i>secret menu hack</i> is the same for some old Casio cameras.</p>
+<p>This is LibRaw 0.22.3's own list, as built into LumenRaw 1.1: 1,258 entries, under their makers' names as LibRaw gives them. Where a camera is sold under several names, they're listed together. Notes in brackets are LibRaw's: <i>CHDK hack</i> means the camera saves raw files only with the free CHDK firmware add-on; <i>secret menu hack</i> is the same for some old Casio cameras.</p>
 <!-- CAMERAS -->
 
 <!-- ======================================================================= -->
@@ -316,12 +320,12 @@
 <tr><td>KDC, DCR</td><td>Kodak</td></tr>
 <tr><td>MRW</td><td>Minolta and Konica Minolta</td></tr>
 <tr><td>RAW</td><td>Various (Panasonic and Leica compacts, and others)</td></tr>
-<tr><td>X3F, GPR</td><td>Sigma Foveon, GoPro: recognised, but not readable by LumenRaw 1.0 (<a href="#ch9">Chapter 9</a>)</td></tr>
+<tr><td>X3F, GPR</td><td>Sigma Foveon, GoPro: recognised, but not readable by LumenRaw 1.1 (<a href="#ch9">Chapter 9</a>)</td></tr>
 </table>
 
 <!-- ======================================================================= -->
 <h2 class="part" id="credits">Credits and licences</h2>
 <p>The photos in this guide are ISS030-E-122639 (Nikon D3S, March 2012) and ISS042-E-297200 (Nikon D4, February 2015), taken from the International Space Station and published by NASA. They're in the public domain.</p>
-<p class="small">LumenRaw is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on LibRaw, &copy; 2008&ndash;2024 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the licence is in <code>!Lumen.Plugins.LibRaw.Licence</code>. The camera list in Appendix A is LibRaw's. Product names are the trademarks of their owners and are used here only to say which cameras work.</p>
+<p class="small">LumenRaw is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on LibRaw, &copy; 2008&ndash;2025 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the licence is in <code>!Lumen.Plugins.LibRaw.Licence</code>. The camera list in Appendix A is LibRaw's. Product names are the trademarks of their owners and are used here only to say which cameras work.</p>
 
 </main>

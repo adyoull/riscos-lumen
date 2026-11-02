@@ -154,7 +154,8 @@ $(OUT)/lumenraw-arm: $(RAW_SRC)
 	arm-linux-gnueabihf-g++ -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard -mno-unaligned-access -no-pie $(RAW_FLAGS) \
 	  -I$(DEPS)/linuxarm/include -o $@ $(RAW_SRC) $(DEPS)/linuxarm/lib/libraw.a $(DEPS)/linuxarm/lib/libjpeg.a \
 	  $(DEPS)/linuxarm/lib/libz.a -lm
-RAW_VERSION := 1.0
+RAW_VERSION := 1.1
+LIBRAW_VERSION := 0.22.3
 # The plug-in's release zip, laid out as it goes into Lumen (PackMan's
 # LumenRaw package maps it into Apps.Graphics.!Lumen.Plugins.LibRaw), and
 # the LibRaw source it was built from (the LGPL asks for it with the binary).
@@ -168,15 +169,15 @@ $(OUT)/LumenRaw-$(RAW_VERSION).zip: $(OUT)/LumenRaw,ff8 plugins/libraw/ReadMe pl
 	cp docs/lumenraw-guide/index.html $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Guide/index.html,faf
 	for f in docs/lumenraw-guide/images/*.png; do cp $$f $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Guide/images/$$(basename $$f),b60; done
 	$(ROZIP) $@ -C $(OUT)/rawpkg !Lumen
-$(OUT)/LibRaw-0.21.4-source.zip:
-	cd /build/src/LibRaw && git archive --format=zip --prefix=LibRaw-0.21.4/ -o $(CURDIR)/$@ HEAD
+$(OUT)/LibRaw-$(LIBRAW_VERSION)-source.zip:
+	cd /build/src/LibRaw && git archive --format=zip --prefix=LibRaw-$(LIBRAW_VERSION)/ -o $(CURDIR)/$@ $(LIBRAW_VERSION)
 # The guide on its own, to read on any computer.
 $(OUT)/Lumen-User-Guide.zip: $(GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ guide
 $(OUT)/LumenRaw-User-Guide.zip: $(RAW_GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenraw-guide
 guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip
-plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-0.21.4-source.zip
+plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-$(LIBRAW_VERSION)-source.zip
 # The helper on real raw files (not in the repository: their licences
 # vary), on Linux and on ARM with RISC OS's alignment rules.
 test-plugin: $(OUT)/lumenraw-host $(OUT)/lumenraw-arm

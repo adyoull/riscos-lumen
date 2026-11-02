@@ -4,17 +4,17 @@ LumenRaw (the LibRaw plug-in for Lumen)
 LumenRaw is copyright (C) 2026 Andrew Youll. Its own code is free
 software under the MIT licence (below, after LibRaw's notice).
 
-It is built with LibRaw 0.21.4 (https://www.libraw.org), used under the GNU
+It is built with LibRaw 0.22.3 (https://www.libraw.org), used under the GNU
 Lesser General Public License version 2.1, which follows LibRaw's own
-copyright notice. The source of LibRaw 0.21.4 and of LumenRaw is published
-with each Lumen release (LibRaw-0.21.4-source.zip and Lumen's source),
+copyright notice. The source of LibRaw 0.22.3 and of LumenRaw is published
+with each Lumen release (LibRaw-0.22.3-source.zip and Lumen's source),
 so LumenRaw can be rebuilt with a changed LibRaw.
 
 -----------------------------------------------------------------------
 
  ** LibRaw: Raw images processing library **
 
-Copyright (C) 2008-2021 LibRaw LLC (http://www.libraw.org, info@libraw.org)
+Copyright (C) 2008-2025 LibRaw LLC (http://www.libraw.org, info@libraw.org)
  
 LibRaw is free software; you can redistribute it and/or modify
 it under the terms of the one of two licenses as you choose:

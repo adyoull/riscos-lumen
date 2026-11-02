@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds LibRaw (0.21.4, /build/src/LibRaw) as a static library for the
+# Builds LibRaw (0.22.3, /build/src/LibRaw) as a static library for the
 # LumenRaw plug-in, for three targets:
 #   riscos   - arm-riscos-gnueabihf (the plug-in)
 #   host     - x86-64 Linux (fast tests)

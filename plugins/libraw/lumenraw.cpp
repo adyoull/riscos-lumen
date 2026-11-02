@@ -132,7 +132,7 @@ static int develop (LibRaw &r, const char *image, const char *info)
 /* LibRaw reports damaged data on stderr by default; any output would open
    a task window on the desktop, so it is kept quiet (a damaged file still
    develops as far as it can). */
-static void quiet (void *data, const char *file, const int offset)
+static void quiet (void *data, const char *file, const INT64 offset)
 {
   (void) data; (void) file; (void) offset;
 }
@@ -159,7 +159,7 @@ int main (int argc, char **argv)
     {
       fprintf (stderr, "LumenRaw %s (LibRaw %s)\n"
                "  LumenRaw thumb SRC IMAGE INFO\n  LumenRaw decode SRC IMAGE INFO MAXSIDE\n",
-               "1.0", libraw_version ());
+               "1.1", libraw_version ());
       return 2;
     }
   const char *src = argv[2], *image = argv[3], *info = argv[4];
