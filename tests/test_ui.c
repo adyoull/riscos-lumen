@@ -774,10 +774,11 @@ int main (int argc, char **argv)
   /* The window menu. */
   click (5, -5, Button_Menu);
   CHECK (menu_open && strncmp ((const char *) menu_open, "Lumen", 5) == 0, "Menu: the Lumen menu");
-  CHECK (strcmp (item_text (menu_open, 0), "Show") == 0 && strcmp (item_text (menu_open, 4), "Plug-ins") == 0
-         && strcmp (item_text (menu_open, 5), "Quit") == 0, "Show ... Plug-ins, Quit");
-  CHECK ((item (menu_open, 5)[0] & 0x80) != 0, "Quit is the last item");
-  CHECK (strcmp (item_text (submenu (menu_open, 4), 0), "Camera raw (LibRaw) 1.0") == 0, "Plug-ins > the LibRaw plug-in");
+  CHECK (strcmp (item_text (menu_open, 0), "Show") == 0 && strcmp (item_text (menu_open, 3), "Versions and stacks") == 0
+         && strcmp (item_text (menu_open, 5), "Plug-ins") == 0 && strcmp (item_text (menu_open, 6), "Quit") == 0,
+         "Show ... Versions and stacks, Plug-ins, Quit");
+  CHECK ((item (menu_open, 6)[0] & 0x80) != 0, "Quit is the last item");
+  CHECK (strcmp (item_text (submenu (menu_open, 5), 0), "Camera raw (LibRaw) 1.0") == 0, "Plug-ins > the LibRaw plug-in");
   {
     const int *show = submenu (menu_open, 0), *proj = submenu (show, 4);
     CHECK (strcmp (item_text (show, 1), "Flagged") == 0, "Show > Flagged");
@@ -805,7 +806,7 @@ int main (int argc, char **argv)
     free (g);
   }
   /* Thumbnail size: Large. */
-  choose (3, 2, -1);
+  choose (4, 2, -1);
   redraw ();
   nulls_until_idle ();
   redraw ();
@@ -1621,6 +1622,86 @@ int main (int argc, char **argv)
         cat_remove_keywords (lib_cat (app_library ()), two, nall, "Ferry, Keswick");
         free (two);
       }
+      /* Versions and stacks. */
+      {
+        cat_item vi;
+        int before = browser_count (), k3, i0, br[4], closed_before = vclosed;
+        cat_id made[4];
+        int nmade = 0;
+        browser_focus_on (0);
+        browser_item (0, &vi);
+        caret_window = BROWSER;
+        key (0x04);                    /* Ctrl-D */
+        CHECK (browser_count () == before + 1 && browser_focus () == 1, "Ctrl-D: a duplicate version, next to it, focused");
+        browser_item (1, &vi);
+        made[nmade++] = vi.id;
+        CHECK (strstr (vi.name, "_v2") != NULL && vi.stack && vi.stack_count == 2 && vi.stack_open && !vi.stack_pick,
+               "named _v2, in an open stack of 2");
+        browser_item (0, &vi);
+        CHECK (vi.stack_pick && vi.stack_count == 2, "the original's version is the pick");
+        key ('s');                     /* close */
+        CHECK (browser_count () == before && browser_focus () == 0, "S: closed, the pick alone, focused");
+        redraw ();
+        CHECK (browser_badge (0, br), "the pick shows the stack's badge");
+        memset (b, 0, sizeof b);
+        b[0] = (br[0] + br[2]) / 2; b[1] = (br[1] + br[3]) / 2; b[2] = Button_Select; b[3] = BROWSER;
+        app_event (Mouse_Click, b, 0);
+        CHECK (browser_count () == before + 1, "a click on the badge opens it");
+        /* Make the version the pick, then close: it stands for the stack. */
+        browser_focus_on (1);
+        key ('\\');
+        key ('s');
+        browser_item (0, &vi);
+        CHECK (browser_count () == before && strstr (vi.name, "_v2") != NULL && vi.stack_pick, "\\: the version the pick");
+        key ('s');
+        /* Stack two other photos with Ctrl-G, then Ctrl-U. */
+        i0 = 2;
+        browser_focus_on (i0);
+        browser_item (i0 + 1, &vi);
+        browser_toggle_select (i0 + 1);   /* as Adjust-click */
+        key (0x07);                    /* Ctrl-G */
+        browser_item (i0, &vi);
+        k3 = vi.stack_count;
+        CHECK (k3 == 2 && vi.stack_open, "Ctrl-G: the two in an open stack");
+        key (0x15);                    /* Ctrl-U */
+        browser_item (i0, &vi);
+        CHECK (!vi.stack, "Ctrl-U: unstacked");
+        /* The menu: Versions and stacks > New version from original. */
+        browser_focus_on (i0);
+        click (5, -5, Button_Menu);
+        CHECK (!strcmp (item_text (submenu (menu_open, 3), 1), "New version from original"), "Versions and stacks > New version from original");
+        choose (3, 1, -1);
+        browser_item (browser_focus (), &vi);
+        made[nmade++] = vi.id;
+        {
+          char rec[64];
+          cat_get_recipe (lib_cat (app_library ()), vi.id, rec, sizeof rec);
+          CHECK (strstr (vi.name, "_v2") != NULL && !rec[0], "a new version from the original: no adjustments");
+        }
+        /* The Info tab says which version it is. */
+        mainwin_set_tab (TAB_INFO);
+        mainwin_info_changed ();
+        CHECK (strstr (mainwin_info_text (), "Version: 2 of 2 of this photo") != NULL
+               && strstr (mainwin_info_text (), "Stack: 2 photos, open") != NULL, "Info: Version 2 of 2, in a stack");
+        mainwin_set_tab (TAB_LIBRARY);
+        /* In the Viewer: Ctrl-D shows the new version. */
+        viewer_open (0);
+        caret_window = VIEWER;
+        key (0x04);
+        CHECK (mainwin_mode () == LAYOUT_VIEWER && viewer_item () != 0, "Ctrl-D in the Viewer");
+        {
+          cat_item vv;
+          browser_item (viewer_index (), &vv);
+          CHECK (strstr (vv.name, "_v3") != NULL, "it shows the new version (v3)");
+          made[nmade++] = vv.id;
+        }
+        mainwin_set_mode (LAYOUT_BROWSER);
+        cat_remove_versions (lib_cat (app_library ()), made, nmade);
+        browser_after_change ();
+        CHECK (browser_count () == before, "the versions removed: back to as it was");
+        browser_select_all (0);
+        vclosed = closed_before;       /* the Viewer's closes counted later start from here */
+      }
       /* No printer driver: says what to do. */
       have_printer = 0;
       reported[0] = '\0';
@@ -1676,9 +1757,10 @@ int main (int argc, char **argv)
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
     CHECK (strstr (item_text (menu_open, 14), "Caption and keywords") != NULL, "Photo menu: Caption and keywords...");
-    CHECK (strstr (item_text (menu_open, 16), "Print...") != NULL, "Photo menu: Print...");
-    CHECK (strstr (item_text (menu_open, 17), "Back to the Browser") != NULL, "Back to the Browser");
-    choose (17, -1, -1);
+    CHECK (strstr (item_text (menu_open, 15), "Duplicate version") != NULL, "Photo menu: Duplicate version");
+    CHECK (strstr (item_text (menu_open, 18), "Print...") != NULL, "Photo menu: Print...");
+    CHECK (strstr (item_text (menu_open, 19), "Back to the Browser") != NULL, "Back to the Browser");
+    choose (19, -1, -1);
     CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
     {
       /* Undo and Redo shaded in the Browser: the toolbar draws them grey and a click does nothing. */

@@ -62,11 +62,17 @@ typedef struct
   int filetype;
   int edited;                 /* has a recipe */
   int missing;                /* its file can't be found */
+  cat_id stack;               /* its stack, 0 for none */
+  int stack_count;            /* how many are in that stack */
+  int stack_pick;             /* it is the stack's pick (shown when the stack is closed) */
+  int stack_open;             /* the stack is open: all shown */
 } cat_item;
 
 enum { THUMB_NONE = 0, THUMB_READY = 1, THUMB_FAILED = 2 };
 
-/* Fills a malloc'd array (free it). Sorted by capture time, then name. */
+/* Fills a malloc'd array (free it). Sorted by capture time, then name; a
+   stack's photos together, its pick first. In All photos, a project and
+   the last import, without a search, a closed stack shows only its pick. */
 int cat_list (cat *c, const cat_source *src, cat_item **items, int *count);
 
 /* The next version without a thumbnail: its id, the original's path,
@@ -194,6 +200,26 @@ void cat_rule_parse (const char *text, cat_rule *r);
    it makes one ("" stays ""); with end set, a bare year or month means its end. */
 int cat_date_normal (const char *in, int end, char out[11]);
 
+/* --- Versions and stacks (schema 5). A version is one way of developing an
+   original; an original can have several. A stack gathers versions (of one
+   original, or a burst or bracket of several) under one, the pick, which
+   stands for them all while the stack is closed. */
+/* A new version of the original version v is of: with its adjustments
+   (keep_look) or as the original; its caption, keywords and albums too.
+   It is stacked with v (open, so it shows). Its id, or -1. */
+cat_id cat_new_version (cat *c, cat_id v, int keep_look);
+/* The versions into one stack (theirs before are merged): pick is its pick
+   if it is among them, else the first. The stack's id, or -1. */
+cat_id cat_stack (cat *c, const cat_id *v, int n, cat_id pick);
+/* Takes the versions out of their stacks (a stack left with one goes). */
+int cat_unstack (cat *c, const cat_id *v, int n);
+int cat_stack_pick (cat *c, cat_id v);                 /* v becomes its stack's pick */
+int cat_stack_open (cat *c, cat_id v, int open);       /* v's stack: 1 open, 0 closed, -1 the other */
+/* Stacks the versions taken within seconds of the one before (bursts,
+   brackets); those with no date are left. How many stacks were made. */
+int cat_auto_stack (cat *c, const cat_id *v, int n, int seconds);
+int cat_count_versions (cat *c, cat_id original);      /* versions of an original */
+
 /* Details for the info line and tests. */
 typedef struct
 {
@@ -206,6 +232,8 @@ typedef struct
   cat_id original;
   int rating;                 /* 0-5, or RATING_REJECT */
   char project_name[64];
+  int versions;               /* of its original (1 if just this) */
+  int version_no;             /* this one's place among them, from 1 */
 } cat_details;
 int cat_get_details (cat *c, cat_id version, cat_details *d);
 

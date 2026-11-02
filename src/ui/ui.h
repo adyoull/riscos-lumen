@@ -164,6 +164,7 @@ const cat_source *browser_source (void);
 int browser_selection (cat_id **ids);
 int browser_count (void);
 void browser_select_all (int on);
+void browser_toggle_select (int i);   /* as Adjust-click on photo i */
 void browser_set_size (int size);      /* 0 small, 1 medium, 2 large */
 int browser_size (void);
 void browser_after_change (void);      /* ratings etc. changed: reload and redraw */
@@ -172,6 +173,15 @@ int browser_focus (void);
 void browser_show_focus (void);       /* scroll the focused photo into view */
 void browser_focus_on (int i);         /* select and show item i, alone */
 void browser_remove_selection (void);  /* asks, then takes them out of the library */
+void viewer_new_version (int keep_look);   /* of the photo shown, then shown */
+/* Versions and stacks: on the selection (or the focused photo). */
+int browser_new_version (int keep_look);   /* a version of each; the (last) new one's index, or -1 */
+void browser_stack (void);             /* the selection into one stack, the focused photo its pick */
+void browser_unstack (void);           /* their stacks taken apart */
+void browser_make_pick (void);         /* the focused photo becomes its stack's pick */
+void browser_toggle_stack (void);      /* the focused photo's stack opened or closed */
+int browser_auto_stack (int seconds);  /* the selection (or all shown): how many stacks made */
+int browser_badge (int i, int r[4]);   /* tests: a cell's stack badge, screen coordinates */
 void browser_removed (const cat_id *ids, int n);   /* the photos left the library */
 
 /* --- viewer.c: one photo and the adjustments panel */

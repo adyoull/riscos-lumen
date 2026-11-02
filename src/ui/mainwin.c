@@ -903,6 +903,17 @@ static void info_load (int force)
     info_add ("Caption", cap[0] ? cap : "None: click to add one", INFO_EDIT);
     info_add ("Keywords", kw[0] ? kw : "None: click to add some", INFO_EDIT);
   }
+  if (d.versions > 1)
+    {
+      snprintf (v, sizeof v, "%d of %d of this photo", d.version_no, d.versions);
+      info_add ("Version", v, 0);
+    }
+  if (it.stack)
+    {
+      snprintf (v, sizeof v, "%d photos%s, %s", it.stack_count, it.stack_pick ? ", this the pick" : "",
+                it.stack_open ? "open" : "closed");
+      info_add ("Stack", v, 0);
+    }
   info_add ("File", d.path, 0);
   if (d.missing)
     info_add ("Missing", "The file can't be found there. If it has moved, drag the folder it is in now into Lumen.", 0);

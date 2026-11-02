@@ -732,6 +732,21 @@ void viewer_open_window (int *block)
 }
 
 int viewer_has_photo (void) { return state != V_CLOSED; }
+/* A new version of the photo shown (with its adjustments, or as the
+   original), shown in its place. */
+void viewer_new_version (int keep_look)
+{
+  int i = viewer_index ();
+  if (i < 0)
+    return;
+  if (crop_mode)
+    viewer_crop_finish (1);
+  browser_focus_on (i);
+  i = browser_new_version (keep_look);
+  if (i >= 0)
+    viewer_open (i);
+}
+
 int viewer_index (void) { return state != V_CLOSED ? index_in_list : -1; }
 
 /* --- rendering */
@@ -2315,6 +2330,9 @@ int viewer_key (int key)
       return 1;
     case 0x03:                         /* Ctrl-C */
       looks_copy_viewer ();
+      return 1;
+    case 0x04:                         /* Ctrl-D: a duplicate version, shown */
+      viewer_new_version (1);
       return 1;
     case 0x0B:                         /* Ctrl-K: caption and keywords */
       {

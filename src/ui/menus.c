@@ -27,7 +27,7 @@ static size_t used;
 static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu, 4 presets, 5 New, 6 rating filter */
 static int open_x, open_y;
 static int info_window = -1;
-static char album_name[40], preset_name[40];
+static char album_name[40], preset_name[40], stack_secs[6] = "2";
 static int export_after_menu, print_after_menu;
 static int tags_after_menu;            /* 1: the selection's caption and keywords, 2: the Viewer's photo */
 static int smart_after_menu;           /* open the Smart album window: 1 a new one, 2 the group menu's album */
@@ -303,7 +303,7 @@ static menu *build_window_menu (void)
   const cat_source *s = browser_source ();
   cat_id *ids;
   int nsel = browser_selection (&ids), k;
-  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb, *apply, *plugm;
+  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb, *apply, *plugm, *vers, *autos;
   static const char *const rating_names[6] = { "No stars", "1 star", "2 stars", "3 stars", "4 stars", "5 stars" };
   static const char *const filter_names[6] = { "Any rating", "1 star and up", "2 stars and up", "3 stars and up", "4 stars and up", "5 stars" };
   free (ids);
@@ -377,23 +377,43 @@ static menu *build_window_menu (void)
       set_item (sizem, 2, 1, "Large", browser_size () == 2 ? MF_TICK : 0, -1, 0);
     }
 
+  /* Versions and stacks: on the selection, or the focused photo. */
+  {
+    int focused = browser_focus () >= 0, stacked = 0;
+    cat_item fi;
+    if (focused && browser_item (browser_focus (), &fi))
+      stacked = fi.stack != 0;
+    autos = writable_menu ("Seconds", stack_secs, sizeof stack_secs);
+    vers = new_menu ("Versions", 7);
+    if (vers)
+      {
+        set_item (vers, 0, 0, "Duplicate version      ^D", 0, -1, nsel == 0 && !focused);
+        set_item (vers, 1, 0, "New version from original", MF_DOTTED, -1, nsel == 0 && !focused);
+        set_item (vers, 2, 0, "Stack      ^G", 0, -1, nsel < 2);
+        set_item (vers, 3, 0, "Unstack      ^U", 0, -1, !stacked && nsel == 0);
+        set_item (vers, 4, 0, "Make the pick      \\", 0, -1, !stacked);
+        set_item (vers, 5, 0, "Open or close stack      S", MF_DOTTED, -1, !stacked);
+        set_item (vers, 6, 1, "Auto-stack, seconds apart", 0, (int) autos, browser_count () < 2);
+      }
+  }
   plugm = build_plugins_menu ();
-  m = new_menu (APP_NAME, 6);
+  m = new_menu (APP_NAME, 7);
   if (m)
     {
       set_item (m, 0, 0, "Show", 0, (int) show, 0);
       set_item (m, 1, 0, "Selection", 0, (int) selm, 0);
       set_item (m, 2, 0, "Album", 0, (int) album, 0);
-      set_item (m, 3, 0, "Thumbnail size", MF_DOTTED, (int) sizem, 0);
-      set_item (m, 4, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
-      set_item (m, 5, 1, "Quit", 0, -1, 0);
+      set_item (m, 3, 0, "Versions and stacks", 0, (int) vers, 0);
+      set_item (m, 4, 0, "Thumbnail size", MF_DOTTED, (int) sizem, 0);
+      set_item (m, 5, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
+      set_item (m, 6, 1, "Quit", 0, -1, 0);
     }
   return m;
 }
 
 /* Photo > ... (the order menus_selection decodes) */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
-       VM_PRESETS, VM_COPY, VM_PASTE, VM_TAGS, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_TAGS, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
 
 /* --- styles shown as the pointer goes down the list
    The Styles item asks for Message_MenuWarning (&400C0, PRM p1017): Lumen
@@ -501,6 +521,8 @@ static menu *build_viewer_menu (void)
       set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
       set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
       set_item (m, VM_TAGS, 0, "Caption and keywords...      ^K", MF_DOTTED, -1, 0);
+      set_item (m, VM_DUP, 0, "Duplicate version      ^D", 0, -1, 0);
+      set_item (m, VM_NEW_ORIG, 0, "New version from original", MF_DOTTED, -1, 0);
       set_item (m, VM_EXPORT, 0, "Export...      ^E", 0, -1, 0);
       set_item (m, VM_PRINT, 0, "Print...      ^P", MF_DOTTED, -1, 0);
       set_item (m, VM_BACK, 0, "Back to the Browser      Esc", MF_DOTTED, -1, 0);
@@ -926,14 +948,36 @@ static int window_choice (const int *c)
       else if (c[1] == 3)
         smart_after_menu = 1;
       break;
-    case 3:                            /* Size */
+    case 3:                            /* Versions and stacks */
+      switch (c[1])
+        {
+        case 0: browser_new_version (1); break;
+        case 1: browser_new_version (0); break;
+        case 2: browser_stack (); break;
+        case 3: browser_unstack (); break;
+        case 4: browser_make_pick (); break;
+        case 5: browser_toggle_stack (); break;
+        case 6:
+          if (c[2] == 0)
+            {
+              int secs = atoi (stack_secs), made;
+              if (secs < 0)
+                secs = 0;
+              made = browser_auto_stack (secs);
+              activity_log (ACT_OTHER, "Auto-stack: %d stack%s of photos taken within %d second%s",
+                            made, made == 1 ? "" : "s", secs, secs == 1 ? "" : "s");
+            }
+          break;
+        }
+      break;
+    case 4:                            /* Size */
       if (c[1] >= 0 && c[1] <= 2)
         browser_set_size (c[1]);
       break;
-    case 4:                            /* Plug-ins */
+    case 5:                            /* Plug-ins */
       plugins_choice (c + 1);
       break;
-    case 5:
+    case 6:
       return 1;
     }
   return 0;
@@ -981,6 +1025,8 @@ int menus_selection (const int *choice)
       case VM_COPY: looks_copy_viewer (); break;
       case VM_PASTE: if (looks_clip ()) viewer_apply_look (looks_clip ()); break;
       case VM_TAGS: tags_after_menu = 2; break;
+      case VM_DUP: viewer_new_version (1); break;
+      case VM_NEW_ORIG: viewer_new_version (0); break;
       case VM_EXPORT: export_after_menu = 2; break;
       case VM_PRINT: print_after_menu = 2; break;
       case VM_BACK: viewer_close (); return 0;
@@ -1140,7 +1186,7 @@ const char *menus_help (int window, int icon)
     n = MAX_LIST;
   base = n ? n : 1;
   /* The Plug-ins submenu, from the icon bar menu (2) or the window menu (4). */
-  if ((which == 2 && c[0] == 6) || (which == 1 && c[0] == 4))
+  if ((which == 2 && c[0] == 6) || (which == 1 && c[0] == 5))
     {
       if (c[1] < 0)
         return "Lumen's plug-ins: switch them on or off, add or remove them.";
@@ -1186,8 +1232,23 @@ const char *menus_help (int window, int icon)
         if (c[1] == 1 && c[2] >= 0 && c[2] < nalbums && albums[c[2]].smart)
           return "A smart album gathers its own photos: change what it looks for instead (its menu in the Library tab).";
         return "Make albums from the selection, add the selection to one, or take it out of this one.";
-      case 3: return "Thumbnail size: Small, Medium or Large.";
-      case 5: return "Leaves Lumen. Everything is saved as you go.";
+      case 3:
+        switch (c[1])
+          {
+          case 0: return "Makes another version of each selected photo, with its adjustments, to try another look. "
+                         "The original file is shared; the versions are stacked.";
+          case 1: return "Makes another version of each selected photo as it came from the camera, without adjustments.";
+          case 2: return "Stacks the selected photos under one (the one with the focus): a burst, a bracket, versions.";
+          case 3: return "Takes the selected photos' stacks apart.";
+          case 4: return "Makes this photo its stack's pick: the one shown while the stack is closed.";
+          case 5: return "Opens the stack to show all its photos, or closes it to show only its pick. "
+                         "Clicking the number on the pick does it too.";
+          case 6: return "Stacks photos taken within this many seconds of each other (bursts and brackets): "
+                         "the selected ones, or all those shown.";
+          }
+        return "Versions of a photo, and stacks of photos that belong together.";
+      case 4: return "Thumbnail size: Small, Medium or Large.";
+      case 6: return "Leaves Lumen. Everything is saved as you go.";
       }
   if (which == 4)
     return presets_help (c, 0);

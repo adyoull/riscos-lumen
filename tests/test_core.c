@@ -690,6 +690,122 @@ static void test_library (void)
     }
   }
 
+  /* Versions and stacks. */
+  {
+    cat *c = lib_cat (l);
+    cat_id cb = items[find_item (items, n, "catbells.jpg")].id, pt = items[find_item (items, n, "portrait.jpg")].id;
+    cat_id v2, v3, alb;
+    cat_item *it;
+    int ni, k, before;
+    char cap[512], kw[1024], rec[256];
+    cat_details d;
+    cat_source all2 = { SRC_ALL, 0, 0, "" }, srch = { SRC_ALL, 0, 0, "catbells" };
+    cat_list (c, &all2, &it, &before);
+    free (it);
+    cat_set_recipe (c, cb, "exposure ev=0.50\n");
+    cat_set_caption (c, &cb, 1, "Catbells");
+    cat_add_keywords (c, &cb, 1, "fells");
+    alb = cat_album_create (c, "Versions");
+    cat_album_add (c, alb, &cb, 1);
+    v2 = cat_new_version (c, cb, 1);
+    CHECK (v2 > 0, "a duplicate version");
+    cat_get_recipe (c, v2, rec, sizeof rec);
+    cat_get_tags (c, v2, cap, sizeof cap, kw, sizeof kw);
+    CHECK (strstr (rec, "exposure ev=0.50") != NULL && !strcmp (cap, "Catbells") && !strcmp (kw, "fells"),
+           "with the adjustments, caption and keywords");
+    {
+      cat_source a = { SRC_ALBUM, alb, 0, "" };
+      cat_list (c, &a, &it, &ni);
+      CHECK (ni == 2, "and in the same album");
+      free (it);
+    }
+    v3 = cat_new_version (c, cb, 0);
+    cat_get_recipe (c, v3, rec, sizeof rec);
+    CHECK (v3 > 0 && !rec[0], "a new version from the original: no adjustments");
+    cat_list (c, &all2, &it, &ni);
+    k = find_item (it, ni, "catbells.jpg");
+    CHECK (ni == before + 2 && k >= 0 && it[k].stack && it[k].stack_count == 3 && it[k].stack_pick && it[k].stack_open,
+           "the three stacked, open, catbells the pick");
+    CHECK (k + 2 < ni && !strcmp (it[k + 1].name, "catbells_v2.jpg") && !strcmp (it[k + 2].name, "catbells_v3.jpg")
+           && !it[k + 1].stack_pick, "listed together, the pick first, named _v2 and _v3");
+    free (it);
+    CHECK (cat_get_details (c, v3, &d) == 0 && d.versions == 3 && d.version_no == 3 && d.original
+           && cat_count_versions (c, d.original) == 3, "version 3 of 3 of its original");
+    /* Closed: the pick alone. A search still finds each. */
+    cat_stack_open (c, cb, 0);
+    cat_list (c, &all2, &it, &ni);
+    CHECK (ni == before && find_item (it, ni, "catbells_v2.jpg") < 0 && it[find_item (it, ni, "catbells.jpg")].stack_count == 3,
+           "closed: only the pick shows, with its count");
+    free (it);
+    cat_list (c, &srch, &it, &ni);
+    CHECK (ni == 3, "a search finds all three");
+    free (it);
+    /* Another pick. */
+    cat_stack_pick (c, v2);
+    cat_list (c, &all2, &it, &ni);
+    CHECK (find_item (it, ni, "catbells_v2.jpg") >= 0 && find_item (it, ni, "catbells.jpg") < 0, "v2 the pick: it stands for them");
+    free (it);
+    /* Stacking two different photos merges whole stacks. */
+    {
+      cat_id two[2] = { pt, v3 };
+      cat_id st = cat_stack (c, two, 2, v3);
+      cat_list (c, &all2, &it, &ni);
+      k = find_item (it, ni, "catbells_v3.jpg");
+      CHECK (st > 0 && k >= 0 && it[k].stack_count == 4 && it[k].stack_pick && find_item (it, ni, "portrait.jpg") < 0,
+             "a stack with portrait: v3's stack-mates come too");
+      free (it);
+    }
+    /* Removing the pick: the stack keeps going with a new pick. */
+    cat_remove_versions (c, &v3, 1);
+    cat_list (c, &all2, &it, &ni);
+    {
+      int picks = 0, j;
+      for (j = 0; j < ni; j++)
+        if (it[j].stack_count == 3 && it[j].stack_pick)
+          picks++;
+      CHECK (picks == 1 && find_item (it, ni, "catbells_v3.jpg") < 0, "its pick removed: three left, one the pick (closed: it alone)");
+    }
+    free (it);
+    /* Unstacking all but one: the stack goes. */
+    {
+      cat_id two[2] = { v2, pt };
+      cat_unstack (c, two, 2);
+      cat_list (c, &srch, &it, &ni);
+      CHECK (ni == 2 && !it[0].stack && !it[1].stack, "unstacked: none left in a stack");
+      free (it);
+    }
+    /* Auto-stack: catbells and its version share a time; the others don't. */
+    {
+      cat_id *vs;
+      int nv, made;
+      cat_list (c, &all2, &it, &ni);
+      vs = malloc (sizeof *vs * (size_t) ni);
+      for (k = 0; k < ni; k++)
+        vs[k] = it[k].id;
+      made = cat_auto_stack (c, vs, ni, 5);
+      free (it);
+      cat_list (c, &all2, &it, &nv);
+      k = find_item (it, nv, "catbells.jpg");
+      CHECK (made == 1 && k >= 0 && it[k].stack_count == 2 && it[find_item (it, nv, "portrait.jpg")].stack == 0,
+             "auto-stack within 5 s: catbells and its version (portrait, 8 minutes on, alone)");
+      CHECK (cat_auto_stack (c, vs, ni, 5) == 0, "again: they are one stack already, none made");
+      free (it);
+      free (vs);
+    }
+    /* Back as it was for what follows: the versions go. */
+    {
+      cat_remove_versions (c, &v2, 1);
+      cat_list (c, &all2, &it, &ni);
+      k = find_item (it, ni, "catbells.jpg");
+      CHECK (k >= 0 && !it[k].stack, "the versions removed: no stack left");
+      free (it);
+      cat_set_recipe (c, cb, "");
+      cat_set_caption (c, &cb, 1, "");
+      cat_remove_keywords (c, &cb, 1, "fells");
+      cat_album_delete (c, alb);
+    }
+  }
+
   /* Ratings, flags, rejects, albums. */
   {
     cat_id ids[2];

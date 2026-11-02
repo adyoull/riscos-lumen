@@ -94,6 +94,13 @@ static int upgrade (cat *c)
                         "ALTER TABLE album ADD COLUMN smart TEXT;"
                         "UPDATE meta SET value = 4 WHERE key = 'schema';"))
     return -1;
+  /* Schema 5 (0.0.23): stacks. */
+  if (v < 5 && exec (c, "ALTER TABLE version ADD COLUMN stack INTEGER;"
+                        "CREATE TABLE IF NOT EXISTS stack (id INTEGER PRIMARY KEY, pick INTEGER NOT NULL,"
+                        "  open INTEGER NOT NULL DEFAULT 0);"
+                        "CREATE INDEX IF NOT EXISTS version_stack ON version (stack);"
+                        "UPDATE meta SET value = 5 WHERE key = 'schema';"))
+    return -1;
   return 0;
 }
 
@@ -251,6 +258,17 @@ int cat_set_flag (cat *c, const cat_id *v, int n, int flag)
     "UPDATE version SET flag = ?3, modified = ?1 WHERE id = ?2", (cat_id) time (NULL), v, n, flag ? 1 : 0);
 }
 
+/* Stacks left with one version (or none) go; a stack whose pick went
+   gets its first version as pick. */
+static int stacks_tidy (cat *c)
+{
+  return exec (c, "UPDATE version SET stack = NULL WHERE stack IN"
+                  " (SELECT stack FROM version WHERE stack IS NOT NULL GROUP BY stack HAVING COUNT(*) < 2);"
+                  "DELETE FROM stack WHERE id NOT IN (SELECT DISTINCT stack FROM version WHERE stack IS NOT NULL);"
+                  "UPDATE stack SET pick = (SELECT MIN(id) FROM version WHERE version.stack = stack.id)"
+                  " WHERE pick NOT IN (SELECT id FROM version WHERE version.stack = stack.id);");
+}
+
 /* --- removing and renaming */
 
 int cat_remove_versions (cat *c, const cat_id *v, int n)
@@ -290,6 +308,8 @@ int cat_remove_versions (cat *c, const cat_id *v, int n)
   if (!rc && exec (c, "DELETE FROM project WHERE id NOT IN (SELECT DISTINCT project FROM version)"))
     rc = -1;
   if (!rc && exec (c, "DELETE FROM keyword WHERE id NOT IN (SELECT DISTINCT keyword FROM version_keyword)"))
+    rc = -1;
+  if (!rc && stacks_tidy (c))
     rc = -1;
   exec (c, rc ? "ROLLBACK TO removing; RELEASE removing" : "RELEASE removing");
   return rc;
@@ -679,10 +699,24 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
       if (rule.to[0])
         strcat (match, " AND REPLACE(SUBSTR(o.taken, 1, 10), ':', '-') <= ?12");
     }
+  /* A closed stack shows its pick alone where photos are browsed (not in
+     albums, rejects, missing files or a search, which look for each one). */
+  if ((src->kind == SRC_ALL || src->kind == SRC_PROJECT || src->kind == SRC_LAST_IMPORT) && !nw)
+    strcat (match, " AND (v.stack IS NULL OR EXISTS (SELECT 1 FROM stack s WHERE s.id = v.stack"
+                   " AND (s.open = 1 OR s.pick = v.id)))");
   snprintf (sql, sizeof sql,
-            "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '', o.missing FROM version v"
-            " JOIN original o ON o.id = v.original WHERE %s%s"
-            " ORDER BY IFNULL(o.taken, '9999'), v.name, v.id", where, match);
+            "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '', o.missing,"
+            " IFNULL(v.stack, 0), (SELECT COUNT(*) FROM version m WHERE m.stack = v.stack),"
+            " IFNULL((SELECT s.pick = v.id FROM stack s WHERE s.id = v.stack), 0),"
+            " IFNULL((SELECT s.open FROM stack s WHERE s.id = v.stack), 0)"
+            " FROM version v JOIN original o ON o.id = v.original WHERE %s%s"
+            /* by date, then name: a stack's photos by their pick's, together, the pick first */
+            " ORDER BY IFNULL((SELECT IFNULL(po.taken, '9999') FROM stack s JOIN version pv ON pv.id = s.pick"
+            " JOIN original po ON po.id = pv.original WHERE s.id = v.stack), IFNULL(o.taken, '9999')),"
+            " IFNULL((SELECT pv.name FROM stack s JOIN version pv ON pv.id = s.pick WHERE s.id = v.stack), v.name),"
+            " IFNULL((SELECT s.pick FROM stack s WHERE s.id = v.stack), v.id),"
+            " v.id <> IFNULL((SELECT s.pick FROM stack s WHERE s.id = v.stack), v.id),"
+            " IFNULL(o.taken, '9999'), v.name, v.id", where, match);
   s = prep (c, sql);
   if (!s)
     return -1;
@@ -719,6 +753,10 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
       a[n].filetype = sqlite3_column_int (s, 5);
       a[n].edited = sqlite3_column_int (s, 6);
       a[n].missing = sqlite3_column_int (s, 7);
+      a[n].stack = sqlite3_column_int64 (s, 8);
+      a[n].stack_count = a[n].stack ? sqlite3_column_int (s, 9) : 0;
+      a[n].stack_pick = sqlite3_column_int (s, 10);
+      a[n].stack_open = sqlite3_column_int (s, 11);
       n++;
     }
   sqlite3_finalize (s);
@@ -1007,6 +1045,17 @@ int cat_get_details (cat *c, cat_id version, cat_details *d)
       r = 0;
     }
   sqlite3_finalize (s);
+  if (r == 0 && (s = prep (c, "SELECT COUNT(*), SUM(id <= ?2) FROM version WHERE original = ?1")))
+    {
+      sqlite3_bind_int64 (s, 1, d->original);
+      sqlite3_bind_int64 (s, 2, version);
+      if (sqlite3_step (s) == SQLITE_ROW)
+        {
+          d->versions = sqlite3_column_int (s, 0);
+          d->version_no = sqlite3_column_int (s, 1);
+        }
+      sqlite3_finalize (s);
+    }
   return r;
 }
 
@@ -1732,4 +1781,359 @@ int cat_smart_set (cat *c, cat_id album, const cat_rule *r)
     rc = fail (c, "smart album");
   sqlite3_finalize (s);
   return rc;
+}
+
+/* --- versions and stacks */
+
+int cat_count_versions (cat *c, cat_id original)
+{
+  sqlite3_stmt *s = prep (c, "SELECT COUNT(*) FROM version WHERE original = ?1");
+  int n = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, original);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    n = sqlite3_column_int (s, 0);
+  sqlite3_finalize (s);
+  return n;
+}
+
+/* A name for version k of a photo called name: _vk before its extension
+   (catbells_v2.jpg; on RISC OS, catbells_v2). */
+static void version_name (const char *name, int k, char *out, size_t n)
+{
+  const char *dot = strrchr (name, '.'), *slash = strrchr (name, '/');
+  const char *ext = dot && dot > name ? dot : slash && slash > name ? slash : NULL;
+  if (ext)
+    snprintf (out, n, "%.*s_v%d%s", (int) (ext - name), name, k, ext);
+  else
+    snprintf (out, n, "%s_v%d", name, k);
+}
+
+static cat_id stack_of (cat *c, cat_id v)
+{
+  sqlite3_stmt *s = prep (c, "SELECT IFNULL(stack, 0) FROM version WHERE id = ?1");
+  cat_id st = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, v);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    st = sqlite3_column_int64 (s, 0);
+  sqlite3_finalize (s);
+  return st;
+}
+
+cat_id cat_new_version (cat *c, cat_id v, int keep_look)
+{
+  sqlite3_stmt *s;
+  cat_id nv = -1, orig = 0, st;
+  char name[64] = "", base[64], newname[80];
+  int k = 1, rc = 0;
+  exec (c, "SAVEPOINT version");
+  s = prep (c, "SELECT original, name FROM version WHERE id = ?1");
+  if (!s)
+    goto fail;
+  sqlite3_bind_int64 (s, 1, v);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    {
+      orig = sqlite3_column_int64 (s, 0);
+      col_text (s, 1, name, sizeof name);
+    }
+  sqlite3_finalize (s);
+  if (!orig)
+    {
+      snprintf (c->err, sizeof c->err, "That photo is no longer in the library.");
+      goto fail;
+    }
+  /* The name: the original's (its file's leaf), numbered: the first
+     number no version of it has. */
+  s = prep (c, "SELECT o.path FROM original o WHERE o.id = ?1");
+  if (!s)
+    goto fail;
+  sqlite3_bind_int64 (s, 1, orig);
+  snprintf (base, sizeof base, "%s", name);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    snprintf (base, sizeof base, "%s", fsys_leaf ((const char *) sqlite3_column_text (s, 0)));
+  sqlite3_finalize (s);
+  s = prep (c, "SELECT 1 FROM version WHERE original = ?1 AND name = ?2");
+  if (!s)
+    goto fail;
+  for (k = 2; k < 1000; k++)
+    {
+      int taken;
+      version_name (base, k, newname, sizeof newname);
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, orig);
+      sqlite3_bind_text (s, 2, newname, -1, SQLITE_TRANSIENT);
+      taken = sqlite3_step (s) == SQLITE_ROW;
+      if (!taken)
+        break;
+    }
+  sqlite3_finalize (s);
+  s = prep (c, keep_look
+               ? "INSERT INTO version (original, project, name, rating, flag, recipe, thumb, created, modified, caption)"
+                 " SELECT original, project, ?2, 0, 0, recipe, 0, ?3, ?3, caption FROM version WHERE id = ?1"
+               : "INSERT INTO version (original, project, name, rating, flag, recipe, thumb, created, modified, caption)"
+                 " SELECT original, project, ?2, 0, 0, '', 0, ?3, ?3, caption FROM version WHERE id = ?1");
+  if (!s)
+    goto fail;
+  sqlite3_bind_int64 (s, 1, v);
+  sqlite3_bind_text (s, 2, newname, -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64 (s, 3, (sqlite3_int64) time (NULL));
+  if (sqlite3_step (s) != SQLITE_DONE)
+    {
+      sqlite3_finalize (s);
+      fail (c, "new version");
+      goto fail;
+    }
+  sqlite3_finalize (s);
+  nv = sqlite3_last_insert_rowid (c->db);
+  /* Its keywords and album places, as v's. */
+  {
+    static const char *const copy[] = {
+      "INSERT OR IGNORE INTO version_keyword (version, keyword) SELECT ?2, keyword FROM version_keyword WHERE version = ?1",
+      "INSERT OR IGNORE INTO album_item (album, version, pos) SELECT album, ?2, pos FROM album_item WHERE version = ?1",
+    };
+    size_t q;
+    for (q = 0; q < sizeof copy / sizeof copy[0] && !rc; q++)
+      {
+        s = prep (c, copy[q]);
+        if (!s)
+          goto fail;
+        sqlite3_bind_int64 (s, 1, v);
+        sqlite3_bind_int64 (s, 2, nv);
+        if (sqlite3_step (s) != SQLITE_DONE)
+          rc = fail (c, "new version");
+        sqlite3_finalize (s);
+      }
+    if (rc)
+      goto fail;
+  }
+  /* Stacked with v, the stack open so the new one shows. */
+  st = stack_of (c, v);
+  if (st < 0)
+    goto fail;
+  if (!st)
+    {
+      cat_id two[2];
+      two[0] = v;
+      two[1] = nv;
+      if ((st = cat_stack (c, two, 2, v)) <= 0)
+        goto fail;
+    }
+  else
+    {
+      s = prep (c, "UPDATE version SET stack = ?2 WHERE id = ?1");
+      if (!s)
+        goto fail;
+      sqlite3_bind_int64 (s, 1, nv);
+      sqlite3_bind_int64 (s, 2, st);
+      sqlite3_step (s);
+      sqlite3_finalize (s);
+    }
+  if (cat_stack_open (c, nv, 1))
+    goto fail;
+  exec (c, "RELEASE version");
+  return nv;
+fail:
+  exec (c, "ROLLBACK TO version; RELEASE version");
+  return -1;
+}
+
+cat_id cat_stack (cat *c, const cat_id *v, int n, cat_id pick)
+{
+  sqlite3_stmt *s;
+  cat_id st;
+  int i, found = 0, was_open = 0;
+  if (n < 2)
+    {
+      snprintf (c->err, sizeof c->err, "A stack needs two photos or more.");
+      return -1;
+    }
+  for (i = 0; i < n; i++)
+    if (v[i] == pick)
+      found = 1;
+  if (!found)
+    pick = v[0];
+  exec (c, "SAVEPOINT stacking");
+  /* Stacks they were in before: merged into the new one (open if any was). */
+  s = prep (c, "SELECT IFNULL(MAX(s.open), 0) FROM stack s JOIN version v ON v.stack = s.id WHERE v.id = ?1");
+  for (i = 0; s && i < n; i++)
+    {
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, v[i]);
+      if (sqlite3_step (s) == SQLITE_ROW && sqlite3_column_int (s, 0))
+        was_open = 1;
+    }
+  sqlite3_finalize (s);
+  s = prep (c, "INSERT INTO stack (pick, open) VALUES (?1, ?2)");
+  if (!s)
+    goto fail;
+  sqlite3_bind_int64 (s, 1, pick);
+  sqlite3_bind_int (s, 2, was_open);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    {
+      sqlite3_finalize (s);
+      fail (c, "stack");
+      goto fail;
+    }
+  sqlite3_finalize (s);
+  st = sqlite3_last_insert_rowid (c->db);
+  /* Whole stacks come along: a member's stack-mates join too. */
+  s = prep (c, "UPDATE version SET stack = ?2 WHERE id = ?1"
+               " OR (stack IS NOT NULL AND stack = (SELECT stack FROM version WHERE id = ?1))");
+  if (!s)
+    goto fail;
+  for (i = 0; i < n; i++)
+    {
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, v[i]);
+      sqlite3_bind_int64 (s, 2, st);
+      if (sqlite3_step (s) != SQLITE_DONE)
+        {
+          sqlite3_finalize (s);
+          fail (c, "stack");
+          goto fail;
+        }
+    }
+  sqlite3_finalize (s);
+  if (stacks_tidy (c))
+    goto fail;
+  exec (c, "RELEASE stacking");
+  return st;
+fail:
+  exec (c, "ROLLBACK TO stacking; RELEASE stacking");
+  return -1;
+}
+
+int cat_unstack (cat *c, const cat_id *v, int n)
+{
+  sqlite3_stmt *s = prep (c, "UPDATE version SET stack = NULL WHERE id = ?1");
+  int i, rc = 0;
+  if (!s)
+    return -1;
+  exec (c, "SAVEPOINT unstacking");
+  for (i = 0; i < n && !rc; i++)
+    {
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, v[i]);
+      if (sqlite3_step (s) != SQLITE_DONE)
+        rc = fail (c, "unstack");
+    }
+  sqlite3_finalize (s);
+  if (!rc && stacks_tidy (c))
+    rc = -1;
+  exec (c, rc ? "ROLLBACK TO unstacking; RELEASE unstacking" : "RELEASE unstacking");
+  return rc;
+}
+
+int cat_stack_pick (cat *c, cat_id v)
+{
+  sqlite3_stmt *s = prep (c, "UPDATE stack SET pick = ?1 WHERE id = (SELECT stack FROM version WHERE id = ?1)");
+  int rc = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, v);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    rc = fail (c, "pick");
+  sqlite3_finalize (s);
+  return rc;
+}
+
+int cat_stack_open (cat *c, cat_id v, int open)
+{
+  sqlite3_stmt *s = prep (c, open < 0 ? "UPDATE stack SET open = 1 - open WHERE id = (SELECT stack FROM version WHERE id = ?1)"
+                                      : "UPDATE stack SET open = ?2 WHERE id = (SELECT stack FROM version WHERE id = ?1)");
+  int rc = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, v);
+  if (open >= 0)
+    sqlite3_bind_int (s, 2, open ? 1 : 0);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    rc = fail (c, "open stack");
+  sqlite3_finalize (s);
+  return rc;
+}
+
+/* EXIF's "YYYY:MM:DD HH:MM:SS" as seconds (from an arbitrary start, for
+   differences); -1 if it isn't one. */
+static long long taken_seconds (const char *t)
+{
+  int y, mo, d, h, mi, s;
+  if (!t || sscanf (t, "%d:%d:%d %d:%d:%d", &y, &mo, &d, &h, &mi, &s) != 6)
+    return -1;
+  /* Days from a fixed start (civil to days, as Howard Hinnant's). */
+  y -= mo <= 2;
+  {
+    long long era = (y >= 0 ? y : y - 399) / 400;
+    long long yoe = y - era * 400;
+    long long doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    long long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    long long days = era * 146097 + doe;
+    return ((days * 24 + h) * 60 + mi) * 60 + s;
+  }
+}
+
+typedef struct { cat_id id; long long t; } timed;
+
+static int cmp_timed (const void *a, const void *b)
+{
+  const timed *x = a, *y = b;
+  return x->t < y->t ? -1 : x->t > y->t ? 1 : x->id < y->id ? -1 : x->id > y->id;
+}
+
+int cat_auto_stack (cat *c, const cat_id *v, int n, int seconds)
+{
+  sqlite3_stmt *s = prep (c, "SELECT o.taken FROM version v JOIN original o ON o.id = v.original WHERE v.id = ?1");
+  timed *t;
+  int i, m = 0, made = 0;
+  if (!s)
+    return -1;
+  t = malloc (sizeof *t * (size_t) (n ? n : 1));
+  if (!t)
+    {
+      sqlite3_finalize (s);
+      return -1;
+    }
+  for (i = 0; i < n; i++)
+    {
+      long long secs = -1;
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, v[i]);
+      if (sqlite3_step (s) == SQLITE_ROW && sqlite3_column_type (s, 0) != SQLITE_NULL)
+        secs = taken_seconds ((const char *) sqlite3_column_text (s, 0));
+      if (secs >= 0)
+        {
+          t[m].id = v[i];
+          t[m].t = secs;
+          m++;
+        }
+    }
+  sqlite3_finalize (s);
+  qsort (t, (size_t) m, sizeof *t, cmp_timed);
+  for (i = 0; i < m;)
+    {
+      int j = i + 1;
+      while (j < m && t[j].t - t[j - 1].t <= seconds)
+        j++;
+      int same = 1, k;
+      for (k = i + 1; k < j && same; k++)  /* already one stack: nothing to do */
+        same = stack_of (c, t[k].id) == stack_of (c, t[i].id) && stack_of (c, t[i].id) > 0;
+      if (j - i >= 2 && !same)
+        {
+          cat_id *ids = malloc (sizeof *ids * (size_t) (j - i));
+          if (ids)
+            {
+              for (k = i; k < j; k++)
+                ids[k - i] = t[k].id;
+              if (cat_stack (c, ids, j - i, ids[0]) > 0)
+                made++;
+              free (ids);
+            }
+        }
+      i = j;
+    }
+  free (t);
+  return made;
 }

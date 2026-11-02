@@ -29,6 +29,8 @@
 #define COL_FLAG 0xB0E6F200u           /* #F2E6B0 */
 #define COL_REJECT 0x7070F000u
 #define COL_MISSING 0x2020C000u        /* #C02020 */
+#define COL_STACK 0x4C4C4C00u          /* behind the photos of an open stack */
+#define COL_STACK_BADGE 0x26262600u
 
 static const int box_sizes[3] = { 160, 224, 320 };
 
@@ -37,6 +39,7 @@ static char title[200];
 static cat_source src = { SRC_ALL, 0, 0, "" };
 static cat_item *items;
 static unsigned char *sel;
+static int (*badge)[4];                /* each cell's stack badge (work area), as last drawn; x0 > x1: none */
 static int n, cols = 1, size = 1, focus = -1, is_open;
 static int layout_w = 256;            /* a cell's width: the window's width shared out */
 static int vis_w = 1200, vis_h = 800;
@@ -244,6 +247,8 @@ void browser_reload (void)
   items = ni;
   n = nn;
   sel = calloc ((size_t) (n ? n : 1), 1);
+  free (badge);
+  badge = calloc ((size_t) (n ? n : 1), sizeof *badge);
   focus = -1;
   for (i = 0; i < n; i++)
     {
@@ -440,6 +445,8 @@ static void draw_cell (int i, int ox, int oy)
   s = thumbcache_get (it->id, it->thumb_state == THUMB_READY);
   if (it->thumb_state == THUMB_NONE)
     lib_want_thumb (app_library (), it->id);   /* on screen: made now (thumbnails are made lazily) */
+  if (it->stack_count && it->stack_open && !selected)
+    draw_rect (x0 + 2, y0 + 2, x1 - 2, y1 - 2, COL_STACK);   /* an open stack's photos, grouped */
   if (selected || i == focus)
     {
       /* Highlight up to just above the photo, not the empty box above a wide one. */
@@ -476,6 +483,35 @@ static void draw_cell (int i, int ox, int oy)
       int tw = draw_text_width (t);
       draw_rect (pic[0] + 8, pic[1] + 8, pic[0] + tw + 24, pic[1] + 48, COL_MISSING);
       draw_text (pic[0] + 16, pic[1] + 18, t, COL_TEXT_SEL, COL_MISSING);
+    }
+  if (badge)
+    badge[i][0] = 1, badge[i][2] = 0;  /* none */
+  if (it->stack_count && it->stack_pick)
+    {
+      /* The stack's count on the pick's top right corner, with an arrow:
+         right, closed (click to open); left, open. */
+      char t[12];
+      int tw, bx1 = pic[2] - 8, by1 = pic[3] - 8, bx0, by0 = by1 - 40;
+      snprintf (t, sizeof t, "%d", it->stack_count);
+      tw = draw_text_width (t);
+      bx0 = bx1 - tw - 52;
+      draw_rect (bx0, by0, bx1, by1, COL_STACK_BADGE);
+      draw_text (bx0 + 10, by0 + 10, t, COL_TEXT_SEL, COL_STACK_BADGE);
+      if (it->stack_open)
+        draw_triangle (bx1 - 12, by0 + 8, bx1 - 12, by1 - 8, bx1 - 30, (by0 + by1) / 2, COL_ACCENT);
+      else
+        draw_triangle (bx1 - 30, by0 + 8, bx1 - 30, by1 - 8, bx1 - 12, (by0 + by1) / 2, COL_ACCENT);
+      if (badge)
+        {
+          badge[i][0] = bx0 - ox; badge[i][1] = by0 - oy; badge[i][2] = bx1 - ox; badge[i][3] = by1 - oy;
+        }
+    }
+  else if (it->stack_count && box () >= 224)
+    {
+      /* An open stack's other photos: a small stack mark. */
+      draw_rect (pic[2] - 36, pic[3] - 36, pic[2] - 8, pic[3] - 8, COL_STACK_BADGE);
+      draw_frame (pic[2] - 30, pic[3] - 30, pic[2] - 16, pic[3] - 16, COL_TEXT_SEL);
+      draw_frame (pic[2] - 26, pic[3] - 26, pic[2] - 12, pic[3] - 12, COL_TEXT_SEL);
     }
   if (it->flag)                        /* a flag on the photo's top left corner */
     {
@@ -611,6 +647,17 @@ void browser_click (int *block)
     }
   _swix (Wimp_SetCaretPosition, _INR (0, 5), mainwin_window (), -1, 0, 0, 1 << 25, -1);
   i = index_at (block[0] - (b[1] - b[5]), block[1] - (b[4] - b[6]));
+  if (i >= 0 && badge && (buttons == Button_Select || buttons == Button_Adjust))
+    {
+      int wx = block[0] - (b[1] - b[5]), wy = block[1] - (b[4] - b[6]);
+      if (badge[i][0] < badge[i][2] && wx >= badge[i][0] && wx <= badge[i][2] && wy >= badge[i][1] && wy <= badge[i][3])
+        {
+          /* The stack's badge: open or close it. */
+          cat_stack_open (lib_cat (app_library ()), items[i].id, -1);
+          browser_reload ();
+          return;
+        }
+    }
   if (buttons == Button_Select)
     {
       static int last_i = -1;
@@ -629,14 +676,186 @@ void browser_click (int *block)
       last_t = app_now ();
     }
   else if (buttons == Button_Adjust && i >= 0)
+    browser_toggle_select (i);
+}
+
+/* Adjust: photo i in or out of the selection, the focus on it. */
+void browser_toggle_select (int i)
+{
+  int old = focus;
+  if (i < 0 || i >= n)
+    return;
+  sel[i] = !sel[i];
+  focus = i;
+  redraw_cell (old);                   /* its focus frame goes (found in the ROL 5.31-5 test) */
+  redraw_cell (i);
+  mainwin_status_changed ();
+}
+
+/* --- versions and stacks */
+
+/* For the tests: cell i's stack badge in screen coordinates, as last drawn. 1 if it has one. */
+int browser_badge (int i, int r[4])
+{
+  int b[9];
+  b[0] = win;
+  if (i < 0 || i >= n || !badge || badge[i][0] >= badge[i][2] || _swix (Wimp_GetWindowState, _IN (1), b))
+    return 0;
+  r[0] = badge[i][0] + b[1] - b[5]; r[2] = badge[i][2] + b[1] - b[5];
+  r[1] = badge[i][1] + b[4] - b[6]; r[3] = badge[i][3] + b[4] - b[6];
+  return 1;
+}
+
+/* The selection's ids, or the focused photo's if none is selected. */
+static int chosen (cat_id **ids)
+{
+  int k = browser_selection (ids);
+  if (k == 0 && focus >= 0 && focus < n && (*ids = malloc (sizeof **ids)))
     {
-      int old = focus;
-      sel[i] = !sel[i];
-      focus = i;
-      redraw_cell (old);               /* its focus frame goes (found in the ROL 5.31-5 test) */
-      redraw_cell (i);
-      mainwin_status_changed ();
+      (*ids)[0] = items[focus].id;
+      k = 1;
     }
+  return k;
+}
+
+/* Selects the photo with this id (alone), if it is listed. Its index, or -1. */
+static int select_id (cat_id id)
+{
+  int i;
+  for (i = 0; i < n; i++)
+    if (items[i].id == id)
+      {
+        browser_focus_on (i);
+        return i;
+      }
+  return -1;
+}
+
+int browser_new_version (int keep_look)
+{
+  cat_id *ids, nv = 0;
+  int k = chosen (&ids), j;
+  cat *c = lib_cat (app_library ());
+  for (j = 0; j < k; j++)
+    if ((nv = cat_new_version (c, ids[j], keep_look)) < 0)
+      {
+        app_report (cat_error (c));
+        break;
+      }
+  free (ids);
+  browser_reload ();
+  return nv > 0 ? select_id (nv) : -1;
+}
+
+void browser_stack (void)
+{
+  cat_id *ids;
+  int k = browser_selection (&ids);
+  cat *c = lib_cat (app_library ());
+  if (k >= 2)
+    {
+      cat_id pick = focus >= 0 && focus < n && sel[focus] ? items[focus].id : ids[0];
+      if (cat_stack (c, ids, k, pick) < 0)
+        app_report (cat_error (c));
+      else
+        cat_stack_open (c, pick, 1);
+      browser_reload ();
+    }
+  else if (k == 1)
+    app_report ("Select two photos or more to stack them.");
+  free (ids);
+}
+
+void browser_unstack (void)
+{
+  cat_id *ids;
+  int k = chosen (&ids), i, j;
+  cat *c = lib_cat (app_library ());
+  /* A closed stack's pick alone stands for its stack: unstack all of it. */
+  for (j = 0; j < k; j++)
+    for (i = 0; i < n; i++)
+      if (items[i].id == ids[j] && items[i].stack_pick && !items[i].stack_open)
+        {
+          cat_stack_open (c, ids[j], 1);
+          break;
+        }
+  if (k)
+    {
+      cat_source s = src;
+      cat_item *all = NULL;
+      int na = 0, m = 0;
+      cat_id *members = NULL;
+      /* Every photo in the chosen ones' stacks. */
+      s.search[0] = '\0';
+      if (cat_list (c, &s, &all, &na) == 0 && (members = malloc (sizeof *members * (size_t) (na ? na : 1))))
+        for (i = 0; i < na; i++)
+          for (j = 0; j < k; j++)
+            {
+              int q;
+              for (q = 0; q < n; q++)
+                if (items[q].id == ids[j] && items[q].stack && all[i].stack == items[q].stack)
+                  break;
+              if (q < n)
+                {
+                  members[m++] = all[i].id;
+                  break;
+                }
+            }
+      if (m && cat_unstack (c, members, m))
+        app_report (cat_error (c));
+      free (members);
+      free (all);
+    }
+  free (ids);
+  browser_reload ();
+}
+
+void browser_make_pick (void)
+{
+  if (focus >= 0 && focus < n && items[focus].stack)
+    {
+      cat_id id = items[focus].id;
+      cat_stack_pick (lib_cat (app_library ()), id);
+      browser_reload ();
+      select_id (id);
+    }
+}
+
+void browser_toggle_stack (void)
+{
+  if (focus >= 0 && focus < n && items[focus].stack)
+    {
+      cat_id id = items[focus].id, st = items[focus].stack;
+      int i;
+      cat_stack_open (lib_cat (app_library ()), id, !items[focus].stack_open);
+      browser_reload ();
+      if (select_id (id) < 0)
+        for (i = 0; i < n; i++)
+          if (items[i].stack == st)    /* closed: the pick stands for it */
+            {
+              browser_focus_on (i);
+              break;
+            }
+    }
+}
+
+int browser_auto_stack (int seconds)
+{
+  cat_id *ids;
+  int k = browser_selection (&ids), made = 0;
+  if (k < 2)
+    {
+      /* Nothing selected: all those shown. */
+      free (ids);
+      ids = malloc (sizeof *ids * (size_t) (n ? n : 1));
+      for (k = 0; ids && k < n; k++)
+        ids[k] = items[k].id;
+    }
+  if (ids && k >= 2)
+    made = cat_auto_stack (lib_cat (app_library ()), ids, k, seconds);
+  free (ids);
+  browser_reload ();
+  return made;
 }
 
 /* After photos leave the library: thumbnails forgotten, the Viewer let
@@ -755,6 +974,16 @@ int browser_key (int key)
       if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
         exportbox_open (0, ptr[0], ptr[1]);
     }
+  else if (key == 0x04)                /* Ctrl-D: a duplicate version */
+    browser_new_version (1);
+  else if (key == 0x07)                /* Ctrl-G: stack the selection */
+    browser_stack ();
+  else if (key == 0x15)                /* Ctrl-U: unstack */
+    browser_unstack ();
+  else if (key == '\\')               /* \: the stack's pick */
+    browser_make_pick ();
+  else if (key == 's' || key == 'S')   /* open or close the stack */
+    browser_toggle_stack ();
   else if (key == 0x0B)                /* Ctrl-K: caption and keywords */
     {
       int ptr[5];
