@@ -53,7 +53,7 @@ a { color:#1f5fa8; }
 <h1>Lumen User Guide</h1>
 <p>Keeping, sorting and improving your photos on RISC OS</p>
 <p>Start here if you've never used a photo library program before. If you have, the Technical Stuff boxes and Chapter 20 are for you.</p>
-<span class="badge">Lumen 0.0.22</span>
+<span class="badge">Lumen 0.0.23</span>
 </div>
 </header>
 <main>
@@ -65,11 +65,11 @@ a { color:#1f5fa8; }
 <li><a href="#part1">Part I: Getting Started</a>
 <ul><li><a href="#ch1">1. What Lumen does</a></li><li><a href="#ch2">2. Installing and starting</a></li><li><a href="#ch3">3. Finding your way round the window</a></li></ul></li>
 <li><a href="#part2">Part II: Your Photos</a>
-<ul><li><a href="#ch4">4. Bringing photos in</a></li><li><a href="#ch5">5. Looking through, rating and flagging</a></li><li><a href="#ch6">6. Projects, albums and watched folders</a></li><li><a href="#ch7">7. Finding photos</a></li><li><a href="#ch8">8. Removing photos, and photos that have moved</a></li></ul></li>
+<ul><li><a href="#ch4">4. Bringing photos in</a></li><li><a href="#ch5">5. Looking through, rating and flagging</a></li><li><a href="#ch6">6. Projects, albums, stacks and watched folders</a></li><li><a href="#ch7">7. Keywords and finding photos</a></li><li><a href="#ch8">8. Removing photos, and photos that have moved</a></li></ul></li>
 <li><a href="#part3">Part III: Making Photos Better</a>
-<ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping and straightening</a></li><li><a href="#ch12">12. Styles, presets, and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
+<ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping and straightening</a></li><li><a href="#ch12">12. Styles, presets, versions and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
 <li><a href="#part4">Part IV: Sharing and Setting Up</a>
-<ul><li><a href="#ch14">14. Exporting photos</a></li><li><a href="#ch15">15. Camera raw files and plug-ins</a></li><li><a href="#ch16">16. Choices</a></li><li><a href="#ch17">17. Getting help</a></li></ul></li>
+<ul><li><a href="#ch14">14. Exporting and printing photos</a></li><li><a href="#ch15">15. Camera raw files and plug-ins</a></li><li><a href="#ch16">16. Choices</a></li><li><a href="#ch17">17. Getting help</a></li></ul></li>
 <li><a href="#part5">Part V: The Part of Tens</a>
 <ul><li><a href="#ch18">18. Ten keys to learn first</a></li><li><a href="#ch19">19. Ten problems and what to do about them</a></li><li><a href="#ch20">20. Ten things for experienced users</a></li></ul></li>
 <li><a href="#appA">Appendix: keys, mouse and menus</a></li>
@@ -89,7 +89,7 @@ a { color:#1f5fa8; }
 <p>The pictures are screenshots of Lumen running on RISC OS 5, with photos of the Lake District by Julian Herzog (see <a href="#credits">Photo credits</a>).</p>
 
 <h4>This is an early version</h4>
-<p>Lumen 0.0.22 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
+<p>Lumen 0.0.23 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>Not much. You should know the three mouse buttons (<b>Select</b> on the left, <b>Menu</b> in the middle, <b>Adjust</b> on the right), and how to drag a file or directory from a Filer window into a program. You don't need to know anything about photography.</p>
@@ -111,9 +111,9 @@ a { color:#1f5fa8; }
 
 <p>Lumen is a photo library and editor, in the style of Apple's Aperture. It has three jobs:</p>
 <ul>
-<li><b>Keeping:</b> your photos in one <b>library</b>, sorted into <b>projects</b> (one for each directory you bring in) and <b>albums</b> (your own collections, such as "Favourites" or "Holiday 2026").</li>
-<li><b>Sorting:</b> star ratings from one to five, flags, rejects, searching and filtering, so the good photos are easy to find.</li>
-<li><b>Improving:</b> exposure, white balance, highlights and shadows, levels, curves, contrast, saturation, split toning, sharpening, straightening, perspective and cropping, or a ready-made <b>style</b> in one click.</li>
+<li><b>Keeping:</b> your photos in one <b>library</b>, sorted into <b>projects</b> (one for each directory you bring in), <b>albums</b> (your own collections, such as "Favourites" or "Holiday 2026"), <b>smart albums</b> that fill themselves, and <b>stacks</b> of photos that belong together.</li>
+<li><b>Sorting:</b> star ratings from one to five, flags, rejects, captions and keywords, searching and filtering, so the good photos are easy to find.</li>
+<li><b>Improving:</b> exposure, white balance, highlights and shadows, levels, curves, contrast, saturation, colour by hue, split toning, noise reduction, sharpening, vignette, straightening, perspective and cropping, or a ready-made <b>style</b> in one click.</li>
 </ul>
 
 <h4>What you can do with it</h4>
@@ -121,12 +121,15 @@ a { color:#1f5fa8; }
 <li><b>Import</b> JPEG and PNG photos, and camera raw files with the free LumenRaw plug-in.</li>
 <li><b>Browse</b> thumbnails in three sizes, and look at one photo large, at 100%, or through a round magnifier (the <b>loupe</b>).</li>
 <li><b>Rate, flag and reject</b> photos with one key each.</li>
-<li><b>Find</b> photos by name, camera, date or project, and show only those with enough stars.</li>
+<li><b>Find</b> photos by name, caption, keyword, camera, date or project, and show only those with enough stars; or let a <b>smart album</b> gather them.</li>
+<li><b>Describe</b> photos with a caption and keywords, one photo or a hundred at once.</li>
 <li><b>Adjust</b> any photo without changing its file, with Undo and Redo, a before-and-after view, and presets to use the same look again.</li>
 <li><b>Try a style</b>: fourteen ready-made looks, from Faded Film to Cyanotype, shown on the photo as you move down the list.</li>
+<li><b>Make versions</b> of a photo to try different looks, kept together in a <b>stack</b>; stack bursts and brackets too.</li>
 <li><b>Watch folders</b>: new photos you put in a folder you imported come into the library on their own, and the folders inside it can become albums.</li>
 <li><b>See what it's doing</b>: the bar at the bottom says what Lumen is busy with, and how far it has got.</li>
-<li><b>Export</b> JPEG or PNG copies at full size or smaller, with the camera's details kept in them.</li>
+<li><b>Export</b> JPEG or PNG copies at full size or smaller, in sRGB, Adobe RGB or Display P3, sharpened for their size and named as you choose, with the camera's details, caption and keywords kept in them.</li>
+<li><b>Print</b> photos on any printer RISC OS knows, at a size you choose.</li>
 <li><b>See everything the camera recorded</b>: camera, lens, exposure, date and place.</li>
 <li><b>Notice when photos have moved</b>, and find them again.</li>
 </ul>
@@ -277,7 +280,7 @@ a { color:#1f5fa8; }
 <h4>Thumbnail size</h4>
 <p>Click <b>Small</b>, <b>Medium</b> or <b>Large</b> at the right of the bottom bar.</p>
 
-<h3 class="chapter" id="ch6"><span>6</span> Projects, albums and watched folders</h3>
+<h3 class="chapter" id="ch6"><span>6</span> Projects, albums, stacks and watched folders</h3>
 
 <p>The <b>Library</b> tab chooses what the Browser shows. Click any line in it.</p>
 <figure><img src="images/library-tab.png" alt="The Library tab"><figcaption>The Library tab with three projects and an album.</figcaption></figure>
@@ -289,7 +292,7 @@ a { color:#1f5fa8; }
 <tr><td>Last Import</td><td>The photos from the last thing you dragged in (including any that were already in the library).</td></tr>
 <tr><td>Missing Files</td><td>Photos whose files Lumen can't find (only shown when there are some, <a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Projects</td><td>One for each directory you imported. The number is how many photos it shows (rejected ones aren't counted).</td></tr>
-<tr><td>Albums</td><td>Your own collections.</td></tr>
+<tr><td>Albums</td><td>Your own collections, and smart albums (with a magnifying glass) that gather photos for you.</td></tr>
 </table>
 
 <h4>Albums</h4>
@@ -301,6 +304,38 @@ a { color:#1f5fa8; }
 </ol>
 <figure><img src="images/new-album.png" alt="Naming a new album"><figcaption>New &rarr; Album from selection, naming the album.</figcaption></figure>
 <p>To add more photos later, select them and choose <b>Album &rarr; Add selection to</b> from the Browser's menu. To take photos out of an album, show the album, select them and choose <b>Album &rarr; Remove from this album</b>. <b>New &rarr; Empty album</b> makes an album with nothing in it yet. <b>Album from selection</b> is greyed out until you've selected some photos.</p>
+
+<h4>Smart albums</h4>
+<p>A <b>smart album</b> fills itself: you say what it should hold, and it gathers every photo that fits, now and later. Click <b>New</b> on the toolbar and choose <b>Smart album...</b> (or <b>Album &rarr; New smart album...</b> on the Browser's menu).</p>
+<figure><img src="images/smart-album.png" alt="The Smart album window"><figcaption>A smart album of the photos with "reflections" in their keywords, taken in 2022 or later.</figcaption></figure>
+<table>
+<tr><th>Setting</th><th>Gathers</th></tr>
+<tr><td>Containing</td><td>Photos with all these words in their name, caption, keywords, camera, project or date. Empty means any.</td></tr>
+<tr><td>Rating</td><td>Photos with at least this many stars.</td></tr>
+<tr><td>Flagged only, Adjusted only</td><td>Only flagged photos; only photos you've adjusted.</td></tr>
+<tr><td>Taken from ... to</td><td>Photos taken between these dates. Type a year (<code>2026</code>), a month (<code>2026-06</code>) or a day (<code>2026-06-16</code> or <code>16/6/2026</code>). Leave either empty for no limit.</td></tr>
+</table>
+<p>Click <b>Create</b>, and the album appears in the Library tab with a magnifying glass, showing how many photos it holds. If you were searching when you made it, it starts with your search words. When a photo gets a new keyword or another star, it joins (or leaves) the album straight away.</p>
+<figure><img src="images/smart-library.png" alt="A smart album in the Library tab"><figcaption>The smart album in the Library tab.</figcaption></figure>
+<p>To change what a smart album looks for, click Menu over it in the Library tab and choose <b>Edit smart album...</b>. You can't add photos to a smart album yourself (it's greyed out in <b>Album &rarr; Add selection to</b>): change its settings instead.</p>
+
+<div class="box try"><b class="label">TRY IT</b>Make a smart album that holds photos with 4 stars or more, taken this year. Then give another of this year's photos four stars (press <kbd>4</kbd>), and watch the album's number go up by one.</div>
+
+<h4>Stacks</h4>
+<p>A <b>stack</b> keeps photos that belong together in one place: several shots of the same view, a burst of a bird taking off, a bracket of exposures, or the versions of a photo (<a href="#ch12">Chapter 12</a>). One photo in the stack is its <b>pick</b>: the best one, which stands for the rest.</p>
+<div class="pair">
+<figure><img src="images/stack-open.png" alt="Open stacks"><figcaption>Two open stacks: each photo and its version, on a grey band. The number on the pick says how many are in the stack.</figcaption></figure>
+<figure><img src="images/stack-closed.png" alt="A closed stack"><figcaption>The Friars_Crag stack closed: only its pick shows.</figcaption></figure>
+</div>
+<ul>
+<li><b>Stack photos:</b> select them and press <kbd>Ctrl</kbd>+<kbd>G</kbd>. The one with the focus (the outlined one) becomes the pick.</li>
+<li><b>Open or close a stack:</b> click the number on its pick, or press <kbd>S</kbd>. Closed, a stack takes up one place in the Browser; open, all its photos show, on a grey band.</li>
+<li><b>Choose another pick:</b> open the stack, click the photo you prefer, and press <kbd>\</kbd>.</li>
+<li><b>Unstack:</b> select photos and press <kbd>Ctrl</kbd>+<kbd>U</kbd>.</li>
+<li><b>Auto-stack:</b> choose <b>Versions and stacks &rarr; Auto-stack, seconds apart</b> from the Browser's menu, type a number of seconds and press <kbd>Return</kbd>. Photos taken within that many seconds of each other are stacked: just right for bursts and brackets. It works on the selected photos, or on all those shown if none are selected.</li>
+</ul>
+<figure><img src="images/versions-menu.png" alt="The Versions and stacks menu"><figcaption>Versions and stacks, on the Browser's menu.</figcaption></figure>
+<p>Stacks close up in Photos, projects and Last Import. Albums, Rejected and searches show every photo, stacked or not, so nothing can hide from you there.</p>
 
 <h4>Renaming and deleting</h4>
 <p>Click <b>Menu</b> over a project or album in the Library tab. Its menu lets you rename it, delete the album (its photos stay in the library) or remove the project (see <a href="#ch8">Chapter 8</a>).</p>
@@ -318,10 +353,25 @@ a { color:#1f5fa8; }
 
 <div class="box tip"><b class="label">TIP</b>To have every directory you import from now on watched, and turned into albums, tick the Folders choices in Choices (<a href="#ch16">Chapter 16</a>). That's also where you set how often Lumen looks.</div>
 
-<h3 class="chapter" id="ch7"><span>7</span> Finding photos</h3>
+<h3 class="chapter" id="ch7"><span>7</span> Keywords and finding photos</h3>
+
+<h4>Captions and keywords</h4>
+<p>A <b>caption</b> is a line about the photo ("Buttermere from the north shore at dawn"). <b>Keywords</b> are words or short phrases you'll want to find it by later: places, people, subjects, events. Give them once, and searches and smart albums can find your photos for years.</p>
+<ol class="steps">
+<li>Select one or more photos (or show one in the Viewer).</li>
+<li>Press <kbd>Ctrl</kbd>+<kbd>K</kbd> (or choose <b>Selection &rarr; Caption and keywords...</b>, or click the Caption or Keywords line in the Info tab).</li>
+<li>Type a caption, press <kbd>Tab</kbd>, and type keywords with commas between them.</li>
+<li>Press <kbd>Return</kbd>, or click <b>Save</b>.</li>
+</ol>
+<figure><img src="images/tags-window.png" alt="The Caption and keywords window"><figcaption>The Caption and keywords window, with its menu of the keywords already in the library.</figcaption></figure>
+<p>The button beside the keywords lists every keyword you've used: choose one to add it, so the same place is always spelt the same way.</p>
+<p>With several photos selected, the window shows the caption only if they all have the same one, and the keywords they <i>all</i> have. Keywords you add go on all of them; keywords you take out of the list come off all of them; keywords that only some of them have are left alone. So you can select a whole day's photos and add "Holiday 2026" to every one in one go.</p>
+<figure><img src="images/info-keywords.png" alt="Caption and keywords in the Info tab"><figcaption>The Info tab shows the caption and keywords. Click them to change them.</figcaption></figure>
+
+<div class="box tip"><b class="label">TIP</b>Keywords travel with your photos. Exports carry the caption and keywords (as XMP, which other photo programs and websites read), and photos you import that were given keywords in another program bring them along.</div>
 
 <h4>Searching</h4>
-<p>Click in the <b>Search</b> box in the bottom bar and type. The Browser shows only the photos that match, as you type. Lumen looks in each photo's name, its camera's make and model, the date it was taken and its project's name. Type several words to find photos that match all of them. <kbd>Escape</kbd> empties the box.</p>
+<p>Click in the <b>Search</b> box in the bottom bar and type. The Browser shows only the photos that match, as you type. Lumen looks in each photo's name, its caption and keywords, its camera's make and model, the date it was taken and its project's name. Type several words to find photos that match all of them. <kbd>Escape</kbd> empties the box.</p>
 <figure><img src="images/search.png" alt="Searching for tarn"><figcaption>Searching for "tarn". The title bar shows what you searched for.</figcaption></figure>
 
 <div class="box tip"><b class="label">TIP</b>Dates are searched as the camera writes them, year first: type <code>2022</code> for a year, or <code>2022:08</code> (or <code>2022-08</code>) for a month.</div>
@@ -397,7 +447,7 @@ a { color:#1f5fa8; }
 
 <div class="pair">
 <figure><img src="images/panel-top.png" alt="The top of the Adjustments tab"><figcaption>White balance, exposure, highlights &amp; shadows, levels.</figcaption></figure>
-<figure><img src="images/panel-bottom.png" alt="The rest of the Adjustments tab"><figcaption>Curves, enhance, split toning, sharpen, geometry, and Undo.</figcaption></figure>
+<figure><img src="images/panel-bottom.png" alt="The rest of the Adjustments tab"><figcaption>Enhance, colour, split toning, noise reduction, sharpen and vignette.</figcaption></figure>
 </div>
 
 <h4>The groups</h4>
@@ -409,12 +459,33 @@ a { color:#1f5fa8; }
 <tr><td>Levels</td><td>Black point, White point, Midtones</td><td>Set how dark the darkest parts and how light the lightest parts are, and the brightness in between.</td></tr>
 <tr><td>Curves</td><td>(a graph)</td><td>Fine control of brightness from dark to light, for all colours (RGB) or one at a time (Red, Green, Blue). Click the line to add a point and drag it; click a point with Adjust to remove it.</td></tr>
 <tr><td>Enhance</td><td>Contrast, Saturation, Vibrancy</td><td>More (or less) punch. Vibrancy adds colour mostly where there's little, so skin doesn't go orange.</td></tr>
+<tr><td>Colour</td><td>Hue, Saturation, Luminance, for each of eight colours</td><td>Change one range of colours and leave the rest: a deeper blue sky, quieter greens, warmer oranges. See below.</td></tr>
 <tr><td>Split Toning</td><td>Shadow hue, Shadows, Highlight hue, Highlights</td><td>Tint the dark parts one colour and the light parts another: warm highlights and cool shadows for a film look, or brown or blue for a toned black and white print. A hue is a colour round the colour wheel (0 red, 30 orange, 60 yellow, 120 green, 180 cyan, 210 blue, 300 magenta); its strength says how much.</td></tr>
+<tr><td>Noise Reduction</td><td>Luminance, Colour</td><td>Smooth away the speckles in photos taken in poor light. See below.</td></tr>
 <tr><td>Sharpen</td><td>Amount, Radius</td><td>Crisper edges. A little goes a long way.</td></tr>
+<tr><td>Vignette</td><td>Amount, Midpoint</td><td>Darken the corners to draw the eye in (a negative Amount), or lighten them. See below.</td></tr>
 <tr><td>Geometry</td><td>Straighten, Vertical, Horizontal</td><td>Level a sloping horizon, and correct buildings that lean back (perspective). <b>-90&deg;</b> and <b>+90&deg;</b> turn the photo a quarter.</td></tr>
 </table>
 
 <figure><img src="images/adjusted.png" alt="After some adjustments"><figcaption>The same photo after some adjustments: shadows lifted, highlights brought down, a gentle curve and more vibrancy. Compare it with the picture above.</figcaption></figure>
+
+<h4>Colour</h4>
+<p>The <b>Colour</b> group changes one range of colours at a time. Click one of the eight swatches (red, orange, yellow, green, aqua, blue, purple, magenta) and its three sliders appear under them:</p>
+<figure><img src="images/colour-panel.png" alt="The Colour group"><figcaption>Blue chosen: its hue turned a little towards aqua and its saturation raised. The dot on the swatch shows Blue has been changed.</figcaption></figure>
+<ul>
+<li><b>Hue</b> turns those colours towards their neighbours: blue towards aqua or purple, orange towards red or yellow.</li>
+<li><b>Saturation</b> makes them stronger, or takes them away (-100 leaves them grey).</li>
+<li><b>Luminance</b> makes them lighter or darker: a darker blue makes a sky deeper without touching the hills.</li>
+</ul>
+<p>Colours between two swatches get some of each, so changes blend smoothly, and greys and whites are left alone. A pale sky is part aqua and part blue, so it changes less than a deep blue one.</p>
+
+<h4>Noise Reduction and Vignette</h4>
+<div class="pair">
+<figure><img src="images/noise-vignette-panel.png" alt="Noise Reduction and Vignette"><figcaption>Noise Reduction and Vignette in the Adjustments tab.</figcaption></figure>
+<figure><img src="images/vignette.png" alt="A vignette"><figcaption>A vignette of -62: the corners darkened, the eye drawn to the middle.</figcaption></figure>
+</div>
+<p>Photos taken in poor light, or at a high ISO, are speckled with <b>noise</b>. <b>Colour</b> takes out the blotches of colour (it smooths the colour, not the detail, so it's safe to use generously); <b>Luminance</b> smooths the grainy speckle while keeping edges sharp. Look at 100% (<kbd>Z</kbd>) to judge it: too much Luminance makes skin and leaves look waxy. Noise reduction comes before sharpening, so the two work together.</p>
+<p>A <b>vignette</b> darkens the photo towards its corners: a negative <b>Amount</b> darkens, a positive one lightens. <b>Midpoint</b> is how far out from the middle it starts (lower starts sooner). It follows the crop: the corners are always the corners you see.</p>
 
 <div class="box try"><b class="label">TRY IT</b>Find a photo with a bright sky and dark ground. Drag <b>Shadows</b> to about 40, then <b>Highlights</b> to about 50. Press <kbd>M</kbd> to see the photo as it was; press it again to see your changes. Then press <kbd>Ctrl</kbd>+<kbd>Z</kbd> a few times and watch your changes go, and <kbd>Ctrl</kbd>+<kbd>Y</kbd> to bring them back.</div>
 
@@ -447,7 +518,7 @@ a { color:#1f5fa8; }
 <h4>Straightening</h4>
 <p>Drag the <b>Straighten</b> slider in the Geometry group. A fine grid appears over the photo while you drag, to line the horizon up with. <kbd>[</kbd> and <kbd>]</kbd> turn the photo a quarter left and right.</p>
 
-<h3 class="chapter" id="ch12"><span>12</span> Styles, presets, and copying adjustments</h3>
+<h3 class="chapter" id="ch12"><span>12</span> Styles, presets, versions and copying adjustments</h3>
 
 <h4>Styles</h4>
 <p>A <b>style</b> is a ready-made look: Lumen comes with fourteen. Open a photo in the Viewer, click <b>Menu</b> over it, and go to <b>Presets &rarr; Styles</b> (or click <b>Presets</b> in the Adjustments tab). As you move the pointer down the list, the photo shows each style in turn, so you can compare them. Nothing is kept yet: move off the list, or press <kbd>Escape</kbd>, and the photo is as it was. Click a style to keep it.</p>
@@ -484,6 +555,10 @@ a { color:#1f5fa8; }
 </ol>
 <p>Every selected photo gets the same adjustments. Both are on the Selection menu, and on the Photo menu in the Viewer.</p>
 
+<h4>Versions: trying another look</h4>
+<p>Sometimes a photo deserves two looks: colour and black and white, or a wide view and a tight crop. Rather than choosing, make another <b>version</b>: press <kbd>Ctrl</kbd>+<kbd>D</kbd> (or choose <b>Duplicate version</b> on the Photo menu, or on the Browser's <b>Versions and stacks</b> menu). Lumen makes a second version of the photo with the same adjustments, and shows it, ready to change. <b>New version from original</b> makes one as it came from the camera instead.</p>
+<p>Versions share the photo's file: only the adjustments are new, so a version takes no space. Each has its own stars, flag and adjustments, and starts with the caption, keywords and albums of the one it came from. It's named after the file with <b>_v2</b>, <b>_v3</b> and so on, and it's stacked with its original, so they stay together (<a href="#ch6">Chapter 6</a>). The Info tab says which version a photo is ("2 of 3 of this photo").</p>
+
 <h4>Presets</h4>
 <p>A <b>preset</b> is your own style: a set of adjustments with a name, to use again on any photo. Click <b>Presets</b> in the Adjustments tab (or Menu over the photo, then <b>Presets</b>). Under <b>Styles</b> come your own presets:</p>
 <ul>
@@ -499,7 +574,7 @@ a { color:#1f5fa8; }
 
 <h3 class="chapter" id="ch13"><span>13</span> What the camera recorded: the Info tab</h3>
 
-<p>Click the <b>Info</b> tab to see everything about the selected photo: its size, rating, file and colour space, and then everything the camera recorded (called <b>EXIF</b>): camera, lens, exposure, date, and, if the camera knew, where it was taken.</p>
+<p>Click the <b>Info</b> tab to see everything about the selected photo: its size, rating, caption and keywords (click them to change them, <a href="#ch7">Chapter 7</a>), which version it is and its stack, file and colour space, and then everything the camera recorded (called <b>EXIF</b>): camera, lens, exposure, date, and, if the camera knew, where it was taken.</p>
 <div class="pair">
 <figure><img src="images/info-tab.png" alt="The Info tab"><figcaption>The top of the Info tab.</figcaption></figure>
 <figure><img src="images/info-exif.png" alt="More of the Info tab"><figcaption>Further down: the lens, and the start of GPS.</figcaption></figure>
@@ -507,30 +582,55 @@ a { color:#1f5fa8; }
 <p>The tab scrolls: there can be a lot. Photos from some programs and phones have less; a PNG usually has none.</p>
 
 <!-- ======================================================================= -->
-<h2 class="part" id="part4">Part IV: Sharing and Setting Up<small>Exporting, raw files, Choices and help</small></h2>
+<h2 class="part" id="part4">Part IV: Sharing and Setting Up<small>Exporting, printing, raw files, Choices and help</small></h2>
 
-<h3 class="chapter" id="ch14"><span>14</span> Exporting photos</h3>
+<h3 class="chapter" id="ch14"><span>14</span> Exporting and printing photos</h3>
 
 <p>To share a photo with its adjustments (by email, on the web, or to print), <b>export</b> it: Lumen makes a new file. The original is never changed.</p>
 <ol class="steps">
 <li>Select the photos in the Browser (or show one in the Viewer).</li>
 <li>Click <b>Export</b> on the toolbar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd>.</li>
-<li>Choose the format, size and quality in the Export box.</li>
+<li>Choose the format, size, colour, sharpening and names in the Export box.</li>
 <li>Drag the file icon into a Filer window of a directory you can write to, to save it there.</li>
 </ol>
 <figure><img src="images/export-box.png" alt="The Export box"><figcaption>The Export box.</figcaption></figure>
 <table>
 <tr><th>Setting</th><th>Choose</th></tr>
 <tr><td>Format</td><td><b>JPEG</b> for sharing (small files); <b>PNG</b> when no quality may be lost (much larger files).</td></tr>
-<tr><td>Size</td><td><b>Full</b> size, or shrunk so the longer side is 3840 (4K screens), 2048 or 1024 pixels (email and the web).</td></tr>
 <tr><td>Quality</td><td>For JPEG, 1 to 100. Higher keeps more detail but makes larger files. 90 suits most photos.</td></tr>
+<tr><td>Size</td><td><b>Full</b> size; shrunk so the longer side is 3840 (4K screens), 2048 or 1024 pixels (email and the web); or <b>Fit in</b> a box, such as 1920 &times; 1080 for a full-HD screen or a slideshow. Photos are never made bigger.</td></tr>
+<tr><td>Colour</td><td><b>sRGB</b> for screens, the web and most printing services; <b>Adobe RGB</b> or <b>Display P3</b> for wider colour, when the printer or program that will use the file asks for it. The file says which it is (an ICC profile).</td></tr>
+<tr><td>Sharpen</td><td>Sharpening for the size written: <b>Low</b> for screens, <b>Standard</b> or <b>High</b> for prints. It's added to the photo's own Sharpen.</td></tr>
+<tr><td>Names</td><td>For several photos: how to name the files. <code>{name}</code> is the photo's name; add <code>{n}</code> or <code>{nnn}</code> for a number (001, 002...), <code>{date}</code>, <code>{year}</code>, <code>{month}</code>, <code>{day}</code> or <code>{time}</code> for when it was taken, <code>{project}</code>, <code>{camera}</code> or <code>{rating}</code>. <code>{date}_{name}_{nnn}</code> makes <code>2022-08-15_Buttermere_001</code>.</td></tr>
 </table>
+<p>The Export box remembers what you chose for next time.</p>
 <p>With several photos selected, the icon is a directory: drag it to a Filer window, and Lumen makes a directory with that name and puts one file for each photo in it. You can also type a full pathname in the name box and click <b>Save</b>, or drag the icon into another program (one photo at a time) to send it there.</p>
 <p>Exports happen in the background; the bottom bar shows how far they've got ("Exporting 3 of 16", with its donut), and the Activity window lists each export when it's done (<a href="#ch3">Chapter 3</a>).</p>
 
-<div class="box tip"><b class="label">TIP</b>Exported photos keep what the camera recorded: camera, lens, exposure, date, place, author and copyright. Other programs (and websites) can show it. If you'd rather not share where a photo was taken, remember the GPS details go with it.</div>
+<div class="box tip"><b class="label">TIP</b>Exported photos keep what the camera recorded: camera, lens, exposure, date, place, author and copyright, and your caption and keywords. Other programs (and websites) can show it. If you'd rather not share where a photo was taken, remember the GPS details go with it.</div>
 
 <div class="box tech"><b class="label">TECHNICAL STUFF</b>The camera's EXIF goes into a JPEG's APP1 block and a PNG's eXIf chunk, rewritten for the new file: its size is the export's, its orientation is "normal" (the export is already the right way up), the colour space is sRGB, and Software says Lumen. The camera's tiny thumbnail and the maker's private notes are left out. For an original with no EXIF of its own, Lumen writes what the library knows of it.</div>
+
+<h4>Printing</h4>
+<p>Lumen prints through RISC OS's printer drivers, so first choose your printer in <b>!Printers</b> (in the Printing directory), as for any other program.</p>
+<ol class="steps">
+<li>Select the photos (or show one in the Viewer).</li>
+<li>Press <kbd>Ctrl</kbd>+<kbd>P</kbd>, or choose <b>Print...</b> on the Selection or Photo menu.</li>
+<li>Choose the copies and the size, and click <b>Print</b>.</li>
+</ol>
+<figure><img src="images/print-box.png" alt="The Print box"><figcaption>The Print box: two photos, each at most 15 &times; 10 cm.</figcaption></figure>
+<table>
+<tr><th>Setting</th><th>Does</th></tr>
+<tr><td>Fit the page</td><td>Each photo as large as it fits on the paper, all of it showing.</td></tr>
+<tr><td>Fill the page</td><td>Each photo filling the printable area; a little is cut off where its shape differs from the paper's.</td></tr>
+<tr><td>Given size</td><td>At most this many centimetres wide and high, keeping the photo's shape (15 &times; 10 is the usual postcard print).</td></tr>
+<tr><td>Turn photos to suit the page</td><td>A landscape photo on a portrait page is turned a quarter, so it's printed larger.</td></tr>
+<tr><td>Sharpen for print</td><td>Makes up for the softening of ink spreading on paper.</td></tr>
+</table>
+<p>Each photo goes on its own page. Lumen first prepares each one at your printer's resolution, in the background (the bottom bar shows how far it has got), then prints them all.</p>
+<figure><img src="images/print-pages.png" alt="Two printed pages"><figcaption>The two pages printed from the box above: each photo turned to suit the page, 10 &times; 15 cm, in the middle of A4.</figcaption></figure>
+
+<div class="box warn"><b class="label">WARNING</b>A PostScript printer prints in grey unless <b>Colour</b> is ticked in its Configure window in !Printers. If it isn't, the Print box says "Grey only: tick Colour in !Printers". Tick it, and choose <b>Save choices</b> on !Printers' icon bar menu so it stays ticked.</div>
 
 <h3 class="chapter" id="ch15"><span>15</span> Camera raw files and plug-ins</h3>
 
@@ -592,7 +692,7 @@ a { color:#1f5fa8; }
 <tr><td><kbd>V</kbd></td><td>Browser, Split View, Viewer</td></tr>
 <tr><td><kbd>M</kbd></td><td>Before and after</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo (<kbd>Ctrl</kbd>+<kbd>Y</kbd> redoes)</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export (<kbd>Ctrl</kbd>+<kbd>P</kbd> prints)</td></tr>
 </table>
 
 <h3 class="chapter" id="ch19"><span>19</span> Ten problems and what to do about them</h3>
@@ -600,13 +700,13 @@ a { color:#1f5fa8; }
 <tr><th>Problem</th><th>What to do</th></tr>
 <tr><td>Lumen says it needs SharedUnixLibrary or ARMEABISupport.</td><td>Install them with PackMan, then start Lumen again.</td></tr>
 <tr><td>New photos I put in an imported directory haven't appeared.</td><td>Lumen only brings them in by itself if the project is watched: tick <b>Watch for new photos</b> on the project's menu (<a href="#ch6">Chapter 6</a>). To have it look now, close and reopen Lumen's window. Or drag the directory in again: only the new photos are added.</td></tr>
-<tr><td>Some files in a directory weren't imported.</td><td>Lumen imports JPEG, PNG and (with LumenRaw) raw files; others are left alone. Photos already in the library aren't added again.</td></tr>
 <tr><td>A raw file has a grey thumbnail, or says to install something.</td><td>Install LumenRaw with PackMan (<a href="#ch15">Chapter 15</a>), then start Lumen again. If it's installed, check it's ticked in the Plug-ins menu: Lumen says when it's switched off.</td></tr>
 <tr><td>Photos show "Missing".</td><td>Their files have moved or their disc isn't there. Put the disc back and reopen the window, or drag the files' new directory into Lumen (<a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Keys don't do anything.</td><td>Click in Lumen's window first, so it has the input focus. If you're typing in the Search box, the keys go there: click on a photo.</td></tr>
 <tr><td>A photo I rejected has disappeared.</td><td>Click <b>Rejected</b> in the Library tab, select it and give it stars again (or press <kbd>0</kbd>): rejecting took its stars away.</td></tr>
-<tr><td>Undo and Redo are grey.</td><td>They work on the photo you're adjusting, in the Viewer or Split View, and only when there's something to take back or do again.</td></tr>
 <tr><td>Fewer photos are shown than I expected.</td><td>Check the rating filter says <b>Any rating</b>, the Search box is empty, and the Library tab has <b>Photos</b> chosen. The title bar shows what's being shown.</td></tr>
+<tr><td>My prints come out grey.</td><td>Your printer is set to print in grey: in !Printers, open its Configure window, tick <b>Colour</b>, and choose <b>Save choices</b> (<a href="#ch14">Chapter 14</a>). The Print box warns about this.</td></tr>
+<tr><td>Some photos seem to have vanished after I stacked them.</td><td>A closed stack shows only its pick. Click the number on the pick (or press <kbd>S</kbd>) to open it (<a href="#ch6">Chapter 6</a>).</td></tr>
 <tr><td>Colours look blotchy or banded.</td><td>The screen is in a mode with too few colours. Choose 16 million colours in Configure &rarr; Screen.</td></tr>
 
 </table>
@@ -622,7 +722,7 @@ a { color:#1f5fa8; }
 <li><b>Colour:</b> Adobe RGB (1998) and Display P3 photos (from their ICC profile, or EXIF's colour space and interoperability index) are converted to sRGB by matrix in linear light. Other profiles are treated as sRGB.</li>
 <li><b>Plug-ins</b> are directories in <code>!Lumen.Plugins</code> with a text <code>Plugin</code> file of <code>Name</code>, <code>Version</code>, <code>Kind</code>, <code>Program</code>, <code>Package</code> and <code>Description</code> lines. LumenRaw runs once per job in a task window and hands back a JPEG or PPM and a few lines of details through <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>. Switched-off plug-ins are listed in <code>&lt;Choices$Write&gt;.Lumen.Plugins</code>.</li>
 <li><b>Choices</b> are a text file, <code>&lt;Choices$Write&gt;.Lumen.Choices</code>, of <code>key value</code> lines; the Activity history is <code>&lt;Choices$Write&gt;.Lumen.Activity</code>, one <code>time kind text</code> line per entry, the last 200 kept.</li>
-<li><b>Single instance:</b> a second Lumen finds the first through the Task Manager, sends it a click on its icon bar icon, and quits.</li>
+<li><b>Versions, keywords and smart albums</b> live in the catalogue: a version is a row of its own sharing its original; keywords are a table of their own; a smart album keeps its rule as text and is worked out afresh each time it's shown. Captions and keywords go out as XMP (<code>dc:description</code>, <code>dc:subject</code>) in a JPEG's APP1 or a PNG's iTXt chunk, and come in the same way. Printing renders each photo to a scrap JPEG at the printer's resolution (150 to 300 dpi) and plots it with <code>JPEG_PlotScaled</code> inside the printer driver's rectangle loop.</li>
 </ol>
 
 <!-- ======================================================================= -->
@@ -645,6 +745,12 @@ a { color:#1f5fa8; }
 <tr><td><kbd>Delete</kbd></td><td>Remove the selected photos from the library (asks first)</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Copy / paste adjustments</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Print</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Caption and keywords</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate version (in the Viewer: and show it)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Stack / unstack the selected photos (Browser)</td></tr>
+<tr><td><kbd>S</kbd></td><td>Open or close the focused photo's stack (Browser)</td></tr>
+<tr><td><kbd>\</kbd></td><td>Make the focused photo its stack's pick (Browser)</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / redo an adjustment (Viewer)</td></tr>
 <tr><td><kbd>M</kbd></td><td>Before and after (Viewer)</td></tr>
 <tr><td><kbd>Z</kbd></td><td>100% / whole photo (Viewer)</td></tr>
@@ -664,6 +770,9 @@ a { color:#1f5fa8; }
 <tr><td>A group's name</td><td colspan="2">Fold it away or open it</td></tr>
 <tr><td>The curve</td><td>Add a point, or drag one</td><td>Remove a point</td></tr>
 <tr><td>A line in the Library tab</td><td>Show those photos</td><td>&ndash;</td></tr>
+<tr><td>The number on a stack's pick</td><td colspan="2">Open or close the stack</td></tr>
+<tr><td>A colour swatch (Colour group)</td><td colspan="2">Show that colour's sliders</td></tr>
+<tr><td>Caption or Keywords in the Info tab</td><td>Change them</td><td>&ndash;</td></tr>
 <tr><td>The grip (bottom right)</td><td colspan="2">Drag to change the window's size</td></tr>
 <tr><td>What Lumen is doing (bottom bar)</td><td>Open the Activity window</td><td>&ndash;</td></tr>
 <tr><td>A style in the Styles menu</td><td>Keep it (just pointing at it shows it)</td><td>Keep it, menu stays open</td></tr>
@@ -679,20 +788,21 @@ a { color:#1f5fa8; }
 <table>
 <tr><th>Menu</th><th>Items</th></tr>
 <tr><td>Show</td><td>All photos; Flagged; Rejected; Last import; Projects &rarr;; Albums &rarr;; Rating filter &rarr;</td></tr>
-<tr><td>Selection</td><td>Rating &rarr;; Flag / unflag; Reject; Select all; Clear selection; Copy adjustments; Paste adjustments; Apply preset &rarr; (Styles &rarr;, then your presets); Export...; Remove from library...</td></tr>
-<tr><td>Album</td><td>New album from selection &rarr;; Add selection to &rarr;; Remove from this album</td></tr>
+<tr><td>Selection</td><td>Rating &rarr;; Flag / unflag; Reject; Caption and keywords...; Select all; Clear selection; Copy adjustments; Paste adjustments; Apply preset &rarr; (Styles &rarr;, then your presets); Export...; Print...; Remove from library...</td></tr>
+<tr><td>Album</td><td>New album from selection &rarr;; Add selection to &rarr;; Remove from this album; New smart album...</td></tr>
+<tr><td>Versions and stacks</td><td>Duplicate version; New version from original; Stack; Unstack; Make the pick; Open or close stack; Auto-stack, seconds apart &rarr;</td></tr>
 <tr><td>Thumbnail size</td><td>Small; Medium; Large</td></tr>
 <tr><td>Plug-ins</td><td>Each plug-in (ticked when on); Add plug-in...; Remove &rarr;</td></tr>
-<tr><td>Photo (Viewer)</td><td>Before and after; Zoom to 100%; Loupe &rarr;; Undo; Redo; Reset all adjustments; Auto adjust; Pick white balance; Crop; Crop shape &rarr;; Grid &rarr;; Presets &rarr; (Styles &rarr;; your presets; Save current as &rarr;; Delete &rarr;); Copy adjustments; Paste adjustments; Export...; Back to the Browser; Remove from library...</td></tr>
+<tr><td>Photo (Viewer)</td><td>Before and after; Zoom to 100%; Loupe &rarr;; Undo; Redo; Reset all adjustments; Auto adjust; Pick white balance; Crop; Crop shape &rarr;; Grid &rarr;; Presets &rarr; (Styles &rarr;; your presets; Save current as &rarr;; Delete &rarr;); Copy adjustments; Paste adjustments; Caption and keywords...; Duplicate version; New version from original; Export...; Print...; Back to the Browser; Remove from library...</td></tr>
 <tr><td>A project</td><td>Rename &rarr;; Watch for new photos; Albums from its folders; Remove project from library...</td></tr>
-<tr><td>An album</td><td>Rename &rarr;; Delete album... (an album made from a folder: Follows its folder)</td></tr>
+<tr><td>An album</td><td>Rename &rarr;; Delete album... (a smart album also: Edit smart album...; an album made from a folder: Follows its folder)</td></tr>
 </table>
 <p>The icon bar menu: Info &rarr;; Help...; User guide; Open library; Activity...; Choices...; Plug-ins &rarr;; Quit.</p>
 <p>Toolbar: Inspector; Import; New; Undo; Redo; Browser; Split View; Viewer; Loupe; Export; Full Screen. Bottom bar: the photo count; what Lumen is doing (click for the Activity window); the rating filter; Search; thumbnail size.</p>
 
 <!-- ======================================================================= -->
 <h2 class="part" id="credits">Photo credits</h2>
-<p>The photos in this guide are by Julian Herzog, from Wikimedia Commons, shown here smaller than the originals, and in Chapters 10 to 12 with Lumen's adjustments and styles applied. Thank you.</p>
+<p>The photos in this guide are by Julian Herzog, from Wikimedia Commons, shown here smaller than the originals, and in Chapters 6, 7 and 10 to 14 with Lumen's adjustments, styles, versions and keywords applied. Thank you.</p>
 <table>
 <tr><th>In the guide</th><th>Original on Wikimedia Commons</th><th>Licence</th></tr>
 <tr><td>Buttermere, Comb_Beck, Fleetwith_Pike</td><td>Buttermere Lake 2022; Comb Beck Waterfall Lake District 2021 01; Buttermere Shore Fleetwith Pike 2021</td><td>CC BY 4.0</td></tr>

@@ -1,11 +1,14 @@
-Lumen 0.0.22 (01 Nov 2026) - test build
+Lumen 0.0.23 (02 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
 This test build has importing, browsing, rating, flagging and albums;
-adjustments (white balance with an eyedropper, exposure, highlights &
-shadows, levels, curves, contrast, saturation, vibrancy, sharpening); Auto; crop, quarter turns, straighten
-and perspective; grids; presets; and copying adjustments between photos.
+captions, keywords and smart albums; versions and stacks; adjustments
+(white balance with an eyedropper, exposure, highlights & shadows,
+levels, curves, contrast, saturation, vibrancy, colour by hue, split
+toning, noise reduction, sharpening, vignette); Auto; crop, quarter
+turns, straighten and perspective; grids; styles and presets; copying
+adjustments between photos; exporting and printing.
 Your photos are never changed: each edit is a recipe kept in the
 library, and can be undone or reset at any time.
 
@@ -35,7 +38,9 @@ Lumen has one window, laid out as Aperture 3's:
                   Library      Photos, Flagged, Rejected, Last Import,
                                your projects (one per imported folder)
                                and albums: click one to show it
-                  Info         the photo's size, rating and file, then
+                  Info         the photo's size, rating, caption and
+                               keywords (click them to change them),
+                               version and stack, and file, then
                                every EXIF tag in it: camera, exposure,
                                lens, dates, GPS position and the rest
                                (it scrolls)
@@ -52,8 +57,8 @@ Lumen has one window, laid out as Aperture 3's:
                 window
 
 Search: click in the field and type. The Browser shows the photos whose
-name, camera (make or model), date taken (2026-06-16 or 2026:06) or
-project match every word typed. Escape clears it. The search and the
+name, camera (make or model), date taken (2026-06-16 or 2026:06),
+project, caption or keywords match every word typed. Escape clears it. The search and the
 rating filter stay as you choose other projects and albums.
 
   V             Browser, Split View, Viewer in turn
@@ -107,8 +112,15 @@ Keys in the Browser
   Ctrl-A        select all
   Escape        clear the selection
   Ctrl-E        export the selected photos
+  Ctrl-P        print them
+  Ctrl-K        their caption and keywords
   Ctrl-C        copy the adjustments of the (first) selected photo
   Ctrl-V        paste them onto the selected photos
+  Ctrl-D        a duplicate version of each (with its adjustments)
+  Ctrl-G        stack the selected photos (the focused one the pick)
+  Ctrl-U        unstack them
+  \             make the focused photo its stack's pick
+  S             open or close the focused photo's stack
 
   Return        open the focused photo in the Viewer (or double-click)
 
@@ -161,6 +173,24 @@ orange, 60 yellow, 120 green, 180 cyan, 210 blue, 300 magenta) and how
 strong for each. It comes after Saturation, so it tones black and white
 photos too (that is how Sepia and Cyanotype are made).
 
+Colour changes one range of colours at a time: choose one of the eight
+bands (red, orange, yellow, green, aqua, blue, purple, magenta) by its
+swatch, then its Hue (turns those colours towards their neighbours, up
+to 30 degrees), Saturation (-100 takes the colour out, +100 doubles it)
+and Luminance (a stop darker or lighter). Colours between two bands get
+some of each; greys are left alone. A dot on a swatch shows a band that
+has been changed. Deepening a blue sky, or quietening a green field, are
+typical uses.
+
+Noise Reduction: Colour takes out the coloured speckles of photos taken
+in poor light (it smooths the colour, not the detail); Luminance smooths
+the grain while keeping edges. Look at 100% (Z) to judge them; too much
+Luminance makes skin and foliage look waxy.
+
+Vignette darkens the photo towards the corners (a negative Amount) or
+lightens them (positive); Midpoint is how far out from the middle it
+starts. It follows any crop: the corners are the cropped photo's.
+
 Highlights & Shadows: Shadows brightens the dark parts of the picture and
 Highlights darkens the bright parts, judged by their surroundings rather
 than pixel by pixel, so detail and contrast within them stay (as
@@ -206,6 +236,9 @@ Keys in the Viewer and Split View
   Ctrl-Z        undo          Ctrl-Y   redo
   Ctrl-C        copy the adjustments   Ctrl-V   paste them here
   Ctrl-E        export this photo
+  Ctrl-P        print it
+  Ctrl-K        its caption and keywords
+  Ctrl-D        a duplicate version of it, shown at once
   0 to 5, 9, /  rating, reject, flag, as in the library
   Escape        back to the Browser
   Menu          all of the above, plus Crop shape, Grid and Presets
@@ -214,13 +247,83 @@ Exporting
 ---------
 Ctrl-E (or Export... in the Selection or Photo menu) opens the Export
 box. Drag its icon to a directory display, or into another program, or
-type a full pathname and click Save. Choose JPEG or PNG, the size (Full,
-or the longer side at 3840, 2048 or 1024 pixels; photos are never made
-bigger) and the JPEG quality. The photo is written with all its
-adjustments, crop and straightening, from the full-size original. With
-several photos selected, the icon is a directory: they are written into
-a new directory of that name, one file each, named after the originals.
-Exports run in the background; the window's title shows the progress.
+type a full pathname and click Save. In the box:
+  Format      JPEG (with its quality) or PNG
+  Size        Full, the longer side at 3840, 2048 or 1024 pixels, or
+              Fit in a box of so many pixels (for a screen, a web page,
+              a slideshow). Photos are never made bigger
+  Colour      sRGB (for screens and the web), Adobe RGB (1998) or Display
+              P3 (wider colour, for printers and newer screens); the file
+              carries its ICC profile
+  Sharpening  for output: None, Low, Standard or High, at the size
+              written (on top of the photo's own Sharpen)
+  Names       for several photos: a pattern of {name} (the photo's),
+              {n} or {nnn} (a counter, padded), {date} {year} {month}
+              {day} {time} (taken), {project}, {camera} and {rating},
+              such as {date}_{name}_{nnn}
+The photo is written with all its adjustments, crop and straightening,
+from the full-size original. With several photos selected, the icon is
+a directory: they are written into a new directory of that name, one
+file each. The box remembers its settings. Exports run in the
+background; the bottom bar shows the progress.
+
+Printing
+--------
+Ctrl-P (or Print... in the Selection or Photo menu) prints the selected
+photos, one to a page, on the printer chosen in !Printers. Choose the
+copies, and the size on the page: Fit the page (all of the photo, as big
+as it goes), Fill the page (to the edges of the printable area; some is
+cut off) or a given size in centimetres (at most; the shape is kept).
+"Turn photos to suit the page" turns a landscape photo on a portrait
+page; "Sharpen for print" makes up for the softening of ink and paper.
+Each photo is prepared at the printer's resolution in the background,
+then printed in colour through the printer driver.
+
+PostScript printers print in grey unless their Configure window in
+!Printers has Colour ticked: the Print box says so when it is not.
+
+Captions, keywords and smart albums
+-----------------------------------
+Ctrl-K (or Selection > Caption and keywords..., or a click on Caption or
+Keywords in the Info tab) opens a window for the selected photos' caption
+and keywords. Keywords are words or short phrases with commas between:
+places, people, subjects. The menu button beside them lists the keywords
+already in the library. For several photos at once, the window shows the
+caption if they share one and the keywords they all have; the keywords
+in the list go on all of them, and those taken out of it come off all of
+them (keywords only some have are left as they are).
+
+Search finds captions and keywords. Exports carry them (as XMP, which
+other photo programs read), and photos tagged elsewhere bring their
+keywords and caption with them when imported.
+
+A smart album (New > Smart album..., or Album > New smart album...)
+holds the photos that match what you choose: words to find (in the name,
+caption, keywords, camera, project or date), the lowest rating, flagged
+only, adjusted only, and the dates taken between (2026, 2026-06,
+16/6/2026...). It starts from the Browser's search. It keeps up as
+photos change; its menu in the Library tab changes what it looks for.
+Smart albums show with a magnifying glass, and photos can't be put in
+them by hand.
+
+Versions and stacks
+-------------------
+A version is one way of developing a photo: Duplicate version (Ctrl-D)
+makes another with the same adjustments, to try a different look (a
+black and white one, a tighter crop); New version from original makes
+one as it came from the camera. Both share the original file: only the
+recipe is new. A version takes the caption, keywords and albums, and is
+named after the file with _v2, _v3...
+
+A stack gathers photos that belong together - a photo's versions, a
+burst, a bracket - under one, the pick. A closed stack shows only its
+pick, with the number in the stack on it; click the number (or press S)
+to open the stack and see them all, on a grey band, the pick first.
+Versions and stacks, on the Lumen menu: Stack (Ctrl-G) the selected
+photos, Unstack (Ctrl-U), Make the pick (\), Open or close stack (S), and
+Auto-stack, which stacks photos taken within so many seconds of each
+other (the selected ones, or all those shown). Albums, Rejected and a
+search show every photo in a stack.
 
 Edited photos are marked "Edited" in the library, and their thumbnails
 are made again with the edit.
@@ -244,10 +347,14 @@ The Lumen menu
 --------------
   Show            All photos, Flagged, Rejected, Last import, a project
                   (one per imported folder), an album, or a rating filter
-  Selection       rating, flag, reject, select all, clear, copy and
-                  paste adjustments, apply a preset
+  Selection       rating, flag, reject, caption and keywords, select
+                  all, clear, copy and paste adjustments, apply a
+                  preset, export, print, remove
   Album           make a new album from the selection, add to one,
-                  or remove from the album shown
+                  or remove from the album shown; a new smart album
+  Versions and stacks
+                  duplicate versions, stack and unstack, the pick,
+                  open or close a stack, auto-stack
   Thumbnail size  Small, Medium, Large
 
 Camera raw files
@@ -312,7 +419,8 @@ Exported files
 Exports keep the original's EXIF: camera, lens, exposure, date, GPS,
 author and copyright (a JPEG's EXIF block, a PNG's eXIf chunk). The
 orientation, size and colour space are the export's own; the
-thumbnail and the maker's notes are left out. For an original with no
+thumbnail and the maker's notes are left out. The caption and keywords
+go in as XMP (dc:description and dc:subject). For an original with no
 EXIF of its own (a PNG, some raw files), what the library knows of it
 is written instead.
 

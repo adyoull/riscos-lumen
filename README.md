@@ -2,7 +2,8 @@
 
 A photo library and non-destructive editor for RISC OS 5, in the spirit of
 Apple's Aperture. Milestone 0 (import, browse, rate, flag, albums) and most
-of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
+of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets),
+with keywords and smart albums, versions and stacks, exporting and printing.
 
 - Design spec: https://claude.ai/artifact/ELstfvAAkFbZGNj7wbhYTs
 - Target: RISC OS 5.30+ on a Raspberry Pi 4, 400 or CM4.
@@ -153,8 +154,29 @@ of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets).
   `curves rgb=0.000:0.000,0.500:0.700,1.000:1.000 red=...`; part of a look
   (presets, copy/paste). The editor: channel buttons, the graph with the
   channel's histogram behind, add/drag/Adjust-remove points.
-- Still to come in milestone 1: versions, a curves editor, several
-  versions of one original, full-resolution rendering.
+- Still to come in milestone 1: full-resolution rendering.
+
+## 0.0.23
+
+- Export options: fit in a box, colour space (sRGB, Adobe RGB, Display P3,
+  with an ICC v2 profile; LittleCMS-checked), output sharpening, and
+  file-naming patterns (naming.c: `{date}_{name}_{nnn}` and the rest).
+- Printing (printbox.c): through the printer drivers, one photo a page,
+  fit/fill/given size, turned to suit the page; each photo developed at
+  the printer's resolution in the background, then plotted with
+  JPEG_PlotScaled in the PDriver rectangle loop. Warns when a PostScript
+  printer is set to grey.
+- Captions, keywords and smart albums (schema 4): the Caption and keywords
+  window works on a selection; search matches both; smart albums are a
+  rule (words, rating, flag, adjusted, dates) evaluated in `cat_list`.
+  XMP (xmp.c) out on export (JPEG APP1, PNG iTXt) and in on import.
+- Colour (HSL, eight bands, hue/saturation/luminance by table on the hue as
+  seen, applied in linear light), noise reduction (denoise.c: chroma blur,
+  small bilateral on luminance; before sharpening, with band margins) and
+  vignette (by place in the whole output, through `develop_region`).
+- Versions and stacks (schema 5): duplicate versions share the original;
+  stacks with a pick, open/closed, collapsed in the Browser; auto-stack by
+  capture time.
 
 ## Layout
 
