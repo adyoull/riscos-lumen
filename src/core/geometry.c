@@ -41,6 +41,35 @@ void geom_to_source (const geom_plan *g, double x, double y, double *sx, double 
   canvas_to_source (g, u + g->cw / 2.0, v + g->ch / 2.0, sx, sy);
 }
 
+/* The other way: where a source pixel ends up in the output (it may be
+   outside it). Newton's method on geom_to_source, from a first guess that
+   ignores straightening and perspective; a few steps are plenty. */
+void geom_from_source (const geom_plan *g, double sx, double sy, double *x, double *y)
+{
+  double ox = g->ow / 2.0, oy = g->oh / 2.0;
+  int it;
+  for (it = 0; it < 12; it++)
+    {
+      double fx, fy, ax, ay, bx, by, j00, j01, j10, j11, det, ex, ey, h = 0.5;
+      geom_to_source (g, ox, oy, &fx, &fy);
+      ex = fx - sx;
+      ey = fy - sy;
+      if (ex * ex + ey * ey < 1e-6)
+        break;
+      geom_to_source (g, ox + h, oy, &ax, &ay);
+      geom_to_source (g, ox, oy + h, &bx, &by);
+      j00 = (ax - fx) / h; j10 = (ay - fy) / h;
+      j01 = (bx - fx) / h; j11 = (by - fy) / h;
+      det = j00 * j11 - j01 * j10;
+      if (det == 0)
+        break;
+      ox -= (j11 * ex - j01 * ey) / det;
+      oy -= (-j10 * ex + j00 * ey) / det;
+    }
+  *x = ox;
+  *y = oy;
+}
+
 static double clampd (double v, double lo, double hi)
 {
   return v < lo ? lo : v > hi ? hi : v;

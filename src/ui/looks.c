@@ -20,7 +20,7 @@ void looks_copy_viewer (void)
 void looks_copy_selection (void)
 {
   cat_id *ids;
-  char text[2048];
+  char text[RECIPE_TEXT_MAX];
   recipe r;
   int n = browser_selection (&ids);
   if (n > 0 && cat_get_recipe (lib_cat (app_library ()), ids[0], text, sizeof text) == 0)
@@ -64,7 +64,7 @@ int looks_presets (cat_preset **out)
 
 int looks_save_preset (const char *name)
 {
-  char text[2048];
+  char text[RECIPE_TEXT_MAX];
   if (!name[0] || !viewer_item ())
     return -1;
   viewer_look (text, sizeof text);

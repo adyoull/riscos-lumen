@@ -43,7 +43,7 @@ struct library
   /* thumbnails */
   thumbgen *tg;
   cat_id tg_version;
-  char tg_recipe[2048];               /* applied when the thumbnail is finished */
+  char tg_recipe[RECIPE_TEXT_MAX];               /* applied when the thumbnail is finished */
   char tg_dst[1100];
   int thumbs_pending;                 /* cached count; -1 to recount */
   /* Thumbnails on screen first: the ones asked for (the photos on screen),

@@ -36,6 +36,7 @@
 #include "recipe.h"
 #include "sharpen.h"
 #include "denoise.h"
+#include "retouch.h"
 #include "thumbgen.h"
 #include "ui.h"
 #include "fsys.h"
@@ -48,7 +49,7 @@
 #define PAD 24
 #define HIST_H 150
 #define INFO_H 52
-#define TOOLS_H 84                     /* the tool buttons and the space under them */
+#define TOOLS_H 156                    /* two rows of tool buttons and the space under them */
 #define GROUP_H 52
 #define ROW_H 56
 #define BUTTON_H 60
@@ -73,8 +74,10 @@
 
 enum { V_CLOSED, V_LOADING, V_READY, V_FAILED };
 enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE, HIT_GROUP, HIT_CURVE, HIT_CURVE_TAB,
-       HIT_HSL_BAND };
-enum { TOOL_AUTO, TOOL_CROP, TOOL_GRID, TOOL_PRESETS, TOOL_COUNT };
+       HIT_HSL_BAND, HIT_LABEL };
+#define LABEL_X0 250                   /* the panel's colour label dots: the first's centre */
+#define LABEL_DX 24
+enum { TOOL_AUTO, TOOL_CROP, TOOL_GRID, TOOL_PRESETS, TOOL_RETOUCH, TOOL_BRUSH, TOOL_COUNT };
 enum { LINK_RESET, LINK_PICK, LINK_AUTO_WB, LINK_LEFT, LINK_RIGHT };
 /* Crop drags: which edges move (or all of it). */
 enum { E_L = 1, E_R = 2, E_T = 4, E_B = 8, E_MOVE = 16, E_NEW = 32 };
@@ -109,6 +112,50 @@ static int before;                     /* showing the original */
 static int dragging = -1, drag_x = -1, drag_y = -1; /* the parameter (or DRAG_CROP), the pointer's last place */
 
 static int crop_mode, crop_edges, crop_shape, grid_mode, picking;
+
+/* Retouch: spots painted out (retouch.h). The proxy is kept as decoded
+   (src_orig) once a photo has spots; src is it with the spots applied. */
+static int retouching, rt_clone;       /* a local tool is on (Retouch, or Brush with brushing) */
+static int brushing, br_kind;
+static float br_pts[RECIPE_STROKE_MAX * 2];   /* the stroke being painted */
+static int br_n;
+static float rt_strength;              /* a stroke's amount */
+static float rt_size = 0.015f;         /* a new spot's radius, a fraction of the longer side */
+static float rt_feather = 0.3f;        /* and its feather */
+static int rt_sel = -1;                /* the spot last placed or moved, which the sliders change too */
+static int rt_sel_auto;
+static int rt_hover, rt_hx, rt_hy, rt_hr;  /* the brush under the pointer: centre (work area), radius */
+static void rt_brush_follow (void);                /* and its source was found for it (found again when it is resized) */
+static uint16_t *src_orig;
+static recipe applied;                 /* the spots and strokes src has */
+static int applied_n = -1;             /* -1: not yet looked */
+static int rt_drag = -1, rt_drag_src;  /* the spot being moved, and whether its source */
+static float rt_dx, rt_dy;             /* where it is being moved to (fractions) */
+#define DRAG_SPOT (-5)
+#define DRAG_RT_SIZE (-6)
+#define DRAG_RT_FEATHER (-7)
+#define DRAG_RT_STRENGTH (-8)
+#define DRAG_STROKE (-9)
+static void stroke_follow (int wx, int wy);
+static void stroke_end (void);
+static float *rt_slider_var (int k);
+static float rt_size_max (void);
+void viewer_toggle_retouch (void);
+static void local_tool (int brush);
+static int retouch_sync (void);
+static void make_half (void);
+static void retouch_click (const int *b, int wx, int wy);
+static int screen_to_photo (const int out[4], int wx, int wy, float *u, float *v);
+static void spots_changed (void);
+enum { RT_SIZE, RT_FEATHER, RT_STRENGTH, RT_SLIDERS };
+#define RT_SLOT 430                    /* a slider with its label and value */
+#define RT_ROW 64
+#define RT_LABEL_W 150                 /* "Strength" and a gap */
+#define RT_TRACK_W 180
+#define RT_SIZE_MIN 0.002f
+#define RT_SIZE_MAX 0.1f
+static float rt_slider_value (int k, int x);
+static void rt_apply (int live);
 
 /* Compare: a photo pinned on the left (its render kept as it was), the
    one being looked at on the right; Left and Right change the right one. */
@@ -247,6 +294,13 @@ static void free_photo (void)
   free_geo ();
   free (src); free (half);
   src = half = NULL;
+  free (src_orig);
+  src_orig = NULL;
+  applied_n = -1;
+  retouching = 0;
+  br_n = 0;
+  rt_drag = -1;
+  rt_sel = -1;
   sprite_free (&full_spr);
   sprite_free (&half_spr);
   full_y = -1;
@@ -454,7 +508,14 @@ static void button_at (int k, int n, int top, int r[4])
 }
 
 static void button_rect (int k, int r[4]) { button_at (k, 3, buttons_top (), r); }
-static void tool_rect (int k, int r[4]) { button_at (k, TOOL_COUNT, tools_top (), r); }
+/* Auto, Crop, Grid, Presets; then Retouch and Brush, a row lower. */
+static void tool_rect (int k, int r[4])
+{
+  if (k < TOOL_RETOUCH)
+    button_at (k, 4, tools_top (), r);
+  else
+    button_at (k - TOOL_RETOUCH, 2, tools_top () - BUTTON_H - 12, r);
+}
 
 /* The links on a group's header, right to left: Reset, then the group's own. */
 static int group_links (int g, int ids[3], const char *names[3])
@@ -544,6 +605,12 @@ static int hit (int wx, int wy, int *what, int panel)
               return HIT_CURVE_TAB;
             }
         }
+    }
+  if (wy <= info_top () - 10 && wy >= info_top () - INFO_H + 4 && wx >= panel_x0 () + LABEL_X0 - LABEL_DX / 2
+      && wx < panel_x0 () + LABEL_X0 + CAT_LABELS * LABEL_DX - LABEL_DX / 2)
+    {
+      *what = (wx - panel_x0 () - LABEL_X0 + LABEL_DX / 2) / LABEL_DX;
+      return HIT_LABEL;
     }
   for (k = 0; k < HSL_BANDS; k++)
     if (hsl_swatch (k, r) && wx >= r[0] && wx <= r[2] && wy >= r[1] - 4 && wy <= r[3] + 4)
@@ -692,7 +759,7 @@ void viewer_title (char *out, size_t n)
     }
   snprintf (out, n, "%s (%d of %d)%s%s", item.name, index_in_list + 1,
             browser_count (), recipe_is_default (previewing ? &preview_saved : &current) ? "" : "  \xB7  edited",
-            crop_mode ? "  \xB7  cropping" : "");
+            crop_mode ? "  \xB7  cropping" : retouching ? (brushing ? "  \xB7  brushing" : "  \xB7  retouching") : "");
 }
 
 static void update_title (void)
@@ -1031,6 +1098,7 @@ static void zoom_render_until (unsigned deadline)
 static void zoom_to (double fx, double fy)
 {
   char e[200];
+  retouching = 0;
   if (comparing)
     compare_stop ();
   if (zoom)
@@ -1090,6 +1158,11 @@ static void zoom_idle (unsigned deadline)
         }
       thumbgen_free (zgen);
       zgen = NULL;
+      {
+        recipe r;
+        effective (&r);
+        retouch_rgb8 (zfull.rgb, zfull.w, zfull.h, &r);   /* the spots, at full size */
+      }
       lplan_ok = 0;
       loupe_dirty = 1;
       if (zoom == 1)
@@ -1304,6 +1377,8 @@ static void refresh (int full)
 {
   if (!src)
     return;
+  if (retouch_sync ())
+    full = 1;
   if (geometry_changed () && geometry_apply ())
     {
       force_image ();
@@ -1321,6 +1396,56 @@ static void refresh (int full)
       loupe_render ();                 /* follows the sliders */
       loupe_force ();
     }
+}
+
+/* Half size: the mean of each 2x2 block of src, in linear light. */
+static void make_half (void)
+{
+  int x, y;
+  for (y = 0; y < hh; y++)
+    for (x = 0; x < hw; x++)
+      {
+        int c;
+        const uint16_t *a = src + ((size_t) (2 * y) * sw + 2 * x) * 3;
+        const uint16_t *b = 2 * y + 1 < sh ? a + (size_t) sw * 3 : a;
+        int dx = 2 * x + 1 < sw ? 3 : 0;
+        for (c = 0; c < 3; c++)
+          half[((size_t) y * hw + x) * 3 + c] = (uint16_t) ((a[c] + a[c + dx] + b[c] + b[c + dx] + 2) >> 2);
+      }
+}
+
+/* The proxy with the spots the recipe has now (src from src_orig): 1 if
+   it changed, and then everything made from it is made again. */
+static int retouch_sync (void)
+{
+  recipe r;
+  size_t bytes = (size_t) sw * sh * 6;
+  effective (&r);
+  if (!src || (applied_n >= 0 && recipe_spots_equal (&applied, &r) && recipe_strokes_equal (&applied, &r)))
+    return 0;
+  if (!src_orig)
+    {
+      if (!r.nspots && !r.nstrokes)
+        {
+          applied = r;
+          applied_n = 0;
+          return 0;
+        }
+      if (!(src_orig = malloc (bytes)))
+        return 0;
+      memcpy (src_orig, src, bytes);
+    }
+  else
+    memcpy (src, src_orig, bytes);
+  retouch_lin (src, sw, sh, &r);
+  make_half ();
+  applied = r;
+  applied_n = 1;
+  geo_key_valid = 0;
+  lummap_ok = 0;
+  if (zfull.rgb || zgen)
+    free_zoom ();                      /* the full size is read again, with them */
+  return 1;
 }
 
 /* Proxy decoded: linear copies and the half-size copy. */
@@ -1342,17 +1467,9 @@ static int proxy_ready (void)
     }
   dev_to_linear (img.rgb, src, (size_t) sw * sh);
   free (img.rgb);
-  /* Half size: the mean of each 2x2 block, in linear light. */
-  for (y = 0; y < hh; y++)
-    for (x = 0; x < hw; x++)
-      {
-        int c;
-        const uint16_t *a = src + ((size_t) (2 * y) * sw + 2 * x) * 3;
-        const uint16_t *b = 2 * y + 1 < sh ? a + (size_t) sw * 3 : a;
-        int dx = 2 * x + 1 < sw ? 3 : 0;
-        for (c = 0; c < 3; c++)
-          half[((size_t) y * hw + x) * 3 + c] = (uint16_t) ((a[c] + a[c + dx] + b[c] + b[c + dx] + 2) >> 2);
-      }
+  (void) x; (void) y;
+  make_half ();
+  retouch_sync ();                     /* the photo's spots */
   geo_key_valid = 0;
   if (geometry_changed () && geometry_apply ())
     return -1;
@@ -1365,7 +1482,7 @@ static int proxy_ready (void)
 /* --- the photo */
 static void load_recipe (void)
 {
-  char text[2048];
+  char text[RECIPE_TEXT_MAX];
   cat_get_recipe (lib_cat (app_library ()), item.id, text, sizeof text);
   recipe_parse (&current, text);
   undo_stack[0] = current;
@@ -1577,7 +1694,7 @@ void viewer_shutdown (void)
 int viewer_busy (void)
 {
   return is_open && (dragging != -1 || (state == V_LOADING && tg) || full_y >= 0 || zgen || (zoom == 2 && zy >= 0)
-                     || (loupe_on && !loupe_pinned && zfull.rgb));
+                     || (loupe_on && !loupe_pinned && zfull.rgb) || retouching);
 }
 
 static void crop_follow (double fx, double fy);
@@ -1608,6 +1725,25 @@ void viewer_idle (void)
               pan_dy = ptr[1] - pan_start_y;
               force_image ();
             }
+          else if (dragging == DRAG_RT_SIZE || dragging == DRAG_RT_FEATHER || dragging == DRAG_RT_STRENGTH)
+            {
+              int k = dragging == DRAG_RT_SIZE ? RT_SIZE : dragging == DRAG_RT_FEATHER ? RT_FEATHER : RT_STRENGTH;
+              *rt_slider_var (k) = rt_slider_value (k, ptr[0] - b[1]);
+              rt_apply (1);
+            }
+          else if (dragging == DRAG_STROKE)
+            stroke_follow (ptr[0] - b[1], ptr[1] - b[4]);
+          else if (dragging == DRAG_SPOT)
+            {
+              int r[4];
+              float u, v;
+              if (photo_rect (r) && screen_to_photo (r, ptr[0] - b[1], ptr[1] - b[4], &u, &v))
+                {
+                  rt_dx = u < 0 ? 0 : u > 1 ? 1 : u;
+                  rt_dy = v < 0 ? 0 : v > 1 ? 1 : v;
+                  force_image ();      /* the circles follow; the photo when let go */
+                }
+            }
           else if (dragging == DRAG_CROP)
             {
               int r[4];
@@ -1637,6 +1773,7 @@ void viewer_idle (void)
         return;
     }
   loupe_track ();
+  rt_brush_follow ();
   if (state == V_LOADING && tg)
     {
       int r;
@@ -1667,7 +1804,7 @@ void viewer_idle (void)
 /* --- changes: saved at once, with undo */
 static void save (void)
 {
-  char text[2048];
+  char text[RECIPE_TEXT_MAX];
   recipe_format (&current, text, sizeof text);
   cat_set_recipe (lib_cat (app_library ()), item.id, text);
   lib_thumbs_changed (app_library ());
@@ -1745,7 +1882,7 @@ void viewer_reload (cat_id id)
   if (state == V_CLOSED || id != item.id || crop_mode)
     return;
   {
-    char text[2048];
+    char text[RECIPE_TEXT_MAX];
     recipe r;
     cat_get_recipe (lib_cat (app_library ()), item.id, text, sizeof text);
     recipe_parse (&r, text);
@@ -1969,6 +2106,7 @@ void viewer_crop_start (void)
 {
   if (!src || crop_mode)
     return;
+  retouching = 0;
   if (comparing)
     compare_stop ();
   if (zoom)
@@ -2160,6 +2298,8 @@ static void tool_click (int k, int b0, int b1)
     case TOOL_CROP: viewer_toggle_crop (); break;
     case TOOL_GRID: viewer_set_grid (grid_mode + 1); break;
     case TOOL_PRESETS: menus_open_presets_menu (b0, b1); break;
+    case TOOL_RETOUCH: viewer_toggle_retouch (); break;
+    case TOOL_BRUSH: viewer_toggle_brush (); break;
     }
 }
 
@@ -2277,6 +2417,8 @@ static void click_in (int *b, int w, int panel)
       start_drag (b[0], b[1], st[1] + track_x0 () - 4, st[4] + row_top (what) - ROW_H + 4,
                   st[1] + track_x1 () + 4, st[4] + row_top (what) - 4, what);
     }
+  else if (h == HIT_IMAGE && retouching && (b[2] == Button_Select || b[2] == Button_Adjust))
+    retouch_click (b, wx, wy);
   else if (h == HIT_IMAGE && b[2] == Button_Adjust && loupe_on)
     viewer_set_loupe_mag (loupe_mag == 4 ? 1 : loupe_mag * 2);
   else if (h == HIT_IMAGE && b[2] == Button_Select)
@@ -2328,6 +2470,16 @@ static void click_in (int *b, int w, int panel)
       curve_ch = what;
       force_panel ();
     }
+  else if (h == HIT_LABEL && b[2] == Button_Select && item.id)
+    {
+      /* That label (the one it has already: none). */
+      int lab = what == item.label ? 0 : what;
+      cat_set_label (lib_cat (app_library ()), &item.id, 1, lab);
+      item.label = lab;
+      browser_after_change ();
+      mainwin_info_changed ();
+      pforce (0, info_top () - INFO_H, PANEL_W, info_top ());
+    }
   else if (h == HIT_HSL_BAND && (b[2] == Button_Select || b[2] == Button_Adjust))
     {
       hsl_band = what;
@@ -2372,6 +2524,42 @@ void viewer_drag_end (void)
       commit ();
       force_curves ();
       restart_full ();
+      return;
+    }
+  if (p == DRAG_STROKE)
+    {
+      stroke_end ();
+      return;
+    }
+  if (p == DRAG_RT_SIZE || p == DRAG_RT_FEATHER || p == DRAG_RT_STRENGTH)
+    {
+      rt_apply (0);
+      return;
+    }
+  if (p == DRAG_SPOT)
+    {
+      if (rt_drag >= 0 && rt_drag < current.nspots)
+        {
+          recipe_spot *sp = &current.spot[rt_drag];
+          if (rt_drag_src)
+            {
+              sp->sx = rt_dx;
+              sp->sy = rt_dy;
+            }
+          else
+            {
+              /* The spot moves; its source keeps its place beside it. */
+              sp->sx += rt_dx - sp->x;
+              sp->sy += rt_dy - sp->y;
+              sp->x = rt_dx;
+              sp->y = rt_dy;
+              sp->sx = sp->sx < 0 ? 0 : sp->sx > 1 ? 1 : sp->sx;
+              sp->sy = sp->sy < 0 ? 0 : sp->sy > 1 ? 1 : sp->sy;
+            }
+          rt_drag = -1;
+          spots_changed ();
+        }
+      rt_drag = -1;
       return;
     }
   if (p == DRAG_PAN)
@@ -2419,6 +2607,25 @@ int viewer_key (int key)
       viewer_toggle_loupe ();
       return 1;
     }
+  if (retouching && (key == KEY_ESCAPE || key == KEY_RETURN))
+    {
+      local_tool (brushing);
+      return 1;
+    }
+  if (retouching && (key == '[' || key == ']'))
+    {
+      rt_size = key == ']' ? (rt_size * 1.25f > rt_size_max () ? rt_size_max () : rt_size * 1.25f)
+                           : (rt_size / 1.25f < RT_SIZE_MIN ? RT_SIZE_MIN : rt_size / 1.25f);
+      rt_apply (0);
+      return 1;
+    }
+  if (retouching && (key == '{' || key == '}'))
+    {
+      rt_feather += key == '}' ? 0.1f : -0.1f;
+      rt_feather = rt_feather < 0 ? 0 : rt_feather > 1 ? 1 : rt_feather;
+      rt_apply (0);
+      return 1;
+    }
   if (comparing && key == KEY_ESCAPE)
     {
       compare_stop ();
@@ -2431,6 +2638,14 @@ int viewer_key (int key)
     }
   switch (key)
     {
+    case 'r':
+    case 'R':
+      viewer_toggle_retouch ();
+      return 1;
+    case 'b':
+    case 'B':
+      viewer_toggle_brush ();
+      return 1;
     case 'o':
     case 'O':
       if (comparing)
@@ -2828,17 +3043,27 @@ static void draw_panel (int ox, int oy)
         draw_rect (px + 200, y - 4, px + 228, y + 24, COL_FRAME);
         draw_rect (px + 204, y, px + 224, y + 20, 0xB0E6F200u);
       }
+    /* The colour label's dots, to pick from; the photo's ringed. */
+    for (k = 0; k < CAT_LABELS; k++)
+      {
+        int cx = px + LABEL_X0 + k * LABEL_DX, cy = y + 10;
+        if (k == item.label)
+          draw_circle (cx, cy, 12, COL_TEXT);
+        draw_label_dot (cx, cy, 8, k);
+      }
   }
   /* Tools */
   {
-    static const char *const names[TOOL_COUNT] = { "Auto", "Crop", "Grid", "Presets" };
+    static const char *const names[TOOL_COUNT] = { "Auto", "Crop", "Grid", "Presets", "Retouch", "Brush" };
     for (k = 0; k < TOOL_COUNT; k++)
       {
         int r[4];
         tool_rect (k, r);
-        draw_button_rect (r, k == TOOL_CROP && crop_mode ? "Done" : names[k],
+        int on = (k == TOOL_RETOUCH && retouching && !brushing) || (k == TOOL_BRUSH && retouching && brushing);
+        draw_button_rect (r, (k == TOOL_CROP && crop_mode) || on ? "Done" : names[k],
                           src != NULL && !(k == TOOL_AUTO && crop_mode),
-                          (k == TOOL_CROP && crop_mode) || (k == TOOL_GRID && grid_mode), ox, oy);
+                          (k == TOOL_CROP && crop_mode) || (k == TOOL_GRID && grid_mode) || on,
+                          ox, oy);
       }
   }
   /* Groups of sliders */
@@ -2902,8 +3127,577 @@ static void draw_grid (int x0, int y0, int x1, int y1, int n, unsigned col)
     }
 }
 
+/* --- retouch: screen <-> photo */
+
+/* A point of the photo (fractions, upright) on the screen; 0 if no plan. */
+static int photo_to_screen (const int out[4], float u, float v, int *x, int *y)
+{
+  double gx, gy;
+  if (!src || gw <= 0 || gh <= 0)
+    return 0;
+  geom_from_source (&plan_full, u * sw, v * sh, &gx, &gy);
+  *x = out[0] + (int) lround (gx / gw * (out[2] - out[0]));
+  *y = out[3] - (int) lround (gy / gh * (out[3] - out[1]));
+  return 1;
+}
+
+/* A point on the screen (work area) as a fraction of the photo, upright. */
+static int screen_to_photo (const int out[4], int wx, int wy, float *u, float *v)
+{
+  double sx, sy;
+  if (!src || out[2] <= out[0] || out[3] <= out[1])
+    return 0;
+  geom_to_source (&plan_full, (double) (wx - out[0]) / (out[2] - out[0]) * gw,
+                  (double) (out[3] - wy) / (out[3] - out[1]) * gh, &sx, &sy);
+  *u = (float) (sx / sw);
+  *v = (float) (sy / sh);
+  return 1;
+}
+
+/* A radius (fraction of the longer side) in screen units, about (u, v). */
+static int radius_on_screen (const int out[4], float u, float v, float r)
+{
+  int x0, y0, x1, y1, longer = sw > sh ? sw : sh;
+  if (!photo_to_screen (out, u, v, &x0, &y0) || !photo_to_screen (out, u + r * longer / sw, v, &x1, &y1))
+    return 0;
+  return (int) lround (sqrt ((double) (x1 - x0) * (x1 - x0) + (double) (y1 - y0) * (y1 - y0)));
+}
+
+/* The tools' controls, in a box across the top of the photo's area: the
+   tool's buttons (Repair and Clone; Dodge, Burn, Saturate, Desaturate)
+   and Done; below, sliders for a new spot's or stroke's size, feather
+   (and strength), which change the one last placed or moved too. */
+
+static int rt_nbuttons (void) { return brushing ? BRUSH_KINDS + 1 : 3; }
+static int rt_nsliders (void) { return brushing ? 3 : 2; }
+static float rt_size_max (void) { return brushing ? 0.2f : RT_SIZE_MAX; }
+
+static void rt_box (int r[4])
+{
+  int ir[4];
+  image_rect (ir);
+  r[0] = ir[0] + PAD - 12;
+  r[2] = r[0] + 24 + rt_nsliders () * RT_SLOT;
+  r[3] = ir[3] - 2;
+  r[1] = r[3] - 2 * RT_ROW - 18;
+}
+
+/* Done is the last, at the right. */
+static void rt_button (int k, int r[4])
+{
+  int box[4];
+  rt_box (box);
+  if (k == rt_nbuttons () - 1)
+    {
+      r[2] = box[2] - 12;
+      r[0] = r[2] - 140;
+    }
+  else
+    {
+      r[0] = box[0] + 12 + k * 190;
+      r[2] = r[0] + 180;
+    }
+  r[3] = box[3] - 10;
+  r[1] = r[3] - 52;
+}
+
+/* A slider's track (the knob's travel); its label is to the left, its value to the right. */
+static void rt_track (int k, int r[4])
+{
+  int box[4];
+  rt_box (box);
+  r[0] = box[0] + 12 + k * RT_SLOT + RT_LABEL_W;
+  r[2] = r[0] + RT_TRACK_W;
+  r[3] = box[3] - 10 - RT_ROW;
+  r[1] = r[3] - 52;
+}
+
+/* Size runs on a log scale: small spots need fine steps. */
+static float rt_slider_value (int k, int x)
+{
+  int t[4];
+  float f;
+  rt_track (k, t);
+  f = (float) (x - t[0]) / (t[2] - t[0]);
+  f = f < 0 ? 0 : f > 1 ? 1 : f;
+  if (k != RT_SIZE)
+    return f;
+  return RT_SIZE_MIN * (float) pow (rt_size_max () / RT_SIZE_MIN, f);
+}
+
+static float *rt_slider_var (int k)
+{
+  return k == RT_SIZE ? &rt_size : k == RT_FEATHER ? &rt_feather : &rt_strength;
+}
+
+static int rt_slider_x (int k)
+{
+  int t[4];
+  float f = k == RT_SIZE ? (float) (log (rt_size / RT_SIZE_MIN) / log (rt_size_max () / RT_SIZE_MIN)) : *rt_slider_var (k);
+  rt_track (k, t);
+  f = f < 0 ? 0 : f > 1 ? 1 : f;
+  return t[0] + (int) lround (f * (t[2] - t[0]));
+}
+
+static const unsigned brush_colours[BRUSH_KINDS] = { 0x40E0F000u, 0xF0904000u, 0x5050F000u, 0xC0C0C000u };
+
+/* A stroke's path on the screen (out: on the screen, as draw_overlays). */
+static void draw_path (const int out[4], const float *xy, int n, unsigned colour, int bold)
+{
+  int j, px = 0, py = 0;
+  for (j = 0; j < n; j++)
+    {
+      int x, y;
+      if (!photo_to_screen (out, xy[2 * j], xy[2 * j + 1], &x, &y))
+        return;
+      if (j)
+        {
+          draw_line (px, py - 2, x, y - 2, COL_FRAME);
+          draw_line (px, py, x, y, colour);
+          if (bold)
+            draw_line (px, py + 2, x, y + 2, colour);
+        }
+      else
+        draw_circle (x, y, bold ? 6 : 4, colour);
+      px = x;
+      py = y;
+    }
+}
+
+static void stroke_points (const recipe_stroke *st, float *xy)
+{
+  int j;
+  for (j = 0; j < st->n; j++)
+    {
+      xy[2 * j] = current.pt[st->first + j][0] / 10000.0f;
+      xy[2 * j + 1] = current.pt[st->first + j][1] / 10000.0f;
+    }
+}
+
+static void draw_retouch (int ox, int oy, const int out[4])
+{
+  int i, k, r[4];
+  static const char *const spot_names[2] = { "Repair", "Clone" };
+  static const char *const brush_names[BRUSH_KINDS] = { "Dodge", "Burn", "Saturate", "Desaturate" };
+  static const char *const labels[RT_SLIDERS] = { "Size", "Feather", "Strength" };
+  if (brushing)
+    {
+      static float xy[RECIPE_STROKE_MAX * 2];
+      for (i = 0; i < current.nstrokes; i++)
+        {
+          stroke_points (&current.stroke[i], xy);
+          draw_path (out, xy, current.stroke[i].n, brush_colours[current.stroke[i].kind], i == rt_sel);
+        }
+      if (dragging == DRAG_STROKE)
+        draw_path (out, br_pts, br_n, COL_KNOB, 1);
+    }
+  else
+    for (i = 0; i < current.nspots; i++)
+      {
+        const recipe_spot *sp = &current.spot[i];
+        float x = sp->x, y = sp->y, sx = sp->sx, sy = sp->sy;
+        int dx, dy, qx, qy, rad, inner;
+        if (i == rt_drag)
+          {
+            if (rt_drag_src) { sx = rt_dx; sy = rt_dy; }
+            else { sx += rt_dx - x; sy += rt_dy - y; x = rt_dx; y = rt_dy; }
+          }
+        if (!photo_to_screen (out, x, y, &dx, &dy) || !photo_to_screen (out, sx, sy, &qx, &qy))
+          continue;
+        rad = radius_on_screen (out, x, y, sp->r);
+        if (rad < 4)
+          rad = 4;
+        /* out is on the screen already (draw_overlays); the controls below are in the work area. */
+        draw_line (dx, dy, qx, qy, 0x80808000u);
+        draw_circle (qx, qy, rad, 0xA0A0A000u);
+        draw_circle (dx, dy, rad, i == rt_sel ? COL_ACCENT : COL_CROP);
+        draw_circle (dx, dy, rad + 2, COL_FRAME);
+        /* The feather: inside this ring the spot is painted out fully. */
+        inner = (int) lround (rad * (1 - (sp->f < 0.02f ? 0.02f : sp->f)));
+        if (i == rt_sel && inner > 3 && inner < rad - 2)
+          draw_circle (dx, dy, inner, 0xA0A0A000u);
+      }
+  /* The brush: a new spot's (stroke's) size and feather, under the pointer. */
+  if (rt_hover && (dragging == -1 || dragging == DRAG_STROKE))
+    {
+      int inner = (int) lround (rt_hr * (1 - (rt_feather < 0.02f ? 0.02f : rt_feather)));
+      draw_circle (ox + rt_hx, oy + rt_hy, rt_hr + 2, COL_FRAME);
+      draw_circle (ox + rt_hx, oy + rt_hy, rt_hr, brushing ? brush_colours[br_kind] : COL_KNOB);
+      if (inner > 3 && inner < rt_hr - 2)
+        draw_circle (ox + rt_hx, oy + rt_hy, inner, 0xA0A0A000u);
+    }
+  rt_box (r);
+  draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + r[3], 0x20202000u);
+  for (k = 0; k < rt_nbuttons (); k++)
+    {
+      int done = k == rt_nbuttons () - 1;
+      rt_button (k, r);
+      draw_button_rect (r, done ? "Done" : brushing ? brush_names[k] : spot_names[k], 1,
+                        !done && (brushing ? k == br_kind : k == rt_clone), ox, oy);
+    }
+  for (k = 0; k < rt_nsliders (); k++)
+    {
+      char t[24];
+      int mid, kx;
+      static const int drags[RT_SLIDERS] = { DRAG_RT_SIZE, DRAG_RT_FEATHER, DRAG_RT_STRENGTH };
+      rt_track (k, r);
+      mid = (r[1] + r[3]) / 2;
+      kx = rt_slider_x (k);
+      draw_text (ox + r[0] - RT_LABEL_W, oy + mid - 9, labels[k], COL_LIGHT, 0x20202000u);
+      draw_rect (ox + r[0], oy + mid - 4, ox + r[2], oy + mid + 4, COL_TRACK);
+      draw_rect (ox + r[0], oy + mid - 4, ox + kx, oy + mid + 4, COL_ACCENT);
+      draw_rect (ox + kx - 10, oy + mid - 18, ox + kx + 10, oy + mid + 18, COL_FRAME);
+      draw_rect (ox + kx - 7, oy + mid - 15, ox + kx + 7, oy + mid + 15, dragging == drags[k] ? COL_ACCENT : COL_KNOB);
+      if (k == RT_SIZE)
+        snprintf (t, sizeof t, "%d", (int) lround (rt_size * 1000));
+      else if (k == RT_STRENGTH && (br_kind == BRUSH_DODGE || br_kind == BRUSH_BURN))
+        snprintf (t, sizeof t, "%.1f EV", 2.0 * rt_strength);   /* recipe.h: 2 stops at 1 */
+      else
+        snprintf (t, sizeof t, "%d%%", (int) lround (*rt_slider_var (k) * 100));
+      draw_text (ox + r[2] + 20, oy + mid - 9, t, COL_LIGHT, 0x20202000u);
+    }
+}
+
+/* Null events while retouching: the brush follows the pointer over the photo. */
+static void rt_hover_force (void)
+{
+  force (rt_hx - rt_hr - 8, rt_hy - rt_hr - 8, rt_hx + rt_hr + 8, rt_hy + rt_hr + 8);
+}
+
+static void rt_brush_follow (void)
+{
+  int ptr[5], st[9], r[4], box[4], wx, wy, over = 0, rad = 0;
+  float u, v;
+  if (!retouching || (dragging != -1 && dragging != DRAG_STROKE) || !src)
+    {
+      if (rt_hover)
+        {
+          rt_hover = 0;
+          rt_hover_force ();
+        }
+      return;
+    }
+  st[0] = win;
+  if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) || _swix (Wimp_GetWindowState, _IN (1), st))
+    return;
+  wx = ptr[0] - st[1] + st[5];
+  wy = ptr[1] - st[4] + st[6];
+  rt_box (box);
+  if ((ptr[3] == win || dragging == DRAG_STROKE) && photo_rect (r) && wx >= r[0] && wx < r[2] && wy >= r[1] && wy < r[3]
+      && !(wx >= box[0] && wx <= box[2] && wy >= box[1] && wy <= box[3]) && screen_to_photo (r, wx, wy, &u, &v))
+    {
+      over = 1;
+      rad = radius_on_screen (r, u, v, rt_size);
+      if (rad < 4)
+        rad = 4;
+    }
+  if (over == rt_hover && (!over || (wx == rt_hx && wy == rt_hy && rad == rt_hr)))
+    return;
+  if (rt_hover)
+    rt_hover_force ();
+  rt_hover = over;
+  rt_hx = wx;
+  rt_hy = wy;
+  rt_hr = rad;
+  if (over)
+    rt_hover_force ();
+}
+
+/* The size, feather or strength changed (slider or keys): for new spots
+   (strokes), and the chosen one too. live: only the overlay follows (a
+   drag); the photo when let go. */
+static void rt_apply (int live)
+{
+  if (brushing && rt_sel >= 0 && rt_sel < current.nstrokes)
+    {
+      recipe_stroke *st = &current.stroke[rt_sel];
+      st->r = rt_size;
+      st->f = rt_feather;
+      st->amount = rt_strength;
+      if (!live)
+        {
+          spots_changed ();
+          return;
+        }
+    }
+  else if (!brushing && rt_sel >= 0 && rt_sel < current.nspots)
+    {
+      recipe_spot *sp = &current.spot[rt_sel];
+      sp->r = rt_size;
+      sp->f = rt_feather;
+      if (!live)
+        {
+          if (rt_sel_auto && src)
+            retouch_auto_source (src_orig ? src_orig : src, sw, sh, sp->x, sp->y, sp->r, &sp->sx, &sp->sy);
+          spots_changed ();
+          return;
+        }
+    }
+  force_image ();
+}
+
+/* --- retouch and brush: the tools */
+
+/* The sliders' values are each tool's own. */
+static float tool_vals[2][3] = { { 0.015f, 0.3f, 0 }, { 0.03f, 0.5f, 0.25f } };
+
+static void local_tool (int brush)
+{
+  if (!src && !retouching)
+    return;
+  if (retouching)
+    {
+      tool_vals[brushing][0] = rt_size;
+      tool_vals[brushing][1] = rt_feather;
+      tool_vals[brushing][2] = rt_strength;
+    }
+  rt_drag = -1;
+  rt_sel = -1;
+  rt_hover = 0;
+  br_n = 0;
+  if (retouching && brushing == brush)
+    retouching = 0;
+  else
+    {
+      if (crop_mode)
+        viewer_crop_finish (1);
+      if (zoom)
+        zoom_to (0, 0);
+      if (loupe_on)
+        viewer_toggle_loupe ();
+      if (comparing)
+        compare_stop ();
+      picking = 0;
+      retouching = 1;
+      brushing = brush;
+      rt_size = tool_vals[brush][0];
+      rt_feather = tool_vals[brush][1];
+      rt_strength = tool_vals[brush][2];
+    }
+  update_title ();
+  force_all ();
+}
+
+void viewer_toggle_retouch (void) { local_tool (0); }
+void viewer_toggle_brush (void) { local_tool (1); }
+int viewer_retouching (void) { return retouching && !brushing; }
+int viewer_brushing (void) { return retouching && brushing; }
+
+/* The spot whose circle (or, with source, its source's) is under (u, v), or -1. */
+static int spot_at (float u, float v, int source)
+{
+  int i, longer = sw > sh ? sw : sh;
+  for (i = current.nspots - 1; i >= 0; i--)
+    {
+      const recipe_spot *sp = &current.spot[i];
+      double dx = ((source ? sp->sx : sp->x) - u) * sw / longer, dy = ((source ? sp->sy : sp->y) - v) * sh / longer;
+      if (dx * dx + dy * dy <= (double) sp->r * sp->r * 1.2)
+        return i;
+    }
+  return -1;
+}
+
+/* The stroke whose brush covers (u, v) (the last painted first), or -1. */
+static int stroke_at (float u, float v)
+{
+  int i, j, longer = sw > sh ? sw : sh;
+  double kx = (double) sw / longer, ky = (double) sh / longer;
+  for (i = current.nstrokes - 1; i >= 0; i--)
+    {
+      const recipe_stroke *st = &current.stroke[i];
+      for (j = 0; j < st->n; j++)
+        {
+          int k = j + 1 < st->n ? j + 1 : j;
+          double ax = current.pt[st->first + j][0] / 10000.0 * kx, ay = current.pt[st->first + j][1] / 10000.0 * ky;
+          double bx = current.pt[st->first + k][0] / 10000.0 * kx, by = current.pt[st->first + k][1] / 10000.0 * ky;
+          double dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy, t = 0, px = u * kx, py = v * ky;
+          if (l > 0)
+            {
+              t = ((px - ax) * dx + (py - ay) * dy) / l;
+              t = t < 0 ? 0 : t > 1 ? 1 : t;
+            }
+          dx = ax + t * dx - px;
+          dy = ay + t * dy - py;
+          if (dx * dx + dy * dy <= (double) st->r * st->r)
+            return i;
+        }
+    }
+  return -1;
+}
+
+static void spots_changed (void)
+{
+  before = 0;
+  commit ();
+  refresh (1);
+  force_image ();
+  force_panel ();
+}
+
+/* While a stroke is painted: a point added when the pointer has gone a
+   third of the brush's radius from the last, and that piece drawn. */
+static void stroke_follow (int wx, int wy)
+{
+  int r[4], longer = sw > sh ? sw : sh, x0, y0, x1, y1;
+  float u, v;
+  double dx, dy;
+  if (br_n <= 0 || br_n >= RECIPE_STROKE_MAX || !photo_rect (r) || !screen_to_photo (r, wx, wy, &u, &v))
+    return;
+  u = u < 0 ? 0 : u > 1 ? 1 : u;
+  v = v < 0 ? 0 : v > 1 ? 1 : v;
+  dx = (u - br_pts[2 * br_n - 2]) * sw / longer;
+  dy = (v - br_pts[2 * br_n - 1]) * sh / longer;
+  if (dx * dx + dy * dy < (double) rt_size * rt_size / 9)
+    return;
+  br_pts[2 * br_n] = u;
+  br_pts[2 * br_n + 1] = v;
+  br_n++;
+  if (photo_to_screen (r, br_pts[2 * br_n - 4], br_pts[2 * br_n - 3], &x0, &y0) && photo_to_screen (r, u, v, &x1, &y1))
+    force ((x0 < x1 ? x0 : x1) - 12, (y0 < y1 ? y0 : y1) - 12, (x0 > x1 ? x0 : x1) + 12, (y0 > y1 ? y0 : y1) + 12);
+}
+
+static void stroke_end (void)
+{
+  if (br_n > 0)
+    {
+      rt_sel = recipe_stroke_add (&current, br_kind, rt_size, rt_feather, rt_strength, br_pts, br_n);
+      br_n = 0;
+      if (rt_sel < 0)
+        {
+          app_report ("There's no room for another stroke on this photo (32 strokes, 1024 points in all). "
+                      "Take some away (Adjust-click) to add more.");
+          force_image ();
+          return;
+        }
+      spots_changed ();
+    }
+}
+
+/* A click in the photo's area while retouching (brushing): the controls,
+   a spot to move or (Adjust) take away, or a new spot with a source found
+   for it; brushing, a stroke to paint, or (Adjust) take away. */
+static void retouch_click (const int *b, int wx, int wy)
+{
+  int out[4], k, r[4], i;
+  float u, v;
+  for (k = 0; k < rt_nbuttons (); k++)
+    {
+      rt_button (k, r);
+      if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
+        {
+          if (k == rt_nbuttons () - 1)
+            {
+              local_tool (brushing);
+              return;
+            }
+          if (brushing)
+            {
+              br_kind = k;
+              rt_sel = -1;               /* a new kind starts a new stroke */
+            }
+          else
+            rt_clone = k;
+          force_image ();
+          return;
+        }
+    }
+  for (k = 0; k < rt_nsliders (); k++)
+    {
+      rt_track (k, r);
+      if (wx >= r[0] - 24 && wx <= r[2] + 24 && wy >= r[1] && wy <= r[3] && photo_rect (out))
+        {
+          static const int drags[RT_SLIDERS] = { DRAG_RT_SIZE, DRAG_RT_FEATHER, DRAG_RT_STRENGTH };
+          *rt_slider_var (k) = rt_slider_value (k, wx);
+          rt_apply (1);
+          start_drag (b[0], b[1], b[0] - (wx - r[0]) - 24, b[1], b[0] + (r[2] - wx) + 24, b[1], drags[k]);
+          if (dragging != drags[k])
+            rt_apply (0);
+          return;
+        }
+    }
+  rt_box (r);
+  if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
+    return;                            /* the controls' box, between them */
+  if (!photo_rect (out) || !screen_to_photo (out, wx, wy, &u, &v) || u < 0 || u > 1 || v < 0 || v > 1)
+    return;
+  if (brushing)
+    {
+      if (b[2] == Button_Adjust)
+        {
+          if ((i = stroke_at (u, v)) >= 0)
+            {
+              recipe_stroke_remove (&current, i);
+              rt_sel = i == rt_sel ? -1 : i < rt_sel ? rt_sel - 1 : rt_sel;
+              spots_changed ();
+            }
+          return;
+        }
+      if (b[2] != Button_Select)
+        return;
+      br_pts[0] = u;
+      br_pts[1] = v;
+      br_n = 1;
+      start_drag (b[0], b[1], b[0] - (wx - out[0]), b[1] - (wy - out[1]), b[0] + (out[2] - wx), b[1] + (out[3] - wy),
+                  DRAG_STROKE);
+      if (dragging != DRAG_STROKE)
+        stroke_end ();                 /* a dab */
+      else
+        force_image ();
+      return;
+    }
+  if ((i = spot_at (u, v, 0)) >= 0 || (i = spot_at (u, v, 1)) >= 0)
+    {
+      int is_src = spot_at (u, v, 0) != i;
+      if (b[2] == Button_Adjust)
+        {
+          recipe_spot_remove (&current, i);
+          rt_sel = i == rt_sel ? -1 : i < rt_sel ? rt_sel - 1 : rt_sel;
+          spots_changed ();
+          return;
+        }
+      /* Drag it (or its source) somewhere else; it is the chosen spot,
+         whose size and feather the sliders show. */
+      if (i != rt_sel || is_src)
+        rt_sel_auto = 0;               /* a source placed by hand stays where it is */
+      rt_sel = i;
+      rt_size = current.spot[i].r;
+      rt_feather = current.spot[i].f;
+      rt_drag = i;
+      rt_drag_src = is_src;
+      rt_dx = u;
+      rt_dy = v;
+      start_drag (b[0], b[1], b[0] - (wx - out[0]), b[1] - (wy - out[1]), b[0] + (out[2] - wx), b[1] + (out[3] - wy),
+                  DRAG_SPOT);
+      return;
+    }
+  if (b[2] != Button_Select)
+    return;
+  {
+    recipe_spot sp;
+    sp.x = u;
+    sp.y = v;
+    sp.r = rt_size;
+    sp.clone = rt_clone;
+    sp.f = rt_feather;
+    retouch_auto_source (src, sw, sh, u, v, rt_size, &sp.sx, &sp.sy);
+    rt_sel_auto = 1;
+    if ((rt_sel = recipe_spot_add (&current, &sp)) < 0)
+      {
+        app_report ("A photo can have 48 spots at most. Take some away (Adjust-click) to add more.");
+        return;
+      }
+    spots_changed ();
+  }
+}
+
 static void draw_overlays (int ox, int oy, const int out[4])
 {
+  if (retouching && !crop_mode)
+    {
+      draw_retouch (ox, oy, out);
+      return;
+    }
+  {
   static const int cells[4] = { 0, 3, 4, 8 };
   int n = cells[grid_mode];
   if (dragging >= P_ANGLE && dragging <= P_PERSP_H)
@@ -2926,6 +3720,7 @@ static void draw_overlays (int ox, int oy, const int out[4])
     }
   else if (n)
     draw_grid (out[0], out[1], out[2], out[3], n, COL_GRID);
+  }
 }
 
 /* Compare: the pinned photo in the left half, named, with a line between. */

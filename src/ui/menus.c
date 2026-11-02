@@ -252,14 +252,26 @@ static void load_groups (void)
 enum { SEL_RATING, SEL_LABEL, SEL_FLAG, SEL_REJECT, SEL_TAGS, SEL_ALL, SEL_CLEAR, SEL_COPY, SEL_PASTE, SEL_PRESET,
        SEL_COMPARE, SEL_EXPORT, SEL_PRINT, SEL_REMOVE, SEL_COUNT };
 
-/* None, Red ... Grey; ticked: the label now (-1: none ticked). */
+/* None, Red ... Grey, each with its coloured dot (the lumlab sprites in
+   !Sprites, beside the text as on a radio button); ticked: the label now
+   (-1: none ticked). */
 static menu *label_menu (const char *title, int now)
 {
   int k;
   menu *m = new_menu (title, CAT_LABELS);
   for (k = 0; m && k < CAT_LABELS; k++)
-    set_item (m, k, k == CAT_LABELS - 1, k ? cat_label_names[k] : "None", (k == now ? MF_TICK : 0) | (k == 0 ? MF_DOTTED : 0),
-              -1, 0);
+    {
+      char v[12];
+      item *it;
+      set_item (m, k, k == CAT_LABELS - 1, k ? cat_label_names[k] : "None",
+                (k == now ? MF_TICK : 0) | (k == 0 ? MF_DOTTED : 0), -1, 0);
+      it = &m->it[k];
+      snprintf (v, sizeof v, "Slumlab%d", k);
+      it->icon_flags |= 0x12;          /* a sprite as well as text, centred vertically */
+      it->data[1] = (int) str (v);
+    }
+  if (m)
+    m->width += 40;                    /* room for the dot */
   return m;
 }
 

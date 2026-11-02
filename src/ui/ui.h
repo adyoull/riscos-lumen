@@ -112,6 +112,8 @@ void draw_set_smoothing (int on);
 void draw_sprite_at (const void *area, const void *sprite, int x, int y);
 void draw_sprite_masked (const void *area, const void *sprite, int x, int y);   /* using its mask */
 void draw_circle (int cx, int cy, int r, unsigned rgb);
+extern const unsigned draw_label_rgb[8];
+void draw_label_dot (int cx, int cy, int r, int label);   /* a colour label's dot; 0: an empty ring */
 /* A progress donut: a ring ro across with a hole ri across, filled
    clockwise from the top to pct (0-100); pct < 0: a quarter of the ring
    turned spin eighths of a turn (for a job whose progress isn't known). */
@@ -196,6 +198,10 @@ void viewer_unplace (void);
 void viewer_close (void);              /* back to the Browser */
 void viewer_shutdown (void);           /* the main window closed */
 void viewer_list_changed (void);       /* the Browser's list was read again */
+void viewer_toggle_retouch (void);   /* R: the Retouch tool */
+int viewer_retouching (void);
+void viewer_toggle_brush (void);     /* B: the Brush tool */
+int viewer_brushing (void);
 void viewer_compare (void);            /* O: the photo shown pinned, the next beside it */
 void viewer_compare_pair (int a, int b);   /* Browser indexes: a pinned, b beside it */
 int viewer_comparing (void);

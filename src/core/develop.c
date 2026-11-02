@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "develop.h"
+#include "retouch.h"
 #include "geometry.h"
 
 static uint16_t s2l[256];
@@ -222,6 +223,7 @@ void develop_prepare (develop *d, const recipe *r)
       look.v[p] = recipe_params[p].def;
     for (p = P_FIRST_GEOMETRY; p < P_COUNT; p++)      /* and geometry before it */
       look.v[p] = recipe_params[p].def;
+    look.nspots = look.nstrokes = 0;                  /* and retouching and brushing */
     d->identity = recipe_is_default (&look);
   }
 }
@@ -631,6 +633,7 @@ int develop_image (const recipe *r, rgb_image *img)
   size_t i, n;
   if (!d)
     return -1;
+  retouch_rgb8 (img->rgb, img->w, img->h, r);   /* spots first, on the photo upright */
   develop_prepare (d, r);
   if (!geometry && !d->hs)
     {

@@ -21,7 +21,12 @@
    in milestone 3. */
 #ifndef LUMEN_RECIPE_H
 #define LUMEN_RECIPE_H
+#include <stdint.h>
 #include <stddef.h>
+
+/* The longest a recipe's text can be (with retouching spots and brush
+   strokes); buffers that hold one are this size. */
+#define RECIPE_TEXT_MAX 32768
 
 enum
 {
@@ -76,7 +81,42 @@ extern const int recipe_ngroups;
 enum { CURVE_RGB, CURVE_RED, CURVE_GREEN, CURVE_BLUE, CURVE_COUNT };
 typedef struct { int n; float x[CURVE_POINTS], y[CURVE_POINTS]; } recipe_curve;
 
-typedef struct { float v[P_COUNT]; recipe_curve curve[CURVE_COUNT]; } recipe;
+/* Retouching spots: a circle at (x, y), radius r, filled from a circle the
+   same size at (sx, sy), healed (its colour and light matched to the
+   surroundings) or cloned (copied as it is). Positions are fractions of
+   the photo as it is turned upright (before any crop or straightening),
+   so spots stay on what they cover; r is a fraction of the longer side.
+   Text form, one line each:  spot x=0.4120 y=0.3310 r=0.0150 sx=0.4420 sy=0.3310 clone=0 f=0.30
+   (f, the feathered part of the radius, is 0.30 when missing). */
+#define RECIPE_SPOTS 48
+typedef struct { float x, y, r, sx, sy; int clone; float f; } recipe_spot;   /* f: feather, 0..1 */
+
+/* Brushed adjustments: strokes painted on the photo, each lightening
+   (dodge) or darkening (burn) it, or strengthening or weakening its
+   colour, under a brush of radius r (a fraction of the longer side) whose
+   outer part f fades. amount, 0..1: for dodge and burn, 2 stops at 1;
+   for the colour, double or none at 1. A stroke's points are fractions
+   of the photo upright (as spots), kept in 1/10000ths. Where one stroke
+   crosses itself it counts once; strokes over each other add up.
+   Text form, one line each:
+     brush k=dodge a=0.25 r=0.0300 f=0.50 p=4120,3310;4180,3325;... */
+enum { BRUSH_DODGE, BRUSH_BURN, BRUSH_SATURATE, BRUSH_DESATURATE, BRUSH_KINDS };
+extern const char *const recipe_brush_keys[BRUSH_KINDS];   /* "dodge", "burn", ... */
+#define RECIPE_STROKES 32
+#define RECIPE_STROKE_POINTS 1024      /* all strokes' points together */
+#define RECIPE_STROKE_MAX 256          /* one stroke's */
+typedef struct { int kind, first, n; float r, f, amount; } recipe_stroke;
+
+typedef struct
+{
+  float v[P_COUNT];
+  recipe_curve curve[CURVE_COUNT];
+  int nspots;
+  recipe_spot spot[RECIPE_SPOTS];
+  int nstrokes, npoints;
+  recipe_stroke stroke[RECIPE_STROKES];
+  uint16_t pt[RECIPE_STROKE_POINTS][2];   /* x, y in 1/10000ths */
+} recipe;
 
 void recipe_default (recipe *r);
 int recipe_is_default (const recipe *r);
@@ -106,6 +146,15 @@ int recipe_curve_add (recipe_curve *c, float x);
 void recipe_curve_remove (recipe_curve *c, int i);
 /* Moves point i, kept between its neighbours. */
 void recipe_curve_move (recipe_curve *c, int i, float x, float y);
+/* Spots: added (its index, -1 when full), and taken away. */
+int recipe_spot_add (recipe *r, const recipe_spot *sp);
+void recipe_spot_remove (recipe *r, int i);
+int recipe_spots_equal (const recipe *a, const recipe *b);
+/* Strokes: added from n points (xy: x, y fractions), its index or -1
+   when there's no room; taken away; compared. */
+int recipe_stroke_add (recipe *r, int kind, float radius, float feather, float amount, const float *xy, int n);
+void recipe_stroke_remove (recipe *r, int i);
+int recipe_strokes_equal (const recipe *a, const recipe *b);
 /* Formats only the look (no geometry lines): what a preset stores. */
 int recipe_format_look (const recipe *r, char *out, size_t n);
 

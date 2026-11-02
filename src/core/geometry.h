@@ -39,6 +39,8 @@ void geom_rows (const geom_plan *g, const uint16_t *src, uint16_t *dst, int y0, 
 
 /* Where output pixel (x, y) comes from in the source, in pixels. */
 void geom_to_source (const geom_plan *g, double x, double y, double *sx, double *sy);
+/* The other way: where source pixel (sx, sy) is in the output (perhaps outside it). */
+void geom_from_source (const geom_plan *g, double sx, double sy, double *x, double *y);
 
 /* Fits a crop to an aspect ratio (w:h of the output; 0 = free), keeping
    its centre, inside the canvas. Canvas shape cw x ch decides fractions. */

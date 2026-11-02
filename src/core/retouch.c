@@ -154,24 +154,149 @@ static void apply_spot (const pic *p, const recipe_spot *s)
   free (patch);
 }
 
+/* --- brushed adjustments */
+
+static float lin_of8[256];             /* sRGB 8-bit to linear 0..1 */
+
+static void tables (void)
+{
+  int i;
+  if (lin_of8[255] > 0)
+    return;
+  for (i = 0; i < 256; i++)
+    {
+      double v = i / 255.0;
+      lin_of8[i] = (float) (v <= 0.04045 ? v / 12.92 : pow ((v + 0.055) / 1.055, 2.4));
+    }
+}
+
+static double to_lin (const pic *p, double v)
+{
+  return p->maxv == 255 ? lin_of8[(int) v] : v / 65535;
+}
+
+static double from_lin (const pic *p, double v)
+{
+  v = v < 0 ? 0 : v > 1 ? 1 : v;
+  if (p->maxv != 255)
+    return v * 65535;
+  return 255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * pow (v, 1 / 2.4) - 0.055);
+}
+
+/* How far (x, y) is from the segment a-b. */
+static double seg_dist (double x, double y, double ax, double ay, double bx, double by)
+{
+  double dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy, t = 0;
+  if (l > 0)
+    {
+      t = ((x - ax) * dx + (y - ay) * dy) / l;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+    }
+  dx = ax + t * dx - x;
+  dy = ay + t * dy - y;
+  return sqrt (dx * dx + dy * dy);
+}
+
+static void apply_stroke (const pic *p, const recipe *r, const recipe_stroke *st)
+{
+  int longer = p->w > p->h ? p->w : p->h, j, x, y, x0, y0, x1, y1, bw, bh;
+  double R = st->r * longer, inner, feather = st->f < 0.02f ? 0.02 : st->f;
+  double stops = 2.0 * st->amount, sat = st->amount;
+  float *mask;
+  if (R < 0.75 || st->n <= 0 || st->amount <= 0)
+    return;
+  inner = R * (1 - feather);
+  /* Its bounds. */
+  {
+    double mx0 = 1e9, my0 = 1e9, mx1 = -1e9, my1 = -1e9;
+    for (j = 0; j < st->n; j++)
+      {
+        double px = r->pt[st->first + j][0] / 10000.0 * p->w, py = r->pt[st->first + j][1] / 10000.0 * p->h;
+        mx0 = px < mx0 ? px : mx0; mx1 = px > mx1 ? px : mx1;
+        my0 = py < my0 ? py : my0; my1 = py > my1 ? py : my1;
+      }
+    x0 = clampi ((int) floor (mx0 - R), 0, p->w - 1); x1 = clampi ((int) ceil (mx1 + R), 0, p->w - 1);
+    y0 = clampi ((int) floor (my0 - R), 0, p->h - 1); y1 = clampi ((int) ceil (my1 + R), 0, p->h - 1);
+  }
+  bw = x1 - x0 + 1;
+  bh = y1 - y0 + 1;
+  if (!(mask = calloc ((size_t) bw * bh, sizeof *mask)))
+    return;
+  /* The mask: each segment (or the one point) in turn, the most any gives. */
+  for (j = 0; j < st->n; j++)
+    {
+      int k = j + 1 < st->n ? j + 1 : j;
+      double ax = r->pt[st->first + j][0] / 10000.0 * p->w, ay = r->pt[st->first + j][1] / 10000.0 * p->h;
+      double bx = r->pt[st->first + k][0] / 10000.0 * p->w, by = r->pt[st->first + k][1] / 10000.0 * p->h;
+      int sx0 = clampi ((int) floor ((ax < bx ? ax : bx) - R), x0, x1), sx1 = clampi ((int) ceil ((ax > bx ? ax : bx) + R), x0, x1);
+      int sy0 = clampi ((int) floor ((ay < by ? ay : by) - R), y0, y1), sy1 = clampi ((int) ceil ((ay > by ? ay : by) + R), y0, y1);
+      if (j + 1 >= st->n && st->n > 1)
+        break;                         /* the last point ends the last segment */
+      for (y = sy0; y <= sy1; y++)
+        for (x = sx0; x <= sx1; x++)
+          {
+            double d = seg_dist (x + 0.5, y + 0.5, ax, ay, bx, by), m;
+            float *mp = &mask[(size_t) (y - y0) * bw + (x - x0)];
+            if (d >= R || *mp >= 1)
+              continue;
+            m = d <= inner ? 1 : (R - d) / (R - inner);
+            m = m * m * (3 - 2 * m);
+            if (m > *mp)
+              *mp = (float) m;
+          }
+    }
+  for (y = y0; y <= y1; y++)
+    for (x = x0; x <= x1; x++)
+      {
+        double m = mask[(size_t) (y - y0) * bw + (x - x0)], c[3], lum;
+        int i;
+        if (m <= 0)
+          continue;
+        for (i = 0; i < 3; i++)
+          c[i] = to_lin (p, p->get (p->img, p->w, x, y, i));
+        switch (st->kind)
+          {
+          case BRUSH_DODGE:
+          case BRUSH_BURN:
+            {
+              double k = pow (2.0, (st->kind == BRUSH_DODGE ? 1 : -1) * stops * m);
+              for (i = 0; i < 3; i++)
+                c[i] *= k;
+              break;
+            }
+          default:
+            lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+            for (i = 0; i < 3; i++)
+              c[i] = lum + (c[i] - lum) * (1 + (st->kind == BRUSH_SATURATE ? sat : -sat) * m);
+            break;
+          }
+        for (i = 0; i < 3; i++)
+          p->put (p->img, p->w, x, y, i, from_lin (p, c[i]));
+      }
+  free (mask);
+}
+
 static void apply_all (pic *p, const recipe *r)
 {
   int i;
   for (i = 0; i < r->nspots; i++)
     apply_spot (p, &r->spot[i]);
+  tables ();
+  for (i = 0; i < r->nstrokes; i++)
+    apply_stroke (p, r, &r->stroke[i]);
 }
 
 void retouch_rgb8 (unsigned char *rgb, int w, int h, const recipe *r)
 {
   pic p = { w, h, 255, get8, put8, rgb };
-  if (r->nspots && w > 0 && h > 0)
+  if ((r->nspots || r->nstrokes) && w > 0 && h > 0)
     apply_all (&p, r);
 }
 
 void retouch_lin (uint16_t *lin, int w, int h, const recipe *r)
 {
   pic p = { w, h, 65535, get16, put16, lin };
-  if (r->nspots && w > 0 && h > 0)
+  if ((r->nspots || r->nstrokes) && w > 0 && h > 0)
     apply_all (&p, r);
 }
 

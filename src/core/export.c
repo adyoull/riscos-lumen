@@ -15,6 +15,7 @@
 #include "fsys.h"
 #include "geometry.h"
 #include "sharpen.h"
+#include "retouch.h"
 #include "denoise.h"
 #include "thumbgen.h"
 
@@ -423,6 +424,7 @@ int export_step (exporter *e, int rows)
           e->tg = NULL;
           return e->done = -1;
         }
+      retouch_rgb8 (e->img.rgb, e->img.w, e->img.h, &e->r);   /* spots, on the photo upright */
       thumbgen_free (e->tg);
       e->tg = NULL;
       {

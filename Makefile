@@ -17,7 +17,7 @@ VERSION := 0.0.24
 DATE := 01 Nov 2026
 OUT := out
 
-CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/sqlite_vfs.c
+CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/sqlite_vfs.c
 CORE_H := $(wildcard src/core/*.h)
 UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/plugwin.c src/ui/choicewin.c src/ui/activity.c src/ui/printbox.c src/ui/tagbox.c src/ui/smartbox.c src/ui/help.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c
 UI_H := $(wildcard src/ui/*.h)
@@ -55,7 +55,7 @@ $(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/risc
 
 $(OUT)/bench: tests/bench.c $(CORE) $(CORE_H) $(OUT)/riscos/sqlite3.o
 	$(RO_CC) $(RISCOS_CFLAGS) $(WARN) $(DEFS) -Isrc/core -Ithird_party/sqlite -I$(DEPS)/riscos/include \
-	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/fsys_riscos.c \
+	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/fsys_riscos.c \
 	  -L$(DEPS)/riscos/lib -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
 
 checks: $(OUT)/lumen $(OUT)/bench
@@ -63,9 +63,10 @@ checks: $(OUT)/lumen $(OUT)/bench
 	$(CHECK_ALL) $(OUT)/lumen
 	$(CHECK_UNALIGNED) -Isrc/core -Isrc/ui -Ithird_party/sqlite -I$(DEPS)/riscos/include $(CORE) src/core/fsys_riscos.c $(UI)
 
-$(OUT)/!Sprites,ff9: app/lumen.png app/sm-lumen.png
+LABEL_PNGS := $(wildcard app/labels/lumlab*.png)
+$(OUT)/!Sprites,ff9: app/lumen.png app/sm-lumen.png $(LABEL_PNGS)
 	@mkdir -p $(OUT)
-	$(PNG2SPRITE) $@ '!lumen=app/lumen.png' 'sm!lumen=app/sm-lumen.png'
+	$(PNG2SPRITE) $@ '!lumen=app/lumen.png' 'sm!lumen=app/sm-lumen.png' $(foreach f,$(LABEL_PNGS),'$(basename $(notdir $(f)))=$(f)')
 
 APPFILES := app/!Run,feb app/!Boot,feb app/!Help,fff
 LICENCES := $(wildcard app/Licences/*)

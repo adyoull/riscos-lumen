@@ -299,7 +299,7 @@ static int start_next (void)
     {
       page *p = &pages[ipage];
       cat_details d;
-      char rtext[2048], err[200];
+      char rtext[RECIPE_TEXT_MAX], err[200];
       recipe r;
       export_opts o;
       int ow, oh, w, h, turned;

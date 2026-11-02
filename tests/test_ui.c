@@ -859,7 +859,7 @@ int main (int argc, char **argv)
 #define PX(x) (iox + (x))
 #define PY(y) (ioy + (y))
     tx0 = px + 232; tx1 = px + 640 - 132;
-    ev_mid = -24 - 150 - 16 - 52 - 84 - (52 + 2 * 56 + 8) - 52 - 28;
+    ev_mid = -24 - 150 - 16 - 52 - 156 - (52 + 2 * 56 + 8) - 52 - 28;
     sx = PX ((tx0 + tx1) / 2);
     sy = PY (ev_mid);
     memset (b, 0, sizeof b);
@@ -912,7 +912,7 @@ int main (int argc, char **argv)
     CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and undo it");
     /* Fold the White Balance group by clicking its name: Exposure moves up. */
     {
-      int wb_top = PY (-24 - 150 - 16 - 52 - 84);
+      int wb_top = PY (-24 - 150 - 16 - 52 - 156);
       memset (b, 0, sizeof b);
       b[0] = PX (px + 24 + 60); b[1] = wb_top - 26; b[2] = Button_Select; b[3] = INSP; b[4] = -1;
       app_event (Mouse_Click, b, 0);
@@ -950,6 +950,18 @@ int main (int argc, char **argv)
       CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 3, "and undo brings it back");
       key (0x1A);
       CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 0 && viewer_recipe ()->v[P_EV] > 0.9f, "undo again: as before the curve");
+    }
+    /* The colour label's dots beside the rating: pick Blue, then Blue again for none. */
+    {
+      cat_item li;
+      memset (b, 0, sizeof b);
+      b[0] = PX (250 + 5 * 24); b[1] = PY (-24 - 150 - 16 - 24); b[2] = Button_Select; b[3] = INSP; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      browser_item (viewer_index (), &li);
+      CHECK (li.label == CAT_LABEL_BLUE, "the panel's blue dot: labelled blue");
+      app_event (Mouse_Click, b, 0);
+      browser_item (viewer_index (), &li);
+      CHECK (li.label == 0, "the same dot again: no label");
     }
     /* Colour: Blue's sliders show first; pick Green, drag its Saturation to -100. */
     {
@@ -1062,6 +1074,45 @@ int main (int argc, char **argv)
       key (KEY_ESCAPE);
       CHECK (!viewer_crop_mode () && vclosed == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5f) < 0.01f,
              "Escape: the old crop back, the viewer still open");
+
+      /* Retouch: a click paints out a spot. Brush: a drag paints a stroke,
+         Adjust takes it away. All undone after. */
+      {
+        int k0, mx, my;
+        key ('r');
+        CHECK (viewer_retouching () && strstr (vtitle, "retouching") != NULL, "R: the Retouch tool");
+        PHOTO_RECT ();
+        mx = (pr[0] + pr[2]) / 2; my = (pr[1] + pr[3]) / 2;
+        memset (b, 0, sizeof b);
+        b[0] = mx; b[1] = my; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+        app_event (Mouse_Click, b, 0);
+        cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+        CHECK (viewer_recipe ()->nspots == 1 && strstr (text, "spot x=") != NULL, "a click: a spot, saved");
+        key ('b');
+        CHECK (viewer_brushing () && !viewer_retouching () && strstr (vtitle, "brushing") != NULL, "B: the Brush tool instead");
+        b[0] = pr[0] + (pr[2] - pr[0]) / 8; b[1] = my; b[2] = Button_Select;
+        k0 = drag_calls;
+        app_event (Mouse_Click, b, 0);
+        CHECK (drag_calls == k0 + 1 && viewer_recipe ()->nstrokes == 0, "a press starts a stroke");
+        ptr_x = mx; ptr_y = my;
+        app_event (Null_Reason, b, 0);
+        ptr_x = pr[2] - (pr[2] - pr[0]) / 8;
+        app_event (Null_Reason, b, 0);
+        app_event (User_Drag_Box, b, 0);
+        cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+        CHECK (viewer_recipe ()->nstrokes == 1 && viewer_recipe ()->stroke[0].n == 3
+               && viewer_recipe ()->stroke[0].kind == BRUSH_DODGE && strstr (text, "brush k=dodge") != NULL,
+               "let go: a dodge stroke along the pointer's path, saved");
+        b[0] = (mx + ptr_x) / 2; b[1] = my; b[2] = Button_Adjust;
+        app_event (Mouse_Click, b, 0);
+        CHECK (viewer_recipe ()->nstrokes == 0 && viewer_recipe ()->nspots == 1, "Adjust on it: taken away");
+        key (KEY_ESCAPE);
+        CHECK (!viewer_brushing () && !viewer_retouching (), "Escape: the tool put away");
+        viewer_undo ();
+        viewer_undo ();
+        viewer_undo ();
+        CHECK (viewer_recipe ()->nspots == 0 && viewer_recipe ()->nstrokes == 0, "undone");
+      }
 
       /* Crop shape: Square, from the menu. */
       memset (b, 0, sizeof b);
@@ -1636,7 +1687,7 @@ int main (int argc, char **argv)
         CHECK (ci.label == CAT_LABEL_YELLOW, "the photo labelled yellow");
         mainwin_set_tab (TAB_INFO);
         mainwin_info_changed ();
-        CHECK (strstr (mainwin_info_text (), "Label: Yellow") != NULL, "the Info tab says so");
+        CHECK (strstr (mainwin_info_text (), "Label: 3") != NULL, "the Info tab has it (its dots)");
         mainwin_set_tab (TAB_LIBRARY);
         /* Two selected, O: the first pinned on the left, the second beside it. */
         browser_focus_on (0);

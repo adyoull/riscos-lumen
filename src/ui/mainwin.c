@@ -732,6 +732,8 @@ static void library_click (int wy)
 #define INFO_VALUE_X 300               /* labels left of this, values right */
 #define INFO_HEAD 1                    /* a row that is a group heading */
 #define INFO_EDIT 2                    /* clicking it opens the Caption and keywords window */
+#define INFO_LABELS 4                  /* the colour label's dots to pick from; value: the label now */
+#define LABEL_STEP 40                  /* between the dots */
 
 typedef struct { char label[48]; char value[256]; int flags, top, bottom; } info_row;
 static info_row *irows;
@@ -845,11 +847,29 @@ static int info_layout (int draw, int ox, int oy, int cy0, int cy1)
         int hl = wrap (r->label, INFO_VALUE_X - INFO_LABEL_X - 16, 0, 0, 0, 0);
         int hv = wrap (r->value, INSP_W - INFO_VALUE_X - 16, 0, 0, 0, 0);
         h = hl > hv ? hl : hv;
+        if (r->flags & INFO_LABELS)
+          h = 1;
         irows[k].top = top;
         irows[k].bottom = top - h * INFO_LINE - 8;
         if (draw && oy + top >= cy0 && oy + top - h * INFO_LINE <= cy1)
           {
             wrap (r->label, INFO_VALUE_X - INFO_LABEL_X - 16, 1, ox + INFO_LABEL_X, oy + top - 32, COL_QUIET);
+            if (r->flags & INFO_LABELS)
+              {
+                /* None, then the seven colours; the photo's ringed. */
+                int j, now = atoi (r->value);
+                for (j = 0; j < CAT_LABELS; j++)
+                  {
+                    int cx = ox + INFO_VALUE_X + 12 + j * LABEL_STEP, cy = oy + top - 20;
+                    if (j == now)
+                      {
+                        draw_circle (cx, cy, 17, COL_TEXT);
+                        draw_circle (cx, cy, 16, COL_TEXT);
+                      }
+                    draw_label_dot (cx, cy, 12, j);
+                  }
+              }
+            else
             wrap (r->value, INSP_W - INFO_VALUE_X - 16, 1, ox + INFO_VALUE_X, oy + top - 32,
                   (r->flags & INFO_EDIT) && !strncmp (r->value, "None: click", 11) ? COL_ACCENT : COL_TEXT);
           }
@@ -892,8 +912,8 @@ static void info_load (int force)
     snprintf (v, sizeof v, "Not rated");
   info_add ("Rating", v, 0);
   info_add ("Flag", it.flag ? "Flagged" : "Not flagged", 0);
-  if (it.label > 0 && it.label < CAT_LABELS)
-    info_add ("Label", cat_label_names[it.label], 0);
+  snprintf (v, sizeof v, "%d", it.label > 0 && it.label < CAT_LABELS ? it.label : 0);
+  info_add ("Label", v, INFO_LABELS);
   info_add ("Adjusted", it.edited ? "Yes" : "No", 0);
   {
     char cap[CAT_CAPTION_MAX], kw[CAT_KEYWORDS_MAX];
@@ -1564,11 +1584,23 @@ void mainwin_inspector_click (int *b)
   else if (tab == TAB_INFO && info_id > 0)
     {
       /* The caption or keywords: the window to change them, for this photo. */
-      int wy = b[1] - (st[4] - st[6]), k;
+      int wy = b[1] - (st[4] - st[6]), wx = b[0] - (st[1] - st[5]), k;
       for (k = 0; k < nirows; k++)
         if ((irows[k].flags & INFO_EDIT) && wy <= irows[k].top && wy > irows[k].bottom)
           {
             tagbox_open_ids (&info_id, 1, b[0], b[1]);
+            break;
+          }
+        else if ((irows[k].flags & INFO_LABELS) && wy <= irows[k].top && wy > irows[k].bottom)
+          {
+            /* A dot: that label (the one it has already: none). */
+            int j = (wx - INFO_VALUE_X - 12 + LABEL_STEP / 2) / LABEL_STEP;
+            if (wx >= INFO_VALUE_X - 8 && j >= 0 && j < CAT_LABELS)
+              {
+                cat_set_label (lib_cat (app_library ()), &info_id, 1, j == atoi (irows[k].value) ? 0 : j);
+                browser_after_change ();
+                mainwin_info_changed ();
+              }
             break;
           }
     }

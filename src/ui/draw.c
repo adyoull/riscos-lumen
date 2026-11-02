@@ -305,6 +305,21 @@ static void filled_circle (int cx, int cy, int r, unsigned rgb)
   _swix (OS_Plot, _INR (0, 2), 157, cx + r, cy);
 }
 
+/* Colour labels' colours (&BBGGRR00), 0 for none. */
+const unsigned draw_label_rgb[8] = { 0, 0x3030D800u, 0x1C8CF000u, 0x20D0F000u, 0x40A83C00u, 0xD8782800u,
+                                     0xB0409000u, 0x90909000u };
+
+void draw_label_dot (int cx, int cy, int r, int label)
+{
+  if (label <= 0 || label > 7)
+    {
+      draw_circle (cx, cy, r, 0x80808000u);   /* none: an empty ring */
+      return;
+    }
+  filled_circle (cx, cy, r, 0x30303000u);
+  filled_circle (cx, cy, r - 2, draw_label_rgb[label]);
+}
+
 void draw_donut (int cx, int cy, int ro, int ri, int pct, int spin, unsigned fg, unsigned track, unsigned bg)
 {
   double from, span;

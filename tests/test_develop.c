@@ -15,6 +15,7 @@
 #include "../src/core/export.h"
 #include "../src/core/xmp.h"
 #include "../src/core/denoise.h"
+#include "../src/core/retouch.h"
 #include "../src/core/exifout.h"
 #include <png.h>
 #include "../src/core/fsys.h"
@@ -1555,6 +1556,239 @@ static void test_hsl_vignette_noise (const char *work)
   (void) k;
 }
 
+/* Spots: healing and cloning, on 8 and 16 bits; the recipe keeps them. */
+static void test_brush (void)
+{
+  int w = 200, h = 100, x, y;
+  unsigned char *img = malloc ((size_t) w * h * 3), *orig = malloc ((size_t) w * h * 3);
+  uint16_t *lin = malloc ((size_t) w * h * 6);
+  recipe r, back;
+  float line[6] = { 0.20f, 0.50f, 0.50f, 0.50f, 0.80f, 0.50f };
+  char t[RECIPE_TEXT_MAX];
+  /* Mid grey on the left half, a muted red on the right. */
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++)
+      {
+        unsigned char *p = img + ((size_t) y * w + x) * 3;
+        p[0] = 118; p[1] = (unsigned char) (x < w / 2 ? 118 : 80); p[2] = (unsigned char) (x < w / 2 ? 118 : 80);
+      }
+  memcpy (orig, img, (size_t) w * h * 3);
+  recipe_default (&r);
+  CHECK (recipe_stroke_add (&r, BRUSH_DODGE, 0.05f, 0.5f, 0.5f, line, 3) == 0 && r.npoints == 3, "a stroke added");
+  recipe_format (&r, t, sizeof t);
+  recipe_parse (&back, t);
+  CHECK (strstr (t, "brush k=dodge a=0.50 r=0.0500 f=0.50 p=2000,5000;5000,5000;8000,5000\n") != NULL
+         && recipe_equal (&r, &back), "brush line written and read back");
+  CHECK (!recipe_is_default (&r), "a recipe with a stroke isn't the original");
+  {
+    recipe look;
+    recipe_format_look (&r, t, sizeof t);
+    recipe_parse (&look, t);
+    CHECK (look.nstrokes == 0, "a look (preset) leaves strokes out");
+  }
+  retouch_rgb8 (img, w, h, &r);
+  {
+    /* 118 is about 0.18 linear; one stop up (a = 0.5) is 0.36, about 163. */
+    unsigned char *c = img + ((size_t) 50 * w + 60) * 3;
+    CHECK (abs (c[0] - 163) <= 2 && c[0] == c[1], "dodge: a stop lighter along the stroke");
+    CHECK (!memcmp (img, orig, (size_t) w * 30 * 3) && !memcmp (img + (size_t) w * 70 * 3, orig + (size_t) w * 70 * 3, (size_t) w * 30 * 3),
+           "dodge: away from the stroke untouched");
+    c = img + ((size_t) 50 * w + 33) * 3;
+    CHECK (c[0] > 118 && c[0] < 163, "dodge: fades at the brush's edge");
+  }
+  /* A stroke that crosses itself counts once. */
+  {
+    recipe once;
+    float back_and_forth[6] = { 0.20f, 0.50f, 0.40f, 0.50f, 0.20f, 0.50f };
+    recipe_default (&once);
+    recipe_stroke_add (&once, BRUSH_DODGE, 0.05f, 0.5f, 0.5f, back_and_forth, 3);
+    memcpy (img, orig, (size_t) w * h * 3);
+    retouch_rgb8 (img, w, h, &once);
+    CHECK (abs (img[((size_t) 50 * w + 60) * 3] - 163) <= 2, "a stroke over itself counts once");
+  }
+  /* Burn, and the colour: the red desaturated to grey. */
+  r.stroke[0].kind = BRUSH_BURN;
+  memcpy (img, orig, (size_t) w * h * 3);
+  retouch_rgb8 (img, w, h, &r);
+  CHECK (abs (img[((size_t) 50 * w + 60) * 3] - 84) <= 2, "burn: a stop darker");
+  r.stroke[0].kind = BRUSH_DESATURATE;
+  r.stroke[0].amount = 1;
+  memcpy (img, orig, (size_t) w * h * 3);
+  retouch_rgb8 (img, w, h, &r);
+  {
+    unsigned char *c = img + ((size_t) 50 * w + 140) * 3;
+    CHECK (abs (c[0] - c[1]) <= 1 && abs (c[1] - c[2]) <= 1, "desaturate at 1: grey");
+  }
+  r.stroke[0].kind = BRUSH_SATURATE;
+  r.stroke[0].amount = 0.5f;
+  memcpy (img, orig, (size_t) w * h * 3);
+  retouch_rgb8 (img, w, h, &r);
+  {
+    unsigned char *c = img + ((size_t) 50 * w + 140) * 3;
+    CHECK (c[0] - c[1] > 118 - 80, "saturate: the red stronger");
+  }
+  /* 16-bit linear: the same dodge. */
+  r.stroke[0].kind = BRUSH_DODGE;
+  dev_to_linear (orig, lin, (size_t) w * h);
+  {
+    uint16_t before = lin[((size_t) 50 * w + 60) * 3];
+    retouch_lin (lin, w, h, &r);
+    CHECK (abs ((int) lin[((size_t) 50 * w + 60) * 3] - 2 * (int) before) < 200, "16-bit: a stop lighter too");
+  }
+  /* Taking strokes away keeps the others' points. */
+  {
+    float dab[2] = { 0.9f, 0.1f };
+    recipe_stroke_add (&r, BRUSH_BURN, 0.02f, 0.3f, 0.2f, dab, 1);
+    recipe_stroke_remove (&r, 0);
+    CHECK (r.nstrokes == 1 && r.npoints == 1 && r.stroke[0].first == 0 && r.pt[0][0] == 9000 && r.stroke[0].kind == BRUSH_BURN,
+           "a stroke taken away, the next moved down");
+  }
+  free (img); free (orig); free (lin);
+}
+
+static void test_retouch (void)
+{
+  int w = 200, h = 100, x, y;
+  unsigned char *img = malloc ((size_t) w * h * 3), *orig = malloc ((size_t) w * h * 3);
+  uint16_t *lin = malloc ((size_t) w * h * 6);
+  recipe r, back;
+  recipe_spot sp = { 0.30f, 0.50f, 0.04f, 0.50f, 0.50f, 0, 0.3f };
+  char t[RECIPE_TEXT_MAX];
+  /* A gradient left to right, a dark blemish at (60, 50). */
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++)
+      {
+        unsigned char *p = img + ((size_t) y * w + x) * 3;
+        int v = 60 + x * 150 / w, blem = (x - 60) * (x - 60) + (y - 50) * (y - 50) < 16;
+        p[0] = (unsigned char) (blem ? 20 : v);
+        p[1] = (unsigned char) (blem ? 15 : v - 20);
+        p[2] = (unsigned char) (blem ? 10 : v - 40);
+      }
+  memcpy (orig, img, (size_t) w * h * 3);
+  recipe_default (&r);
+  CHECK (recipe_spot_add (&r, &sp) == 0 && r.nspots == 1, "a spot added");
+  recipe_format (&r, t, sizeof t);
+  recipe_parse (&back, t);
+  CHECK (strstr (t, "spot x=0.3000 y=0.5000 r=0.0400 sx=0.5000 sy=0.5000 clone=0") != NULL && recipe_equal (&r, &back),
+         "spot line written and read back");
+  CHECK (!recipe_is_default (&r), "a recipe with a spot isn't the original");
+  {
+    recipe look;
+    recipe_format_look (&r, t, sizeof t);
+    recipe_parse (&look, t);
+    CHECK (look.nspots == 0, "a look (preset) leaves spots out");
+  }
+  retouch_rgb8 (img, w, h, &r);
+  {
+    unsigned char *c = img + ((size_t) 50 * w + 60) * 3;
+    int want = 60 + 60 * 150 / w;
+    CHECK (abs (c[0] - want) <= 6 && abs (c[1] - (want - 20)) <= 6, "heal: the blemish takes its surroundings' colour, not the source's");
+    CHECK (!memcmp (img, orig, 30 * 3) && !memcmp (img + ((size_t) 99 * w) * 3, orig + ((size_t) 99 * w) * 3, (size_t) w * 3),
+           "the rest untouched");
+  }
+  /* The gradient carries on through the healed spot: across it, off its
+     middle, each pixel within a few levels of what was there. */
+  {
+    int worst = 0;
+    for (x = 52; x <= 68; x++)
+      for (y = 42; y <= 58; y++)
+        if ((x - 60) * (x - 60) + (y - 50) * (y - 50) >= 16)
+          {
+            int d = abs (img[((size_t) y * w + x) * 3] - orig[((size_t) y * w + x) * 3]);
+            worst = d > worst ? d : worst;
+          }
+    CHECK (worst <= 3, "heal: a gradient across the spot carries on through it");
+  }
+  /* Feather: a hard edge (0) paints the circle to its rim; the default fades it. */
+  {
+    recipe hard = r;
+    unsigned char *soft_img = malloc ((size_t) w * h * 3);
+    int rim = (int) (0.04f * w) - 1;   /* just inside the circle, left of the spot */
+    memcpy (soft_img, img, (size_t) w * h * 3);
+    hard.spot[0].clone = 1;
+    hard.spot[0].f = 0;
+    memcpy (img, orig, (size_t) w * h * 3);
+    retouch_rgb8 (img, w, h, &hard);
+    {
+      unsigned char *e = img + ((size_t) 50 * w + 60 - rim) * 3, *s2 = orig + ((size_t) 50 * w + 100 - rim) * 3;
+      CHECK (abs (e[0] - s2[0]) <= 2, "feather 0: the edge is the source's");
+    }
+    hard.spot[0].f = 1;
+    memcpy (img, orig, (size_t) w * h * 3);
+    retouch_rgb8 (img, w, h, &hard);
+    {
+      unsigned char *e = img + ((size_t) 50 * w + 60 - rim) * 3, *o = orig + ((size_t) 50 * w + 60 - rim) * 3;
+      CHECK (abs (e[0] - o[0]) <= 4, "feather 1: the edge fades to the photo");
+    }
+    memcpy (img, soft_img, (size_t) w * h * 3);
+    free (soft_img);
+  }
+  /* Clone: the source's pixels as they are (brighter, from further right). */
+  memcpy (img, orig, (size_t) w * h * 3);
+  r.spot[0].clone = 1;
+  retouch_rgb8 (img, w, h, &r);
+  {
+    unsigned char *c = img + ((size_t) 50 * w + 60) * 3, *s2 = orig + ((size_t) 50 * w + 100) * 3;
+    CHECK (abs (c[0] - s2[0]) <= 1, "clone: the source copied as it is");
+  }
+  /* 16-bit linear: the same healing. */
+  dev_to_linear (orig, lin, (size_t) w * h);
+  r.spot[0].clone = 0;
+  retouch_lin (lin, w, h, &r);
+  {
+    uint16_t *c = lin + ((size_t) 50 * w + 60) * 3, *n2 = lin + ((size_t) 50 * w + 50) * 3;
+    CHECK (abs ((int) c[0] - (int) n2[0]) < 4000, "16-bit: healed too");
+  }
+  /* Auto source: a clean place round it, not on the blemish. */
+  {
+    float sx, sy;
+    dev_to_linear (orig, lin, (size_t) w * h);
+    retouch_auto_source (lin, w, h, 0.30f, 0.50f, 0.04f, &sx, &sy);
+    CHECK (fabsf (sx - 0.30f) > 0.03f || fabsf (sy - 0.50f) > 0.05f, "auto source: away from the spot");
+    CHECK (fabsf (sy - 0.50f) < 0.3f && fabsf (sx - 0.30f) < 0.25f, "and near it, inside the picture");
+  }
+  /* Geometry's inverse: round trips through a turned, straightened, keystoned crop. */
+  {
+    recipe g;
+    geom_plan pl;
+    double ox, oy, bx, by;
+    int ok = 1, k;
+    recipe_default (&g);
+    recipe_parse (&g, "geometry rotate=1 angle=4.5 vertical=30\ncrop x0=0.1 y0=0.05 x1=0.8 y1=0.9\n");
+    geom_plan_make (&pl, &g, 400, 300, 1, 0, 0);
+    for (k = 0; k < 20; k++)
+      {
+        double tx = 20 + k * 15, ty = 30 + (k * 37) % 200;
+        geom_to_source (&pl, tx, ty, &bx, &by);
+        geom_from_source (&pl, bx, by, &ox, &oy);
+        if (fabs (ox - tx) > 0.05 || fabs (oy - ty) > 0.05)
+          ok = 0;
+      }
+    CHECK (ok, "geom_from_source undoes geom_to_source");
+  }
+  /* Thumbnails and exports go through develop_image: the spot is applied. */
+  memcpy (img, orig, (size_t) w * h * 3);
+  {
+    rgb_image im = { w, h, NULL };
+    unsigned char *copy = malloc ((size_t) w * h * 3);
+    memcpy (copy, img, (size_t) w * h * 3);
+    im.rgb = copy;
+    develop_image (&r, &im);
+    CHECK (abs (im.rgb[((size_t) 50 * im.w + 60) * 3] - (60 + 60 * 150 / w)) <= 6, "develop_image applies the spots");
+    free (im.rgb);
+  }
+  /* Full: at most RECIPE_SPOTS. */
+  recipe_default (&r);
+  for (x = 0; x < RECIPE_SPOTS + 3; x++)
+    recipe_spot_add (&r, &sp);
+  CHECK (r.nspots == RECIPE_SPOTS && recipe_format (&r, t, sizeof t) > 0, "48 spots at most, and they fit the text");
+  recipe_spot_remove (&r, 0);
+  CHECK (r.nspots == RECIPE_SPOTS - 1, "one taken away");
+  free (img);
+  free (orig);
+  free (lin);
+}
+
 /* Export options: fit in a box, colour spaces, output sharpening; names. */
 static void test_export_options (const char *work)
 {
@@ -1779,6 +2013,8 @@ int main (int argc, char **argv)
   test_export (argv[1]);
   test_export_options (argv[1]);
   test_hsl_vignette_noise (argv[1]);
+  test_retouch ();
+  test_brush ();
   test_export_exif (argv[1]);
   printf ("test_develop: %d checks, %d failed\n", checks, fails);
   return fails != 0;

@@ -12,7 +12,10 @@
    circle (the spot's feather) fades into the photo.
 
    Spots apply in order: one may take its source from where another has
-   already been painted out. */
+   already been painted out. Then the brushed adjustments (recipe.h's
+   strokes), in linear light: each stroke's mask (its brush along its
+   points, the most at each pixel) scales the light (dodge, burn) or the
+   colour round the luminance (saturate, desaturate). */
 #ifndef LUMEN_RETOUCH_H
 #define LUMEN_RETOUCH_H
 #include <stdint.h>

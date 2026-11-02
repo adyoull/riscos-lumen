@@ -110,6 +110,8 @@ int recipe_is_default (const recipe *r)
   for (i = 0; i < CURVE_COUNT; i++)
     if (!recipe_curve_is_identity (&r->curve[i]))
       return 0;
+  if (r->nspots || r->nstrokes)
+    return 0;
   return 1;
 }
 
@@ -135,6 +137,8 @@ int recipe_equal (const recipe *a, const recipe *b)
   for (i = 0; i < CURVE_COUNT; i++)
     if (!curve_equal (&a->curve[i], &b->curve[i]))
       return 0;
+  if (!recipe_spots_equal (a, b) || !recipe_strokes_equal (a, b))
+    return 0;
   return 1;
 }
 
@@ -278,7 +282,7 @@ int recipe_parse (recipe *r, const char *text)
   recipe_default (r);
   while (text && *text)
     {
-      char line[1024], *tok, *save = NULL;
+      char line[4096], *tok, *save = NULL;   /* a stroke's line is the longest */
       const char *end = strchr (text, '\n');
       size_t len = end ? (size_t) (end - text) : strlen (text);
       if (len >= sizeof line)
@@ -289,6 +293,72 @@ int recipe_parse (recipe *r, const char *text)
       tok = strtok_r (line, " \t\r", &save);
       if (!tok)
         continue;
+      if (strcmp (tok, "brush") == 0)
+        {
+          int kind = BRUSH_DODGE, n = 0, k;
+          float rad = 0.03f, fe = 0.5f, amt = 0.25f, xy[RECIPE_STROKE_MAX * 2];
+          while ((tok = strtok_r (NULL, " \t\r", &save)) != NULL)
+            {
+              char *eq = strchr (tok, '=');
+              if (!eq)
+                continue;
+              *eq = '\0';
+              if (!strcmp (tok, "k"))
+                {
+                  for (k = 0; k < BRUSH_KINDS; k++)
+                    if (!strcmp (eq + 1, recipe_brush_keys[k]))
+                      kind = k;
+                }
+              else if (!strcmp (tok, "a")) amt = strtof (eq + 1, NULL);
+              else if (!strcmp (tok, "r")) rad = strtof (eq + 1, NULL);
+              else if (!strcmp (tok, "f")) fe = strtof (eq + 1, NULL);
+              else if (!strcmp (tok, "p"))
+                {
+                  char *q = eq + 1, *e;
+                  while (*q && n < RECIPE_STROKE_MAX)
+                    {
+                      long x = strtol (q, &e, 10), y;
+                      if (e == q || *e != ',')
+                        break;
+                      q = e + 1;
+                      y = strtol (q, &e, 10);
+                      if (e == q)
+                        break;
+                      xy[2 * n] = (float) x / 10000;
+                      xy[2 * n + 1] = (float) y / 10000;
+                      n++;
+                      q = *e == ';' ? e + 1 : e;
+                      if (*e != ';')
+                        break;
+                    }
+                }
+            }
+          if (n)
+            recipe_stroke_add (r, kind, rad, fe, amt, xy, n);
+          continue;
+        }
+      if (strcmp (tok, "spot") == 0)
+        {
+          recipe_spot sp = { 0.5f, 0.5f, 0.01f, 0.5f, 0.5f, 0, 0.3f };
+          while ((tok = strtok_r (NULL, " \t\r", &save)) != NULL)
+            {
+              char *eq = strchr (tok, '=');
+              float v;
+              if (!eq)
+                continue;
+              *eq = '\0';
+              v = strtof (eq + 1, NULL);
+              if (!strcmp (tok, "x")) sp.x = v;
+              else if (!strcmp (tok, "y")) sp.y = v;
+              else if (!strcmp (tok, "r")) sp.r = v;
+              else if (!strcmp (tok, "sx")) sp.sx = v;
+              else if (!strcmp (tok, "sy")) sp.sy = v;
+              else if (!strcmp (tok, "clone")) sp.clone = v != 0;
+              else if (!strcmp (tok, "f")) sp.f = v;
+            }
+          recipe_spot_add (r, &sp);
+          continue;
+        }
       if (strcmp (tok, "curves") == 0)
         {
           while ((tok = strtok_r (NULL, " \t\r", &save)) != NULL)
@@ -355,6 +425,108 @@ void recipe_copy_look (recipe *dst, const recipe *src)
     dst->v[i] = src->v[i];
   for (i = 0; i < CURVE_COUNT; i++)
     dst->curve[i] = src->curve[i];
+}
+
+/* --- spots */
+int recipe_spots_equal (const recipe *a, const recipe *b)
+{
+  int i;
+  if (a->nspots != b->nspots)
+    return 0;
+  for (i = 0; i < a->nspots; i++)
+    {
+      const recipe_spot *p = &a->spot[i], *q = &b->spot[i];
+      if (!same (p->x, q->x) || !same (p->y, q->y) || !same (p->r, q->r) || !same (p->sx, q->sx) || !same (p->sy, q->sy)
+          || p->clone != q->clone || !same (p->f, q->f))
+        return 0;
+    }
+  return 1;
+}
+
+static float clamp_unit (float v)
+{
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+int recipe_spot_add (recipe *r, const recipe_spot *sp)
+{
+  recipe_spot *d;
+  if (r->nspots >= RECIPE_SPOTS)
+    return -1;
+  d = &r->spot[r->nspots];
+  d->x = clamp_unit (sp->x);
+  d->y = clamp_unit (sp->y);
+  d->sx = clamp_unit (sp->sx);
+  d->sy = clamp_unit (sp->sy);
+  d->r = sp->r < 0.001f ? 0.001f : sp->r > 0.25f ? 0.25f : sp->r;
+  d->clone = sp->clone ? 1 : 0;
+  d->f = clamp_unit (sp->f);
+  return r->nspots++;
+}
+
+/* --- strokes */
+const char *const recipe_brush_keys[BRUSH_KINDS] = { "dodge", "burn", "saturate", "desaturate" };
+
+int recipe_stroke_add (recipe *r, int kind, float radius, float feather, float amount, const float *xy, int n)
+{
+  recipe_stroke *st;
+  int j;
+  if (n > RECIPE_STROKE_MAX)
+    n = RECIPE_STROKE_MAX;
+  if (n <= 0 || r->nstrokes >= RECIPE_STROKES || r->npoints + n > RECIPE_STROKE_POINTS)
+    return -1;
+  st = &r->stroke[r->nstrokes];
+  st->kind = kind < 0 || kind >= BRUSH_KINDS ? BRUSH_DODGE : kind;
+  st->r = radius < 0.001f ? 0.001f : radius > 0.25f ? 0.25f : radius;
+  st->f = clamp_unit (feather);
+  st->amount = clamp_unit (amount);
+  st->first = r->npoints;
+  st->n = n;
+  for (j = 0; j < n; j++)
+    {
+      r->pt[r->npoints + j][0] = (uint16_t) lroundf (clamp_unit (xy[2 * j]) * 10000);
+      r->pt[r->npoints + j][1] = (uint16_t) lroundf (clamp_unit (xy[2 * j + 1]) * 10000);
+    }
+  r->npoints += n;
+  return r->nstrokes++;
+}
+
+void recipe_stroke_remove (recipe *r, int i)
+{
+  int j, first, n;
+  if (i < 0 || i >= r->nstrokes)
+    return;
+  first = r->stroke[i].first;
+  n = r->stroke[i].n;
+  memmove (&r->pt[first], &r->pt[first + n], sizeof r->pt[0] * (size_t) (r->npoints - first - n));
+  r->npoints -= n;
+  memmove (&r->stroke[i], &r->stroke[i + 1], sizeof r->stroke[0] * (size_t) (r->nstrokes - i - 1));
+  r->nstrokes--;
+  for (j = i; j < r->nstrokes; j++)
+    r->stroke[j].first -= n;
+}
+
+int recipe_strokes_equal (const recipe *a, const recipe *b)
+{
+  int i;
+  if (a->nstrokes != b->nstrokes || a->npoints != b->npoints)
+    return 0;
+  for (i = 0; i < a->nstrokes; i++)
+    {
+      const recipe_stroke *p = &a->stroke[i], *q = &b->stroke[i];
+      if (p->kind != q->kind || p->n != q->n || p->first != q->first || !same (p->r, q->r) || !same (p->f, q->f)
+          || !same (p->amount, q->amount))
+        return 0;
+    }
+  return !memcmp (a->pt, b->pt, sizeof a->pt[0] * (size_t) a->npoints);
+}
+
+void recipe_spot_remove (recipe *r, int i)
+{
+  if (i < 0 || i >= r->nspots)
+    return;
+  memmove (&r->spot[i], &r->spot[i + 1], sizeof r->spot[0] * (size_t) (r->nspots - i - 1));
+  r->nspots--;
 }
 
 int recipe_format_look (const recipe *r, char *out, size_t n)
@@ -430,5 +602,38 @@ int recipe_format (const recipe *r, char *out, size_t n)
       out[used++] = '\n';
       out[used] = '\0';
     }
+  {
+    int i;
+    for (i = 0; i < r->nspots; i++)
+      {
+        const recipe_spot *p = &r->spot[i];
+        int k = snprintf (out + used, n - used, "spot x=%.4f y=%.4f r=%.4f sx=%.4f sy=%.4f clone=%d f=%.2f\n",
+                          (double) p->x, (double) p->y, (double) p->r, (double) p->sx, (double) p->sy, p->clone,
+                          (double) p->f);
+        if (k < 0 || used + (size_t) k >= n)
+          return -1;
+        used += (size_t) k;
+      }
+    for (i = 0; i < r->nstrokes; i++)
+      {
+        const recipe_stroke *st = &r->stroke[i];
+        int j, k = snprintf (out + used, n - used, "brush k=%s a=%.2f r=%.4f f=%.2f p=", recipe_brush_keys[st->kind],
+                             (double) st->amount, (double) st->r, (double) st->f);
+        if (k < 0 || used + (size_t) k >= n)
+          return -1;
+        used += (size_t) k;
+        for (j = 0; j < st->n; j++)
+          {
+            k = snprintf (out + used, n - used, "%s%u,%u", j ? ";" : "", r->pt[st->first + j][0], r->pt[st->first + j][1]);
+            if (k < 0 || used + (size_t) k >= n)
+              return -1;
+            used += (size_t) k;
+          }
+        if (used + 2 > n)
+          return -1;
+        out[used++] = '\n';
+        out[used] = '\0';
+      }
+  }
   return (int) used;
 }

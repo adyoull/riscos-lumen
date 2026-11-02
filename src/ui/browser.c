@@ -405,10 +405,12 @@ void browser_mode_changed (void)
 }
 
 /* --- drawing */
-static void draw_name (const char *name, int x0, int x1, int y, unsigned fg, unsigned bg)
+/* The name, centred and shortened to fit; with a colour label, its dot
+   before it. */
+static void draw_name_label (const char *name, int label, int x0, int x1, int y, unsigned fg, unsigned bg)
 {
   char buf[72];
-  int width = x1 - x0, len;
+  int dot = label > 0 ? 30 : 0, width = x1 - x0 - dot, len;
   snprintf (buf, sizeof buf, "%s", name);
   len = (int) strlen (buf);
   if (draw_text_width (buf) > width)
@@ -428,7 +430,17 @@ static void draw_name (const char *name, int x0, int x1, int y, unsigned fg, uns
             }
         }
     }
-  draw_text (x0 + (width - draw_text_width (buf)) / 2, y, buf, fg, bg);
+  {
+    int x = x0 + (width - draw_text_width (buf)) / 2;
+    if (dot)
+      draw_label_dot (x + 10, y + 13, 10, label);
+    draw_text (x + dot, y, buf, fg, bg);
+  }
+}
+
+static void draw_name (const char *name, int x0, int x1, int y, unsigned fg, unsigned bg)
+{
+  draw_name_label (name, 0, x0, x1, y, fg, bg);
 }
 
 static void draw_cell (int i, int ox, int oy)
@@ -516,19 +528,12 @@ static void draw_cell (int i, int ox, int oy)
       draw_frame (pic[2] - 30, pic[3] - 30, pic[2] - 16, pic[3] - 16, COL_TEXT_SEL);
       draw_frame (pic[2] - 26, pic[3] - 26, pic[2] - 12, pic[3] - 12, COL_TEXT_SEL);
     }
-  if (it->label > 0 && it->label < CAT_LABELS)
-    {
-      /* The colour label: a bar under the photo, as wide as it. */
-      static const unsigned label_rgb[CAT_LABELS] = { 0, 0x3030D800u, 0x1C8CF000u, 0x20D0F000u, 0x40A83C00u,
-                                                      0xD8782800u, 0xB0409000u, 0x90909000u };
-      draw_rect (pic[0], pic[1] - 12, pic[2], pic[1] - 4, label_rgb[it->label]);
-    }
   if (it->flag)                        /* a flag on the photo's top left corner */
     {
       draw_rect (pic[0] + 8, pic[3] - 40, pic[0] + 36, pic[3] - 8, 0x30303000u);
       draw_rect (pic[0] + 12, pic[3] - 36, pic[0] + 32, pic[3] - 12, COL_FLAG);
     }
-  draw_name (it->name, x0 + 12, x1 - 12, by0 - 8 - 28, fg, bg);
+  draw_name_label (it->name, it->label > 0 && it->label < CAT_LABELS ? it->label : 0, x0 + 12, x1 - 12, by0 - 8 - 28, fg, bg);
   if (it->rating == RATING_REJECT)
     draw_name ("Rejected", x0 + 12, x1 - 12, y0 + 10, selected ? COL_TEXT_SEL : COL_REJECT, bg);
   else
