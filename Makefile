@@ -48,7 +48,7 @@ $(OUT)/host32/sqlite3.o: $(SQLITE)
 
 # --- RISC OS build ------------------------------------------------------------
 RO_LIBS := -L$(DEPS)/riscos/lib -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
-$(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/riscos/sqlite3.o
+$(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/riscos/sqlite3.o Makefile
 	@mkdir -p $(OUT)
 	$(RO_CC) $(RISCOS_CFLAGS) $(WARN) $(DEFS) -Isrc/core -Isrc/ui -Ithird_party/sqlite -I$(DEPS)/riscos/include \
 	  $(RISCOS_LDFLAGS) -o $@ $(CORE) src/core/fsys_riscos.c $(UI) $(OUT)/riscos/sqlite3.o $(RO_LIBS)
