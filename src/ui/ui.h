@@ -195,6 +195,7 @@ void viewer_place (int *block);        /* inside the main window */
 void viewer_unplace (void);
 void viewer_close (void);              /* back to the Browser */
 void viewer_shutdown (void);           /* the main window closed */
+void viewer_list_changed (void);       /* the Browser's list was read again */
 int viewer_has_photo (void);
 int viewer_index (void);               /* the browser index shown, -1 */
 void viewer_title (char *out, size_t n);
@@ -398,6 +399,7 @@ void tagbox_open_ids (const cat_id *ids, int n, int x, int y);
 void tagbox_click (int *b);
 int tagbox_key (int key);
 void tagbox_closed (void);
+void tagbox_forget (const cat_id *ids, int n);   /* photos removed: closes if they were its own */
 void tagbox_add_keyword (const char *kw);               /* chosen from the keyword menu */
 const char *tagbox_caption_text (void);
 const char *tagbox_keywords_text (void);
@@ -419,6 +421,7 @@ int printbox_busy (void);
 void printbox_idle (unsigned deadline);
 int printbox_percent (void);
 void printbox_status (char *out, size_t n);
+void printbox_quit (void);             /* Lumen quitting: a job being prepared goes */
 /* Where a pw x ph photo goes on the printable area a (millipoints): its
    printed size (as placed) and whether it is turned a quarter. mode: 0 fit
    the page, 1 fill it, 2 at most w_cm x h_cm. */

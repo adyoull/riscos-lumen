@@ -473,12 +473,10 @@ int export_step (exporter *e, int rows)
           e->osharp = k > 0 && k < 4 ? amounts[k] : 0;
           if (e->osharp)
             {
-              int m;
+              /* Each step reads the rows round it as the one before left them:
+                 the margins add up (denoise, then sharpen, then this). */
               e->osigma = 0.7;
-              m = sharpen_margin (e->osigma) + (e->nlum > 0 || e->ncol > 0
-                                                ? denoise_margin (e->nlum, e->ncol, e->nscale) : 0);
-              if (m > e->margin)
-                e->margin = m;
+              e->margin += sharpen_margin (e->osigma);
               e->band = 48;
             }
         }

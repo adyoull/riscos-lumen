@@ -125,8 +125,9 @@ static void take_text (const char *p, const char *end, char *out, size_t n)
 }
 
 /* The rdf:li items inside the element named tag (e.g. "dc:subject"): calls
-   back with each one's text. */
-static int each_item (const char *p, const char *end, const char *tag,
+   back with each one's text; with attr, only those whose opening tag has
+   it (as xml:lang="x-default"). */
+static int each_item (const char *p, const char *end, const char *tag, const char *attr,
                       int (*fn) (void *ctx, const char *text), void *ctx)
 {
   char open[40], close[40];
@@ -140,7 +141,7 @@ static int each_item (const char *p, const char *end, const char *tag,
   for (p = a; (p = find (p, b, "<rdf:li")) != NULL;)
     {
       const char *gt = find (p, b, ">"), *stop;
-      char text[256];
+      char text[512];
       if (!gt)
         break;
       if (gt[-1] == '/')               /* <rdf:li/> */
@@ -151,6 +152,11 @@ static int each_item (const char *p, const char *end, const char *tag,
       stop = find (gt + 1, b, "</rdf:li>");
       if (!stop)
         break;
+      if (attr && !find (p, gt, attr))
+        {
+          p = stop + 9;
+          continue;
+        }
       take_text (gt + 1, stop, text, sizeof text);
       if (text[0] && fn (ctx, text))
         return 1;
@@ -199,7 +205,9 @@ int xmp_read (const unsigned char *buf, size_t len, char *caption, size_t cn, ch
   d.out = caption;
   d.n = cn;
   /* dc:description may also be an attribute-less simple element in old files. */
-  if (!each_item (a, b, "dc:description", first_text, &d) && cn)
+  /* The caption: the x-default language's, else the first. */
+  if (!each_item (a, b, "dc:description", "x-default", first_text, &d)
+      && !each_item (a, b, "dc:description", NULL, first_text, &d) && cn)
     {
       const char *s = find (a, b, "<dc:description>"), *e = s ? find (s, b, "</dc:description>") : NULL;
       if (s && e && !find (s, e, "<rdf:"))
@@ -207,6 +215,6 @@ int xmp_read (const unsigned char *buf, size_t len, char *caption, size_t cn, ch
     }
   d.out = keywords;
   d.n = kn;
-  each_item (a, b, "dc:subject", add_keyword, &d);
+  each_item (a, b, "dc:subject", NULL, add_keyword, &d);
   return 1;
 }

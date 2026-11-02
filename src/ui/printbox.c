@@ -438,13 +438,14 @@ static const _kernel_oserror *plot_page (const page *p, int a[4], int xeig, int 
   unsigned char *jpeg = read_file (p->jpeg, &len);
   int iw = 0, ih = 0, w, h, turned, rect[4], m[4], pos[2], more = 0, id = 0, blk[4], ow, oh;
   const _kernel_oserror *e;
+  static _kernel_oserror unreadable = { 0, "a prepared photo couldn't be read back (is the disc full?)" };
   if (!jpeg)
-    return NULL;
+    return &unreadable;
   e = _swix (JPEG_Info, _INR (0, 2) | _OUTR (2, 3), 1, jpeg, len, &iw, &ih);
   if (e || iw <= 0 || ih <= 0)
     {
       free (jpeg);
-      return e;
+      return e ? e : &unreadable;
     }
   print_place (iw, ih, a, job_size_mode, job_w_cm, job_h_cm, job_rotate, &w, &h, &turned);
   /* Our drawing: the JPEG at (0,0), ow x oh OS units. On paper an OS unit
@@ -486,9 +487,30 @@ static const _kernel_oserror *plot_page (const page *p, int a[4], int xeig, int 
 static void remove_scraps (void)
 {
   int k;
+  char dir[256];
   for (k = 0; k < npages; k++)
     if (pages[k].jpeg[0])
       remove (pages[k].jpeg);
+#ifdef __riscos__
+  snprintf (dir, sizeof dir, "<Wimp$ScrapDir>.LumenPrint");
+  _swix (OS_File, _INR (0, 1), 6, dir);   /* the directory too (OS_File 6: delete; only if empty) */
+#else
+  (void) dir;
+#endif
+}
+
+/* Lumen is quitting: a job being prepared is dropped and its scraps go. */
+void printbox_quit (void)
+{
+  if (!printing)
+    return;
+  export_free (cur);
+  cur = NULL;
+  remove_scraps ();
+  free (pages);
+  pages = NULL;
+  npages = ipage = failed = 0;
+  printing = 0;
 }
 
 static void finish_job (void)
@@ -507,10 +529,12 @@ static void finish_job (void)
     }
   if (ready && !e)
     {
+      int selected = 0;
       /* OS_Find &8F: open out, errors if it can't. */
       e = _swix (OS_Find, _INR (0, 1) | _OUT (0), 0x8F, "printer:", &fh);
       if (!e)
         e = _swix (PDriver_SelectJob, _INR (0, 1) | _OUT (0), fh, "Lumen", &old);
+      selected = fh && !e;
       _swix (Hourglass_On, 0);
       for (k = 0; !e && k < npages; k++)
         if (pages[k].ready)
@@ -519,15 +543,21 @@ static void finish_job (void)
             printed += !e;
           }
       _swix (Hourglass_Off, 0);
-      if (fh)
+      if (selected)
         {
-          if (e)
-            _swix (PDriver_AbortJob, _IN (0), fh);
-          else
+          /* An error, or EndJob failing: the job is thrown away, and none of
+             it was printed. */
+          if (!e)
             e = _swix (PDriver_EndJob, _IN (0), fh);
-          _swix (OS_Find, _INR (0, 1), 0, fh);
-          _swix (PDriver_SelectJob, _INR (0, 1), old, 0);
+          if (e)
+            {
+              _swix (PDriver_AbortJob, _IN (0), fh);
+              printed = 0;
+            }
+          _swix (PDriver_SelectJob, _INR (0, 1), old, 0);   /* the job that was current before ours */
         }
+      if (fh)
+        _swix (OS_Find, _INR (0, 1), 0, fh);
     }
   remove_scraps ();
   if (e)

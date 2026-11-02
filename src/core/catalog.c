@@ -64,6 +64,21 @@ static sqlite3_stmt *prep (cat *c, const char *sql);
 static void bind_text_or_null (sqlite3_stmt *s, int i, const char *t);
 
 /* Schema 2 (0.0.16): originals whose files can't be found are marked. */
+/* One schema step, all or nothing: a step half done (power lost after an
+   ALTER TABLE) would fail for ever after with "duplicate column". */
+static int step (cat *c, const char *sql)
+{
+  if (exec (c, "BEGIN") || exec (c, sql))
+    {
+      char keep[256];
+      snprintf (keep, sizeof keep, "%s", c->err);
+      exec (c, "ROLLBACK");
+      snprintf (c->err, sizeof c->err, "%s", keep);
+      return -1;
+    }
+  return exec (c, "COMMIT");
+}
+
 static int upgrade (cat *c)
 {
   sqlite3_stmt *s = prep (c, "SELECT value FROM meta WHERE key = 'schema'");
@@ -73,12 +88,12 @@ static int upgrade (cat *c)
   if (sqlite3_step (s) == SQLITE_ROW)
     v = sqlite3_column_int (s, 0);
   sqlite3_finalize (s);
-  if (v < 2 && exec (c, "ALTER TABLE original ADD COLUMN missing INTEGER NOT NULL DEFAULT 0;"
+  if (v < 2 && step (c, "ALTER TABLE original ADD COLUMN missing INTEGER NOT NULL DEFAULT 0;"
                         "UPDATE meta SET value = 2 WHERE key = 'schema';"))
     return -1;
   /* Schema 3 (0.0.19): a project's folder, whether it is watched and has
      albums from its folders; a folder album's project and folder. */
-  if (v < 3 && exec (c, "ALTER TABLE project ADD COLUMN root TEXT;"
+  if (v < 3 && step (c, "ALTER TABLE project ADD COLUMN root TEXT;"
                         "ALTER TABLE project ADD COLUMN watch INTEGER NOT NULL DEFAULT 0;"
                         "ALTER TABLE project ADD COLUMN folder_albums INTEGER NOT NULL DEFAULT 0;"
                         "ALTER TABLE album ADD COLUMN project INTEGER;"
@@ -86,7 +101,7 @@ static int upgrade (cat *c)
                         "UPDATE meta SET value = 3 WHERE key = 'schema';"))
     return -1;
   /* Schema 4 (0.0.23): captions, keywords, and smart albums' rules. */
-  if (v < 4 && exec (c, "ALTER TABLE version ADD COLUMN caption TEXT NOT NULL DEFAULT '';"
+  if (v < 4 && step (c, "ALTER TABLE version ADD COLUMN caption TEXT NOT NULL DEFAULT '';"
                         "CREATE TABLE IF NOT EXISTS keyword (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE);"
                         "CREATE TABLE IF NOT EXISTS version_keyword (version INTEGER NOT NULL, keyword INTEGER NOT NULL,"
                         "  PRIMARY KEY (version, keyword));"
@@ -95,7 +110,7 @@ static int upgrade (cat *c)
                         "UPDATE meta SET value = 4 WHERE key = 'schema';"))
     return -1;
   /* Schema 5 (0.0.23): stacks. */
-  if (v < 5 && exec (c, "ALTER TABLE version ADD COLUMN stack INTEGER;"
+  if (v < 5 && step (c, "ALTER TABLE version ADD COLUMN stack INTEGER;"
                         "CREATE TABLE IF NOT EXISTS stack (id INTEGER PRIMARY KEY, pick INTEGER NOT NULL,"
                         "  open INTEGER NOT NULL DEFAULT 0);"
                         "CREATE INDEX IF NOT EXISTS version_stack ON version (stack);"
@@ -660,7 +675,7 @@ static int add_words (const char *q, char words[][70], int nw, int max, char *ma
 
 int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
 {
-  char sql[6000];
+  char sql[10000];
   const char *where;
   sqlite3_stmt *s;
   int n = 0, cap = 256, smart = 0, min_rating = src->min_rating;
@@ -679,15 +694,15 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
     case SRC_MISSING:     where = "o.missing = 1 AND (v.rating >= ?2 OR v.rating = -1)"; break;
     default:              where = "v.rating >= ?2"; break;
     }
-  /* Search: up to four words (?3..?6); a smart album's rule adds its own
-     words (up to ?10), and its other limits (?11, ?12 for the dates). */
-  char words[8][70], match[4800];
+  /* Search: up to four words (?3..?6); a smart album's rule adds up to
+     eight of its own (?7..?14), and its other limits (?15, ?16 for the dates). */
+  char words[12][70], match[8800];
   int nw = 0, k;
   match[0] = '\0';
   nw = add_words (src->search, words, 0, 4, match, sizeof match);
   if (smart)
     {
-      nw = add_words (rule.words, words, nw, 8, match, sizeof match);
+      nw = add_words (rule.words, words, nw, nw + 8, match, sizeof match);
       if (rule.min_rating > min_rating)
         min_rating = rule.min_rating;
       if (rule.flagged)
@@ -695,15 +710,15 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
       if (rule.edited)
         strcat (match, " AND v.recipe <> ''");
       if (rule.from[0])
-        strcat (match, " AND REPLACE(SUBSTR(o.taken, 1, 10), ':', '-') >= ?11");
+        strcat (match, " AND REPLACE(SUBSTR(o.taken, 1, 10), ':', '-') >= ?15");
       if (rule.to[0])
-        strcat (match, " AND REPLACE(SUBSTR(o.taken, 1, 10), ':', '-') <= ?12");
+        strcat (match, " AND REPLACE(SUBSTR(o.taken, 1, 10), ':', '-') <= ?16");
     }
-  /* A closed stack shows its pick alone where photos are browsed (not in
-     albums, rejects, missing files or a search, which look for each one). */
-  if ((src->kind == SRC_ALL || src->kind == SRC_PROJECT || src->kind == SRC_LAST_IMPORT) && !nw)
-    strcat (match, " AND (v.stack IS NULL OR EXISTS (SELECT 1 FROM stack s WHERE s.id = v.stack"
-                   " AND (s.open = 1 OR s.pick = v.id)))");
+  /* A closed stack shows one photo where photos are browsed (not in albums,
+     rejects, missing files or a search, which look for each one): its pick,
+     or if the view leaves the pick out (rejected, too few stars, another
+     project), the first of the rest that it shows. Done below, on the rows. */
+  int collapse = (src->kind == SRC_ALL || src->kind == SRC_PROJECT || src->kind == SRC_LAST_IMPORT) && !nw;
   snprintf (sql, sizeof sql,
             "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '', o.missing,"
             " IFNULL(v.stack, 0), (SELECT COUNT(*) FROM version m WHERE m.stack = v.stack),"
@@ -725,9 +740,9 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
   for (k = 0; k < nw; k++)
     sqlite3_bind_text (s, 3 + k, words[k], -1, SQLITE_TRANSIENT);
   if (smart && rule.from[0])
-    sqlite3_bind_text (s, 11, rule.from, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text (s, 15, rule.from, -1, SQLITE_TRANSIENT);
   if (smart && rule.to[0])
-    sqlite3_bind_text (s, 12, rule.to, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text (s, 16, rule.to, -1, SQLITE_TRANSIENT);
   a = malloc (sizeof *a * cap);
   if (!a)
     {
@@ -757,6 +772,16 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
       a[n].stack_count = a[n].stack ? sqlite3_column_int (s, 9) : 0;
       a[n].stack_pick = sqlite3_column_int (s, 10);
       a[n].stack_open = sqlite3_column_int (s, 11);
+      /* A stack's rows come together, its pick first: a closed stack keeps
+         the first of them shown here. */
+      if (collapse && a[n].stack && !a[n].stack_open && n > 0)
+        {
+          int j, seen = 0;
+          for (j = n - 1; j >= 0 && a[j].stack == a[n].stack; j--)
+            seen = 1;
+          if (seen)
+            continue;
+        }
       n++;
     }
   sqlite3_finalize (s);
@@ -1427,20 +1452,36 @@ int cat_set_caption (cat *c, const cat_id *v, int n, const char *caption)
 
 void cat_keyword_split (const char *list, void (*fn) (void *ctx, const char *kw), void *ctx)
 {
-  char seen[32][64];
+  char seen[128][64];                  /* 8 KB: a callback may split another list meanwhile */
   int nseen = 0;
   while (list && *list)
     {
       char kw[64];
       size_t len = 0;
-      int k, dup = 0;
+      int k, dup = 0, cut = 0;
       while (*list == ' ' || *list == ',' || *list == ';')
         list++;
       while (*list && *list != ',' && *list != ';')
         {
           unsigned char ch = (unsigned char) *list++;
-          if (len < sizeof kw - 1 && ch >= ' ')
+          if (len < sizeof kw - 1 && ch >= ' ' && !cut)
             kw[len++] = (char) ch;
+          else if (ch >= ' ')
+            cut = 1;
+        }
+      if (cut)
+        {
+          /* Too long: cut at a whole UTF-8 character, not inside one. */
+          size_t k = len;
+          while (k && ((unsigned char) kw[k - 1] & 0xC0) == 0x80)
+            k--;
+          if (k && ((unsigned char) kw[k - 1] & 0xC0) == 0xC0)
+            {
+              unsigned char lead = (unsigned char) kw[k - 1];
+              size_t need = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
+              if (len - (k - 1) < need)
+                len = k - 1;           /* its last character incomplete: dropped */
+            }
         }
       while (len && kw[len - 1] == ' ')
         len--;
@@ -1451,7 +1492,7 @@ void cat_keyword_split (const char *list, void (*fn) (void *ctx, const char *kw)
         dup = !strcasecmp (seen[k], kw);
       if (dup)
         continue;
-      if (nseen < 32)
+      if (nseen < 128)
         memcpy (seen[nseen++], kw, len + 1);
       fn (ctx, kw);
     }
@@ -1561,6 +1602,7 @@ int cat_common_tags (cat *c, const cat_id *v, int n, char *caption, size_t cn, i
   for (i = 0; i < n; i++)
     {
       char cap[CAT_CAPTION_MAX];
+      static char first[CAT_CAPTION_MAX];  /* the first one's, whole (the caller's copy may be shorter) */
       sqlite3_reset (s);
       sqlite3_bind_int64 (s, 1, v[i]);
       cap[0] = '\0';
@@ -1568,10 +1610,11 @@ int cat_common_tags (cat *c, const cat_id *v, int n, char *caption, size_t cn, i
         col_text (s, 0, cap, sizeof cap);
       if (i == 0)
         {
+          snprintf (first, sizeof first, "%s", cap);
           if (caption)
             snprintf (caption, cn, "%s", cap);
         }
-      else if (caption && strcmp (cap, caption))
+      else if (strcmp (cap, first))
         all = 0;
     }
   sqlite3_finalize (s);
@@ -1746,7 +1789,13 @@ cat_id cat_smart_create (cat *c, const char *name, const cat_rule *r)
 {
   cat_id id = cat_album_create (c, name);
   if (id > 0 && cat_smart_set (c, id, r))
-    return -1;
+    {
+      char keep[256];
+      snprintf (keep, sizeof keep, "%s", c->err);
+      cat_album_delete (c, id);        /* not left behind as an ordinary album */
+      snprintf (c->err, sizeof c->err, "%s", keep);
+      return -1;
+    }
   return id;
 }
 
@@ -1870,6 +1919,11 @@ cat_id cat_new_version (cat *c, cat_id v, int keep_look)
         break;
     }
   sqlite3_finalize (s);
+  if (k >= 1000)
+    {
+      snprintf (c->err, sizeof c->err, "This photo has too many versions already.");
+      goto fail;
+    }
   s = prep (c, keep_look
                ? "INSERT INTO version (original, project, name, rating, flag, recipe, thumb, created, modified, caption)"
                  " SELECT original, project, ?2, 0, 0, recipe, 0, ?3, ?3, caption FROM version WHERE id = ?1"
@@ -1999,6 +2053,12 @@ cat_id cat_stack (cat *c, const cat_id *v, int n, cat_id pick)
   sqlite3_finalize (s);
   if (stacks_tidy (c))
     goto fail;
+  if (stack_of (c, pick) != st)
+    {
+      /* Fewer than two different photos (the same one twice): no stack. */
+      snprintf (c->err, sizeof c->err, "A stack needs two photos or more.");
+      goto fail;
+    }
   exec (c, "RELEASE stacking");
   return st;
 fail:
@@ -2009,6 +2069,28 @@ fail:
 int cat_unstack (cat *c, const cat_id *v, int n)
 {
   sqlite3_stmt *s = prep (c, "UPDATE version SET stack = NULL WHERE id = ?1");
+  int i, rc = 0;
+  if (!s)
+    return -1;
+  exec (c, "SAVEPOINT unstacking");
+  for (i = 0; i < n && !rc; i++)
+    {
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, v[i]);
+      if (sqlite3_step (s) != SQLITE_DONE)
+        rc = fail (c, "unstack");
+    }
+  sqlite3_finalize (s);
+  if (!rc && stacks_tidy (c))
+    rc = -1;
+  exec (c, rc ? "ROLLBACK TO unstacking; RELEASE unstacking" : "RELEASE unstacking");
+  return rc;
+}
+
+int cat_unstack_all (cat *c, const cat_id *v, int n)
+{
+  sqlite3_stmt *s = prep (c, "UPDATE version SET stack = NULL WHERE stack IS NOT NULL"
+                             " AND stack = (SELECT stack FROM version WHERE id = ?1)");
   int i, rc = 0;
   if (!s)
     return -1;

@@ -595,6 +595,29 @@ static void test_library (void)
     free (kws);
   }
 
+  /* Keywords: a long one cut at a whole UTF-8 character; long captions compared whole. */
+  {
+    char kw[200], out[1024], cap[16];
+    int same = 0;
+    cat_id v0 = items[0].id, v1 = items[1].id, both[2] = { items[0].id, items[1].id };
+    memset (kw, 'a', 62);
+    kw[62] = '\0';
+    strcat (kw, "\xC3\xA9xyz");           /* an e-acute straddling the 63-byte limit */
+    cat_add_keywords (lib_cat (l), &v0, 1, kw);
+    cat_get_tags (lib_cat (l), v0, NULL, 0, out, sizeof out);
+    CHECK (strncmp (out, kw, 62) == 0 && (out[62] == ',' || out[62] == '\0'),
+           "a keyword too long is cut before a character it can't hold whole");
+    kw[62] = '\0';
+    cat_remove_keywords (lib_cat (l), &v0, 1, kw);
+    memset (kw, 'b', 100);
+    kw[100] = '\0';
+    cat_set_caption (lib_cat (l), both, 2, kw);
+    cat_common_tags (lib_cat (l), both, 2, cap, sizeof cap, &same, NULL, 0);
+    CHECK (same == 1, "the same long caption on two: the same, though the copy asked for is short");
+    cat_set_caption (lib_cat (l), both, 2, "");
+    (void) v1;
+  }
+
   /* Dates as typed, for smart albums. */
   {
     static const struct { const char *in; int end; const char *out; } d[] = {
@@ -669,6 +692,24 @@ static void test_library (void)
       int nv;
       CHECK (cat_group_versions (c, SRC_ALBUM, smart, &vs, &nv) == 0 && nv == 1 && vs[0] == cb, "its photos, for exporting");
       free (vs);
+    }
+    /* Rule words aren't dropped when there's a search too. */
+    {
+      cat_rule r2 = r;
+      cat_source q2 = { SRC_ALBUM, smart, 0, "fells" };
+      cat_id cb2 = cb;
+      cat_add_keywords (c, &cb2, 1, "k1, k2, k3, k4, k5");
+      cat_add_keywords (c, &one, 1, "k1, k2, k3, k4");
+      memset (&r2, 0, sizeof r2);
+      strcpy (r2.words, "k1 k2 k3 k4 k5");
+      cat_smart_set (c, smart, &r2);
+      strcpy (q2.search, "k1 k2 k3 k4");
+      cat_list (c, &q2, &found, &nf);
+      CHECK (nf == 1 && found[0].id == cb, "5 rule words and 4 searched: all count");
+      free (found);
+      cat_remove_keywords (c, &cb2, 1, "k1, k2, k3, k4, k5");
+      cat_remove_keywords (c, &one, 1, "k1, k2, k3, k4");
+      cat_smart_set (c, smart, &r);
     }
     r.edited = 1;
     strcpy (r.from, "2026");
@@ -791,6 +832,29 @@ static void test_library (void)
       CHECK (cat_auto_stack (c, vs, ni, 5) == 0, "again: they are one stack already, none made");
       free (it);
       free (vs);
+    }
+    /* Regressions from review. A closed stack whose pick the view leaves
+       out (rejected) still shows one photo, with the badge. */
+    {
+      cat_id two[2] = { cb, v2 }, st;
+      int k2, shown = 0;
+      cat_unstack_all (c, &cb, 1);
+      st = cat_stack (c, two, 2, cb);
+      cat_stack_open (c, cb, 0);
+      cat_set_rating (c, &cb, 1, RATING_REJECT);
+      cat_list (c, &all2, &it, &ni);
+      for (k2 = 0; k2 < ni; k2++)
+        if (it[k2].stack == st)
+          shown++;
+      CHECK (st > 0 && shown == 1 && find_item (it, ni, "catbells_v2.jpg") >= 0,
+             "closed stack, pick rejected: the other shows for it");
+      free (it);
+      cat_set_rating (c, &cb, 1, 0);
+      CHECK (cat_unstack_all (c, &v2, 1) == 0, "unstack all");
+      cat_list (c, &all2, &it, &ni);
+      CHECK (it[find_item (it, ni, "catbells.jpg")].stack == 0, "the whole stack taken apart from one of it");
+      free (it);
+      CHECK (cat_stack (c, (cat_id[2]) { v2, v2 }, 2, v2) == -1, "the same photo twice: no stack");
     }
     /* Back as it was for what follows: the versions go. */
     {

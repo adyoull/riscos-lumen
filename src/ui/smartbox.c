@@ -28,7 +28,7 @@ enum
 
 static int win = -1, is_open;
 static cat_id editing;                 /* the album being changed, 0 for a new one */
-static char name_text[40], words_text[64], from_text[12], to_text[12], note[100], ok_text[8] = "Create";
+static char name_text[64], words_text[64], from_text[12], to_text[12], note[100], ok_text[8] = "Create";
 
 int smartbox_window (void) { return win; }
 int smartbox_is_open (void) { return is_open; }
@@ -217,6 +217,15 @@ static void ok (void)
       r.min_rating = k;
   r.flagged = is_on (SB_FLAGGED);
   r.edited = is_on (SB_EDITED);
+  if (editing && cat_smart_get (c, editing, &(cat_rule) { 0 }) != 1)
+    {
+      /* Deleted while the window was open (or its id now another album's). */
+      app_report ("That smart album has been deleted. Click Create to make it again.");
+      editing = 0;
+      snprintf (ok_text, sizeof ok_text, "Create");
+      redraw_icon (SB_OK);
+      return;
+    }
   if (editing)
     {
       char old[64];

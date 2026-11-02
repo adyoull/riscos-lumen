@@ -29,8 +29,8 @@ enum { TG_CAP_LABEL, TG_CAP, TG_KW_LABEL, TG_KW, TG_KW_MENU, TG_NOTE, TG_CANCEL,
 #define T_POPUP   0x1700310Bu          /* sprite, border, centred, indirected, click */
 
 static int win = -1, is_open;
-static char cap_text[256], kw_text[512], note[100];
-static char orig_cap[256], orig_kw[512];
+static char cap_text[CAT_CAPTION_MAX], kw_text[CAT_KEYWORDS_MAX], note[100];
+static char orig_cap[CAT_CAPTION_MAX], orig_kw[CAT_KEYWORDS_MAX];
 static int orig_same;
 static cat_id *ids;
 static int nids;
@@ -190,6 +190,11 @@ void tagbox_add_keyword (const char *kw)
   len = strlen (kw_text);
   while (len && (kw_text[len - 1] == ' ' || kw_text[len - 1] == ','))
     kw_text[--len] = '\0';
+  if (len + strlen (kw) + 3 > sizeof kw_text)
+    {
+      app_report ("There's no room for another keyword in the list.");
+      return;
+    }
   snprintf (kw_text + len, sizeof kw_text - len, "%s%s", len ? ", " : "", kw);
   redraw_icon (TG_KW);
   _swix (Wimp_SetCaretPosition, _INR (0, 5), win, TG_KW, 0, 0, -1, (int) strlen (kw_text));
@@ -284,4 +289,20 @@ int tagbox_key (int key)
 void tagbox_closed (void)
 {
   is_open = 0;
+}
+
+/* Photos left the library: if the window is for any of them, it closes. */
+void tagbox_forget (const cat_id *v, int n)
+{
+  int i, j;
+  for (i = 0; i < n; i++)
+    for (j = 0; j < nids; j++)
+      if (v[i] == ids[j])
+        {
+          close_win ();
+          free (ids);
+          ids = NULL;
+          nids = 0;
+          return;
+        }
 }

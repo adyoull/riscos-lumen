@@ -261,6 +261,7 @@ void browser_reload (void)
   if ((n + cols - 1) / cols != old_rows)
     set_extent ();
   redraw_all ();
+  viewer_list_changed ();
   browser_update_title ();
   mainwin_library_changed ();
   mainwin_status_changed ();
@@ -486,8 +487,10 @@ static void draw_cell (int i, int ox, int oy)
     }
   if (badge)
     badge[i][0] = 1, badge[i][2] = 0;  /* none */
-  if (it->stack_count && it->stack_pick)
+  if (it->stack_count && (it->stack_pick || !it->stack_open))
     {
+      /* (closed, the one shown stands for the stack: its pick, or the first
+         the view shows if the pick is left out) */
       /* The stack's count on the pick's top right corner, with an arrow:
          right, closed (click to open); left, open. */
       char t[12];
@@ -769,43 +772,11 @@ void browser_stack (void)
 void browser_unstack (void)
 {
   cat_id *ids;
-  int k = chosen (&ids), i, j;
+  int k = chosen (&ids);
   cat *c = lib_cat (app_library ());
-  /* A closed stack's pick alone stands for its stack: unstack all of it. */
-  for (j = 0; j < k; j++)
-    for (i = 0; i < n; i++)
-      if (items[i].id == ids[j] && items[i].stack_pick && !items[i].stack_open)
-        {
-          cat_stack_open (c, ids[j], 1);
-          break;
-        }
-  if (k)
-    {
-      cat_source s = src;
-      cat_item *all = NULL;
-      int na = 0, m = 0;
-      cat_id *members = NULL;
-      /* Every photo in the chosen ones' stacks. */
-      s.search[0] = '\0';
-      if (cat_list (c, &s, &all, &na) == 0 && (members = malloc (sizeof *members * (size_t) (na ? na : 1))))
-        for (i = 0; i < na; i++)
-          for (j = 0; j < k; j++)
-            {
-              int q;
-              for (q = 0; q < n; q++)
-                if (items[q].id == ids[j] && items[q].stack && all[i].stack == items[q].stack)
-                  break;
-              if (q < n)
-                {
-                  members[m++] = all[i].id;
-                  break;
-                }
-            }
-      if (m && cat_unstack (c, members, m))
-        app_report (cat_error (c));
-      free (members);
-      free (all);
-    }
+  /* Their stacks taken apart, every photo in them (in this view or not). */
+  if (k && cat_unstack_all (c, ids, k))
+    app_report (cat_error (c));
   free (ids);
   browser_reload ();
 }
@@ -843,6 +814,12 @@ int browser_auto_stack (int seconds)
 {
   cat_id *ids;
   int k = browser_selection (&ids), made = 0;
+  if (k == 1)
+    {
+      free (ids);
+      app_report ("Select two photos or more to auto-stack, or none for all those shown.");
+      return 0;
+    }
   if (k < 2)
     {
       /* Nothing selected: all those shown. */
@@ -863,6 +840,7 @@ int browser_auto_stack (int seconds)
 void browser_removed (const cat_id *ids, int n)
 {
   int k;
+  tagbox_forget (ids, n);              /* its window let go of them */
   for (k = 0; k < n; k++)
     {
       thumbcache_drop (ids[k]);

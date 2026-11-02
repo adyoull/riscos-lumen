@@ -484,6 +484,7 @@ int app_init (const char *library_path)
 
 void app_quit (void)
 {
+  printbox_quit ();                    /* a print being prepared: its scrap files go */
   lib_close (lib);
   lib = NULL;
   close_down ();
@@ -551,7 +552,7 @@ int app_has_focus (void)
    desktop the computer in between (Wimp_PollIdle until *when). */
 int app_background_wait (unsigned *when)
 {
-  if (!lib || viewer_busy () || thumbcache_pending () || exports_busy () || rawjob_busy ()
+  if (!lib || viewer_busy () || thumbcache_pending () || exports_busy () || rawjob_busy () || printbox_busy ()
       || !lib_background_only (lib) || app_has_focus ())
     return 0;
   *when = app_now () + 4;

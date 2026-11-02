@@ -1639,6 +1639,18 @@ int main (int argc, char **argv)
                "named _v2, in an open stack of 2");
         browser_item (0, &vi);
         CHECK (vi.stack_pick && vi.stack_count == 2, "the original's version is the pick");
+        /* In the Viewer on the version (not the pick): S closes the stack and
+           the Viewer moves to the pick, its place right. */
+        viewer_open (1);
+        caret_window = MAINW;
+        key ('s');
+        browser_item (0, &vi);
+        CHECK (mainwin_mode () == LAYOUT_VIEWER && viewer_index () == 0 && viewer_item () == vi.id && vi.stack_pick,
+               "S in the Viewer on a stacked version: closed, the Viewer shows the pick");
+        mainwin_set_mode (LAYOUT_BROWSER);
+        key ('s');                     /* open again */
+        CHECK (browser_count () == before + 1, "S: open again");
+        browser_focus_on (0);
         key ('s');                     /* close */
         CHECK (browser_count () == before && browser_focus () == 0, "S: closed, the pick alone, focused");
         redraw ();
@@ -1696,6 +1708,11 @@ int main (int argc, char **argv)
           made[nmade++] = vv.id;
         }
         mainwin_set_mode (LAYOUT_BROWSER);
+        /* The Caption window open for a photo that is then removed: it closes. */
+        tagbox_open_ids (&made[nmade - 1], 1, 500, 500);
+        CHECK (tagbox_is_open (), "the Caption window open for a version");
+        browser_removed (&made[nmade - 1], 1);
+        CHECK (!tagbox_is_open (), "the version removed: the window closes");
         cat_remove_versions (lib_cat (app_library ()), made, nmade);
         browser_after_change ();
         CHECK (browser_count () == before, "the versions removed: back to as it was");

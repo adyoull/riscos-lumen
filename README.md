@@ -178,6 +178,29 @@ with keywords and smart albums, versions and stacks, exporting and printing.
   stacks with a pick, open/closed, collapsed in the Browser; auto-stack by
   capture time.
 
+## 0.0.24
+
+Fixes from a review of 0.0.23:
+- A closed stack whose pick the view leaves out (rejected, filtered by
+  stars, another project) vanished whole; now the first member shown
+  stands for it.
+- The Viewer kept a stale place after the list changed (closing a stack,
+  a smart album, a search): it now follows, or shows the stack's pick.
+- Printing: a failed or aborted job was logged as printed; an unreadable
+  prepared page was skipped silently; EndJob failure now aborts; the
+  previous job is only reselected if ours was selected; scraps (and the
+  LumenPrint directory) go on quit; preparation no longer slows down when
+  Lumen isn't in front.
+- Smart albums kept only 8 words between search and rule; now 4 + 8.
+- Export margins with recipe and output sharpening together were too
+  small (faint seams every 48 rows).
+- Thumbnails with geometry and a vignette were darkened all over.
+- Schema upgrades are now all-or-nothing.
+- Unstack takes the whole stack apart, in any view; XMP captions prefer
+  x-default; long keywords cut on a character boundary; Caption window
+  fields hold the catalogue's full sizes; a smart album deleted while
+  being edited is noticed; the Caption window closes if its photo goes.
+
 ## Layout
 
 ```

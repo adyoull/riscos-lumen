@@ -511,8 +511,9 @@ static void gain_row (const develop *d, int y, float *row)
 static inline void vignette (const develop *d, int fw, float ny2, int x, int *R, int *G, int *B)
 {
   float cx = (float) x + 0.5f - fw * 0.5f, nx = cx / (fw * 0.5f);
-  int i = (int) ((nx * nx + ny2) * 128), g;
-  g = d->vig_gain[i > 256 ? 256 : i];
+  float f = (nx * nx + ny2) * 128;
+  int i = f > 256 ? 256 : f < 0 ? 0 : (int) f, g;
+  g = d->vig_gain[i];
   *R = (*R * g) >> 12;
   *G = (*G * g) >> 12;
   *B = (*B * g) >> 12;
@@ -652,6 +653,7 @@ int develop_image (const recipe *r, rgb_image *img)
     }
   if (geometry)
     geom_rows (&g, lin, out, 0, oh);
+  develop_region (d, ow, oh, 0, 0);    /* the vignette's frame: the whole picture */
   develop_rows (d, out, ow, 0, oh, px, NULL);
   for (i = 0; i < n; i++)
     {

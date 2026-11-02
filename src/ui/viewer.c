@@ -1398,6 +1398,49 @@ void viewer_show (int i)
   fit_panel ();
 }
 
+/* The Browser's list changed (a stack closed, a search, a smart album):
+   the photo shown keeps its place in it; if it has gone from the list, the
+   one standing for its stack, or the one at its old place, is shown; with
+   none left, back to the Browser. */
+void viewer_list_changed (void)
+{
+  int i, n = browser_count ();
+  cat_item it;
+  if (state == V_CLOSED)
+    return;
+  for (i = 0; i < n; i++)
+    if (browser_item (i, &it) && it.id == item.id)
+      {
+        if (i != index_in_list)
+          {
+            index_in_list = i;
+            update_title ();
+            force_panel ();
+          }
+        return;
+      }
+  if (mainwin_mode () == LAYOUT_BROWSER)
+    {
+      index_in_list = -1;              /* shown again from the Browser when opened */
+      return;
+    }
+  if (crop_mode)
+    viewer_crop_finish (1);
+  for (i = 0; item.stack && i < n; i++)
+    if (browser_item (i, &it) && it.stack == item.stack)
+      {
+        viewer_show (i);
+        return;
+      }
+  if (n > 0)
+    viewer_show (index_in_list >= 0 && index_in_list < n ? index_in_list : n - 1);
+  else
+    {
+      mainwin_set_mode (LAYOUT_BROWSER);
+      viewer_shutdown ();
+    }
+}
+
 /* A photo opened from the Browser: the Viewer layout. */
 void viewer_open (int i)
 {

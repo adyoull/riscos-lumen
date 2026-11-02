@@ -1426,6 +1426,12 @@ static void test_hsl_vignette_noise (const char *work)
       CHECK (corner < 95 && corner > 60, "the corner about 2 stops darker");
       CHECK (edge < mid && edge > corner, "the side, in between");
     }
+    /* With geometry too (a thumbnail of a turned photo): still only the corners. */
+    memset (img.rgb, 160, 200 * 100 * 3);
+    recipe_default (&r);
+    recipe_parse (&r, "vignette amount=-100 midpoint=50\ngeometry rotate=2\n");
+    develop_image (&r, &img);
+    CHECK (img.rgb[(50 * 200 + 100) * 3] >= 158 && img.rgb[0] < 95, "vignette with geometry: middle kept, corners dark");
     memset (img.rgb, 100, 200 * 100 * 3);
     recipe_default (&r);
     recipe_parse (&r, "vignette amount=60\n");
@@ -1615,6 +1621,12 @@ static void test_export_options (const char *work)
       CHECK (xmp_read ((const unsigned char *) other, sizeof other - 1, cap, sizeof cap, kw, sizeof kw) == 1
              && !strcmp (kw, "Lake  District, Swans") && !strcmp (cap, "A swan on'the lake"),
              "XMP as others write it: keywords (a comma inside one goes), a plain description");
+      {
+        static const char langs[] = "<x:xmpmeta><dc:description><rdf:Alt><rdf:li xml:lang=\"de\">Hallo</rdf:li>"
+                                    "<rdf:li xml:lang=\"x-default\">Hello</rdf:li></rdf:Alt></dc:description></x:xmpmeta>";
+        CHECK (xmp_read ((const unsigned char *) langs, sizeof langs - 1, cap, sizeof cap, kw, sizeof kw) == 1
+               && !strcmp (cap, "Hello"), "XMP caption: the x-default language's, not the first");
+      }
       CHECK (xmp_read ((const unsigned char *) "no packet here", 14, cap, sizeof cap, kw, sizeof kw) == 0 && !cap[0] && !kw[0],
              "no packet: nothing");
     }

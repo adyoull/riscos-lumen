@@ -213,6 +213,8 @@ cat_id cat_new_version (cat *c, cat_id v, int keep_look);
 cat_id cat_stack (cat *c, const cat_id *v, int n, cat_id pick);
 /* Takes the versions out of their stacks (a stack left with one goes). */
 int cat_unstack (cat *c, const cat_id *v, int n);
+/* Takes their stacks apart: every version in them, wherever it is shown. */
+int cat_unstack_all (cat *c, const cat_id *v, int n);
 int cat_stack_pick (cat *c, cat_id v);                 /* v becomes its stack's pick */
 int cat_stack_open (cat *c, cat_id v, int open);       /* v's stack: 1 open, 0 closed, -1 the other */
 /* Stacks the versions taken within seconds of the one before (bursts,
