@@ -1399,6 +1399,33 @@ static void test_hsl_vignette_noise (const char *work)
   dev1 (&r, 230, 230, 30, a);          /* yellow itself */
   CHECK (abs (a[0] - a[2]) < 12, "yellow, -100: grey");
   CHECK (o[0] - o[2] > 40 && o[0] - o[2] < 190, "an orange-yellow between: partly taken");
+  /* Black & White: grey out; a red filter makes a blue sky darker than a red rose. */
+  recipe_default (&r);
+  recipe_parse (&r, "bw amount=100\n");
+  CHECK (r.v[P_BW_AMOUNT] == 100 && r.v[P_BW_RED] == 30, "bw line parsed, the usual mix by default");
+  dev1 (&r, 200, 60, 40, o);
+  CHECK (o[0] == o[1] && o[1] == o[2], "amount 100: grey");
+  {
+    int sky[3], rose[3];
+    recipe_parse (&r, "bw amount=100 red=100 green=0 blue=0\n");
+    dev1 (&r, 60, 110, 200, sky);
+    dev1 (&r, 200, 40, 50, rose);
+    CHECK (sky[0] < rose[0] - 60, "red filter: the blue sky dark, the red rose light");
+    recipe_parse (&r, "bw amount=100 red=0 green=0 blue=100\n");
+    dev1 (&r, 60, 110, 200, sky);
+    dev1 (&r, 200, 40, 50, rose);
+    CHECK (sky[0] > rose[0] + 60, "blue filter: the other way round");
+  }
+  recipe_parse (&r, "bw amount=50\n");
+  dev1 (&r, 200, 60, 40, o);
+  CHECK (o[0] > o[1] + 20 && o[0] < 200, "amount 50: half way, some colour left");
+  dev1 (&r, 128, 128, 128, o);
+  CHECK (abs (o[0] - 128) <= 1 && o[0] == o[2], "a grey stays grey");
+  recipe_default (&r);
+  recipe_parse (&r, "bw red=80\n");
+  dev1 (&r, 200, 60, 40, o);
+  CHECK (o[0] == 200 && o[1] == 60, "a mix without amount: no change");
+
   /* Copying a look carries the colour, noise and vignette settings. */
   {
     recipe dst, src;

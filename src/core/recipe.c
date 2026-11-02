@@ -41,6 +41,10 @@ const recipe_param recipe_params[P_COUNT] = {
   { "hsl",      "magenta_hue", "Hue", -100, 100, 0, 1, 0, 1 },
   { "hsl",      "magenta_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
   { "hsl",      "magenta_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
+  { "bw",       "amount",     "Amount",         0, 100, 0, 1, 0, 0 },
+  { "bw",       "red",        "Red",         -100, 200, 30, 1, 0, 0 },
+  { "bw",       "green",      "Green",       -100, 200, 59, 1, 0, 0 },
+  { "bw",       "blue",       "Blue",        -100, 200, 11, 1, 0, 0 },
   { "tone",     "shadow_hue", "Shadow hue",     0, 360, 0, 1, 0, 0 },
   { "tone",     "shadows",    "Shadows",        0, 100, 0, 1, 0, 0 },
   { "tone",     "highlight_hue", "Highlight hue", 0, 360, 0, 1, 0, 0 },
@@ -69,6 +73,7 @@ const recipe_group recipe_groups[] = {
   { "Curves", 1, 0, 1, 1, 0 },         /* no sliders: the curves editor */
   { "Enhance", P_CONTRAST, P_VIBRANCE, 1, 0, 0 },
   { "Colour", P_HSL, P_HSL_END, 1, 0, 1 },   /* a band's three sliders at a time */
+  { "Black & White", P_BW_AMOUNT, P_BW_BLUE, 1, 0, 0 },
   { "Split Toning", P_TONE_SH_HUE, P_TONE_HI, 1, 0, 0 },
   { "Noise Reduction", P_NOISE_LUM, P_NOISE_COL, 1, 0, 0 },
   { "Sharpen", P_SHARPEN, P_SHARP_RADIUS, 1, 0, 0 },

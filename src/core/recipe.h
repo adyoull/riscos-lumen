@@ -9,6 +9,7 @@
      enhance contrast=12 saturation=0 vibrance=18
      tone shadow_hue=210 shadows=30 highlight_hue=40 highlights=25
      hsl blue_hue=-20 blue_saturation=30 green_luminance=-15
+     bw amount=100 red=60 green=30 blue=10
      noise luminance=30 colour=50
      sharpen amount=40 radius=1.0
      vignette amount=-40 midpoint=50
@@ -31,6 +32,7 @@ enum
   P_CONTRAST, P_SATURATION, P_VIBRANCE,/* enhance */
   P_HSL,                               /* colour: 8 hue bands x hue, saturation, luminance (HSL_*) */
   P_HSL_END = P_HSL + 8 * 3 - 1,
+  P_BW_AMOUNT, P_BW_RED, P_BW_GREEN, P_BW_BLUE,   /* black & white: the mix of channels, and how much */
   P_TONE_SH_HUE, P_TONE_SH, P_TONE_HI_HUE, P_TONE_HI,   /* split toning: after saturation, so it tints black and white too */
   P_NOISE_LUM, P_NOISE_COL,            /* noise reduction (after develop, before sharpening) */
   P_SHARPEN, P_SHARP_RADIUS,           /* sharpen (applied after develop, at the output's size) */

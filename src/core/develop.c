@@ -170,6 +170,10 @@ void develop_prepare (develop *d, const recipe *r)
     }
   /* Colour: each band's three values, from the bands either side of a
      hue (in a straight line between their centres), as tables by degree. */
+  d->bw = (int) lround (r->v[P_BW_AMOUNT] / 100.0 * 256);
+  d->bw_w[0] = (int) lround (r->v[P_BW_RED] / 100.0 * 1024);
+  d->bw_w[1] = (int) lround (r->v[P_BW_GREEN] / 100.0 * 1024);
+  d->bw_w[2] = (int) lround (r->v[P_BW_BLUE] / 100.0 * 1024);
   d->hsl = 0;
   for (i = P_HSL; i <= P_HSL_END; i++)
     if (r->v[i] != 0)
@@ -308,6 +312,16 @@ static inline void pixel (const develop *d, const uint16_t *s, int *r, int *g, i
     }
   if (d->hsl)
     hsl_step (d, &R, &G, &B);
+  if (d->bw)
+    {
+      /* The grey a black and white film behind these filters would give:
+         each channel weighed (at most 3 x 65535 x 2048: fits 32 bits). */
+      int m = (R * d->bw_w[0] + G * d->bw_w[1] + B * d->bw_w[2]) / 1024;
+      m = m < 0 ? 0 : m > 65535 ? 65535 : m;
+      R += ((m - R) * d->bw) >> 8;
+      G += ((m - G) * d->bw) >> 8;
+      B += ((m - B) * d->bw) >> 8;
+    }
   if (d->toning)
     {
       int Y = (int) (((unsigned) R * 13933u + (unsigned) G * 46871u + (unsigned) B * 4732u) >> 24);

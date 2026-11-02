@@ -13,7 +13,8 @@
    person sees it); back to linear; saturation and vibrancy in linear;
    colour (HSL: each hue band turned, saturated and brightened, the band
    found from the colour as seen, the change made in linear light); split
-   toning; then the vignette, by the pixel's place in the whole output. */
+   black & white (a mix of the channels, as a filter on black and white
+   film would give); toning; then the vignette, by the pixel's place in the whole output. */
 #ifndef LUMEN_DEVELOP_H
 #define LUMEN_DEVELOP_H
 #include <stdint.h>
@@ -49,6 +50,8 @@ typedef struct
   uint16_t tint[3][256];               /* its gain per channel by luminance (top 8 bits), 4096 = none */
   int vib;                             /* vibrancy, 65536 = unchanged */
   int hsl;                             /* colour (HSL) adjustments on */
+  int bw;                              /* black & white: how much, 256 = all */
+  int bw_w[3];                         /* its mix of red, green and blue, 1024 = 100% */
   int16_t hsl_cos[360], hsl_sin[360];  /* hue turn by hue (degrees, as seen): cos, and sin / sqrt 3, 1.14 fixed */
   uint16_t hsl_sat[360];               /* saturation by hue, 256 = unchanged */
   uint16_t hsl_lum[360];               /* brightness by hue, 4096 = unchanged */
