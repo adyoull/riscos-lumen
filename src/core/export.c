@@ -11,6 +11,7 @@
 #include "develop.h"
 #include "export.h"
 #include "exifout.h"
+#include "xmp.h"
 #include "fsys.h"
 #include "geometry.h"
 #include "sharpen.h"
@@ -57,6 +58,8 @@ struct exporter
   size_t src_tiff_len;
   img_info known;
   int have_known;
+  char *xmp;                           /* the caption and keywords as XMP, or NULL */
+  size_t xmp_len;
 };
 
 #define HEAD_READ (256 * 1024)          /* enough of the original for its EXIF (a NEF's too) */
@@ -92,6 +95,21 @@ void export_set_known (exporter *e, const img_info *known)
 {
   e->known = *known;
   e->have_known = 1;
+}
+
+void export_set_tags (exporter *e, const char *caption, const char *keywords)
+{
+  char *x = malloc (XMP_MAX);
+  free (e->xmp);
+  e->xmp = NULL;
+  e->xmp_len = 0;
+  if (!x)
+    return;
+  e->xmp_len = xmp_packet (caption, keywords, x, XMP_MAX);
+  if (e->xmp_len)
+    e->xmp = x;
+  else
+    free (x);
 }
 
 static void jerr_exit (j_common_ptr c)
@@ -265,6 +283,14 @@ static int open_output (exporter *e)
           if (n)
             jpeg_write_icc_profile (&e->jc, icc, (unsigned) n);
         }
+      if (e->xmp)
+        {
+          /* The caption and keywords: APP1, the XMP namespace and the packet. */
+          static unsigned char app1[sizeof XMP_NAMESPACE + XMP_MAX];
+          memcpy (app1, XMP_NAMESPACE, sizeof XMP_NAMESPACE);
+          memcpy (app1 + sizeof XMP_NAMESPACE, e->xmp, e->xmp_len);
+          jpeg_write_marker (&e->jc, JPEG_APP0 + 1, app1, (unsigned) (sizeof XMP_NAMESPACE + e->xmp_len));
+        }
     }
   else
     {
@@ -293,6 +319,18 @@ static int open_output (exporter *e)
       png_set_compression_level (e->png, 6);
       if (exif_len)
         png_set_eXIf_1 (e->png, e->pinfo, (png_uint_32) exif_len, exif + 6);
+      if (e->xmp)
+        {
+          png_text t;
+          memset (&t, 0, sizeof t);
+          t.compression = PNG_ITXT_COMPRESSION_NONE;
+          t.key = (char *) "XML:com.adobe.xmp";
+          t.text = e->xmp;
+          t.itxt_length = e->xmp_len;
+          t.lang = (char *) "";
+          t.lang_key = (char *) "";
+          png_set_text (e->png, e->pinfo, &t, 1);
+        }
       png_write_info (e->png, e->pinfo);
     }
   return 0;
@@ -510,6 +548,7 @@ void export_free (exporter *e)
   free (e->px);
   free (e->row);
   free (e->src_tiff);
+  free (e->xmp);
   free (e->dev);
   free (e);
 }

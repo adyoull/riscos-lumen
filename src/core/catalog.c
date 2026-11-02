@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
+#include <strings.h>
 #include "sqlite3.h"
 #include "catalog.h"
 #include "fsys.h"
@@ -82,6 +84,15 @@ static int upgrade (cat *c)
                         "ALTER TABLE album ADD COLUMN project INTEGER;"
                         "ALTER TABLE album ADD COLUMN folder TEXT;"
                         "UPDATE meta SET value = 3 WHERE key = 'schema';"))
+    return -1;
+  /* Schema 4 (0.0.23): captions, keywords, and smart albums' rules. */
+  if (v < 4 && exec (c, "ALTER TABLE version ADD COLUMN caption TEXT NOT NULL DEFAULT '';"
+                        "CREATE TABLE IF NOT EXISTS keyword (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE);"
+                        "CREATE TABLE IF NOT EXISTS version_keyword (version INTEGER NOT NULL, keyword INTEGER NOT NULL,"
+                        "  PRIMARY KEY (version, keyword));"
+                        "CREATE INDEX IF NOT EXISTS version_keyword_kw ON version_keyword (keyword);"
+                        "ALTER TABLE album ADD COLUMN smart TEXT;"
+                        "UPDATE meta SET value = 4 WHERE key = 'schema';"))
     return -1;
   return 0;
 }
@@ -207,6 +218,14 @@ static int for_each_version (cat *c, const char *sql, cat_id a, const cat_id *v,
 
 int cat_album_add (cat *c, cat_id album, const cat_id *v, int n)
 {
+  cat_rule r;
+  int smart = cat_smart_get (c, album, &r);
+  if (smart)
+    {
+      if (smart > 0)
+        snprintf (c->err, sizeof c->err, "A smart album gathers its own photos: change its rule instead.");
+      return -1;
+    }
   return for_each_version (c,
     "INSERT OR IGNORE INTO album_item (album, version, pos) VALUES (?1, ?2,"
     " (SELECT IFNULL(MAX(pos), 0) + 1 + ?3 FROM album_item WHERE album = ?1))", album, v, n, 0);
@@ -238,6 +257,7 @@ int cat_remove_versions (cat *c, const cat_id *v, int n)
 {
   static const char *const steps[] = {
     "DELETE FROM album_item WHERE version = ?1",
+    "DELETE FROM version_keyword WHERE version = ?1",
     "DELETE FROM version WHERE id = ?1",
   };
   size_t k;
@@ -268,6 +288,8 @@ int cat_remove_versions (cat *c, const cat_id *v, int n)
   if (!rc && exec (c, "DELETE FROM original WHERE id NOT IN (SELECT DISTINCT original FROM version)"))
     rc = -1;
   if (!rc && exec (c, "DELETE FROM project WHERE id NOT IN (SELECT DISTINCT project FROM version)"))
+    rc = -1;
+  if (!rc && exec (c, "DELETE FROM keyword WHERE id NOT IN (SELECT DISTINCT keyword FROM version_keyword)"))
     rc = -1;
   exec (c, rc ? "ROLLBACK TO removing; RELEASE removing" : "RELEASE removing");
   return rc;
@@ -394,6 +416,29 @@ int cat_count_missing (cat *c)
 
 int cat_group_versions (cat *c, int kind, cat_id id, cat_id **out, int *count)
 {
+  cat_rule rule;
+  if (kind == SRC_ALBUM && cat_smart_get (c, id, &rule) == 1)
+    {
+      /* A smart album's photos: those its rule matches now. */
+      cat_source src = { SRC_ALBUM, id, 0, "" };
+      cat_item *it = NULL;
+      int m = 0, k;
+      cat_id *a;
+      if (cat_list (c, &src, &it, &m))
+        return -1;
+      a = malloc (sizeof *a * (size_t) (m ? m : 1));
+      if (!a)
+        {
+          free (it);
+          return -1;
+        }
+      for (k = 0; k < m; k++)
+        a[k] = it[k].id;
+      free (it);
+      *out = a;
+      *count = m;
+      return 0;
+    }
   sqlite3_stmt *s = prep (c, kind == SRC_ALBUM ? "SELECT version FROM album_item WHERE album = ?1"
                                                : "SELECT id FROM version WHERE project = ?1");
   int n = 0, cap = 64;
@@ -556,56 +601,84 @@ cat_id cat_add_original (cat *c, cat_id project, const cat_original *o, cat_id *
   return ver;
 }
 
+/* Adds up to max words of q to words[] (as LIKE patterns, %word%) and their
+   test to match: each must be in the name, the camera, the date (as stored,
+   or with - for :), the project, the caption or one of the keywords. */
+static int add_words (const char *q, char words[][70], int nw, int max, char *match, size_t mn)
+{
+  while (*q && nw < max)
+    {
+      size_t len = 0;
+      int p = 3 + nw;
+      while (*q == ' ')
+        q++;
+      if (!*q)
+        break;
+      words[nw][0] = '%';
+      while (*q && *q != ' ' && len < 64)
+        {
+          char ch = *q++;
+          if (ch == '%' || ch == '_' || ch == '\\')
+            words[nw][1 + len++] = '\\';   /* LIKE's own characters, taken literally */
+          words[nw][1 + len++] = ch;
+        }
+      words[nw][1 + len] = '%';
+      words[nw][2 + len] = '\0';
+      snprintf (match + strlen (match), mn - strlen (match),
+                " AND (v.name LIKE ?%d ESCAPE '\\' OR IFNULL(o.make, '') LIKE ?%d ESCAPE '\\'"
+                " OR IFNULL(o.model, '') LIKE ?%d ESCAPE '\\' OR REPLACE(IFNULL(o.taken, ''), ':', '-') LIKE ?%d ESCAPE '\\'"
+                " OR IFNULL(o.taken, '') LIKE ?%d ESCAPE '\\'"
+                " OR (SELECT name FROM project WHERE id = v.project) LIKE ?%d ESCAPE '\\'"
+                " OR v.caption LIKE ?%d ESCAPE '\\'"
+                " OR EXISTS (SELECT 1 FROM version_keyword vk JOIN keyword k ON k.id = vk.keyword"
+                " WHERE vk.version = v.id AND k.name LIKE ?%d ESCAPE '\\'))",
+                p, p, p, p, p, p, p, p);
+      nw++;
+    }
+  return nw;
+}
+
 int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
 {
-  char sql[1800];
+  char sql[6000];
   const char *where;
   sqlite3_stmt *s;
-  int n = 0, cap = 256;
+  int n = 0, cap = 256, smart = 0, min_rating = src->min_rating;
   cat_item *a;
+  cat_rule rule;
+  if (src->kind == SRC_ALBUM && (smart = cat_smart_get (c, src->id, &rule)) < 0)
+    return -1;
   switch (src->kind)
     {
     case SRC_FLAGGED:     where = "v.flag = 1 AND v.rating >= ?2"; break;
     case SRC_REJECTED:    where = "v.rating = -1"; break;
     case SRC_LAST_IMPORT: where = "o.batch = (SELECT MAX(batch) FROM original) AND v.rating >= ?2"; break;
     case SRC_PROJECT:     where = "v.project = ?1 AND v.rating >= ?2"; break;
-    case SRC_ALBUM:       where = "v.id IN (SELECT version FROM album_item WHERE album = ?1) AND v.rating >= ?2"; break;
+    case SRC_ALBUM:       where = smart ? "v.rating >= ?2"
+                                        : "v.id IN (SELECT version FROM album_item WHERE album = ?1) AND v.rating >= ?2"; break;
     case SRC_MISSING:     where = "o.missing = 1 AND (v.rating >= ?2 OR v.rating = -1)"; break;
     default:              where = "v.rating >= ?2"; break;
     }
-  /* Search: up to four words, each as a pattern ?3.. that the name, the
-     camera, the date (as stored, or with - for :) or the project matches. */
-  char words[4][70], match[900];
+  /* Search: up to four words (?3..?6); a smart album's rule adds its own
+     words (up to ?10), and its other limits (?11, ?12 for the dates). */
+  char words[8][70], match[4800];
   int nw = 0, k;
-  {
-    const char *q = src->search;
-    match[0] = '\0';
-    while (*q && nw < 4)
-      {
-        size_t len = 0;
-        while (*q == ' ')
-          q++;
-        if (!*q)
-          break;
-        words[nw][0] = '%';
-        while (*q && *q != ' ' && len < 64)
-          {
-            char ch = *q++;
-            if (ch == '%' || ch == '_' || ch == '\\')
-              words[nw][1 + len++] = '\\';   /* LIKE's own characters, taken literally */
-            words[nw][1 + len++] = ch;
-          }
-        words[nw][1 + len] = '%';
-        words[nw][2 + len] = '\0';
-        snprintf (match + strlen (match), sizeof match - strlen (match),
-                  " AND (v.name LIKE ?%d ESCAPE '\\' OR IFNULL(o.make, '') LIKE ?%d ESCAPE '\\'"
-                  " OR IFNULL(o.model, '') LIKE ?%d ESCAPE '\\' OR REPLACE(IFNULL(o.taken, ''), ':', '-') LIKE ?%d ESCAPE '\\'"
-                  " OR IFNULL(o.taken, '') LIKE ?%d ESCAPE '\\'"
-                  " OR (SELECT name FROM project WHERE id = v.project) LIKE ?%d ESCAPE '\\')",
-                  3 + nw, 3 + nw, 3 + nw, 3 + nw, 3 + nw, 3 + nw);
-        nw++;
-      }
-  }
+  match[0] = '\0';
+  nw = add_words (src->search, words, 0, 4, match, sizeof match);
+  if (smart)
+    {
+      nw = add_words (rule.words, words, nw, 8, match, sizeof match);
+      if (rule.min_rating > min_rating)
+        min_rating = rule.min_rating;
+      if (rule.flagged)
+        strcat (match, " AND v.flag = 1");
+      if (rule.edited)
+        strcat (match, " AND v.recipe <> ''");
+      if (rule.from[0])
+        strcat (match, " AND REPLACE(SUBSTR(o.taken, 1, 10), ':', '-') >= ?11");
+      if (rule.to[0])
+        strcat (match, " AND REPLACE(SUBSTR(o.taken, 1, 10), ':', '-') <= ?12");
+    }
   snprintf (sql, sizeof sql,
             "SELECT v.id, v.name, v.rating, v.flag, v.thumb, o.filetype, v.recipe <> '', o.missing FROM version v"
             " JOIN original o ON o.id = v.original WHERE %s%s"
@@ -614,9 +687,13 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
   if (!s)
     return -1;
   sqlite3_bind_int64 (s, 1, src->id);
-  sqlite3_bind_int (s, 2, src->min_rating);
+  sqlite3_bind_int (s, 2, min_rating);
   for (k = 0; k < nw; k++)
     sqlite3_bind_text (s, 3 + k, words[k], -1, SQLITE_TRANSIENT);
+  if (smart && rule.from[0])
+    sqlite3_bind_text (s, 11, rule.from, -1, SQLITE_TRANSIENT);
+  if (smart && rule.to[0])
+    sqlite3_bind_text (s, 12, rule.to, -1, SQLITE_TRANSIENT);
   a = malloc (sizeof *a * cap);
   if (!a)
     {
@@ -840,7 +917,7 @@ int cat_groups (cat *c, int kind, cat_group **out, int *count)
   sqlite3_stmt *s = prep (c, kind == SRC_PROJECT
       ? "SELECT p.id, p.name, (SELECT COUNT(*) FROM version v WHERE v.project = p.id AND v.rating >= 0)"
         " FROM project p ORDER BY p.name COLLATE NOCASE"
-      : "SELECT a.id, a.name, (SELECT COUNT(*) FROM album_item i WHERE i.album = a.id)"
+      : "SELECT a.id, a.name, (SELECT COUNT(*) FROM album_item i WHERE i.album = a.id), a.smart IS NOT NULL"
         " FROM album a WHERE a.folder IS NULL ORDER BY a.name COLLATE NOCASE, a.id");
   int n = 0, cap = 32;
   cat_group *g;
@@ -860,9 +937,20 @@ int cat_groups (cat *c, int kind, cat_group **out, int *count)
       g[n].id = sqlite3_column_int64 (s, 0);
       snprintf (g[n].name, sizeof g[n].name, "%s", (const char *) sqlite3_column_text (s, 1));
       g[n].count = sqlite3_column_int (s, 2);
+      g[n].smart = kind == SRC_ALBUM && sqlite3_column_int (s, 3);
       n++;
     }
   sqlite3_finalize (s);
+  for (int k = 0; g && k < n; k++)
+    if (g[k].smart)
+      {
+        cat_source src = { SRC_ALBUM, g[k].id, 0, "" };
+        cat_item *it = NULL;
+        int m = 0;
+        if (cat_list (c, &src, &it, &m) == 0)
+          g[k].count = m;
+        free (it);
+      }
   *out = g;
   *count = n;
   return g ? 0 : -1;
@@ -1266,4 +1354,382 @@ int cat_album_is_folder (cat *c, cat_id album)
     r = sqlite3_column_int (s, 0);
   sqlite3_finalize (s);
   return r;
+}
+
+/* --- captions and keywords */
+
+int cat_set_caption (cat *c, const cat_id *v, int n, const char *caption)
+{
+  sqlite3_stmt *s = prep (c, "UPDATE version SET caption = ?2 WHERE id = ?1");
+  int i, rc = 0;
+  if (!s)
+    return -1;
+  for (i = 0; i < n && !rc; i++)
+    {
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, v[i]);
+      sqlite3_bind_text (s, 2, caption, -1, SQLITE_TRANSIENT);
+      if (sqlite3_step (s) != SQLITE_DONE)
+        rc = fail (c, "caption");
+    }
+  sqlite3_finalize (s);
+  return rc;
+}
+
+void cat_keyword_split (const char *list, void (*fn) (void *ctx, const char *kw), void *ctx)
+{
+  char seen[32][64];
+  int nseen = 0;
+  while (list && *list)
+    {
+      char kw[64];
+      size_t len = 0;
+      int k, dup = 0;
+      while (*list == ' ' || *list == ',' || *list == ';')
+        list++;
+      while (*list && *list != ',' && *list != ';')
+        {
+          unsigned char ch = (unsigned char) *list++;
+          if (len < sizeof kw - 1 && ch >= ' ')
+            kw[len++] = (char) ch;
+        }
+      while (len && kw[len - 1] == ' ')
+        len--;
+      kw[len] = '\0';
+      if (!len)
+        continue;
+      for (k = 0; k < nseen && !dup; k++)
+        dup = !strcasecmp (seen[k], kw);
+      if (dup)
+        continue;
+      if (nseen < 32)
+        memcpy (seen[nseen++], kw, len + 1);
+      fn (ctx, kw);
+    }
+}
+
+typedef struct { cat *c; const cat_id *v; int n, rc, add; } kw_job;
+
+static void kw_apply (void *ctx, const char *kw)
+{
+  kw_job *j = ctx;
+  sqlite3_stmt *s;
+  cat_id id = 0;
+  int i;
+  if (j->rc)
+    return;
+  if (j->add)
+    {
+      s = prep (j->c, "INSERT OR IGNORE INTO keyword (name) VALUES (?1)");
+      if (!s)
+        {
+          j->rc = -1;
+          return;
+        }
+      sqlite3_bind_text (s, 1, kw, -1, SQLITE_TRANSIENT);
+      sqlite3_step (s);
+      sqlite3_finalize (s);
+    }
+  s = prep (j->c, "SELECT id FROM keyword WHERE name = ?1");
+  if (!s)
+    {
+      j->rc = -1;
+      return;
+    }
+  sqlite3_bind_text (s, 1, kw, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    id = sqlite3_column_int64 (s, 0);
+  sqlite3_finalize (s);
+  if (!id)
+    return;                            /* taking away one nobody has */
+  s = prep (j->c, j->add ? "INSERT OR IGNORE INTO version_keyword (version, keyword) VALUES (?1, ?2)"
+                         : "DELETE FROM version_keyword WHERE version = ?1 AND keyword = ?2");
+  if (!s)
+    {
+      j->rc = -1;
+      return;
+    }
+  for (i = 0; i < j->n && !j->rc; i++)
+    {
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, j->v[i]);
+      sqlite3_bind_int64 (s, 2, id);
+      if (sqlite3_step (s) != SQLITE_DONE)
+        j->rc = fail (j->c, "keywords");
+    }
+  sqlite3_finalize (s);
+}
+
+static int keywords_change (cat *c, const cat_id *v, int n, const char *list, int add)
+{
+  kw_job j = { c, v, n, 0, add };
+  exec (c, "SAVEPOINT keywords");
+  cat_keyword_split (list, kw_apply, &j);
+  if (!j.rc && !add && exec (c, "DELETE FROM keyword WHERE id NOT IN (SELECT DISTINCT keyword FROM version_keyword)"))
+    j.rc = -1;
+  exec (c, j.rc ? "ROLLBACK TO keywords; RELEASE keywords" : "RELEASE keywords");
+  return j.rc;
+}
+
+int cat_add_keywords (cat *c, const cat_id *v, int n, const char *list)
+{
+  return keywords_change (c, v, n, list, 1);
+}
+
+int cat_remove_keywords (cat *c, const cat_id *v, int n, const char *list)
+{
+  return keywords_change (c, v, n, list, 0);
+}
+
+/* Appends name to a list ("a, b") in out. */
+static void list_add (char *out, size_t n, const char *name)
+{
+  size_t len = strlen (out);
+  snprintf (out + len, n - len, "%s%s", len ? ", " : "", name);
+}
+
+int cat_get_tags (cat *c, cat_id version, char *caption, size_t cn, char *keywords, size_t kn)
+{
+  return cat_common_tags (c, &version, 1, caption, cn, NULL, keywords, kn);
+}
+
+int cat_common_tags (cat *c, const cat_id *v, int n, char *caption, size_t cn, int *same,
+                     char *keywords, size_t kn)
+{
+  sqlite3_stmt *s, *t;
+  int i, all = 1;
+  if (caption && cn)
+    caption[0] = '\0';
+  if (keywords && kn)
+    keywords[0] = '\0';
+  if (same)
+    *same = 0;
+  if (n <= 0)
+    return 0;
+  s = prep (c, "SELECT caption FROM version WHERE id = ?1");
+  if (!s)
+    return -1;
+  for (i = 0; i < n; i++)
+    {
+      char cap[CAT_CAPTION_MAX];
+      sqlite3_reset (s);
+      sqlite3_bind_int64 (s, 1, v[i]);
+      cap[0] = '\0';
+      if (sqlite3_step (s) == SQLITE_ROW)
+        col_text (s, 0, cap, sizeof cap);
+      if (i == 0)
+        {
+          if (caption)
+            snprintf (caption, cn, "%s", cap);
+        }
+      else if (caption && strcmp (cap, caption))
+        all = 0;
+    }
+  sqlite3_finalize (s);
+  if (!all && caption)
+    caption[0] = '\0';
+  if (same)
+    *same = all;
+  if (!keywords)
+    return 0;
+  /* The first one's keywords that all the others have too. */
+  s = prep (c, "SELECT k.id, k.name FROM version_keyword vk JOIN keyword k ON k.id = vk.keyword"
+               " WHERE vk.version = ?1 ORDER BY k.name COLLATE NOCASE");
+  t = prep (c, "SELECT 1 FROM version_keyword WHERE version = ?1 AND keyword = ?2");
+  if (!s || !t)
+    {
+      sqlite3_finalize (s);
+      sqlite3_finalize (t);
+      return -1;
+    }
+  sqlite3_bind_int64 (s, 1, v[0]);
+  while (sqlite3_step (s) == SQLITE_ROW)
+    {
+      cat_id kw = sqlite3_column_int64 (s, 0);
+      char name[64];
+      int every = 1;
+      for (i = 1; i < n && every; i++)
+        {
+          sqlite3_reset (t);
+          sqlite3_bind_int64 (t, 1, v[i]);
+          sqlite3_bind_int64 (t, 2, kw);
+          every = sqlite3_step (t) == SQLITE_ROW;
+        }
+      if (every)
+        {
+          col_text (s, 1, name, sizeof name);
+          list_add (keywords, kn, name);
+        }
+    }
+  sqlite3_finalize (s);
+  sqlite3_finalize (t);
+  return 0;
+}
+
+int cat_keywords (cat *c, cat_keyword **out, int *count)
+{
+  sqlite3_stmt *s = prep (c, "SELECT k.name, COUNT(*) FROM keyword k JOIN version_keyword vk ON vk.keyword = k.id"
+                             " GROUP BY k.id ORDER BY k.name COLLATE NOCASE");
+  int n = 0, cap = 32;
+  cat_keyword *a;
+  *out = NULL;
+  *count = 0;
+  if (!s)
+    return -1;
+  a = malloc (sizeof *a * cap);
+  while (a && sqlite3_step (s) == SQLITE_ROW)
+    {
+      if (n == cap)
+        {
+          cat_keyword *b = realloc (a, sizeof *a * cap * 2);
+          if (!b)
+            break;
+          a = b;
+          cap *= 2;
+        }
+      col_text (s, 0, a[n].name, sizeof a[n].name);
+      a[n].count = sqlite3_column_int (s, 1);
+      n++;
+    }
+  sqlite3_finalize (s);
+  *out = a;
+  *count = n;
+  return a ? 0 : -1;
+}
+
+/* --- smart albums */
+
+void cat_rule_format (const cat_rule *r, char *out, size_t n)
+{
+  snprintf (out, n, "words=%s\nrating=%d\nflagged=%d\nedited=%d\nfrom=%s\nto=%s\n", r->words, r->min_rating,
+            r->flagged, r->edited, r->from, r->to);
+}
+
+void cat_rule_parse (const char *text, cat_rule *r)
+{
+  memset (r, 0, sizeof *r);
+  while (text && *text)
+    {
+      const char *eol = strchr (text, '\n'), *eq = strchr (text, '=');
+      size_t len = eol ? (size_t) (eol - text) : strlen (text);
+      if (eq && eq < text + len)
+        {
+          size_t kl = (size_t) (eq - text), vl = len - kl - 1;
+          char val[64];
+          if (vl >= sizeof val)
+            vl = sizeof val - 1;
+          memcpy (val, eq + 1, vl);
+          val[vl] = '\0';
+          if (kl == 5 && !strncmp (text, "words", 5))
+            snprintf (r->words, sizeof r->words, "%s", val);
+          else if (kl == 6 && !strncmp (text, "rating", 6))
+            r->min_rating = atoi (val) < 0 ? 0 : atoi (val) > 5 ? 5 : atoi (val);
+          else if (kl == 7 && !strncmp (text, "flagged", 7))
+            r->flagged = atoi (val) != 0;
+          else if (kl == 6 && !strncmp (text, "edited", 6))
+            r->edited = atoi (val) != 0;
+          else if (kl == 4 && !strncmp (text, "from", 4))
+            cat_date_normal (val, 0, r->from);
+          else if (kl == 2 && !strncmp (text, "to", 2))
+            cat_date_normal (val, 1, r->to);
+        }
+      text += len + (eol ? 1 : 0);
+    }
+}
+
+int cat_date_normal (const char *in, int end, char out[11])
+{
+  int part[3] = { 0, 0, 0 }, digits[3] = { 0, 0, 0 }, np = 0, y, m, d;
+  const char *p = in;
+  out[0] = '\0';
+  while (*p == ' ')
+    p++;
+  if (!*p)
+    return 0;
+  while (*p && np < 3)
+    {
+      if (!isdigit ((unsigned char) *p))
+        return -1;
+      while (isdigit ((unsigned char) *p))
+        {
+          if (digits[np] < 4)
+            part[np] = part[np] * 10 + (*p - '0');
+          digits[np]++;
+          p++;
+        }
+      np++;
+      if (*p == '-' || *p == '/' || *p == '.' || *p == ':')
+        p++;
+      else
+        break;
+    }
+  while (*p == ' ')
+    p++;
+  if (*p || !np)
+    return -1;
+  if (digits[0] == 4)                  /* year first: 2026, 2026-05, 2026-05-03 */
+    {
+      y = part[0];
+      m = np > 1 ? part[1] : end ? 12 : 1;
+      d = np > 2 ? part[2] : end ? 31 : 1;
+    }
+  else if (np == 3 && digits[2] == 4)  /* day first, as written in Britain: 3/5/2026 */
+    {
+      d = part[0];
+      m = part[1];
+      y = part[2];
+    }
+  else if (np == 2 && digits[1] == 4)  /* 5/2026 */
+    {
+      m = part[0];
+      y = part[1];
+      d = end ? 31 : 1;
+    }
+  else
+    return -1;
+  if (y < 1800 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31)
+    return -1;
+  snprintf (out, 11, "%04d-%02d-%02d", y, m, d);
+  return 0;
+}
+
+cat_id cat_smart_create (cat *c, const char *name, const cat_rule *r)
+{
+  cat_id id = cat_album_create (c, name);
+  if (id > 0 && cat_smart_set (c, id, r))
+    return -1;
+  return id;
+}
+
+int cat_smart_get (cat *c, cat_id album, cat_rule *r)
+{
+  sqlite3_stmt *s = prep (c, "SELECT smart FROM album WHERE id = ?1");
+  int found = 0;
+  memset (r, 0, sizeof *r);
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, album);
+  if (sqlite3_step (s) == SQLITE_ROW && sqlite3_column_type (s, 0) != SQLITE_NULL)
+    {
+      cat_rule_parse ((const char *) sqlite3_column_text (s, 0), r);
+      found = 1;
+    }
+  sqlite3_finalize (s);
+  return found;
+}
+
+int cat_smart_set (cat *c, cat_id album, const cat_rule *r)
+{
+  char text[256];
+  sqlite3_stmt *s = prep (c, "UPDATE album SET smart = ?2 WHERE id = ?1");
+  int rc = 0;
+  if (!s)
+    return -1;
+  cat_rule_format (r, text, sizeof text);
+  sqlite3_bind_int64 (s, 1, album);
+  sqlite3_bind_text (s, 2, text, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    rc = fail (c, "smart album");
+  sqlite3_finalize (s);
+  return rc;
 }

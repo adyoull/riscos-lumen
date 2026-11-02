@@ -268,6 +268,7 @@ void mainwin_inspector_extent (int h);
 void mainwin_force_inspector (int x0, int y0, int x1, int y1);
 void mainwin_library_changed (void);
 void mainwin_info_changed (void);
+const char *mainwin_info_text (void);   /* its rows as text, for the tests */
 void mainwin_status_changed (void);   /* the bottom bar: counts */
 int mainwin_search_icon (void);
 /* What a screen point (and icon) is over, for interactive help: MW_TOOLBAR + the button
@@ -376,6 +377,30 @@ int printbox_create (void);
 int printbox_window (void);
 void printbox_open (int from_viewer, int x, int y);
 const char *printbox_info (void);
+/* tagbox.c: the Caption and keywords window. */
+int tagbox_create (void);
+int tagbox_window (void);
+int tagbox_is_open (void);
+void tagbox_open (int from_viewer, int x, int y);       /* the selection, or the Viewer's photo */
+void tagbox_open_ids (const cat_id *ids, int n, int x, int y);
+void tagbox_click (int *b);
+int tagbox_key (int key);
+void tagbox_closed (void);
+void tagbox_add_keyword (const char *kw);               /* chosen from the keyword menu */
+const char *tagbox_caption_text (void);
+const char *tagbox_keywords_text (void);
+const char *tagbox_note (void);
+void tagbox_set_texts (const char *caption, const char *keywords);
+/* smartbox.c: the Smart album window (album 0: a new one). */
+int smartbox_create (void);
+int smartbox_window (void);
+int smartbox_is_open (void);
+void smartbox_open (cat_id album, int x, int y);
+void smartbox_click (int *b);
+int smartbox_key (int key);
+void smartbox_closed (void);
+const char *smartbox_note (void);
+void smartbox_set_texts (const char *name, const char *words, const char *from, const char *to);
 void printbox_click (int *b);
 int printbox_key (int key);
 int printbox_busy (void);
@@ -399,6 +424,7 @@ void menus_open_presets_menu (int x, int y);
 void menus_open_new_menu (int x, int y);
 void menus_open_rating_menu (int x, int y);
 void menus_open_group_menu (int x, int y, int kind, cat_id id);   /* a project or album in the Library tab */
+void menus_open_keyword_menu (int x, int y);   /* the keywords in use, for the Caption and keywords window */
 int menus_selection (const int *choice);   /* 1: quit */
 /* Help for the menu item under the pointer, NULL if window isn't one of Lumen's menus. */
 const char *menus_help (int window, int icon);

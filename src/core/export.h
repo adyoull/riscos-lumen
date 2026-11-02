@@ -42,6 +42,8 @@ exporter *export_start (const char *src, int src_w, int src_h, int orientation,
 /* What the library knows of the photo (camera, date, exposure): the EXIF
    written when the original has none of its own to copy (exifout.h). */
 void export_set_known (exporter *e, const img_info *known);
+/* The photo's caption and keywords ("a, b"), written as XMP (xmp.h). */
+void export_set_tags (exporter *e, const char *caption, const char *keywords);
 /* Does up to rows rows of work. 0: more to do; 1: written; -1: failed. */
 int export_step (exporter *e, int rows);
 int export_progress (const exporter *e);   /* 0-100 */

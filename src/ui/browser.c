@@ -755,6 +755,12 @@ int browser_key (int key)
       if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
         exportbox_open (0, ptr[0], ptr[1]);
     }
+  else if (key == 0x0B)                /* Ctrl-K: caption and keywords */
+    {
+      int ptr[5];
+      if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+        tagbox_open (0, ptr[0], ptr[1]);
+    }
   else if (key == 0x10)                /* Ctrl-P: print */
     {
       int ptr[5];

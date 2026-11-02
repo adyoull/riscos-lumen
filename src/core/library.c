@@ -6,6 +6,7 @@
 #include "exif.h"
 #include "fsys.h"
 #include "library.h"
+#include "xmp.h"
 #include "thumbgen.h"
 #include "develop.h"
 
@@ -421,6 +422,9 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       fclose (f);
       return;
     }
+  /* A caption and keywords given elsewhere (an XMP packet near the start). */
+  char xcap[CAT_CAPTION_MAX], xkw[CAT_KEYWORDS_MAX];
+  xmp_read (l->head, got, xcap, sizeof xcap, xkw, sizeof xkw);
   /* Content hash: the size, the first 64 KB and the last 64 KB. */
   h = fnv (h, (const unsigned char *) &e->size, sizeof e->size);
   h = fnv (h, l->head, got < HASH_BYTES ? got : HASH_BYTES);
@@ -454,6 +458,10 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   v = cat_add_original (l->db, l->project, &o, &existing);
   if (v > 0)
     {
+      if (xcap[0])
+        cat_set_caption (l->db, &v, 1, xcap);
+      if (xkw[0])
+        cat_add_keywords (l->db, &v, 1, xkw);
       l->added++;
       if (l->thumbs_pending >= 0)
         l->thumbs_pending++;

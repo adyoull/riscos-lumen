@@ -13,6 +13,7 @@
 #include "../src/core/resample.h"
 #include "../src/core/sharpen.h"
 #include "../src/core/export.h"
+#include "../src/core/xmp.h"
 #include "../src/core/exifout.h"
 #include <png.h>
 #include "../src/core/fsys.h"
@@ -1405,6 +1406,54 @@ static void test_export_options (const char *work)
   CHECK (read_back (dst, &back) == 0 && back.w == 200 && back.h == 150, "written 200x150");
   free (back.rgb);
   o.box_w = o.box_h = 0;
+
+  /* Caption and keywords: written as XMP in a JPEG and a PNG, read back. */
+  {
+    static const char *const ext[2] = { "jpg", "png" };
+    int fmt;
+    char xbuf[XMP_MAX];
+    CHECK (xmp_packet ("", " , ", xbuf, sizeof xbuf) == 0, "no caption or keywords: no packet");
+    CHECK (xmp_packet ("Tom & Jerry <at> \"home\"", "a, b", xbuf, 100) == 0, "too big for the space: none");
+    for (fmt = 0; fmt < 2; fmt++)
+      {
+        unsigned char *buf = malloc (1 << 20);
+        size_t got;
+        char cap[512], kw[1024], what[80];
+        o.format = fmt ? EXPORT_PNG : EXPORT_JPEG;
+        snprintf (dst, sizeof dst, "%s/opts-tags.%s", work, ext[fmt]);
+        e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+        export_set_tags (e, "Tom & Jerry <at> \"home\"", "Fells, Derwent Water, fells, rain; boats");
+        run_export (e);
+        export_free (e);
+        f = fopen (dst, "rb");
+        got = f && buf ? fread (buf, 1, 1 << 20, f) : 0;
+        if (f)
+          fclose (f);
+        snprintf (what, sizeof what, "%s: the caption, its & < and \" kept", ext[fmt]);
+        CHECK (got && xmp_read (buf, got, cap, sizeof cap, kw, sizeof kw) == 1 && !strcmp (cap, "Tom & Jerry <at> \"home\""), what);
+        snprintf (what, sizeof what, "%s: the keywords, one of each", ext[fmt]);
+        CHECK (!strcmp (kw, "Fells, Derwent Water, rain, boats"), what);
+        if (fmt == 0)
+          CHECK (got > 40 && memmem (buf, 4096, "http://ns.adobe.com/xap/1.0/", 29) != NULL, "jpg: in APP1 with the XMP namespace");
+        else
+          CHECK (memmem (buf, got, "iTXtXML:com.adobe.xmp", 21) != NULL, "png: in an iTXt chunk");
+        free (buf);
+      }
+    o.format = EXPORT_JPEG;
+    {
+      /* As other programs write it: a simple description, attributes on the items. */
+      static const char other[] =
+        "junk<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF><rdf:Description>"
+        "<dc:subject><rdf:Bag><rdf:li>Lake, District</rdf:li><rdf:li/><rdf:li xml:lang='en'> Swans </rdf:li></rdf:Bag></dc:subject>"
+        "<dc:description>A   swan\n on&apos;the lake</dc:description></rdf:Description></rdf:RDF></x:xmpmeta>";
+      char cap[512], kw[1024];
+      CHECK (xmp_read ((const unsigned char *) other, sizeof other - 1, cap, sizeof cap, kw, sizeof kw) == 1
+             && !strcmp (kw, "Lake  District, Swans") && !strcmp (cap, "A swan on'the lake"),
+             "XMP as others write it: keywords (a comma inside one goes), a plain description");
+      CHECK (xmp_read ((const unsigned char *) "no packet here", 14, cap, sizeof cap, kw, sizeof kw) == 0 && !cap[0] && !kw[0],
+             "no packet: nothing");
+    }
+  }
 
   /* Colour spaces: the file says what it is, and Lumen reading it back
      (converting to sRGB) gets the colours it started with. */

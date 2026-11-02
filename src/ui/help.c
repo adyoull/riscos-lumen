@@ -143,6 +143,31 @@ const char *help_text (int window, int icon, int x, int y)
       case 16: return "Prints. The photos are prepared in the background first (the bottom bar shows how far it has got).";
       default: return "Prints photos, one to a page.";
       }
+  if (window == tagbox_window ())
+    switch (icon)
+      {
+      case 1: return "A line about the photo. It goes into exported files (as XMP), and search finds it.";
+      case 3: return "Words or short phrases, with commas between: places, people, subjects. Search and smart albums find them; "
+                     "exports carry them.";
+      case 4: return "The keywords already in the library: choose one to add it.";
+      case 6: return "Closes the window without changing anything.";
+      case 7: return "Saves the caption and keywords. For several photos: the caption goes to all of them if you changed it, "
+                     "and the keywords are added to all.";
+      default: return "The caption and keywords of the photo, or the photos selected.";
+      }
+  if (window == smartbox_window ())
+    switch (icon)
+      {
+      case 1: return "The album's name, in the Library tab.";
+      case 3: return "Words the photos must all match: in the name, caption, keywords, camera, project or date. Empty: any.";
+      case 6: case 7: case 8: case 9: case 10: case 11: return "The lowest rating a photo may have to be in the album.";
+      case 12: return "Ticked: only flagged photos.";
+      case 13: return "Ticked: only photos with adjustments.";
+      case 15: case 17: return "The dates the photos were taken between, such as 2026, 2026-06 or 16/6/2026. Empty: no limit.";
+      case 20: return "Closes the window without changing anything.";
+      case 21: return "Makes the album (or saves the change). It keeps up as photos change.";
+      default: return "A smart album gathers the photos that match what you choose here.";
+      }
   if (window == activitywin_window ())
     return activitywin_part_at (x, y) ? "Clears the list of what Lumen has done (the file in Lumen's Choices too)."
                                       : "What Lumen is doing now, each with how far it has got, and what it has "

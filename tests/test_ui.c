@@ -32,6 +32,8 @@
 #define CHOICEW 0x31000
 #define ACTW 0x32000
 #define PRINTW 0x33000
+#define TAGW 0x34000
+#define SMARTW 0x35000
 #define FILER 0x9000
 #define TASK 0x1234
 
@@ -61,6 +63,8 @@ static char started[300];               /* the last Wimp_StartTask command */
 static int other_lumen;
 static int menu_state[4] = { -1, -1, -1, -1 };   /* what Wimp_GetMenuState 1 reports */
 static int getmenustate0, submenu_opened;
+static unsigned smart_icon_flags[32];   /* the Smart album window's */
+static int tagw_open, smartw_open;
 static unsigned choice_icon_flags[32];  /* the Choices window's icons' state (bit 21: selected) */                /* a task handle the fake Task Manager lists as another Lumen */
 
 /* TaskManager_EnumerateTasks: ourselves, a LumenRaw task window, a module
@@ -147,6 +151,10 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         r[0] = ACTW;
       else if (nwindows == 9)
         r[0] = PRINTW;
+      else if (nwindows == 10)
+        r[0] = TAGW;
+      else if (nwindows == 11)
+        r[0] = SMARTW;
       else
         r[0] = INFO;
       return NULL;
@@ -169,6 +177,10 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         memcpy (iopened, b, sizeof iopened);
       else if (b[0] == PLUGW)
         plugw_opens++;
+      else if (b[0] == TAGW)
+        tagw_open = 1;
+      else if (b[0] == SMARTW)
+        smartw_open = 1;
       else if (b[0] == BROWSER)
         {
           memcpy (opened, b, sizeof opened);
@@ -183,7 +195,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_GetWindowState:
       CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP
-             || b[0] == PLUGW || b[0] == CHOICEW || b[0] == ACTW || b[0] == PRINTW, "window state: one of ours");
+             || b[0] == PLUGW || b[0] == CHOICEW || b[0] == ACTW || b[0] == PRINTW || b[0] == TAGW || b[0] == SMARTW,
+             "window state: one of ours");
       if (b[0] == EXPORTW)
         {
           b[1] = 600; b[2] = 400; b[3] = 1320; b[4] = 860; b[5] = 0; b[6] = 0;
@@ -195,11 +208,18 @@ static const _kernel_oserror *wimp (int swi, int r[10])
     case Wimp_SetIconState:
       if (b[0] == CHOICEW && b[1] >= 0 && b[1] < 32)
         choice_icon_flags[b[1]] = (choice_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
+      if (b[0] == SMARTW && b[1] >= 0 && b[1] < 32)
+        smart_icon_flags[b[1]] = (smart_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
       return NULL;
     case Wimp_GetIconState:
       if (b[0] == PRINTW)
         {
           b[6] = (int) (b[1] == 12 ? print_turn : b[1] == 13 ? print_sharpen : 0);
+          return NULL;
+        }
+      if (b[0] == SMARTW)
+        {
+          b[6] = b[1] >= 0 && b[1] < 32 ? (int) smart_icon_flags[b[1]] : 0;
           return NULL;
         }
       CHECK (b[0] == CHOICEW, "icon state: the Choices window's");
@@ -553,6 +573,16 @@ static void key (int k)
   app_event (Key_Pressed, b, 0);
 }
 
+/* A key typed into one of our windows (not the caret's). */
+static void key_in (int w, int k)
+{
+  int b[64] = { 0 };
+  b[0] = w;
+  b[1] = -1;
+  b[6] = k;
+  app_event (Key_Pressed, b, 0);
+}
+
 /* Menu block helpers: a 28-byte header, then 24-byte items. */
 static const int *item (const int *menu, int i) { return menu + 7 + 6 * i; }
 static const char *item_text (const int *menu, int i) { return (const char *) item (menu, i)[3]; }
@@ -642,7 +672,8 @@ int main (int argc, char **argv)
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 10, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity, Print and Info windows");
+  CHECK (nwindows == 12, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity, Print, "
+                        "Caption and keywords, Smart album and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
   CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
@@ -1256,14 +1287,14 @@ int main (int argc, char **argv)
       /* Selection > Apply preset > Bright, on photo 3. */
       browser_focus_on (2);
       click (16 + 352 + 60, -16 - 60, Button_Menu);
-      CHECK (strstr (item_text (submenu (menu_open, 1), 7), "Apply preset") != NULL, "Selection > Apply preset");
-      choose (1, 7, 1);
+      CHECK (strstr (item_text (submenu (menu_open, 1), 8), "Apply preset") != NULL, "Selection > Apply preset");
+      choose (1, 8, 1);
       browser_item (2, &it2);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "exposure") != NULL, "photo 3 gets Bright");
       browser_focus_on (3);
       click (16 + 352 + 60, -16 - 60, Button_Menu);
-      choose4 (1, 7, 0, 12);             /* Apply preset > Styles > Cyanotype */
+      choose4 (1, 8, 0, 12);             /* Apply preset > Styles > Cyanotype */
       browser_item (3, &it2);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "tone shadow_hue=212") != NULL && strstr (text, "saturation=-100") != NULL,
@@ -1432,6 +1463,133 @@ int main (int argc, char **argv)
       eb[3] = EXPORTW;
       CHECK ((intptr_t) menu_open != PRINTW && !printbox_busy (), "Cancel: nothing printed");
       printer_colour = 1;
+      /* Caption and keywords: Ctrl-K on two photos. */
+      {
+        cat_id *two;
+        char cap[512], kw[1024], says[40];
+        int k2, nall;
+        browser_select_all (1);
+        nall = browser_selection (&two);
+        CHECK (nall >= 2, "the photos selected");
+        cat_add_keywords (lib_cat (app_library ()), &two[1], 1, "Ferry");   /* only the second has it */
+        caret_window = BROWSER;
+        tagw_open = 0;
+        key (0x0B);
+        snprintf (says, sizeof says, "%d photos", nall);
+        CHECK (tagw_open && tagbox_is_open () && strstr (tagbox_note (), says) != NULL && !tagbox_keywords_text ()[0],
+               "Ctrl-K: the Caption and keywords window, for them all (Ferry isn't shown: only one has it)");
+        tagbox_set_texts ("Derwentwater from Friar's Crag", "Lakes, Keswick, lakes");
+        eb[3] = TAGW;
+        eb[4] = 7; app_event (Mouse_Click, eb, 0);                 /* Save */
+        eb[3] = EXPORTW;
+        cat_get_tags (lib_cat (app_library ()), two[0], cap, sizeof cap, kw, sizeof kw);
+        CHECK (!tagbox_is_open () && !strcmp (cap, "Derwentwater from Friar's Crag") && !strcmp (kw, "Keswick, Lakes"),
+               "saved: the caption, two keywords (lakes only once)");
+        cat_get_tags (lib_cat (app_library ()), two[1], cap, sizeof cap, kw, sizeof kw);
+        CHECK (!strcmp (kw, "Ferry, Keswick, Lakes"), "and the second keeps its own Ferry too");
+        /* Again: Lakes taken out of the list goes from both; Ferry stays. */
+        caret_window = BROWSER;
+        key (0x0B);
+        CHECK (!strcmp (tagbox_caption_text (), "Derwentwater from Friar's Crag") && !strcmp (tagbox_keywords_text (), "Keswick, Lakes"),
+               "opened again: the caption they share and the keywords both have");
+        tagbox_set_texts ("Derwentwater from Friar's Crag", "Keswick");
+        /* The keyword menu: the ones in the library; choosing one adds it. */
+        eb[3] = TAGW;
+        eb[4] = 4; app_event (Mouse_Click, eb, 0);
+        eb[3] = EXPORTW;
+        CHECK (menu_open && strncmp ((const char *) menu_open, "Keywords", 8) == 0
+               && !strcmp (item_text (menu_open, 0), "Ferry") && !strcmp (item_text (menu_open, 2), "Lakes"),
+               "the keyword menu lists the library's keywords");
+        choose (0, -1, -1);
+        CHECK (!strcmp (tagbox_keywords_text (), "Keswick, Ferry"), "Ferry chosen: added to the list");
+        key_in (TAGW, KEY_RETURN);
+        cat_get_tags (lib_cat (app_library ()), two[0], cap, sizeof cap, kw, sizeof kw);
+        CHECK (!strcmp (kw, "Ferry, Keswick"), "Return saves: Lakes gone, Ferry added to the first");
+        /* Search finds them; the Info tab shows them. */
+        mainwin_set_search ("crag");
+        CHECK (browser_count () == nall, "search finds the caption");
+        mainwin_set_search ("");
+        mainwin_set_tab (TAB_INFO);
+        browser_focus_on (0);
+        mainwin_info_changed ();
+        CHECK (strstr (mainwin_info_text (), "Caption: Derwentwater from Friar's Crag") != NULL
+               && strstr (mainwin_info_text (), "Keywords: Ferry, Keswick") != NULL, "the Info tab shows them");
+        mainwin_set_tab (TAB_LIBRARY);
+        /* A smart album from New: the keyword Ferry, any rating. */
+        browser_select_all (0);
+        menus_open_new_menu (600, 600);
+        CHECK (strstr (item_text (menu_open, 2), "Smart album") != NULL, "New > Smart album...");
+        smartw_open = 0;
+        choose (2, -1, -1);
+        CHECK (smartw_open && smartbox_is_open (), "the Smart album window opens");
+        smartbox_set_texts ("Ferries", "ferry", "2026-13", "");
+        key_in (SMARTW, KEY_RETURN);
+        CHECK (smartbox_is_open () && strstr (smartbox_note (), "date") != NULL, "a date it can't read: it says so, stays open");
+        smartbox_set_texts ("Ferries", "ferry", "", "");
+        key_in (SMARTW, KEY_RETURN);
+        CHECK (!smartbox_is_open () && browser_source ()->kind == SRC_ALBUM && browser_count () == nall,
+               "Create: the album shows those with Ferry");
+        {
+          cat_group *g2;
+          int ng2, found = 0;
+          cat_id smart = browser_source ()->id;
+          cat_groups (lib_cat (app_library ()), SRC_ALBUM, &g2, &ng2);
+          for (k2 = 0; k2 < ng2; k2++)
+            if (g2[k2].id == smart && g2[k2].smart && g2[k2].count == nall && !strcmp (g2[k2].name, "Ferries"))
+              found = 1;
+          CHECK (found, "listed in the Library tab as a smart album, with its count");
+          free (g2);
+          /* Its own menu: Edit smart album...; the window shows its rule. */
+          menus_open_group_menu (500, 500, SRC_ALBUM, smart);
+          CHECK (!strncmp ((const char *) menu_open, "Smart album", 11) && strstr (item_text (menu_open, 2), "Edit smart album") != NULL,
+                 "its menu: Edit smart album...");
+          choose (2, -1, -1);
+          CHECK (smartbox_is_open (), "the window opens for it");
+          /* Only flagged: none now. */
+          smart_icon_flags[12] = 1u << 21;
+          key_in (SMARTW, KEY_RETURN);
+          {
+            cat_source fl = { SRC_FLAGGED, 0, 0, "ferry" };
+            cat_item *fi;
+            int nfl = -1;
+            cat_list (lib_cat (app_library ()), &fl, &fi, &nfl);
+            free (fi);
+            CHECK (browser_count () == nfl && nfl < nall, "flagged only: just the flagged ones");
+          }
+          {
+            cat_rule rr;
+            CHECK (cat_smart_get (lib_cat (app_library ()), smart, &rr) == 1 && rr.flagged && !strcmp (rr.words, "ferry"),
+                   "the rule saved");
+          }
+          smart_icon_flags[12] = 0;
+          /* Photos can't be added to it by hand: shaded in Album > Add selection to. */
+          browser_select_all (1);
+          click (5, -5, Button_Menu);
+          {
+            const int *addto = submenu (submenu (menu_open, 2), 1);
+            int shaded = 0;
+            for (k2 = 0; k2 < 48; k2++)
+              {
+                if (strstr (item_text (addto, k2), "Ferries") && (item (addto, k2)[2] & 0x00400000))
+                  shaded = 1;
+                if (item (addto, k2)[0] & 0x80)   /* the last */
+                  break;
+              }
+            CHECK (shaded, "Album > Add selection to: the smart album is shaded");
+            CHECK (strstr (item_text (submenu (menu_open, 2), 3), "New smart album") != NULL, "Album > New smart album...");
+          }
+          choose (-1, -1, -1);
+          browser_select_all (0);
+          cat_album_delete (lib_cat (app_library ()), smart);
+          {
+            cat_source alls = { SRC_ALL, 0, 0, "" };
+            browser_set_source (&alls);
+          }
+        }
+        cat_set_caption (lib_cat (app_library ()), two, nall, "");
+        cat_remove_keywords (lib_cat (app_library ()), two, nall, "Ferry, Keswick");
+        free (two);
+      }
       /* No printer driver: says what to do. */
       have_printer = 0;
       reported[0] = '\0';
@@ -1486,9 +1644,10 @@ int main (int argc, char **argv)
     b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
-    CHECK (strstr (item_text (menu_open, 15), "Print...") != NULL, "Photo menu: Print...");
-    CHECK (strstr (item_text (menu_open, 16), "Back to the Browser") != NULL, "Back to the Browser");
-    choose (16, -1, -1);
+    CHECK (strstr (item_text (menu_open, 14), "Caption and keywords") != NULL, "Photo menu: Caption and keywords...");
+    CHECK (strstr (item_text (menu_open, 16), "Print...") != NULL, "Photo menu: Print...");
+    CHECK (strstr (item_text (menu_open, 17), "Back to the Browser") != NULL, "Back to the Browser");
+    choose (17, -1, -1);
     CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
     {
       /* Undo and Redo shaded in the Browser: the toolbar draws them grey and a click does nothing. */
@@ -1756,9 +1915,9 @@ int main (int argc, char **argv)
     browser_focus_on (0);
     click (16 + 352 + 60, -16 - 60, Button_Adjust);      /* add the second photo (Large thumbnails) */
     click (5, -5, Button_Menu);
-    CHECK (strstr (item_text (submenu (menu_open, 1), 10), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 9), "Print") != NULL, "Selection > Print..., Remove from library");
+    CHECK (strstr (item_text (submenu (menu_open, 1), 11), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 10), "Print") != NULL, "Selection > Print..., Remove from library");
     asked[0] = '\0';
-    choose (1, 10, -1);
+    choose (1, 11, -1);
     CHECK (strstr (asked, "these 2 photos") != NULL, "it asks about the two");
     CHECK (browser_count () == before - 3 && viewer_item () == 0, "both gone, and the Viewer let its photo go");
 

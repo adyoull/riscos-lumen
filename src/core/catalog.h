@@ -118,8 +118,9 @@ int cat_album_delete (cat *c, cat_id album);
    message in cat_error, if taken or empty). */
 int cat_group_rename (cat *c, int kind, cat_id id, const char *name);
 
-typedef struct { cat_id id; char name[64]; int count; } cat_group;
-/* Projects (kind SRC_PROJECT) or albums (SRC_ALBUM, your own, not folder albums), sorted by name. */
+typedef struct { cat_id id; char name[64]; int count; int smart; } cat_group;
+/* Projects (kind SRC_PROJECT) or albums (SRC_ALBUM, your own, not folder
+   albums; smart ones with their count of photos now), sorted by name. */
 int cat_groups (cat *c, int kind, cat_group **out, int *count);
 /* Name of a project or album, or "" */
 void cat_group_name (cat *c, int kind, cat_id id, char *out, size_t n);
@@ -149,6 +150,49 @@ int cat_sync_all_folder_albums (cat *c);
 typedef struct { cat_id id; char name[64]; int count, depth; } cat_folder;
 int cat_folder_albums (cat *c, cat_id project, cat_folder **out, int *count);
 int cat_album_is_folder (cat *c, cat_id album);   /* made from a folder (not edited by hand) */
+
+/* --- Captions and keywords (schema 4). A caption is a line of text about
+   the photo; keywords are words or short phrases (any case kept, matched
+   without it), given as a list separated by commas. */
+#define CAT_CAPTION_MAX 512
+#define CAT_KEYWORDS_MAX 1024
+int cat_set_caption (cat *c, const cat_id *versions, int n, const char *caption);
+/* Adds or takes away the keywords in list (commas between) for each version. */
+int cat_add_keywords (cat *c, const cat_id *versions, int n, const char *list);
+int cat_remove_keywords (cat *c, const cat_id *versions, int n, const char *list);
+/* A version's caption and keywords ("a, b, c", sorted). 0 on success. */
+int cat_get_tags (cat *c, cat_id version, char *caption, size_t cn, char *keywords, size_t kn);
+/* The keywords every one of the versions has, and the caption if all have
+   the same one (*same 1; else "" and 0). */
+int cat_common_tags (cat *c, const cat_id *versions, int n, char *caption, size_t cn, int *same,
+                     char *keywords, size_t kn);
+/* All the keywords in use, with how many photos have each (malloc'd), by name. */
+typedef struct { char name[64]; int count; } cat_keyword;
+int cat_keywords (cat *c, cat_keyword **out, int *count);
+/* Splits a keyword list: calls fn for each keyword, trimmed, without
+   duplicates (ignoring case), at most 63 characters each. */
+void cat_keyword_split (const char *list, void (*fn) (void *ctx, const char *kw), void *ctx);
+
+/* --- Smart albums: an album whose photos are the ones that match its rule
+   now, kept up to date as photos change. */
+typedef struct
+{
+  char words[64];              /* all must match name, camera, date, project, caption or a keyword */
+  int min_rating;              /* 0-5 */
+  int flagged;                 /* only flagged photos */
+  int edited;                  /* only adjusted ones */
+  char from[11], to[11];       /* taken from / to, YYYY-MM-DD ("" for no limit) */
+} cat_rule;
+cat_id cat_smart_create (cat *c, const char *name, const cat_rule *r);
+/* 1 and its rule if the album is smart, 0 if not, -1 on error. */
+int cat_smart_get (cat *c, cat_id album, cat_rule *r);
+int cat_smart_set (cat *c, cat_id album, const cat_rule *r);
+/* The rule as text, and back (unknown lines ignored). */
+void cat_rule_format (const cat_rule *r, char *out, size_t n);
+void cat_rule_parse (const char *text, cat_rule *r);
+/* A date as YYYY-MM-DD from what was typed (2026-5-3, 3/5/2026, 2026): 0 if
+   it makes one ("" stays ""); with end set, a bare year or month means its end. */
+int cat_date_normal (const char *in, int end, char out[11]);
 
 /* Details for the info line and tests. */
 typedef struct

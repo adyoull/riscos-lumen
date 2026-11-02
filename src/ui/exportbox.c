@@ -429,6 +429,11 @@ void exports_idle (unsigned deadline)
               known.focal = d.focal;
               known.iso = d.iso;
               export_set_known (cur, &known);
+              {
+                char cap[CAT_CAPTION_MAX], kw[CAT_KEYWORDS_MAX];
+                if (cat_get_tags (lib_cat (app_library ()), jobs[ijob].id, cap, sizeof cap, kw, sizeof kw) == 0)
+                  export_set_tags (cur, cap, kw);
+              }
             }
           if (!cur)
             {

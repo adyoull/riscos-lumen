@@ -29,6 +29,10 @@ static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40];
 static int export_after_menu, print_after_menu;
+static int tags_after_menu;            /* 1: the selection's caption and keywords, 2: the Viewer's photo */
+static int smart_after_menu;           /* open the Smart album window: 1 a new one, 2 the group menu's album */
+static cat_keyword *keywords;          /* the keyword menu's list */
+static int nkeywords;
 static int remove_after_menu;          /* ask about removing once the menu has gone */
 static int plugin_remove_after_menu;   /* 1 + the plug-in to ask about removing */
 static int plugwin_after_menu;         /* open the Add plug-in window once the menu has gone */
@@ -328,31 +332,42 @@ static menu *build_window_menu (void)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
   npresets = looks_presets (&presets);
   apply = apply_menu (nsel == 0);
-  selm = new_menu ("Selection", 11);
+  selm = new_menu ("Selection", 12);
   if (selm)
     {
       set_item (selm, 0, 0, "Rating", 0, (int) rating, nsel == 0);
       set_item (selm, 1, 0, "Flag / unflag      /", 0, -1, nsel == 0);
-      set_item (selm, 2, 0, "Reject      9", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, 3, 0, "Select all      ^A", 0, -1, browser_count () == 0);
-      set_item (selm, 4, 0, "Clear selection      Esc", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, 5, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
-      set_item (selm, 6, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
-      set_item (selm, 7, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0);
-      set_item (selm, 8, 0, "Export...      ^E", 0, -1, nsel == 0);
-      set_item (selm, 9, 0, "Print...      ^P", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, 10, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
+      set_item (selm, 2, 0, "Reject      9", 0, -1, nsel == 0);
+      set_item (selm, 3, 0, "Caption and keywords...      ^K", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, 4, 0, "Select all      ^A", 0, -1, browser_count () == 0);
+      set_item (selm, 5, 0, "Clear selection      Esc", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, 6, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
+      set_item (selm, 7, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
+      set_item (selm, 8, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0);
+      set_item (selm, 9, 0, "Export...      ^E", 0, -1, nsel == 0);
+      set_item (selm, 10, 0, "Print...      ^P", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, 11, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
     }
 
   newalbum = writable_menu ("Name", album_name, sizeof album_name);
   addto = group_menu ("Add to", albums, nalbums, -1, "No albums yet");
-  album = new_menu ("Album", 3);
-  if (album)
-    {
-      set_item (album, 0, 0, "New album from selection", 0, (int) newalbum, nsel == 0);
-      set_item (album, 1, 0, "Add selection to", 0, (int) addto, nsel == 0 || nalbums == 0);
-      set_item (album, 2, 1, "Remove from this album", 0, -1, nsel == 0 || s->kind != SRC_ALBUM);
-    }
+  for (k = 0; addto && k < nalbums && k < MAX_LIST; k++)
+    if (albums[k].smart)               /* a smart album gathers its own */
+      addto->it[k].icon_flags |= (int) IF_SHADED;
+  {
+    int in_smart = 0;
+    for (k = 0; k < nalbums; k++)
+      if (s->kind == SRC_ALBUM && albums[k].id == s->id && albums[k].smart)
+        in_smart = 1;
+    album = new_menu ("Album", 4);
+    if (album)
+      {
+        set_item (album, 0, 0, "New album from selection", 0, (int) newalbum, nsel == 0);
+        set_item (album, 1, 0, "Add selection to", 0, (int) addto, nsel == 0 || nalbums == 0);
+        set_item (album, 2, 0, "Remove from this album", MF_DOTTED, -1, nsel == 0 || s->kind != SRC_ALBUM || in_smart);
+        set_item (album, 3, 1, "New smart album...", 0, -1, 0);
+      }
+  }
 
   sizem = new_menu ("Size", 3);
   if (sizem)
@@ -378,7 +393,7 @@ static menu *build_window_menu (void)
 
 /* Photo > ... (the order menus_selection decodes) */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
-       VM_PRESETS, VM_COPY, VM_PASTE, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_TAGS, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
 
 /* --- styles shown as the pointer goes down the list
    The Styles item asks for Message_MenuWarning (&400C0, PRM p1017): Lumen
@@ -485,6 +500,7 @@ static menu *build_viewer_menu (void)
       set_item (m, VM_PRESETS, 0, "Presets", 0, (int) pre, 0);
       set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
       set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
+      set_item (m, VM_TAGS, 0, "Caption and keywords...      ^K", MF_DOTTED, -1, 0);
       set_item (m, VM_EXPORT, 0, "Export...      ^E", 0, -1, 0);
       set_item (m, VM_PRINT, 0, "Print...      ^P", MF_DOTTED, -1, 0);
       set_item (m, VM_BACK, 0, "Back to the Browser      Esc", MF_DOTTED, -1, 0);
@@ -599,11 +615,12 @@ static menu *build_new_menu (void)
   used = 0;
   from = writable_menu ("Name", album_name, sizeof album_name);
   empty = writable_menu ("Name", album_name, sizeof album_name);
-  m = new_menu ("New", 2);
+  m = new_menu ("New", 3);
   if (m)
     {
       set_item (m, 0, 0, "Album from selection", 0, (int) from, nsel == 0);
-      set_item (m, 1, 1, "Empty album", 0, (int) empty, 0);
+      set_item (m, 1, 0, "Empty album", 0, (int) empty, 0);
+      set_item (m, 2, 1, "Smart album...", 0, -1, 0);
     }
   return m;
 }
@@ -659,11 +676,15 @@ static menu *build_group_menu (void)
     }
   if (group_kind == SRC_ALBUM)
     {
-      m = new_menu ("Album", 2);
+      cat_rule r;
+      int smart = cat_smart_get (lib_cat (app_library ()), group_id, &r) == 1;
+      m = new_menu (smart ? "Smart album" : "Album", smart ? 3 : 2);
       if (m)
         {
           set_item (m, 0, 0, "Rename", 0, (int) ren, 0);
-          set_item (m, 1, 1, "Delete album...", 0, -1, 0);
+          set_item (m, 1, !smart, "Delete album...", 0, -1, 0);
+          if (smart)
+            set_item (m, 2, 1, "Edit smart album...", 0, -1, 0);
         }
       return m;
     }
@@ -698,6 +719,32 @@ void menus_open_group_menu (int x, int y, int kind, cat_id id)
     _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
 
+/* The keywords already in the library, to add one to the Caption and
+   keywords window's list. */
+void menus_open_keyword_menu (int x, int y)
+{
+  menu *m;
+  int k, count;
+  free (keywords);
+  keywords = NULL;
+  nkeywords = 0;
+  cat_keywords (lib_cat (app_library ()), &keywords, &nkeywords);
+  count = nkeywords > 64 ? 64 : nkeywords;
+  nkeywords = count;
+  used = 0;
+  m = new_menu ("Keywords", count ? count : 1);
+  if (!m)
+    return;
+  if (!count)
+    set_item (m, 0, 1, "None yet", 0, -1, 1);
+  for (k = 0; k < count; k++)
+    set_item (m, k, k == count - 1, keywords[k].name, 0, -1, 0);
+  which = 8;
+  open_x = x;
+  open_y = y;
+  _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
+}
+
 static void group_choice (const int *c)
 {
   cat *db = lib_cat (app_library ());
@@ -725,6 +772,8 @@ static void group_choice (const int *c)
       app_watch_now ();                /* look now (and count what is watched) */
       mainwin_library_changed ();
     }
+  else if (c[0] == 2 && group_kind == SRC_ALBUM)
+    smart_after_menu = 2;
   else if (c[0] == 1 && group_kind == SRC_ALBUM)
     {
       snprintf (q, sizeof q, "Delete the album \"%s\"? Its photos stay in the library.", name);
@@ -847,31 +896,35 @@ static int window_choice (const int *c)
       else if (c[1] == 2)
         with_selection (0, RATING_REJECT);
       else if (c[1] == 3)
-        browser_select_all (1);
+        tags_after_menu = 1;
       else if (c[1] == 4)
-        browser_select_all (0);
+        browser_select_all (1);
       else if (c[1] == 5)
+        browser_select_all (0);
+      else if (c[1] == 6)
         looks_copy_selection ();
-      else if (c[1] == 6 && looks_clip ())
+      else if (c[1] == 7 && looks_clip ())
         looks_apply_selection (looks_clip ());
-      else if (c[1] == 7 && c[2] == 0 && styles_get (c[3]))
+      else if (c[1] == 8 && c[2] == 0 && styles_get (c[3]))
         looks_apply_selection (styles_get (c[3])->recipe);
-      else if (c[1] == 7 && c[2] >= 1 && c[2] <= npresets && c[2] <= MAX_LIST)
+      else if (c[1] == 8 && c[2] >= 1 && c[2] <= npresets && c[2] <= MAX_LIST)
         looks_apply_selection (presets[c[2] - 1].recipe);
-      else if (c[1] == 10)
+      else if (c[1] == 11)
         remove_after_menu = 1;
-      else if (c[1] == 8)
-        export_after_menu = 1;
       else if (c[1] == 9)
+        export_after_menu = 1;
+      else if (c[1] == 10)
         print_after_menu = 1;
       break;
     case 2:                            /* Album */
       if (c[1] == 0 && c[2] == 0)
         with_selection (4, 0);
-      else if (c[1] == 1 && c[2] >= 0 && c[2] < nalbums)
+      else if (c[1] == 1 && c[2] >= 0 && c[2] < nalbums && !albums[c[2]].smart)
         with_selection (2, (int) albums[c[2]].id);
       else if (c[1] == 2)
         with_selection (3, 0);
+      else if (c[1] == 3)
+        smart_after_menu = 1;
       break;
     case 3:                            /* Size */
       if (c[1] >= 0 && c[1] <= 2)
@@ -927,6 +980,7 @@ int menus_selection (const int *choice)
       case VM_PRESETS: if (choice[1] >= 0) presets_choice (choice + 1); break;
       case VM_COPY: looks_copy_viewer (); break;
       case VM_PASTE: if (looks_clip ()) viewer_apply_look (looks_clip ()); break;
+      case VM_TAGS: tags_after_menu = 2; break;
       case VM_EXPORT: export_after_menu = 2; break;
       case VM_PRINT: print_after_menu = 2; break;
       case VM_BACK: viewer_close (); return 0;
@@ -944,6 +998,11 @@ int menus_selection (const int *choice)
     presets_choice (choice);
   else if (which == 7)
     group_choice (choice);
+  else if (which == 8)
+    {
+      if (choice[0] >= 0 && choice[0] < nkeywords)
+        tagbox_add_keyword (keywords[choice[0]].name);
+    }
   else if (which == 6)
     {
       if (choice[0] >= 0 && choice[0] <= 5)
@@ -964,6 +1023,8 @@ int menus_selection (const int *choice)
           album_name[0] = '\0';
           browser_after_change ();
         }
+      else if (choice[0] == 2)
+        smart_after_menu = 1;
     }
   else if (which == 2)
     {
@@ -1004,6 +1065,23 @@ int menus_selection (const int *choice)
       browser_remove_selection ();
       return 0;
     }
+  if (tags_after_menu)
+    {
+      /* The window opens once the menu has gone, at the pointer. */
+      int from_viewer = tags_after_menu == 2;
+      tags_after_menu = 0;
+      if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+        tagbox_open (from_viewer, ptr[0], ptr[1]);
+      return 0;
+    }
+  if (smart_after_menu)
+    {
+      cat_id album = smart_after_menu == 2 ? group_id : 0;
+      smart_after_menu = 0;
+      if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+        smartbox_open (album, ptr[0], ptr[1]);
+      return 0;
+    }
   if (print_after_menu)
     {
       /* The Print box replaces the menu, at the pointer. */
@@ -1026,6 +1104,11 @@ int menus_selection (const int *choice)
   if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL && (ptr[2] & Button_Adjust))
     {
       menu *m;
+      if (which == 8)
+        {
+          menus_open_keyword_menu (open_x, open_y);   /* Adjust: add another */
+          return 0;
+        }
       if (which == 4)
         {
           used = 0;
@@ -1086,16 +1169,23 @@ const char *menus_help (int window, int icon)
       {
       case 0: return "Which photos the Browser shows: all, flagged, rejected, the last import, a project or album, by rating.";
       case 1:
-        if (c[1] == 10)
+        if (c[1] == 11)
           return "Takes the selected photos out of the library, after asking. Their files are not deleted.";
-        if (c[1] == 9)
+        if (c[1] == 10)
           return "Prints the selected photos, one to a page, on the printer chosen in !Printers.";
-        if (c[1] == 8)
+        if (c[1] == 9)
           return "Exports the selected photos as new JPEG or PNG files.";
-        if (c[1] == 7 && c[2] >= 0)
+        if (c[1] == 8 && c[2] >= 0)
           return presets_help (c + 2, 1);
-        return "Rate, flag, reject, select, copy and paste adjustments, export or remove the selected photos.";
-      case 2: return "Make albums from the selection, add the selection to one, or take it out of this one.";
+        if (c[1] == 3)
+          return "Gives the selected photos a caption and keywords, which search and smart albums find.";
+        return "Rate, flag, reject, caption, select, copy and paste adjustments, export or remove the selected photos.";
+      case 2:
+        if (c[1] == 3)
+          return "Makes an album that gathers the photos matching what you choose: words, rating, flag, dates.";
+        if (c[1] == 1 && c[2] >= 0 && c[2] < nalbums && albums[c[2]].smart)
+          return "A smart album gathers its own photos: change what it looks for instead (its menu in the Library tab).";
+        return "Make albums from the selection, add the selection to one, or take it out of this one.";
       case 3: return "Thumbnail size: Small, Medium or Large.";
       case 5: return "Leaves Lumen. Everything is saved as you go.";
       }
@@ -1104,6 +1194,8 @@ const char *menus_help (int window, int icon)
   if (which == 3)
     return c[0] == VM_PRESETS && c[1] >= 0 ? presets_help (c + 1, 0)
                                            : "What can be done to this photo. Many have keys, shown beside them.";
+  if (which == 8)
+    return "Adds this keyword to the list.";
   if (which == 7)
     switch (c[0])
       {
@@ -1114,7 +1206,8 @@ const char *menus_help (int window, int icon)
       case 1: return group_kind == SRC_PROJECT ? "Ticked: Lumen looks in this project's folder for new photos at start, "
                                                  "when its window opens and every few minutes (Choices)."
                                                : "Deletes the album. Its photos stay in the library.";
-      case 2: return "Ticked: each folder inside this project's folder is an album, under the project in the Library tab.";
+      case 2: return group_kind == SRC_ALBUM ? "Changes what this smart album looks for."
+                                             : "Ticked: each folder inside this project's folder is an album, under the project in the Library tab.";
       case 3: return "Takes the project and its photos out of the library, after asking. The files aren't touched.";
       }
   return "";

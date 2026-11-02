@@ -2258,6 +2258,13 @@ int viewer_key (int key)
     case 0x03:                         /* Ctrl-C */
       looks_copy_viewer ();
       return 1;
+    case 0x0B:                         /* Ctrl-K: caption and keywords */
+      {
+        int ptr[5];
+        if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+          tagbox_open (1, ptr[0], ptr[1]);
+      }
+      return 1;
     case 0x10:                         /* Ctrl-P: print */
       {
         int ptr[5];

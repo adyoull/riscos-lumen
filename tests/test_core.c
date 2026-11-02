@@ -11,6 +11,7 @@
 #include <png.h>
 #include <sys/stat.h>
 #include "../src/core/catalog.h"
+#include "../src/core/xmp.h"
 #include "../src/core/exif.h"
 #include "../src/core/colour.h"
 #include "../src/core/rawjob.h"
@@ -549,6 +550,146 @@ static void test_library (void)
       }
   }
 
+  /* Captions and keywords: set on several at once, found by search. */
+  {
+    cat *c = lib_cat (l);
+    cat_id two[2], one;
+    char cap[CAT_CAPTION_MAX], kw[CAT_KEYWORDS_MAX];
+    int same = -1, nf, k;
+    cat_item *found;
+    cat_keyword *kws;
+    cat_source q = { SRC_ALL, 0, 0, "" };
+    two[0] = items[find_item (items, n, "catbells.jpg")].id;
+    two[1] = items[find_item (items, n, "portrait.jpg")].id;
+    one = items[find_item (items, n, "wide.png")].id;
+    CHECK (cat_get_tags (c, one, cap, sizeof cap, kw, sizeof kw) == 0 && !cap[0] && !kw[0], "no caption or keywords at first");
+    CHECK (cat_add_keywords (c, two, 2, " Fells, walking ;fells,, Derwent Water ") == 0, "keywords added to two");
+    CHECK (cat_add_keywords (c, &one, 1, "Walking, sunset") == 0, "and others to one");
+    cat_get_tags (c, two[0], cap, sizeof cap, kw, sizeof kw);
+    CHECK (!strcmp (kw, "Derwent Water, Fells, walking"), "trimmed, sorted, one of each (case aside)");
+    cat_get_tags (c, one, cap, sizeof cap, kw, sizeof kw);
+    CHECK (!strcmp (kw, "sunset, walking"), "a keyword keeps the case it was first given");
+    CHECK (cat_set_caption (c, two, 2, "Morning above Keswick") == 0, "caption set on two");
+    cat_common_tags (c, two, 2, cap, sizeof cap, &same, kw, sizeof kw);
+    CHECK (same == 1 && !strcmp (cap, "Morning above Keswick") && !strcmp (kw, "Derwent Water, Fells, walking"),
+           "in common: the caption and all three keywords");
+    {
+      cat_id three[3] = { two[0], two[1], one };
+      cat_common_tags (c, three, 3, cap, sizeof cap, &same, kw, sizeof kw);
+      CHECK (same == 0 && !cap[0] && !strcmp (kw, "walking"), "with the third: captions differ, one keyword in common");
+    }
+    CHECK (cat_keywords (c, &kws, &k) == 0 && k == 4 && !strcmp (kws[0].name, "Derwent Water") && kws[3].count == 3,
+           "the keywords in use, with their counts");
+    free (kws);
+    strcpy (q.search, "derwent");
+    cat_list (c, &q, &found, &nf);
+    CHECK (nf == 2, "search finds keywords");
+    free (found);
+    strcpy (q.search, "keswick morning");
+    cat_list (c, &q, &found, &nf);
+    CHECK (nf == 2, "and captions");
+    free (found);
+    CHECK (cat_remove_keywords (c, &one, 1, "SUNSET") == 0, "a keyword taken away (any case)");
+    cat_keywords (c, &kws, &k);
+    CHECK (k == 3, "and gone from the list when nobody has it");
+    free (kws);
+  }
+
+  /* Dates as typed, for smart albums. */
+  {
+    static const struct { const char *in; int end; const char *out; } d[] = {
+      { "2026-06-16", 0, "2026-06-16" }, { "2026:6:3", 0, "2026-06-03" }, { "3/5/2026", 0, "2026-05-03" },
+      { "2026", 0, "2026-01-01" }, { "2026", 1, "2026-12-31" }, { "2026-02", 1, "2026-02-31" },
+      { "5/2026", 0, "2026-05-01" }, { "", 0, "" }, { " 2026-6-1 ", 0, "2026-06-01" },
+    };
+    static const char *const bad[] = { "16/06/26", "2026-13-01", "June", "2026-06-16x", "1/2/3" };
+    size_t k;
+    char out[11], what[80];
+    for (k = 0; k < sizeof d / sizeof d[0]; k++)
+      {
+        snprintf (what, sizeof what, "date \"%s\" is %s", d[k].in, d[k].out);
+        CHECK (cat_date_normal (d[k].in, d[k].end, out) == 0 && !strcmp (out, d[k].out), what);
+      }
+    for (k = 0; k < sizeof bad / sizeof bad[0]; k++)
+      {
+        snprintf (what, sizeof what, "\"%s\" is not a date", bad[k]);
+        CHECK (cat_date_normal (bad[k], 0, out) == -1, what);
+      }
+  }
+
+  /* Smart albums: whatever matches the rule now. */
+  {
+    cat *c = lib_cat (l);
+    cat_rule r, back;
+    char text[256];
+    cat_id smart, one = items[find_item (items, n, "wide.png")].id, cb = items[find_item (items, n, "catbells.jpg")].id;
+    cat_source src = { SRC_ALBUM, 0, 0, "" };
+    cat_item *found;
+    cat_group *g;
+    int nf, ng, k, seen = 0;
+    memset (&r, 0, sizeof r);
+    strcpy (r.words, "walking");
+    smart = cat_smart_create (c, "Walks", &r);
+    CHECK (smart > 0 && cat_smart_get (c, smart, &back) == 1 && !strcmp (back.words, "walking"), "a smart album keeps its rule");
+    src.id = smart;
+    cat_list (c, &src, &found, &nf);
+    CHECK (nf == 3, "Walks: the three with the keyword");
+    free (found);
+    CHECK (cat_album_add (c, smart, &cb, 1) == -1 && strstr (cat_error (c), "smart") != NULL,
+           "photos can't be put in one by hand");
+    strcpy (r.from, "2026-06-01");
+    strcpy (r.to, "2026-06-30");
+    cat_smart_set (c, smart, &r);
+    cat_list (c, &src, &found, &nf);
+    CHECK (nf == 2, "taken in June 2026: two (the PNG has no date)");
+    free (found);
+    r.from[0] = r.to[0] = '\0';
+    r.flagged = 1;
+    cat_smart_set (c, smart, &r);
+    cat_set_flag (c, &one, 1, 1);
+    cat_list (c, &src, &found, &nf);
+    CHECK (nf == 1 && found[0].id == one, "flagged only: the one flagged");
+    free (found);
+    cat_set_flag (c, &one, 1, 0);
+    r.flagged = 0;
+    r.min_rating = 2;
+    cat_smart_set (c, smart, &r);
+    cat_set_rating (c, &cb, 1, 3);
+    cat_list (c, &src, &found, &nf);
+    CHECK (nf == 1 && found[0].id == cb, "2 stars and up: the one rated 3");
+    free (found);
+    cat_groups (c, SRC_ALBUM, &g, &ng);
+    for (k = 0; k < ng; k++)
+      if (g[k].id == smart)
+        seen = g[k].smart && g[k].count == 1;
+    CHECK (seen, "listed with the albums as smart, with its count now");
+    free (g);
+    {
+      cat_id *vs;
+      int nv;
+      CHECK (cat_group_versions (c, SRC_ALBUM, smart, &vs, &nv) == 0 && nv == 1 && vs[0] == cb, "its photos, for exporting");
+      free (vs);
+    }
+    r.edited = 1;
+    strcpy (r.from, "2026");
+    cat_rule_format (&r, text, sizeof text);
+    cat_rule_parse (text, &back);
+    CHECK (!memcmp (&r, &back, sizeof r) || (back.min_rating == 2 && back.edited && !strcmp (back.from, "2026-01-01")),
+           "a rule survives being written as text");
+    cat_set_rating (c, &cb, 1, 0);
+    CHECK (cat_album_delete (c, smart) == 0, "a smart album deleted");
+    /* Captions and keywords go back to none for what follows. */
+    {
+      cat_id all3[3] = { items[find_item (items, n, "catbells.jpg")].id, items[find_item (items, n, "portrait.jpg")].id, one };
+      cat_set_caption (c, all3, 3, "");
+      cat_remove_keywords (c, all3, 3, "Derwent Water, Fells, walking");
+      cat_keyword *kws;
+      cat_keywords (c, &kws, &k);
+      CHECK (k == 0, "no keywords left");
+      free (kws);
+    }
+  }
+
   /* Ratings, flags, rejects, albums. */
   {
     cat_id ids[2];
@@ -614,6 +755,50 @@ static void test_library (void)
     cat_list (lib_cat (l), &last, &items, &n);
     CHECK (n == 1 && strcmp (items[0].name, "single.jpg") == 0, "Last import shows the new one");
     free (items);
+  }
+  /* A photo tagged elsewhere: its XMP caption and keywords come in with it. */
+  {
+    char src[1024], dst[1024], cap[512], kw[1024];
+    unsigned char *buf = malloc (1 << 20), xmp[2048];
+    size_t got = 0, xn;
+    FILE *f;
+    cat_source last = { SRC_LAST_IMPORT, 0, 0, "" };
+    p (src, "Lakes/Day1/catbells.jpg");
+    p (dst, "Tagged");
+    mkdir (dst, 0777);
+    p (dst, "Tagged/tagged.jpg");
+    f = fopen (src, "rb");
+    if (f && buf)
+      {
+        got = fread (buf, 1, 1 << 20, f);
+        fclose (f);
+      }
+    memcpy (xmp, XMP_NAMESPACE, sizeof XMP_NAMESPACE);
+    xn = sizeof XMP_NAMESPACE + xmp_packet ("Catbells at dawn", "Catbells, fells", (char *) xmp + sizeof XMP_NAMESPACE,
+                                             sizeof xmp - sizeof XMP_NAMESPACE);
+    f = fopen (dst, "wb");
+    if (f && got > 2)
+      {
+        /* SOI, then the XMP's APP1, then the rest. */
+        fwrite (buf, 1, 2, f);
+        fputc (0xFF, f); fputc (0xE1, f); fputc ((int) ((xn + 2) >> 8), f); fputc ((int) ((xn + 2) & 255), f);
+        fwrite (xmp, 1, xn, f);
+        fwrite (buf + 2, 1, got - 2, f);
+        fclose (f);
+      }
+    free (buf);
+    p (path, "Tagged");
+    lib_import (l, path);
+    while (lib_busy (l))
+      lib_work (l, fake_now, clock_cs + 3, NULL, NULL);
+    cat_list (lib_cat (l), &last, &items, &n);
+    CHECK (n == 1 && cat_get_tags (lib_cat (l), items[0].id, cap, sizeof cap, kw, sizeof kw) == 0
+           && !strcmp (cap, "Catbells at dawn") && !strcmp (kw, "Catbells, fells"),
+           "a photo with XMP: its caption and keywords imported");
+    if (n == 1)
+      cat_remove_versions (lib_cat (l), &items[0].id, 1);
+    free (items);
+    remove (dst);
   }
   lib_close (l);
 

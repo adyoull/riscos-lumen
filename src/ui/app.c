@@ -464,7 +464,8 @@ int app_init (const char *library_path)
     app_load_prefs ();
   activity_init ();
   if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ()
-      || plugwin_create () || choicewin_create () || activitywin_create () || printbox_create ())
+      || plugwin_create () || choicewin_create () || activitywin_create () || printbox_create ()
+      || tagbox_create () || smartbox_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       close_down ();
@@ -748,6 +749,14 @@ static int app_event_1 (int reason, int *b, int sender)
           activitywin_closed ();
           _swix (Wimp_CloseWindow, _IN (1), b);
         }
+      else if (b[0] == tagbox_window () || b[0] == smartbox_window ())
+        {
+          if (b[0] == tagbox_window ())
+            tagbox_closed ();
+          else
+            smartbox_closed ();
+          _swix (Wimp_CloseWindow, _IN (1), b);
+        }
       else
         _swix (Wimp_CloseWindow, _IN (1), b);
       break;
@@ -777,6 +786,10 @@ static int app_event_1 (int reason, int *b, int sender)
         activitywin_click (b);
       else if (b[3] == printbox_window ())
         printbox_click (b);
+      else if (b[3] == tagbox_window ())
+        tagbox_click (b);
+      else if (b[3] == smartbox_window ())
+        smartbox_click (b);
       break;
     case User_Drag_Box:
       if (exportbox_dragging ())
@@ -787,6 +800,8 @@ static int app_event_1 (int reason, int *b, int sender)
     case Key_Pressed:
       if (b[0] == exportbox_window () ? !exportbox_key (b[6])
           : b[0] == printbox_window () ? !printbox_key (b[6])
+          : b[0] == tagbox_window () ? !tagbox_key (b[6])
+          : b[0] == smartbox_window () ? !smartbox_key (b[6])
           : b[0] == choicewin_window () ? !choicewin_key (b[6])
           : b[0] == mainwin_window () && b[1] >= 0 && b[1] == mainwin_search_icon () ? !mainwin_search_key (b[6])
           : !app_key (b[6]))

@@ -65,7 +65,7 @@ static char search_valid[] = "Pptr_write;KN";
 static int insp_extent = 2000, insp_content = 400, insp_vis = 400;
 
 /* The Library tab's rows: what each shows. */
-typedef struct { int kind; cat_id id; char text[80]; int heading, depth, watched; } lib_row;   /* depth: a folder album's */
+typedef struct { int kind; cat_id id; char text[80]; int heading, depth, watched, smart; } lib_row;   /* depth: a folder album's */
 static lib_row *rows;
 static int nrows;
 static void build_rows (void);
@@ -541,6 +541,7 @@ static void add_row (int kind, cat_id id, const char *text, int heading)
   rows[nrows].heading = heading;
   rows[nrows].depth = 0;
   rows[nrows].watched = 0;
+  rows[nrows].smart = 0;
   snprintf (rows[nrows].text, sizeof rows[nrows].text, "%s", text);
   nrows++;
 }
@@ -603,6 +604,8 @@ static void build_rows (void)
         {
           snprintf (t, sizeof t, "%s (%d)", g[k].name, g[k].count);
           add_row (SRC_ALBUM, g[k].id, t, 0);
+          if (nrows)
+            rows[nrows - 1].smart = g[k].smart;
         }
       free (g);
     }
@@ -662,6 +665,13 @@ static void row_icon (int kind, int x, int y, unsigned col)
       draw_frame (x, y, x + 32, y + 22, col);
       draw_rect (x, y + 22, x + 12, y + 26, col);
       break;
+    case -3:                           /* a smart album: a magnifying glass */
+      draw_circle (x + 13, y + 17, 11, col);
+      draw_circle (x + 13, y + 17, 10, col);
+      draw_line (x + 20, y + 9, x + 30, y - 1, col);
+      draw_line (x + 21, y + 10, x + 31, y, col);
+      draw_line (x + 19, y + 9, x + 29, y - 1, col);
+      break;
     case SRC_ALBUM:                    /* an album: a book */
       draw_frame (x + 2, y, x + 28, y + 30, col);
       draw_rect (x + 2, y, x + 7, y + 30, col);
@@ -679,7 +689,7 @@ static void draw_library (int ox, int oy, int cy0, int cy1)
       if (y1 < cy0 - oy || y0 > cy1 - oy)
         continue;
       int in = r->depth * 32;           /* folder albums sit under their project */
-      int kind = r->depth ? -2 : r->kind;   /* -2: a folder's icon */
+      int kind = r->depth ? -2 : r->smart ? -3 : r->kind;   /* -2: a folder's icon, -3 a smart album's */
       if (r->heading)
         draw_text (ox + 16, oy + y0 + 12, r->text, COL_QUIET, COL_PANEL);
       else if (row_selected (r))
@@ -721,8 +731,9 @@ static void library_click (int wy)
 #define INFO_LABEL_X 24
 #define INFO_VALUE_X 300               /* labels left of this, values right */
 #define INFO_HEAD 1                    /* a row that is a group heading */
+#define INFO_EDIT 2                    /* clicking it opens the Caption and keywords window */
 
-typedef struct { char label[48]; char value[256]; int flags; } info_row;
+typedef struct { char label[48]; char value[256]; int flags, top, bottom; } info_row;
 static info_row *irows;
 static int nirows;
 static cat_id info_id = -1;            /* the version irows describe */
@@ -834,10 +845,13 @@ static int info_layout (int draw, int ox, int oy, int cy0, int cy1)
         int hl = wrap (r->label, INFO_VALUE_X - INFO_LABEL_X - 16, 0, 0, 0, 0);
         int hv = wrap (r->value, INSP_W - INFO_VALUE_X - 16, 0, 0, 0, 0);
         h = hl > hv ? hl : hv;
+        irows[k].top = top;
+        irows[k].bottom = top - h * INFO_LINE - 8;
         if (draw && oy + top >= cy0 && oy + top - h * INFO_LINE <= cy1)
           {
             wrap (r->label, INFO_VALUE_X - INFO_LABEL_X - 16, 1, ox + INFO_LABEL_X, oy + top - 32, COL_QUIET);
-            wrap (r->value, INSP_W - INFO_VALUE_X - 16, 1, ox + INFO_VALUE_X, oy + top - 32, COL_TEXT);
+            wrap (r->value, INSP_W - INFO_VALUE_X - 16, 1, ox + INFO_VALUE_X, oy + top - 32,
+                  (r->flags & INFO_EDIT) && !strncmp (r->value, "None: click", 11) ? COL_ACCENT : COL_TEXT);
           }
         y -= h * INFO_LINE + 8;
       }
@@ -879,6 +893,16 @@ static void info_load (int force)
   info_add ("Rating", v, 0);
   info_add ("Flag", it.flag ? "Flagged" : "Not flagged", 0);
   info_add ("Adjusted", it.edited ? "Yes" : "No", 0);
+  {
+    char cap[CAT_CAPTION_MAX], kw[CAT_KEYWORDS_MAX];
+    cat_get_tags (lib_cat (app_library ()), it.id, cap, sizeof cap, kw, sizeof kw);
+    if (strlen (cap) > 240)
+      strcpy (cap + 237, "...");
+    if (strlen (kw) > 240)
+      strcpy (kw + 237, "...");
+    info_add ("Caption", cap[0] ? cap : "None: click to add one", INFO_EDIT);
+    info_add ("Keywords", kw[0] ? kw : "None: click to add some", INFO_EDIT);
+  }
   info_add ("File", d.path, 0);
   if (d.missing)
     info_add ("Missing", "The file can't be found there. If it has moved, drag the folder it is in now into Lumen.", 0);
@@ -923,6 +947,23 @@ static void info_load (int force)
       }
   }
   info_height = info_layout (0, 0, 0, 0, 0);
+}
+
+/* The Info tab's rows as text, "Label: value" a line (for the tests). */
+const char *mainwin_info_text (void)
+{
+  static char t[4096];
+  int k;
+  size_t len = 0;
+  t[0] = '\0';
+  for (k = 0; k < nirows && len < sizeof t - 1; k++)
+    {
+      int w = snprintf (t + len, sizeof t - len, "%s%s%s\n", irows[k].label, irows[k].value[0] ? ": " : "", irows[k].value);
+      if (w < 0)
+        break;
+      len += (size_t) w;
+    }
+  return t;
 }
 
 static void draw_info (int ox, int oy, int cy0, int cy1)
@@ -1507,6 +1548,17 @@ void mainwin_inspector_click (int *b)
     return;
   if (tab == TAB_LIBRARY)
     library_click (b[1] - (st[4] - st[6]));
+  else if (tab == TAB_INFO && info_id > 0)
+    {
+      /* The caption or keywords: the window to change them, for this photo. */
+      int wy = b[1] - (st[4] - st[6]), k;
+      for (k = 0; k < nirows; k++)
+        if ((irows[k].flags & INFO_EDIT) && wy <= irows[k].top && wy > irows[k].bottom)
+          {
+            tagbox_open_ids (&info_id, 1, b[0], b[1]);
+            break;
+          }
+    }
 }
 
 /* Keys for the whole window; 1 if used. */
