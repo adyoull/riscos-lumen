@@ -370,6 +370,23 @@ void activitywin_now_changed (void);
 void activitywin_redraw (int *b);
 void activitywin_click (int *b);
 int activitywin_part_at (int x, int y);
+
+/* printbox.c: the Print box and printing through the printer drivers. */
+int printbox_create (void);
+int printbox_window (void);
+void printbox_open (int from_viewer, int x, int y);
+const char *printbox_info (void);
+void printbox_click (int *b);
+int printbox_key (int key);
+int printbox_busy (void);
+void printbox_idle (unsigned deadline);
+int printbox_percent (void);
+void printbox_status (char *out, size_t n);
+/* Where a pw x ph photo goes on the printable area a (millipoints): its
+   printed size (as placed) and whether it is turned a quarter. mode: 0 fit
+   the page, 1 fill it, 2 at most w_cm x h_cm. */
+void print_place (int pw, int ph, const int a[4], int mode, double w_cm, double h_cm, int may_turn, int *out_w,
+                  int *out_h, int *turned);
 void plugwin_open (void);
 void plugwin_click (int *block);
 

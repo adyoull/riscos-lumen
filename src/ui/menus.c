@@ -28,7 +28,7 @@ static int which;                      /* 1 window menu, 2 icon bar menu, 3 view
 static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40];
-static int export_after_menu;
+static int export_after_menu, print_after_menu;
 static int remove_after_menu;          /* ask about removing once the menu has gone */
 static int plugin_remove_after_menu;   /* 1 + the plug-in to ask about removing */
 static int plugwin_after_menu;         /* open the Add plug-in window once the menu has gone */
@@ -328,7 +328,7 @@ static menu *build_window_menu (void)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
   npresets = looks_presets (&presets);
   apply = apply_menu (nsel == 0);
-  selm = new_menu ("Selection", 10);
+  selm = new_menu ("Selection", 11);
   if (selm)
     {
       set_item (selm, 0, 0, "Rating", 0, (int) rating, nsel == 0);
@@ -339,8 +339,9 @@ static menu *build_window_menu (void)
       set_item (selm, 5, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
       set_item (selm, 6, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
       set_item (selm, 7, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0);
-      set_item (selm, 8, 0, "Export...      ^E", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, 9, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
+      set_item (selm, 8, 0, "Export...      ^E", 0, -1, nsel == 0);
+      set_item (selm, 9, 0, "Print...      ^P", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, 10, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
     }
 
   newalbum = writable_menu ("Name", album_name, sizeof album_name);
@@ -377,7 +378,7 @@ static menu *build_window_menu (void)
 
 /* Photo > ... (the order menus_selection decodes) */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
-       VM_PRESETS, VM_COPY, VM_PASTE, VM_EXPORT, VM_BACK, VM_REMOVE, VM_COUNT };
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
 
 /* --- styles shown as the pointer goes down the list
    The Styles item asks for Message_MenuWarning (&400C0, PRM p1017): Lumen
@@ -484,7 +485,8 @@ static menu *build_viewer_menu (void)
       set_item (m, VM_PRESETS, 0, "Presets", 0, (int) pre, 0);
       set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
       set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
-      set_item (m, VM_EXPORT, 0, "Export...      ^E", MF_DOTTED, -1, 0);
+      set_item (m, VM_EXPORT, 0, "Export...      ^E", 0, -1, 0);
+      set_item (m, VM_PRINT, 0, "Print...      ^P", MF_DOTTED, -1, 0);
       set_item (m, VM_BACK, 0, "Back to the Browser      Esc", MF_DOTTED, -1, 0);
       set_item (m, VM_REMOVE, 1, "Remove from library...", 0, -1, 0);
     }
@@ -856,10 +858,12 @@ static int window_choice (const int *c)
         looks_apply_selection (styles_get (c[3])->recipe);
       else if (c[1] == 7 && c[2] >= 1 && c[2] <= npresets && c[2] <= MAX_LIST)
         looks_apply_selection (presets[c[2] - 1].recipe);
-      else if (c[1] == 9)
+      else if (c[1] == 10)
         remove_after_menu = 1;
       else if (c[1] == 8)
         export_after_menu = 1;
+      else if (c[1] == 9)
+        print_after_menu = 1;
       break;
     case 2:                            /* Album */
       if (c[1] == 0 && c[2] == 0)
@@ -924,6 +928,7 @@ int menus_selection (const int *choice)
       case VM_COPY: looks_copy_viewer (); break;
       case VM_PASTE: if (looks_clip ()) viewer_apply_look (looks_clip ()); break;
       case VM_EXPORT: export_after_menu = 2; break;
+      case VM_PRINT: print_after_menu = 2; break;
       case VM_BACK: viewer_close (); return 0;
       case VM_REMOVE:
         {
@@ -999,6 +1004,15 @@ int menus_selection (const int *choice)
       browser_remove_selection ();
       return 0;
     }
+  if (print_after_menu)
+    {
+      /* The Print box replaces the menu, at the pointer. */
+      int from_viewer = print_after_menu == 2;
+      print_after_menu = 0;
+      if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+        printbox_open (from_viewer, ptr[0], ptr[1]);
+      return 0;
+    }
   if (export_after_menu)
     {
       /* The Export box replaces the menu, at the pointer (as a menu would open). */
@@ -1072,8 +1086,10 @@ const char *menus_help (int window, int icon)
       {
       case 0: return "Which photos the Browser shows: all, flagged, rejected, the last import, a project or album, by rating.";
       case 1:
-        if (c[1] == 9)
+        if (c[1] == 10)
           return "Takes the selected photos out of the library, after asking. Their files are not deleted.";
+        if (c[1] == 9)
+          return "Prints the selected photos, one to a page, on the printer chosen in !Printers.";
         if (c[1] == 8)
           return "Exports the selected photos as new JPEG or PNG files.";
         if (c[1] == 7 && c[2] >= 0)

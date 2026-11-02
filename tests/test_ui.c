@@ -17,6 +17,7 @@
 #include "fsys.h"
 #include "rawjob.h"
 #include "styles.h"
+#include "exif.h"
 #include "colour.h"
 #include "export.h"
 #include "ui.h"
@@ -30,6 +31,7 @@
 #define PLUGW 0x30000
 #define CHOICEW 0x31000
 #define ACTW 0x32000
+#define PRINTW 0x33000
 #define FILER 0x9000
 #define TASK 0x1234
 
@@ -44,6 +46,7 @@ static int opened[8], open_calls, mopened[9], iopened[8], nested_opens;
 static unsigned main_flags = 0xAF000002u;
 static int extent[4];
 static int caret_window, caret_icon = -1;
+static unsigned print_turn = 1u << 21, print_sharpen = 1u << 21;
 static int force_redraws, title_redraws;
 static int sprite_plots, smooth_plots, masked_plots, last_scale[4];
 static int stars;
@@ -142,6 +145,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         r[0] = CHOICEW;
       else if (nwindows == 8)
         r[0] = ACTW;
+      else if (nwindows == 9)
+        r[0] = PRINTW;
       else
         r[0] = INFO;
       return NULL;
@@ -178,7 +183,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_GetWindowState:
       CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP
-             || b[0] == PLUGW || b[0] == CHOICEW || b[0] == ACTW, "window state: one of ours");
+             || b[0] == PLUGW || b[0] == CHOICEW || b[0] == ACTW || b[0] == PRINTW, "window state: one of ours");
       if (b[0] == EXPORTW)
         {
           b[1] = 600; b[2] = 400; b[3] = 1320; b[4] = 860; b[5] = 0; b[6] = 0;
@@ -192,6 +197,11 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         choice_icon_flags[b[1]] = (choice_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
       return NULL;
     case Wimp_GetIconState:
+      if (b[0] == PRINTW)
+        {
+          b[6] = (int) (b[1] == 12 ? print_turn : b[1] == 13 ? print_sharpen : 0);
+          return NULL;
+        }
       CHECK (b[0] == CHOICEW, "icon state: the Choices window's");
       if (b[1] >= 0 && b[1] < 32)
         b[6] = (int) choice_icon_flags[b[1]];
@@ -299,6 +309,87 @@ static const _kernel_oserror *wimp (int swi, int r[10])
 
 static unsigned clock_cs;
 
+/* A printer: PDriver_* as the classic PRM describes them, an A4 page with
+   5 mm margins, 300 dpi; what the job does is recorded. */
+static int print_jobs, print_rects, print_ended, print_aborted, print_matrix[4], print_pos[2], print_rect[4];
+static int print_plot_w, print_plots, print_handle_open;
+static int have_printer = 1, printer_colour = 1;
+static const _kernel_oserror *printer (int swi, int r[10])
+{
+  static _kernel_oserror none = { 0, "Printer driver not loaded" };
+  static int pending;
+  switch (swi)
+    {
+    case PDriver_Info:
+      if (!have_printer)
+        return &none;
+      r[0] = 400; r[1] = 300; r[2] = 300; r[3] = printer_colour; r[4] = (int) "Fake printer"; r[7] = 0;
+      return NULL;
+    case PDriver_PageSize:
+      r[1] = 595276; r[2] = 841890;
+      r[3] = 14173; r[4] = 14173; r[5] = 595276 - 14173; r[6] = 841890 - 14173;
+      return NULL;
+    case PDriver_SelectJob:
+      if (r[0])
+        print_jobs++;
+      r[0] = 0;
+      return NULL;
+    case PDriver_GiveRectangle:
+      memcpy (print_rect, (const int *) r[1], sizeof print_rect);
+      memcpy (print_matrix, (const int *) r[2], sizeof print_matrix);
+      memcpy (print_pos, (const int *) r[3], sizeof print_pos);
+      print_rects++;
+      return NULL;
+    case PDriver_DrawPage:
+      pending = 1;
+      r[0] = 1; r[2] = 0;
+      return NULL;
+    case PDriver_GetRectangle:
+      r[0] = 0;
+      pending = 0;
+      return NULL;
+    case PDriver_EndJob:
+      print_ended++;
+      return NULL;
+    case PDriver_AbortJob:
+      print_aborted++;
+      return NULL;
+    case OS_Find:
+      if (r[0] == 0x8F)
+        {
+          CHECK (!strcmp ((const char *) r[1], "printer:"), "the job goes to printer:");
+          r[0] = 77;
+          print_handle_open = 1;
+        }
+      else if (r[0] == 0 && r[1] == 77)
+        print_handle_open = 0;
+      return NULL;
+    case Hourglass_On: case Hourglass_Off:
+      return NULL;
+    case 0x49980:                      /* JPEG_Info: the size from the JPEG's frame header */
+      {
+        img_info ii;
+        memset (&ii, 0, sizeof ii);
+        if (img_read_info ((const unsigned char *) r[1], (size_t) r[2], &ii))
+          return &none;
+        r[2] = ii.width; r[3] = ii.height; r[0] = 0;
+      }
+      return NULL;
+    case 0x49982:                      /* JPEG_PlotScaled */
+      CHECK (print_handle_open && r[3] == 0, "JPEG_PlotScaled at 1:1, during the job");
+      {
+        img_info ii;
+        memset (&ii, 0, sizeof ii);
+        img_read_info ((const unsigned char *) r[0], (size_t) r[4], &ii);
+        print_plot_w = ii.width;
+      }
+      print_plots++;
+      return NULL;
+    }
+  (void) pending;
+  return NULL;
+}
+
 static const _kernel_oserror *graphics (int swi, int r[10])
 {
   switch (swi)
@@ -374,6 +465,17 @@ static void fakes (void)
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
     fake_swi (list[i].swi, list[i].name, list[i].wimp ? wimp : graphics);
   fake_swi (TaskManager_EnumerateTasks, "TaskManager_EnumerateTasks", tasks);
+  {
+    static const struct { int swi; const char *name; } pl[] = {
+      { PDriver_Info, "PDriver_Info" }, { PDriver_PageSize, "PDriver_PageSize" },
+      { PDriver_SelectJob, "PDriver_SelectJob" }, { PDriver_GiveRectangle, "PDriver_GiveRectangle" },
+      { PDriver_DrawPage, "PDriver_DrawPage" }, { PDriver_GetRectangle, "PDriver_GetRectangle" },
+      { PDriver_EndJob, "PDriver_EndJob" }, { PDriver_AbortJob, "PDriver_AbortJob" }, { OS_Find, "OS_Find" },
+      { Hourglass_On, "Hourglass_On" }, { Hourglass_Off, "Hourglass_Off" },
+      { 0x49980, "JPEG_Info" }, { 0x49982, "JPEG_PlotScaled" } };
+    for (i = 0; i < sizeof pl / sizeof pl[0]; i++)
+      fake_swi (pl[i].swi, pl[i].name, printer);
+  }
 }
 
 static void make_jpeg (const char *path, int w, int h)
@@ -540,7 +642,7 @@ int main (int argc, char **argv)
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 9, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity and Info windows");
+  CHECK (nwindows == 10, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity, Print and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
   CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
@@ -1272,6 +1374,72 @@ int main (int argc, char **argv)
                && app_prefs ()->export_sharpen == EXPORT_SHARP_STANDARD && !strcmp (app_prefs ()->export_names, "{project}_{nnn}")
                && app_prefs ()->export_box_w == 200, "and these are what the next export starts with (kept in Choices)");
       }
+      /* Printing: photo 1 (640 x 480, landscape) on an A4 page (portrait). */
+      browser_focus_on (0);
+      caret_window = BROWSER;
+      key (0x10);
+      CHECK ((intptr_t) menu_open == PRINTW, "Ctrl-P: the Print box, as a dialogue");
+      CHECK (strstr (printbox_info (), "1 photo, one to a page: 21.0") != NULL, "it says what is printed, on what paper");
+      key (KEY_RETURN);
+      CHECK (printbox_busy () && (intptr_t) menu_open == -1, "Print: the box closes, the photo is prepared");
+      CHECK (activity_busy (), "the status area shows it");
+      nulls_until_idle ();
+      CHECK (!printbox_busy () && print_jobs == 1 && print_rects == 1 && print_ended == 1 && !print_aborted
+             && !print_handle_open, "one job, one page, ended, printer: closed");
+      CHECK (print_plots == 1 && print_plot_w == 640, "the photo plotted once, at its own 640 pixels (never enlarged)");
+      {
+        /* Turned a quarter to suit the portrait page, fitted: the printable area is 566930 x 813544 mp. */
+        double aw = 595276 - 2 * 14173, ah = 841890 - 2 * 14173, s = aw / 480 < ah / 640 ? aw / 480 : ah / 640;
+        double h = 640 * s, f = h / (640 * 800.0) * 65536;
+        CHECK (print_matrix[0] == 0 && print_matrix[3] == 0 && print_matrix[1] > 0 && print_matrix[2] == -print_matrix[1],
+               "turned a quarter (matrix 0, s, -s, 0)");
+        CHECK (fabs (print_matrix[1] - f) < f * 0.01, "scaled so the photo fills the page's width");
+        CHECK (print_rect[0] == 0 && print_rect[2] == 1280 && print_rect[3] == 960, "the drawing: 640 x 480 pixels, 2 OS units each");
+        CHECK (abs (print_pos[0] - 595276 + 14173) < 600, "placed from the right-hand margin (turned)");
+      }
+      CHECK (history_has ("Printed 1 photo on Fake printer"), "in the history");
+      {
+        char p2[760];
+        snprintf (p2, sizeof p2, "%s/LumenPrint-P0.jpg", work);
+        f = fopen (p2, "rb");
+        CHECK (!f, "the prepared copy is deleted afterwards");
+        if (f) fclose (f);
+      }
+      /* Not turned, at a given size: 10 x 7.5 cm. */
+      print_turn = 0;
+      caret_window = BROWSER;
+      key (0x10);
+      eb[3] = PRINTW;
+      eb[4] = 12; app_event (Mouse_Click, eb, 0);                   /* untick Turn */
+      eb[4] = 7; app_event (Mouse_Click, eb, 0);                    /* the given size */
+      eb[3] = EXPORTW;
+      key (KEY_RETURN);
+      nulls_until_idle ();
+      CHECK (print_matrix[1] == 0 && print_matrix[0] > 0, "not turned when told not to");
+      {
+        double w = 10 / 2.54 * 72000 * 640 / 480, f = w / (640 * 800.0) * 65536;   /* 4:3 in 15 x 10 cm: the height decides */
+        CHECK (fabs (print_matrix[0] - f) < f * 0.01, "at most 15 x 10 cm: 13.3 x 10 cm");
+      }
+      print_turn = 1u << 21;
+      /* A printer set to grey only (Colour unticked in !Printers): says so. */
+      printer_colour = 0;
+      caret_window = BROWSER;
+      key (0x10);
+      CHECK ((intptr_t) menu_open == PRINTW && strstr (printbox_info (), "Grey only: tick Colour in !Printers") != NULL,
+             "a black-and-white printer: says how to print in colour");
+      eb[3] = PRINTW;
+      eb[4] = 15; app_event (Mouse_Click, eb, 0);                   /* Cancel */
+      eb[3] = EXPORTW;
+      CHECK ((intptr_t) menu_open != PRINTW && !printbox_busy (), "Cancel: nothing printed");
+      printer_colour = 1;
+      /* No printer driver: says what to do. */
+      have_printer = 0;
+      reported[0] = '\0';
+      caret_window = BROWSER;
+      key (0x10);
+      CHECK (strstr (reported, "!Printers") != NULL && (intptr_t) menu_open != PRINTW, "no printer: start !Printers");
+      have_printer = 1;
+
       /* Back as it was, for what follows. */
       key (0x05);
       eb[4] = 4; app_event (Mouse_Click, eb, 0);                    /* PNG */
@@ -1318,8 +1486,9 @@ int main (int argc, char **argv)
     b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
-    CHECK (strstr (item_text (menu_open, 15), "Back to the Browser") != NULL, "Back to the Browser");
-    choose (15, -1, -1);
+    CHECK (strstr (item_text (menu_open, 15), "Print...") != NULL, "Photo menu: Print...");
+    CHECK (strstr (item_text (menu_open, 16), "Back to the Browser") != NULL, "Back to the Browser");
+    choose (16, -1, -1);
     CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
     {
       /* Undo and Redo shaded in the Browser: the toolbar draws them grey and a click does nothing. */
@@ -1587,9 +1756,9 @@ int main (int argc, char **argv)
     browser_focus_on (0);
     click (16 + 352 + 60, -16 - 60, Button_Adjust);      /* add the second photo (Large thumbnails) */
     click (5, -5, Button_Menu);
-    CHECK (strstr (item_text (submenu (menu_open, 1), 9), "Remove from library") != NULL, "Selection > Remove from library");
+    CHECK (strstr (item_text (submenu (menu_open, 1), 10), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 9), "Print") != NULL, "Selection > Print..., Remove from library");
     asked[0] = '\0';
-    choose (1, 9, -1);
+    choose (1, 10, -1);
     CHECK (strstr (asked, "these 2 photos") != NULL, "it asks about the two");
     CHECK (browser_count () == before - 3 && viewer_item () == 0, "both gone, and the Viewer let its photo go");
 

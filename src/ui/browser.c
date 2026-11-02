@@ -755,6 +755,12 @@ int browser_key (int key)
       if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
         exportbox_open (0, ptr[0], ptr[1]);
     }
+  else if (key == 0x10)                /* Ctrl-P: print */
+    {
+      int ptr[5];
+      if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+        printbox_open (0, ptr[0], ptr[1]);
+    }
   else if (key == 0x03)                /* Ctrl-C: copy the adjustments */
     looks_copy_selection ();
   else if (key == 0x16)                /* Ctrl-V: paste them */

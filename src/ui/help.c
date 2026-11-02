@@ -129,6 +129,20 @@ const char *help_text (int window, int icon, int x, int y)
                       "and when its window opens.";
       default: return "Lumen's Choices.";
       }
+  if (window == printbox_window ())
+    switch (icon)
+      {
+      case 1: return "The printer chosen in !Printers. To use another, choose it in !Printers.";
+      case 3: return "How many copies of each photo to print.";
+      case 5: return "Each photo as large as it fits on the page, all of it showing.";
+      case 6: return "Each photo filling the page; parts beyond the printable area are cut off.";
+      case 7: case 8: case 10: return "Each photo at most this size in centimetres, width by height, keeping its shape.";
+      case 12: return "Ticked: a landscape photo on a portrait page (or the other way) is turned a quarter to use the page better.";
+      case 13: return "Ticked: the photo is sharpened for print, where ink and paper soften detail.";
+      case 15: return "Closes the box without printing.";
+      case 16: return "Prints. The photos are prepared in the background first (the bottom bar shows how far it has got).";
+      default: return "Prints photos, one to a page.";
+      }
   if (window == activitywin_window ())
     return activitywin_part_at (x, y) ? "Clears the list of what Lumen has done (the file in Lumen's Choices too)."
                                       : "What Lumen is doing now, each with how far it has got, and what it has "

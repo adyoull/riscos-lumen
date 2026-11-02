@@ -2258,6 +2258,15 @@ int viewer_key (int key)
     case 0x03:                         /* Ctrl-C */
       looks_copy_viewer ();
       return 1;
+    case 0x10:                         /* Ctrl-P: print */
+      {
+        int ptr[5];
+        if (crop_mode)
+          viewer_crop_finish (1);
+        if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
+          printbox_open (1, ptr[0], ptr[1]);
+      }
+      return 1;
     case 0x05:                         /* Ctrl-E: export */
       {
         int ptr[5];
