@@ -121,6 +121,8 @@ Keys in the Browser
   Ctrl-U        unstack them
   \             make the focused photo its stack's pick
   S             open or close the focused photo's stack
+  O             compare the selected photos: the first pinned on the
+                left, the next beside it (see Comparing)
 
   Return        open the focused photo in the Viewer (or double-click)
 
@@ -156,6 +158,12 @@ The tools above the sliders:
   Presets       Styles, Lumen's own looks; then your presets: apply one,
                 save the current look by name, or delete one. A preset
                 or style keeps the look, not the crop
+  Retouch       paints out spots (R); see Retouch and Brush below
+  Brush         paints on lightening, darkening or colour (B)
+
+Under the histogram: the photo's place, its flag, its colour label (the
+row of dots: click one to give the photo that label, its own again to
+take it off) and its stars.
 
 Styles (Presets > Styles, or Selection > Apply preset > Styles for many
 photos at once): Faded Film, Warm Vintage, Golden Hour, Soft Portrait,
@@ -167,6 +175,11 @@ changed afterwards, and Undo takes it off again.
 In the Viewer, the photo shows each style as the pointer goes down the
 Styles list, so you can compare them; nothing is kept until you click
 one. Move off the list, or close the menu, and the photo is as it was.
+
+Black & White: Amount takes the colour out (100: black and white).
+Red, Green and Blue say how light each colour comes out, like a filter
+on black and white film: lower Blue for a dark, dramatic sky, raise Red
+for lighter skin and autumn leaves. They start at 30, 59 and 11.
 
 Split Toning colours the shadows and the highlights: a hue (0 red, 30
 orange, 60 yellow, 120 green, 180 cyan, 210 blue, 300 magenta) and how
@@ -218,6 +231,42 @@ Geometry: -90 and +90 turn the photo; Straighten (up to 15 degrees
 either way), Vertical and Horizontal (perspective) zoom in just enough
 that no empty corners show.
 
+Retouch and Brush
+-----------------
+Retouch (R, or the Retouch button) paints out dust, a stray rock, a
+crisp packet: click on it. Repair fills the spot from a patch close by,
+chosen for you, matched to its surroundings; Clone copies the patch as
+it is. The circle under the pointer is the size a spot will be: make it
+a little bigger than the blemish (the Size slider, or [ and ]). Feather
+(or { and }) is how much of the edge fades in. The sliders change the
+spot placed or moved last too (a resized spot finds a new patch). Drag
+a spot, or its grey source circle, to move it; Adjust-click takes it
+away. Return, Escape or Done puts the tool away.
+
+Brush (B, or the Brush button) paints Dodge (lighter), Burn (darker),
+Saturate or Desaturate where you drag. Strength is how much (for Dodge
+and Burn, up to 2 stops). One stroke over itself counts once; a second
+stroke adds to the first. The sliders change the stroke painted last;
+Adjust-click on a stroke's path takes it away.
+
+Spots and strokes belong to the photo: they are not in presets, styles
+or copied adjustments. They are in exports, prints and thumbnails.
+
+Comparing
+---------
+O with photos selected in the Browser (or Selection > Compare) pins the
+first on the left and shows the next beside it; in the Viewer, O pins
+the photo shown. Left and Right change the photo on the right (the keys
+rate and label it); Return pins it instead and shows the next. O or
+Escape stops comparing.
+
+Colour labels
+-------------
+Selection > Colour label (or Photo > Colour label) gives the selected
+photos a coloured dot: Red, Orange, Yellow, Green, Blue, Purple, Grey,
+or None. The dot shows beside the name in the Browser; searching for
+the colour's name finds them.
+
 Keys in the Viewer and Split View
 ---------------------------------
   Left, Right   previous and next photo
@@ -230,7 +279,12 @@ Keys in the Viewer and Split View
                 pin it in place, ` or Escape to put it away)
   A             Auto
   C             crop (Return to crop, Escape to cancel)
-  [ ]           turn 90 degrees anticlockwise, clockwise
+  [ ]           turn 90 degrees anticlockwise, clockwise (retouching or
+                brushing: the brush smaller, larger; { } its feather)
+  R             Retouch: paint out spots
+  B             Brush: paint on adjustments
+  O             compare this photo with the next (Return: pin the
+                right one; O or Escape: stop)
   G             next grid
   M             before and after (the original, and back)
   Ctrl-Z        undo          Ctrl-Y   redo

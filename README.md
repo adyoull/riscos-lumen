@@ -201,6 +201,22 @@ Fixes from a review of 0.0.23:
   fields hold the catalogue's full sizes; a smart album deleted while
   being edited is noticed; the Caption window closes if its photo goes.
 
+## 0.0.25
+
+- Retouch (R): spots painted out, healed (the patch's texture with a
+  plane plus inverse-distance blend of the edge difference, so gradients
+  carry through) or cloned, from a source found by ring matching; size
+  and feather sliders, a brush outline under the pointer. retouch.c,
+  applied on the photo upright before geometry.
+- Brush (B): Dodge, Burn, Saturate, Desaturate strokes with a feathered
+  brush, in linear light after the spots; up to 32 strokes, 1024 points.
+- Black & White mixer (amount and red/green/blue weights) after HSL,
+  before split toning.
+- Colour labels (schema 6): seven coloured dots, in the Selection and
+  Photo menus, the Info tab, the Adjustments tab and beside each name.
+  Search matches the label's name.
+- Compare (O): a photo pinned on the left beside the one being looked at.
+
 ## Layout
 
 ```

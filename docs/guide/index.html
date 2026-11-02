@@ -67,7 +67,7 @@ a { color:#1f5fa8; }
 <li><a href="#part2">Part II: Your Photos</a>
 <ul><li><a href="#ch4">4. Bringing photos in</a></li><li><a href="#ch5">5. Looking through, rating and flagging</a></li><li><a href="#ch6">6. Projects, albums, stacks and watched folders</a></li><li><a href="#ch7">7. Keywords and finding photos</a></li><li><a href="#ch8">8. Removing photos, and photos that have moved</a></li></ul></li>
 <li><a href="#part3">Part III: Making Photos Better</a>
-<ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping and straightening</a></li><li><a href="#ch12">12. Styles, presets, versions and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
+<ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping, straightening, retouching and brushing</a></li><li><a href="#ch12">12. Styles, presets, versions and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
 <li><a href="#part4">Part IV: Sharing and Setting Up</a>
 <ul><li><a href="#ch14">14. Exporting and printing photos</a></li><li><a href="#ch15">15. Camera raw files and plug-ins</a></li><li><a href="#ch16">16. Choices</a></li><li><a href="#ch17">17. Getting help</a></li></ul></li>
 <li><a href="#part5">Part V: The Part of Tens</a>
@@ -275,6 +275,14 @@ a { color:#1f5fa8; }
 </ul>
 <p>All of these are on the <b>Selection</b> menu too: click Menu over the Browser.</p>
 
+<h4>Colour labels</h4>
+<p>A <b>colour label</b> is a coloured dot you give a photo, for whatever you like: red for "to print", green for "done", blue for "send to Mum". Choose <b>Colour label</b> from the Selection menu and pick a dot: the selected photos all get it, and the dot shows beside each one's name. <b>None</b> takes it off.</p>
+<div class="pair">
+<figure><img src="images/label-menu.png" alt="The Colour label menu"><figcaption>Selection &rarr; Colour label: pick a dot.</figcaption></figure>
+<figure><img src="images/labels.png" alt="Photos with colour labels"><figcaption>The dots beside the names.</figcaption></figure>
+</div>
+<p>You can also click a dot in the <b>Info</b> tab's Label row, or in the line of dots under the histogram in the Adjustments tab: click the photo's own dot again to take it off. Searching for a colour's name (<code>red</code>, <code>blue</code>) finds the photos with that label.</p>
+
 <div class="box try"><b class="label">TRY IT</b>Go through your photos with the arrow keys. Give each one stars: <kbd>5</kbd> for the best, <kbd>1</kbd> for the poor ones, <kbd>9</kbd> for the ones you'd never show anyone. Then choose <b>4 stars and up</b> from the rating filter in the bottom bar (<a href="#ch7">Chapter 7</a>): there are your best photos.</div>
 
 <h4>Thumbnail size</h4>
@@ -371,7 +379,7 @@ a { color:#1f5fa8; }
 <div class="box tip"><b class="label">TIP</b>Keywords travel with your photos. Exports carry the caption and keywords (as XMP, which other photo programs and websites read), and photos you import that were given keywords in another program bring them along.</div>
 
 <h4>Searching</h4>
-<p>Click in the <b>Search</b> box in the bottom bar and type. The Browser shows only the photos that match, as you type. Lumen looks in each photo's name, its caption and keywords, its camera's make and model, the date it was taken and its project's name. Type several words to find photos that match all of them. <kbd>Escape</kbd> empties the box.</p>
+<p>Click in the <b>Search</b> box in the bottom bar and type. The Browser shows only the photos that match, as you type. Lumen looks in each photo's name, its caption and keywords, its colour label's name, its camera's make and model, the date it was taken and its project's name. Type several words to find photos that match all of them. <kbd>Escape</kbd> empties the box.</p>
 <figure><img src="images/search.png" alt="Searching for tarn"><figcaption>Searching for "tarn". The title bar shows what you searched for.</figcaption></figure>
 
 <div class="box tip"><b class="label">TIP</b>Dates are searched as the camera writes them, year first: type <code>2022</code> for a year, or <code>2022:08</code> (or <code>2022-08</code>) for a month.</div>
@@ -426,6 +434,16 @@ a { color:#1f5fa8; }
 </ul>
 <figure><img src="images/loupe.png" alt="The loupe"><figcaption>The loupe at 100%, over the rocks.</figcaption></figure>
 
+<h4>Comparing two photos</h4>
+<p>To choose between two shots of the same thing, select both in the Browser and press <kbd>O</kbd> (or choose <b>Compare</b> from the Selection menu). The first is pinned on the left; the other is beside it on the right, as large as the window allows.</p>
+<figure><img src="images/compare.png" alt="Comparing two photos"><figcaption>Friars Crag pinned on the left, Buttermere on the right.</figcaption></figure>
+<ul>
+<li>In the Viewer, <kbd>O</kbd> (or <b>Compare with the next</b> on the Photo menu) pins the photo you're looking at and shows the next beside it.</li>
+<li><kbd>&larr;</kbd> and <kbd>&rarr;</kbd> change the photo on the right; the pinned one stays. Rate, flag and label as you go: the keys work on the photo on the right.</li>
+<li><kbd>Return</kbd> pins the photo on the right instead, and shows the next beside it: a quick way to find the best of a run, keeping the winner pinned.</li>
+<li><kbd>O</kbd> or <kbd>Escape</kbd> stops comparing. Zooming to 100%, cropping or the loupe stop it too.</li>
+</ul>
+
 <h4>Full screen</h4>
 <p>Click <b>Full Screen</b> or press <kbd>F</kbd>: the photo fills the whole screen, with nothing else. Press <kbd>F</kbd> or <kbd>Escape</kbd> to come back.</p>
 <figure><img src="images/full-screen.png" alt="Full screen"><figcaption>Full screen.</figcaption></figure>
@@ -435,7 +453,7 @@ a { color:#1f5fa8; }
 <p>Click the <b>Adjustments</b> tab. If you were in the Browser, Lumen switches to Split View so you can see the photo you're adjusting.</p>
 <figure><img src="images/adjustments.png" alt="The Adjustments tab"><figcaption>The Adjustments tab beside the photo.</figcaption></figure>
 
-<p>At the top is the photo's <b>histogram</b> (a graph of how much of the photo is dark, middle and light: left to right), its place in the list and its stars. Under that are four buttons, <b>Auto</b>, <b>Crop</b>, <b>Grid</b> and <b>Presets</b>, and then the adjustments, in groups.</p>
+<p>At the top is the photo's <b>histogram</b> (a graph of how much of the photo is dark, middle and light: left to right), its place in the list, its flag, its colour label (click a dot to change it) and its stars. Under that are the buttons <b>Auto</b>, <b>Crop</b>, <b>Grid</b> and <b>Presets</b>, then <b>Retouch</b> and <b>Brush</b> (<a href="#ch11">Chapter 11</a>), and then the adjustments, in groups.</p>
 
 <h4>Using the sliders</h4>
 <ul>
@@ -447,7 +465,7 @@ a { color:#1f5fa8; }
 
 <div class="pair">
 <figure><img src="images/panel-top.png" alt="The top of the Adjustments tab"><figcaption>White balance, exposure, highlights &amp; shadows, levels.</figcaption></figure>
-<figure><img src="images/panel-bottom.png" alt="The rest of the Adjustments tab"><figcaption>Enhance, colour, split toning, noise reduction, sharpen and vignette.</figcaption></figure>
+<figure><img src="images/panel-bottom.png" alt="The rest of the Adjustments tab"><figcaption>Further down: enhance, colour, black &amp; white and split toning.</figcaption></figure>
 </div>
 
 <h4>The groups</h4>
@@ -460,6 +478,7 @@ a { color:#1f5fa8; }
 <tr><td>Curves</td><td>(a graph)</td><td>Fine control of brightness from dark to light, for all colours (RGB) or one at a time (Red, Green, Blue). Click the line to add a point and drag it; click a point with Adjust to remove it.</td></tr>
 <tr><td>Enhance</td><td>Contrast, Saturation, Vibrancy</td><td>More (or less) punch. Vibrancy adds colour mostly where there's little, so skin doesn't go orange.</td></tr>
 <tr><td>Colour</td><td>Hue, Saturation, Luminance, for each of eight colours</td><td>Change one range of colours and leave the rest: a deeper blue sky, quieter greens, warmer oranges. See below.</td></tr>
+<tr><td>Black &amp; White</td><td>Amount, Red, Green, Blue</td><td>Turn the photo black and white, choosing how light each colour comes out: like a coloured filter on a black and white film camera. See below.</td></tr>
 <tr><td>Split Toning</td><td>Shadow hue, Shadows, Highlight hue, Highlights</td><td>Tint the dark parts one colour and the light parts another: warm highlights and cool shadows for a film look, or brown or blue for a toned black and white print. A hue is a colour round the colour wheel (0 red, 30 orange, 60 yellow, 120 green, 180 cyan, 210 blue, 300 magenta); its strength says how much.</td></tr>
 <tr><td>Noise Reduction</td><td>Luminance, Colour</td><td>Smooth away the speckles in photos taken in poor light. See below.</td></tr>
 <tr><td>Sharpen</td><td>Amount, Radius</td><td>Crisper edges. A little goes a long way.</td></tr>
@@ -478,6 +497,11 @@ a { color:#1f5fa8; }
 <li><b>Luminance</b> makes them lighter or darker: a darker blue makes a sky deeper without touching the hills.</li>
 </ul>
 <p>Colours between two swatches get some of each, so changes blend smoothly, and greys and whites are left alone. A pale sky is part aqua and part blue, so it changes less than a deep blue one.</p>
+
+<h4>Black &amp; White</h4>
+<p><b>Amount</b> takes the colour away: at 100 the photo is black and white, and in between it's partly faded. <b>Red</b>, <b>Green</b> and <b>Blue</b> say how much each of the photo's colours counts towards the grey: raise Red and red and orange things (skin, autumn leaves, a sunset) come out lighter; lower Blue and a blue sky or lake comes out darker and dramatic, as a red filter does on film. They start at 30, 59 and 11, the mix that looks most like the colour photo's own brightness.</p>
+<figure><img src="images/black-white.png" alt="Black and white"><figcaption>Buttermere in black and white: Red raised to 78, Blue lowered to -65, so the sky and its reflection go dark and the fell stands out.</figcaption></figure>
+<p>Split Toning comes after it, so you can tint the black and white: brown in the shadows for an old print, or a cool blue.</p>
 
 <h4>Noise Reduction and Vignette</h4>
 <div class="pair">
@@ -502,7 +526,7 @@ a { color:#1f5fa8; }
 
 <div class="box tech"><b class="label">TECHNICAL STUFF</b>Lumen works on a copy of the photo up to 1600 pixels across while you adjust, in 16-bit linear light, so changes are quick and smooth. 100%, the loupe and exports work from the full-size photo. A photo's adjustments are kept as a short text "recipe" in the catalogue.</div>
 
-<h3 class="chapter" id="ch11"><span>11</span> Cropping and straightening</h3>
+<h3 class="chapter" id="ch11"><span>11</span> Cropping, straightening, retouching and brushing</h3>
 
 <p>Click <b>Crop</b> in the Adjustments tab, or press <kbd>C</kbd>. Lumen shows the whole photo with the crop over it; the parts outside are darkened.</p>
 <figure><img src="images/crop.png" alt="Cropping"><figcaption>Cropping, with the Thirds grid to help place the mountain.</figcaption></figure>
@@ -517,6 +541,44 @@ a { color:#1f5fa8; }
 
 <h4>Straightening</h4>
 <p>Drag the <b>Straighten</b> slider in the Geometry group. A fine grid appears over the photo while you drag, to line the horizon up with. <kbd>[</kbd> and <kbd>]</kbd> turn the photo a quarter left and right.</p>
+
+<h4>Painting things out: Retouch</h4>
+<p>A speck of dust on the sensor, a stray rock in a still lake, a crisp packet on a beach: click <b>Retouch</b> in the Adjustments tab, or press <kbd>R</kbd>, and click on it. Lumen paints it out with a patch from close by, which it chooses for you.</p>
+<figure><img src="images/retouch.png" alt="The Retouch tool"><figcaption>Retouching: the spot's circle in blue, and the place it was filled from in grey, with a line between.</figcaption></figure>
+<p>The tool's controls are in a box at the top of the photo:</p>
+<ul>
+<li><b>Repair</b> (usually best) takes the texture from the patch but matches its colour and brightness to what's round the spot, so it blends in. <b>Clone</b> copies the patch exactly as it is: use it where there's a hard line to carry on, such as a wall's edge.</li>
+<li><b>Size</b> sets the size of the circle. A circle follows the pointer over the photo, so you can match it to what you're painting out before you click: a little bigger than the blemish is right. <kbd>[</kbd> and <kbd>]</kbd> make it smaller and larger.</li>
+<li><b>Feather</b> is how much of the circle's edge fades into the photo. The inner ring shows where the painting is complete. A spot with too much feather lets a ghost of the blemish show; too little can leave a visible edge.</li>
+<li>The sliders change the spot you placed (or moved) last as well as new ones: if a spot doesn't quite cover the blemish, make it bigger. Lumen chooses a new patch to fill it from.</li>
+<li>Drag a spot to move it, or drag its grey circle to fill it from somewhere else. Click a spot with <b>Adjust</b> to take it away.</li>
+<li><b>Done</b>, <kbd>Return</kbd> or <kbd>Escape</kbd> puts the tool away. Undo works on spots as on everything else.</li>
+</ul>
+<div class="pair">
+<figure><img src="images/retouch-before.png" alt="Before retouching"><figcaption>Before: the circle over the rock.</figcaption></figure>
+<figure><img src="images/retouch-after.png" alt="After retouching"><figcaption>After one click.</figcaption></figure>
+</div>
+<div class="box tip"><b class="label">TIP</b>Keep each spot small and close to its blemish. A big circle that reaches a sharp edge nearby (the dark reflection of a hill, say) smudges it; two small spots do better than one large one.</div>
+
+<h4>Painting on adjustments: Brush</h4>
+<p>Sometimes only part of a photo needs a change: a sky a little too bright, a face in shadow, a field of flowers that should glow. Click <b>Brush</b> in the Adjustments tab, or press <kbd>B</kbd>, choose what to paint, and drag over the photo:</p>
+<ul>
+<li><b>Dodge</b> lightens and <b>Burn</b> darkens, as a darkroom printer did by hand.</li>
+<li><b>Saturate</b> makes colours stronger; <b>Desaturate</b> makes them quieter (at full strength, grey).</li>
+<li><b>Size</b> and <b>Feather</b> are the brush's size and soft edge, as for Retouch; <b>Strength</b> is how much: for Dodge and Burn, in stops (EV) of light, up to 2.</li>
+</ul>
+<figure><img src="images/brush.png" alt="The Brush tool"><figcaption>Brushing: a large Burn stroke along the sky (its path in blue) and a Dodge stroke over the rocks (in yellow). The circle is the brush.</figcaption></figure>
+<div class="pair">
+<figure><img src="images/brush-before.png" alt="Before brushing"><figcaption>Before.</figcaption></figure>
+<figure><img src="images/brush-after.png" alt="After brushing"><figcaption>After: the sky deeper, the rocks in front lifted.</figcaption></figure>
+</div>
+<ul>
+<li>Each stroke's path is drawn over the photo in its colour: yellow for Dodge, blue for Burn, red for Saturate, grey for Desaturate.</li>
+<li>Going over the same place in one stroke doesn't add up; a second stroke over the first does. So for a stronger effect, paint again.</li>
+<li>The sliders change the stroke you painted last, so you can paint first and then judge how strong it should be.</li>
+<li>Click a stroke's path with <b>Adjust</b> to take that stroke away.</li>
+</ul>
+<div class="box rem"><b class="label">REMEMBER</b>Spots and strokes belong to that photo: they aren't part of a preset or a style, and aren't copied by Copy adjustments, because they're in particular places on that photo. They're kept in its recipe, so like every adjustment they change nothing in the photo's file, and they're in exports, prints and thumbnails.</div>
 
 <h3 class="chapter" id="ch12"><span>12</span> Styles, presets, versions and copying adjustments</h3>
 
@@ -574,7 +636,7 @@ a { color:#1f5fa8; }
 
 <h3 class="chapter" id="ch13"><span>13</span> What the camera recorded: the Info tab</h3>
 
-<p>Click the <b>Info</b> tab to see everything about the selected photo: its size, rating, caption and keywords (click them to change them, <a href="#ch7">Chapter 7</a>), which version it is and its stack, file and colour space, and then everything the camera recorded (called <b>EXIF</b>): camera, lens, exposure, date, and, if the camera knew, where it was taken.</p>
+<p>Click the <b>Info</b> tab to see everything about the selected photo: its size, rating, flag, colour label (click a dot to change it), caption and keywords (click them to change them, <a href="#ch7">Chapter 7</a>), which version it is and its stack, file and colour space, and then everything the camera recorded (called <b>EXIF</b>): camera, lens, exposure, date, and, if the camera knew, where it was taken.</p>
 <div class="pair">
 <figure><img src="images/info-tab.png" alt="The Info tab"><figcaption>The top of the Info tab.</figcaption></figure>
 <figure><img src="images/info-exif.png" alt="More of the Info tab"><figcaption>Further down: the lens, and the start of GPS.</figcaption></figure>
@@ -716,7 +778,7 @@ a { color:#1f5fa8; }
 <li><b>The library</b> is a directory: <code>Catalogue</code> (an SQLite database) and <code>Thumbs</code> (256-pixel JPEGs in 256 subdirectories). Originals are referenced, never copied or written to. Back the directory up as you would any other.</li>
 <li><b>Choosing the library:</b> <code>Lumen$Library</code>, set before Lumen starts, wins over the Choices window. Otherwise it's the Choices setting, else <code>&lt;Choices$Write&gt;.Lumen.Library</code> (or <code>LumenLibrary</code> beside !Lumen if there's no Choices yet).</li>
 <li><b>Recognising photos:</b> each original is identified by a hash of its size and its first and last 64 KB, which is how re-imports are skipped and moved files relinked.</li>
-<li><b>Recipes:</b> adjustments are stored per photo as a short text recipe; the pipeline runs geometry first (quarter turns, straighten, perspective, crop) in 16-bit linear light, then white balance, exposure, local highlights and shadows, levels, curves and enhance, then split toning (after saturation, so it tints black and white), then sharpening at the output size. A style is the look part of a recipe; while one is shown from the menu, nothing is written to the catalogue.</li>
+<li><b>Recipes:</b> adjustments are stored per photo as a short text recipe; retouch spots (<code>spot</code> lines) and brush strokes (<code>brush</code> lines, their points in ten-thousandths of the photo) are applied first, on the photo turned upright, so they stay on what they cover whatever the crop; then the pipeline runs geometry (quarter turns, straighten, perspective, crop) in 16-bit linear light, then white balance, exposure, local highlights and shadows, levels, curves and enhance, then the black and white mix and split toning (after saturation, so it tints black and white), then sharpening at the output size. A style is the look part of a recipe; while one is shown from the menu, nothing is written to the catalogue.</li>
 <li><b>Speed:</b> the Viewer works on a proxy of up to 1600 pixels, and a half-size copy while a slider is dragged. JPEGs are decoded with libjpeg-turbo, which uses NEON when the processor has it (set <code>JSIMD_FORCENONE</code> to 1 to compare without).</li>
 <li><b>Background work</b> (imports, thumbnails, exports, checking files, watched folders) runs in short slices on null events, so the desktop never waits; Lumen asks for null events only while there's work to do. Thumbnails nobody is looking at are made with <code>Wimp_PollIdle</code> between slices while another task has the input focus. Watched folders wake Lumen with <code>Wimp_PollIdle</code> when they're due; unchanged files are skipped by size and date without being read. The Styles item asks for <code>Message_MenuWarning</code>, and only while that list is open does Lumen look at the pointer (every 5 cs) to show the style under it.</li>
 <li><b>Colour:</b> Adobe RGB (1998) and Display P3 photos (from their ICC profile, or EXIF's colour space and interoperability index) are converted to sRGB by matrix in linear light. Other profiles are treated as sRGB.</li>
@@ -758,7 +820,11 @@ a { color:#1f5fa8; }
 <tr><td><kbd>A</kbd></td><td>Auto adjust (Viewer)</td></tr>
 <tr><td><kbd>C</kbd></td><td>Crop (Viewer)</td></tr>
 <tr><td><kbd>G</kbd></td><td>Next grid: none, thirds, quarters, fine (Viewer)</td></tr>
-<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Turn a quarter left / right (Viewer)</td></tr>
+<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Turn a quarter left / right (Viewer; while retouching or brushing: the brush smaller / larger)</td></tr>
+<tr><td><kbd>{</kbd> / <kbd>}</kbd></td><td>Less / more feather (while retouching or brushing)</td></tr>
+<tr><td><kbd>R</kbd></td><td>Retouch on / off (Viewer)</td></tr>
+<tr><td><kbd>B</kbd></td><td>Brush on / off (Viewer)</td></tr>
+<tr><td><kbd>O</kbd></td><td>Compare: the selection (Browser), or this photo with the next (Viewer); again to stop. While comparing, <kbd>Return</kbd> pins the photo on the right</td></tr>
 </table>
 
 <h4>Mouse</h4>
@@ -769,6 +835,9 @@ a { color:#1f5fa8; }
 <tr><td>A slider</td><td>Drag or click to set it</td><td>Back to where it started</td></tr>
 <tr><td>A group's name</td><td colspan="2">Fold it away or open it</td></tr>
 <tr><td>The curve</td><td>Add a point, or drag one</td><td>Remove a point</td></tr>
+<tr><td>The photo, retouching</td><td>Paint out a spot; drag a spot or its source to move it</td><td>Take a spot away</td></tr>
+<tr><td>The photo, brushing</td><td>Drag to paint a stroke (click: a dab)</td><td>Take a stroke away</td></tr>
+<tr><td>A colour label's dot (Info or Adjustments tab)</td><td colspan="2">Give the photo that label (its own dot again: none)</td></tr>
 <tr><td>A line in the Library tab</td><td>Show those photos</td><td>&ndash;</td></tr>
 <tr><td>The number on a stack's pick</td><td colspan="2">Open or close the stack</td></tr>
 <tr><td>A colour swatch (Colour group)</td><td colspan="2">Show that colour's sliders</td></tr>
@@ -788,12 +857,12 @@ a { color:#1f5fa8; }
 <table>
 <tr><th>Menu</th><th>Items</th></tr>
 <tr><td>Show</td><td>All photos; Flagged; Rejected; Last import; Projects &rarr;; Albums &rarr;; Rating filter &rarr;</td></tr>
-<tr><td>Selection</td><td>Rating &rarr;; Flag / unflag; Reject; Caption and keywords...; Select all; Clear selection; Copy adjustments; Paste adjustments; Apply preset &rarr; (Styles &rarr;, then your presets); Export...; Print...; Remove from library...</td></tr>
+<tr><td>Selection</td><td>Rating &rarr;; Colour label &rarr;; Flag / unflag; Reject; Caption and keywords...; Select all; Clear selection; Copy adjustments; Paste adjustments; Apply preset &rarr; (Styles &rarr;, then your presets); Compare; Export...; Print...; Remove from library...</td></tr>
 <tr><td>Album</td><td>New album from selection &rarr;; Add selection to &rarr;; Remove from this album; New smart album...</td></tr>
 <tr><td>Versions and stacks</td><td>Duplicate version; New version from original; Stack; Unstack; Make the pick; Open or close stack; Auto-stack, seconds apart &rarr;</td></tr>
 <tr><td>Thumbnail size</td><td>Small; Medium; Large</td></tr>
 <tr><td>Plug-ins</td><td>Each plug-in (ticked when on); Add plug-in...; Remove &rarr;</td></tr>
-<tr><td>Photo (Viewer)</td><td>Before and after; Zoom to 100%; Loupe &rarr;; Undo; Redo; Reset all adjustments; Auto adjust; Pick white balance; Crop; Crop shape &rarr;; Grid &rarr;; Presets &rarr; (Styles &rarr;; your presets; Save current as &rarr;; Delete &rarr;); Copy adjustments; Paste adjustments; Caption and keywords...; Duplicate version; New version from original; Export...; Print...; Back to the Browser; Remove from library...</td></tr>
+<tr><td>Photo (Viewer)</td><td>Before and after; Zoom to 100%; Loupe &rarr;; Undo; Redo; Reset all adjustments; Auto adjust; Pick white balance; Crop; Crop shape &rarr;; Grid &rarr;; Presets &rarr; (Styles &rarr;; your presets; Save current as &rarr;; Delete &rarr;); Copy adjustments; Paste adjustments; Colour label &rarr;; Caption and keywords...; Compare with the next; Duplicate version; New version from original; Export...; Print...; Back to the Browser; Remove from library...</td></tr>
 <tr><td>A project</td><td>Rename &rarr;; Watch for new photos; Albums from its folders; Remove project from library...</td></tr>
 <tr><td>An album</td><td>Rename &rarr;; Delete album... (a smart album also: Edit smart album...; an album made from a folder: Follows its folder)</td></tr>
 </table>
