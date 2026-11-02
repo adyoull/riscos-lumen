@@ -1,0 +1,14 @@
+Guide pictures: how they were taken
+===================================
+Both user guides' pictures were taken on the ROL test bed (RISC OS 5.31-5,
+1920x1080, 16M colours) with these scripts. Run start-new.sh, then
+new1.sh to new7.sh in order; start-new2.sh then new8.sh; start-print.sh
+then new9.sh. The LumenRaw guide: guide's start.sh, then lumenraw-shots.sh.
+
+The photos are Andrew Youll's own (copyright Andrew Youll, used with his
+permission), in IXFS:$.RISCOS.Photos: Eventing, Schooling, Portraits,
+Dogs_and_garden, Polo and Jousting (JPEGs) and Raw (three Nikon D700
+NEFs). They are not kept in the repository.
+
+The styles sheet is made on the host: render.c and sheet.py in
+/home/claude/styles (Lumen's develop on a small copy of Upright).

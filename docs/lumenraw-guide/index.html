@@ -60,7 +60,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 </header>
 <main>
 
-<figure><img src="images/d4.png" alt="A raw photo from the International Space Station, developed by LumenRaw"><figcaption>A raw photo (Nikon D4, NEF) taken on the International Space Station, opened in Lumen and developed by LumenRaw.</figcaption></figure>
+<figure><img src="images/cover.png" alt="A raw photo of a polo match, developed by LumenRaw"><figcaption>A raw photo of a polo match (Nikon D700, NEF), opened in Lumen and developed by LumenRaw, with no adjustments.</figcaption></figure>
 
 <nav class="toc">
 <h3>Contents</h3>
@@ -91,7 +91,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <h4>About this guide</h4>
 <p>This guide is about the plug-in. Everything else about Lumen (the library, the adjustments, exporting) is in the <b>Lumen User Guide</b>, which comes with Lumen: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
-<p>The pictures are screenshots of Lumen 0.0.26 with LumenRaw on RISC OS 5. The raw photos in them were taken by astronauts on the International Space Station and are published by NASA.</p>
+<p>The pictures are screenshots of Lumen 0.0.26 with LumenRaw on RISC OS 5. The raw photos in them are Andrew Youll's, straight from his Nikon D700.</p>
 
 <h4>New in LumenRaw 1.1</h4>
 <p>LumenRaw 1.1 is built on LibRaw 0.22.3, the newest LibRaw (October 2026), in place of 0.21.4. It knows 77 more cameras, mostly from 2023 and 2024: among them the Canon EOS R8, R50, R6 Mark II and R5 Mark II, the Nikon Z 8, Z f and Z 6 III, the Sony A7R V, A7C II and A6700, the Fujifilm X-T5, X-H2 and X100VI, the OM System OM-5, Panasonic's GH6 and GH7, and iPhones up to the 15 Pro Max. LibRaw's 0.22 releases also fix many ways a damaged or deliberately broken raw file could upset it.</p>
@@ -204,9 +204,9 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>When it's done, the developed photo replaces the preview. This takes a few seconds for a typical camera, longer for big sensors.</p>
 <div class="pair">
 <figure><img src="images/preview.png" alt="The camera's preview"><figcaption>First: the preview the camera saved in the file.</figcaption></figure>
-<figure><img src="images/developed.png" alt="Developed by LumenRaw"><figcaption>A few seconds later: developed from the raw data. The shadows hold far more.</figcaption></figure>
+<figure><img src="images/developed.png" alt="Developed by LumenRaw"><figcaption>A few seconds later: developed from the raw data, a little softer and more natural than the camera's own version.</figcaption></figure>
 </div>
-<p>The two can look quite different, as here. The camera made its preview for its own small screen, sometimes with settings of its own; LumenRaw develops what the sensor recorded.</p>
+<p>Here the two are close. With other cameras and settings they can look quite different: the camera made its preview for its own small screen, with its own sharpening, contrast and picture style; LumenRaw develops what the sensor recorded, and leaves the look to you.</p>
 
 <h4>Half size and full size</h4>
 <p>To be quick, LumenRaw develops at <b>half size</b> when that's still big enough for what Lumen needs. A 24 megapixel camera gives a 3000 pixel wide picture at half size, which is plenty for the Viewer. For <b>100%</b> and the <b>loupe</b>, Lumen asks for the full size, which takes longer, so the first zoom into a raw photo has a short wait. <b>Exports</b> and <b>prints</b> are developed at the size they need: half size for a small export, full size for a big one.</p>
@@ -239,7 +239,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <tr><td>Camera raw: the LibRaw plug-in is switched off (Plug-ins, on the icon bar menu)</td><td>LumenRaw is installed, but switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
 <tr><td>Camera raw: needs the LibRaw plug-in (LumenRaw, from PackMan)</td><td>LumenRaw isn't installed (<a href="#ch2">Chapter 2</a>).</td></tr>
 </table>
-<figure><img src="images/info-raw.png" alt="The Info tab for a raw photo"><figcaption>A Nikon D3S raw photo in the Info tab.</figcaption></figure>
+<figure><img src="images/info-raw.png" alt="The Info tab for a raw photo"><figcaption>A Nikon D700 raw photo in the Info tab.</figcaption></figure>
 <p>Below that are the camera's details. Lumen reads them from the raw file itself; LumenRaw adds the photo's true size and which way up it was taken, which it knows better for some makes.</p>
 
 <!-- ======================================================================= -->
@@ -541,7 +541,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <!-- ======================================================================= -->
 <h2 class="part" id="credits">Credits and licences</h2>
-<p>The photos in this guide are ISS030-E-122639 (Nikon D3S, March 2012) and ISS042-E-297200 (Nikon D4, February 2015), taken from the International Space Station and published by NASA. They're in the public domain.</p>
+<p>The photos in this guide are by Andrew Youll, &copy; Andrew Youll, and are used with his permission: three raw files from his Nikon D700, of a Highland cow (2015), a Labrador in the water and a polo match (2016).</p>
 <p class="small">LumenRaw is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on LibRaw, &copy; 2008&ndash;2025 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the licence is in <code>!Lumen.Plugins.LibRaw.Licence</code>. The camera list in Appendix A is LibRaw's. Product names are the trademarks of their owners and are used here only to say which cameras work.</p>
 
 </main>
