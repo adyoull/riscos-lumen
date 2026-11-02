@@ -30,6 +30,12 @@ int thumbgen_colour (const thumbgen *t);
 /* A camera raw file (through the LibRaw plug-in, rawjob.h): 1 and its
    details (size, orientation, camera...) once the plug-in has given them. */
 int thumbgen_raw_details (const thumbgen *t, img_info *info);
+/* A camera raw file gives its camera's preview for a picture of at most
+   THUMBGEN_PREVIEW_SIDE (thumbnails), and is developed by the plug-in for
+   anything bigger (the viewer, 100%, export, print): the preview can look
+   quite unlike the raw. 1 if this one is being developed. */
+#define THUMBGEN_PREVIEW_SIDE 256
+int thumbgen_raw_developed (const thumbgen *t);
 /* The thumbnail's size, once finished (after orientation). */
 void thumbgen_size (const thumbgen *t, int *w, int *h);
 void thumbgen_free (thumbgen *t);

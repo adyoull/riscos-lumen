@@ -127,7 +127,7 @@ struct thumbgen
   /* A camera raw file: the plug-in's job, then its picture read as a
      JPEG or a PPM. */
   rawjob *rj;
-  int is_raw;
+  int is_raw, raw_developed;
   img_info raw_info;
   int done;
   int out_w, out_h;
@@ -347,6 +347,8 @@ static int start_raw_picture (thumbgen *t)
   return start_jpeg (t);
 }
 
+int thumbgen_raw_developed (const thumbgen *t) { return t->is_raw && t->raw_developed; }
+
 int thumbgen_raw_details (const thumbgen *t, img_info *info)
 {
   if (!t->is_raw || !t->raw_info.width)
@@ -485,7 +487,8 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
       fclose (t->f);
       t->f = NULL;
       t->is_raw = 1;
-      t->rj = rawjob_start (src, max_side > 1024, max_side, err, errlen);
+      t->raw_developed = max_side > THUMBGEN_PREVIEW_SIDE;
+      t->rj = rawjob_start (src, t->raw_developed, max_side, err, errlen);
       if (t->rj)
         return t;
       free (t);

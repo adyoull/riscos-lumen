@@ -1256,6 +1256,17 @@ static void test_raw (void)
          "the plug-in's details: 4284 x 2844, Nikon D3S, ISO 3200, the date");
   thumbgen_size (t, &w, &h);
   CHECK (w == 256 && h > 160 && h < 175, "a 256-wide thumbnail");
+  CHECK (t && !thumbgen_raw_developed (t), "a thumbnail is the camera's preview");
+  thumbgen_free (t);
+  /* A small export (1000 pixels) is developed too: the preview can look
+     quite unlike the raw (this one is much darker). */
+  t = thumbgen_start (nef, NULL, 1000, 1, err, sizeof err);
+  CHECK (t && thumbgen_raw_developed (t), "a 1000-pixel export of a raw is developed, not the camera's preview");
+  while (t && (r = thumbgen_step (t, 256)) == 0)
+    ;
+  CHECK (t && r == 1 && thumbgen_take (t, &img) == 0 && img.w == 1000, "and comes out 1000 wide");
+  if (t && r == 1)
+    free (img.rgb);
   thumbgen_free (t);
   /* Developed, at half size (2142 wide is more than 1600). */
   t = thumbgen_start (nef, NULL, 1600, 1, err, sizeof err);
