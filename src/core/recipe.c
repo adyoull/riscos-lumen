@@ -17,12 +17,40 @@ const recipe_param recipe_params[P_COUNT] = {
   { "enhance",  "contrast",   "Contrast",    -100, 100, 0, 1, 0, 0 },
   { "enhance",  "saturation", "Saturation",  -100, 100, 0, 1, 0, 0 },
   { "enhance",  "vibrance",   "Vibrancy",    -100, 100, 0, 1, 0, 0 },
+  { "hsl",      "red_hue", "Hue", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "red_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "red_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "orange_hue", "Hue", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "orange_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "orange_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "yellow_hue", "Hue", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "yellow_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "yellow_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "green_hue", "Hue", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "green_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "green_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "aqua_hue", "Hue", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "aqua_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "aqua_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "blue_hue", "Hue", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "blue_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "blue_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "purple_hue", "Hue", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "purple_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "purple_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "magenta_hue", "Hue", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "magenta_saturation", "Saturation", -100, 100, 0, 1, 0, 1 },
+  { "hsl",      "magenta_luminance", "Luminance", -100, 100, 0, 1, 0, 1 },
   { "tone",     "shadow_hue", "Shadow hue",     0, 360, 0, 1, 0, 0 },
   { "tone",     "shadows",    "Shadows",        0, 100, 0, 1, 0, 0 },
   { "tone",     "highlight_hue", "Highlight hue", 0, 360, 0, 1, 0, 0 },
   { "tone",     "highlights", "Highlights",     0, 100, 0, 1, 0, 0 },
+  { "noise",    "luminance",  "Luminance",      0, 100, 0, 1, 0, 0 },
+  { "noise",    "colour",     "Colour",         0, 100, 0, 1, 0, 0 },
   { "sharpen",  "amount",     "Amount",         0, 200, 0, 1, 0, 0 },
   { "sharpen",  "radius",     "Radius",       0.3,   3, 1, 0.1f, 1, 0 },
+  { "vignette", "amount",     "Amount",      -100, 100, 0, 1, 0, 0 },
+  { "vignette", "midpoint",   "Midpoint",       0, 100, 50, 1, 0, 0 },
   { "geometry", "rotate",     "Rotate",         0,   3, 0, 1, 0, 1 },
   { "geometry", "angle",      "Straighten",   -15,  15, 0, 0.1f, 1, 0 },
   { "geometry", "vertical",   "Vertical",    -100, 100, 0, 1, 0, 0 },
@@ -34,17 +62,23 @@ const recipe_param recipe_params[P_COUNT] = {
 };
 
 const recipe_group recipe_groups[] = {
-  { "White Balance", P_TEMP, P_TINT, 1, 0 },
-  { "Exposure", P_EV, P_EV, 1, 0 },
-  { "Highlights & Shadows", P_HIGHLIGHTS, P_SHADOWS, 1, 0 },
-  { "Levels", P_BLACK, P_MID, 1, 0 },
-  { "Curves", 1, 0, 1, 1 },            /* no sliders: the curves editor */
-  { "Enhance", P_CONTRAST, P_VIBRANCE, 1, 0 },
-  { "Split Toning", P_TONE_SH_HUE, P_TONE_HI, 1, 0 },
-  { "Sharpen", P_SHARPEN, P_SHARP_RADIUS, 1, 0 },
-  { "Geometry", P_ROTATE, P_PERSP_H, 1, 0 },
-  { "Crop", P_CROP_X0, P_CROP_Y1, 0, 0 },
+  { "White Balance", P_TEMP, P_TINT, 1, 0, 0 },
+  { "Exposure", P_EV, P_EV, 1, 0, 0 },
+  { "Highlights & Shadows", P_HIGHLIGHTS, P_SHADOWS, 1, 0, 0 },
+  { "Levels", P_BLACK, P_MID, 1, 0, 0 },
+  { "Curves", 1, 0, 1, 1, 0 },         /* no sliders: the curves editor */
+  { "Enhance", P_CONTRAST, P_VIBRANCE, 1, 0, 0 },
+  { "Colour", P_HSL, P_HSL_END, 1, 0, 1 },   /* a band's three sliders at a time */
+  { "Split Toning", P_TONE_SH_HUE, P_TONE_HI, 1, 0, 0 },
+  { "Noise Reduction", P_NOISE_LUM, P_NOISE_COL, 1, 0, 0 },
+  { "Sharpen", P_SHARPEN, P_SHARP_RADIUS, 1, 0, 0 },
+  { "Vignette", P_VIG_AMOUNT, P_VIG_MID, 1, 0, 0 },
+  { "Geometry", P_ROTATE, P_PERSP_H, 1, 0, 0 },
+  { "Crop", P_CROP_X0, P_CROP_Y1, 0, 0, 0 },
 };
+
+const char *const recipe_hsl_bands[HSL_BANDS] = { "Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta" };
+const float recipe_hsl_centre[HSL_BANDS] = { 0, 30, 60, 120, 180, 225, 270, 315 };
 const int recipe_ngroups = (int) (sizeof recipe_groups / sizeof recipe_groups[0]);
 
 void recipe_default (recipe *r)
@@ -378,6 +412,8 @@ int recipe_format (const recipe *r, char *out, size_t n)
       used += (size_t) k;
       for (p = first; p <= last; p++)
         {
+          if (recipe_groups[g].hsl && same (r->v[p], recipe_params[p].def))
+            continue;                  /* 24 values: only those changed */
           k = snprintf (out + used, n - used, " %s=%.*f", recipe_params[p].key,
                         recipe_params[p].decimals, (double) r->v[p]);
           if (k < 0 || used + (size_t) k >= n)

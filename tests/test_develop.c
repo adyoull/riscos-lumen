@@ -14,6 +14,7 @@
 #include "../src/core/sharpen.h"
 #include "../src/core/export.h"
 #include "../src/core/xmp.h"
+#include "../src/core/denoise.h"
 #include "../src/core/exifout.h"
 #include <png.h>
 #include "../src/core/fsys.h"
@@ -1357,6 +1358,170 @@ static void test_toning (void)
     }
 }
 
+/* Colour (HSL), vignette and noise reduction. */
+static void test_hsl_vignette_noise (const char *work)
+{
+  recipe r;
+  int o[3], a[3], k;
+  char t[1024];
+  /* HSL: blue's saturation down takes a blue's colour away and leaves red. */
+  recipe_default (&r);
+  recipe_parse (&r, "hsl blue_saturation=-100 red_hue=0\n");
+  CHECK (r.v[HSL_PARAM (HSL_BLUE, HSL_SAT)] == -100, "hsl line parsed");
+  recipe_format (&r, t, sizeof t);
+  CHECK (strstr (t, "hsl blue_saturation=-100") != NULL && strstr (t, "red_hue") == NULL, "and written, defaults left out");
+  dev1 (&r, 40, 90, 200, o);
+  CHECK (abs (o[0] - o[2]) < 12 && abs (o[1] - o[2]) < 12, "blue, saturation -100: grey");
+  dev1 (&r, 200, 40, 40, a);
+  CHECK (a[0] == 200 && a[1] == 40 && a[2] == 40, "red: untouched");
+  dev1 (&r, 128, 128, 128, a);
+  CHECK (a[0] == 128 && a[1] == 128 && a[2] == 128, "grey: untouched");
+  /* Hue: red turned towards orange (+), towards magenta (-). */
+  recipe_default (&r);
+  recipe_parse (&r, "hsl red_hue=100\n");
+  dev1 (&r, 200, 30, 30, o);
+  CHECK (o[1] > 50 && o[1] > o[2] + 15, "red hue +100: towards orange (more green than blue)");
+  recipe_default (&r);
+  recipe_parse (&r, "hsl red_hue=-100\n");
+  dev1 (&r, 200, 30, 30, o);
+  CHECK (o[2] > o[1] + 15, "red hue -100: towards magenta (more blue than green)");
+  /* Luminance: green darker, a green's brightness falls; blue unaffected. */
+  recipe_default (&r);
+  recipe_parse (&r, "hsl green_luminance=-100\n");
+  dev1 (&r, 60, 160, 60, o);
+  CHECK (o[1] < 140 && o[1] > 60, "green luminance -100: darker green");
+  dev1 (&r, 40, 60, 200, o);
+  CHECK (abs (o[2] - 200) <= 2, "a blue isn't touched by green's slider");
+  /* Neighbouring bands blend: halfway between orange (30) and yellow (60). */
+  recipe_default (&r);
+  recipe_parse (&r, "hsl yellow_saturation=-100\n");
+  dev1 (&r, 230, 172, 30, o);          /* hue about 42: between orange and yellow */
+  dev1 (&r, 230, 230, 30, a);          /* yellow itself */
+  CHECK (abs (a[0] - a[2]) < 12, "yellow, -100: grey");
+  CHECK (o[0] - o[2] > 40 && o[0] - o[2] < 190, "an orange-yellow between: partly taken");
+  /* Copying a look carries the colour, noise and vignette settings. */
+  {
+    recipe dst, src;
+    recipe_default (&src);
+    recipe_parse (&src, "hsl aqua_hue=20\nnoise luminance=40 colour=60\nvignette amount=-50 midpoint=30\ncrop x0=0.1\n");
+    recipe_default (&dst);
+    recipe_copy_look (&dst, &src);
+    CHECK (dst.v[HSL_PARAM (HSL_AQUA, HSL_HUE)] == 20 && dst.v[P_NOISE_COL] == 60 && dst.v[P_VIG_AMOUNT] == -50
+           && dst.v[P_VIG_MID] == 30 && dst.v[P_CROP_X0] == 0, "a look: colour, noise, vignette (no crop)");
+  }
+
+  /* Vignette: corners darker than the middle, by about 2 stops at -100. */
+  {
+    rgb_image img;
+    int x, y;
+    img.w = 200; img.h = 100;
+    img.rgb = malloc (200 * 100 * 3);
+    memset (img.rgb, 160, 200 * 100 * 3);
+    recipe_default (&r);
+    recipe_parse (&r, "vignette amount=-100 midpoint=50\n");
+    develop_image (&r, &img);
+    {
+      int mid = img.rgb[(50 * 200 + 100) * 3], corner = img.rgb[0], edge = img.rgb[(50 * 200 + 0) * 3];
+      CHECK (mid >= 158 && mid <= 162, "vignette: the middle unchanged");
+      CHECK (corner < 95 && corner > 60, "the corner about 2 stops darker");
+      CHECK (edge < mid && edge > corner, "the side, in between");
+    }
+    memset (img.rgb, 100, 200 * 100 * 3);
+    recipe_default (&r);
+    recipe_parse (&r, "vignette amount=60\n");
+    develop_image (&r, &img);
+    CHECK (img.rgb[0] > 115, "a positive amount lightens the corners");
+    /* The same through the rows a band at a time (export, the Viewer at 100%). */
+    {
+      static develop d;
+      uint16_t *lin = malloc (200 * 10 * 6);
+      uint32_t *px = malloc (200 * 10 * 4);
+      unsigned char row[200 * 10 * 3];
+      memset (row, 160, sizeof row);
+      recipe_default (&r);
+      recipe_parse (&r, "vignette amount=-100\n");
+      develop_prepare (&d, &r);
+      dev_to_linear (row, lin, 200 * 10);
+      develop_region (&d, 200, 100, 0, 90);   /* the bottom 10 rows of 100 */
+      develop_rows (&d, lin, 200, 0, 10, px, NULL);
+      y = (int) (px[9 * 200] & 255);
+      memset (img.rgb, 160, 200 * 100 * 3);
+      develop_image (&r, &img);
+      x = img.rgb[(99 * 200) * 3];
+      CHECK (abs (x - y) <= 1, "a band of rows matches the whole (its place is known)");
+      free (lin);
+      free (px);
+    }
+    free (img.rgb);
+  }
+
+  /* Noise reduction: a noisy flat grey gets smoother; an edge stays. */
+  {
+    int w = 64, h = 64, x, y;
+    uint32_t *px = malloc ((size_t) w * h * 4), *orig = malloc ((size_t) w * h * 4);
+    double var0 = 0, var1 = 0, cvar0 = 0, cvar1 = 0;
+    unsigned seed = 1;
+    for (y = 0; y < h; y++)
+      for (x = 0; x < w; x++)
+        {
+          int base = x < 32 ? 70 : 190, n[3], c;
+          for (c = 0; c < 3; c++)
+            {
+              seed = seed * 1103515245u + 12345u;
+              n[c] = base + (int) ((seed >> 16) % 13) - 6;
+            }
+          px[y * w + x] = (uint32_t) n[0] | (uint32_t) n[1] << 8 | (uint32_t) n[2] << 16;
+        }
+    memcpy (orig, px, (size_t) w * h * 4);
+    CHECK (denoise32 (px, w, h, 0, 0, 1) == 0 && !memcmp (px, orig, (size_t) w * h * 4), "noise 0: unchanged");
+    CHECK (denoise_margin (60, 80, 1) > 0 && denoise_margin (0, 0, 1) == 0, "a margin when on");
+    denoise32 (px, w, h, 60, 80, 1);
+    for (y = 8; y < 56; y++)
+      for (x = 4; x < 24; x++)
+        {
+          int i = y * w + x, r0 = (int) (orig[i] & 255), g0 = (int) (orig[i] >> 8 & 255), b0 = (int) (orig[i] >> 16 & 255);
+          int r1 = (int) (px[i] & 255), g1 = (int) (px[i] >> 8 & 255), b1 = (int) (px[i] >> 16 & 255);
+          double l0 = (r0 + g0 + b0) / 3.0 - 70, l1 = (r1 + g1 + b1) / 3.0 - 70;
+          var0 += l0 * l0;
+          var1 += l1 * l1;
+          cvar0 += (r0 - b0) * (r0 - b0);
+          cvar1 += (r1 - b1) * (r1 - b1);
+        }
+    CHECK (var1 < var0 * 0.6, "luminance noise: smoother");
+    CHECK (cvar1 < cvar0 * 0.4, "colour noise: much less");
+    {
+      int left = (int) (px[32 * w + 29] & 255), right = (int) (px[32 * w + 34] & 255);
+      CHECK (left < 90 && right > 170, "the edge between 70 and 190 is kept");
+    }
+    free (px);
+    free (orig);
+  }
+  /* Export with all three: runs, and the vignette is in the file. */
+  {
+    char src[700], dst[700], err[200];
+    rgb_image img, back;
+    export_opts o = { EXPORT_PNG, 95, 0, "", 0, 0, CS_SRGB, EXPORT_SHARP_NONE };
+    exporter *e;
+    img.w = 300; img.h = 200;
+    img.rgb = malloc (300 * 200 * 3);
+    memset (img.rgb, 150, 300 * 200 * 3);
+    snprintf (src, sizeof src, "%s/vig-src.jpg", work);
+    img_save_jpeg (&img, src, 98, err, sizeof err);
+    recipe_default (&r);
+    recipe_parse (&r, "vignette amount=-80\nnoise luminance=50 colour=50\nsharpen amount=40\nhsl blue_saturation=20\n");
+    snprintf (dst, sizeof dst, "%s/vig-out.png", work);
+    e = export_start (src, 300, 200, 1, &r, dst, &o, err, sizeof err);
+    CHECK (e && run_export (e) >= 0, "export with colour, noise reduction and vignette");
+    export_free (e);
+    CHECK (read_back (dst, &back) == 0 && back.w == 300 && back.rgb[0] < 110 && back.rgb[(100 * 300 + 150) * 3] > 140,
+           "exported: corners darker, middle as it was");
+    if (back.rgb)
+      free (back.rgb);
+    free (img.rgb);
+  }
+  (void) k;
+}
+
 /* Export options: fit in a box, colour spaces, output sharpening; names. */
 static void test_export_options (const char *work)
 {
@@ -1574,6 +1739,7 @@ int main (int argc, char **argv)
   test_presets (argv[1]);
   test_export (argv[1]);
   test_export_options (argv[1]);
+  test_hsl_vignette_noise (argv[1]);
   test_export_exif (argv[1]);
   printf ("test_develop: %d checks, %d failed\n", checks, fails);
   return fails != 0;

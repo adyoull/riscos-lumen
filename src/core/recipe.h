@@ -8,7 +8,10 @@
      levels black=2 white=98 mid=10
      enhance contrast=12 saturation=0 vibrance=18
      tone shadow_hue=210 shadows=30 highlight_hue=40 highlights=25
+     hsl blue_hue=-20 blue_saturation=30 green_luminance=-15
+     noise luminance=30 colour=50
      sharpen amount=40 radius=1.0
+     vignette amount=-40 midpoint=50
      geometry rotate=1 angle=-1.5 vertical=0 horizontal=0
      crop x0=0.050 y0=0.000 x1=0.950 y1=1.000
 
@@ -26,8 +29,12 @@ enum
   P_HIGHLIGHTS, P_SHADOWS,             /* highlights & shadows (local, see develop.h) */
   P_BLACK, P_WHITE, P_MID,             /* levels */
   P_CONTRAST, P_SATURATION, P_VIBRANCE,/* enhance */
+  P_HSL,                               /* colour: 8 hue bands x hue, saturation, luminance (HSL_*) */
+  P_HSL_END = P_HSL + 8 * 3 - 1,
   P_TONE_SH_HUE, P_TONE_SH, P_TONE_HI_HUE, P_TONE_HI,   /* split toning: after saturation, so it tints black and white too */
+  P_NOISE_LUM, P_NOISE_COL,            /* noise reduction (after develop, before sharpening) */
   P_SHARPEN, P_SHARP_RADIUS,           /* sharpen (applied after develop, at the output's size) */
+  P_VIG_AMOUNT, P_VIG_MID,             /* vignette: darker (or lighter) towards the corners */
   P_ROTATE, P_ANGLE, P_PERSP_V, P_PERSP_H,  /* geometry: quarter turns, straighten, perspective */
   P_CROP_X0, P_CROP_Y0, P_CROP_X1, P_CROP_Y1, /* crop, as fractions of the straightened picture */
   P_COUNT,
@@ -47,7 +54,15 @@ typedef struct
 extern const recipe_param recipe_params[P_COUNT];
 
 /* The panel's groups, in order: name and first/last parameter. */
-typedef struct { const char *name; int first, last; int panel; int curves; } recipe_group;
+typedef struct { const char *name; int first, last; int panel; int curves; int hsl; } recipe_group;
+
+/* The colour (HSL) bands: parameter P_HSL + band * 3 + HSL_HUE etc. */
+#define HSL_BANDS 8
+enum { HSL_RED, HSL_ORANGE, HSL_YELLOW, HSL_GREEN, HSL_AQUA, HSL_BLUE, HSL_PURPLE, HSL_MAGENTA };
+enum { HSL_HUE, HSL_SAT, HSL_LUM };
+extern const char *const recipe_hsl_bands[HSL_BANDS];   /* "Red", "Orange"... */
+extern const float recipe_hsl_centre[HSL_BANDS];        /* each band's hue, degrees */
+#define HSL_PARAM(band, what) (P_HSL + (band) * 3 + (what))
 extern const recipe_group recipe_groups[];
 extern const int recipe_ngroups;
 

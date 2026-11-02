@@ -950,6 +950,37 @@ int main (int argc, char **argv)
       key (0x1A);
       CHECK (viewer_recipe ()->curve[CURVE_RGB].n == 0 && viewer_recipe ()->v[P_EV] > 0.9f, "undo again: as before the curve");
     }
+    /* Colour: Blue's sliders show first; pick Green, drag its Saturation to -100. */
+    {
+      int sw[4], top, k0 = drag_calls;
+      CHECK (viewer_row_top (HSL_PARAM (HSL_BLUE, HSL_SAT)) != 0 && viewer_row_top (HSL_PARAM (HSL_GREEN, HSL_SAT)) == 0,
+             "Colour: Blue's three sliders shown, not Green's");
+      CHECK (viewer_hsl_swatch (HSL_GREEN, sw), "the band swatches");
+      memset (b, 0, sizeof b);
+      b[0] = PX ((sw[0] + sw[2]) / 2); b[1] = PY ((sw[1] + sw[3]) / 2); b[2] = Button_Select; b[3] = INSP; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      top = viewer_row_top (HSL_PARAM (HSL_GREEN, HSL_SAT));
+      CHECK (top != 0 && viewer_row_top (HSL_PARAM (HSL_BLUE, HSL_SAT)) == 0, "Green chosen: its sliders instead");
+      memset (b, 0, sizeof b);
+      b[0] = sx; b[1] = PY (top - 28); b[2] = Button_Select; b[3] = INSP; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      CHECK (drag_calls == k0 + 1, "a drag on Green's Saturation");
+      ptr_x = PX (tx0) - 40; ptr_y = PY (top - 28);
+      memset (b, 0, sizeof b);
+      app_event (Null_Reason, b, 0);
+      app_event (User_Drag_Box, b, 0);
+      cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+      CHECK (viewer_recipe ()->v[HSL_PARAM (HSL_GREEN, HSL_SAT)] == -100 && strstr (text, "hsl green_saturation=-100") != NULL,
+             "dragged to the left end: -100, saved");
+      b[0] = PX ((sw[0] + sw[2]) / 2); b[1] = PY ((sw[1] + sw[3]) / 2);
+      ntexts = 0;
+      b[0] = INSP;
+      app_event (Redraw_Window_Request, b, 0);
+      CHECK (text_drawn ("Green") && text_drawn ("Saturation") && text_drawn ("Noise Reduction") && text_drawn ("Vignette"),
+             "drawn: the band's name and sliders; Noise Reduction and Vignette groups");
+      key (0x1A);
+      CHECK (viewer_recipe ()->v[HSL_PARAM (HSL_GREEN, HSL_SAT)] == 0, "undone");
+    }
 #undef PX
 #undef PY
     }

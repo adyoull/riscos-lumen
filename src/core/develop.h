@@ -10,7 +10,10 @@
 
    Order (the spec's stages 2, 4 and 5): white balance and exposure in
    linear light; levels and contrast on the sRGB-encoded value (as a
-   person sees it); back to linear; saturation and vibrancy in linear. */
+   person sees it); back to linear; saturation and vibrancy in linear;
+   colour (HSL: each hue band turned, saturated and brightened, the band
+   found from the colour as seen, the change made in linear light); split
+   toning; then the vignette, by the pixel's place in the whole output. */
 #ifndef LUMEN_DEVELOP_H
 #define LUMEN_DEVELOP_H
 #include <stdint.h>
@@ -45,6 +48,12 @@ typedef struct
   int toning;                          /* split toning on */
   uint16_t tint[3][256];               /* its gain per channel by luminance (top 8 bits), 4096 = none */
   int vib;                             /* vibrancy, 65536 = unchanged */
+  int hsl;                             /* colour (HSL) adjustments on */
+  int16_t hsl_cos[360], hsl_sin[360];  /* hue turn by hue (degrees, as seen): cos, and sin / sqrt 3, 1.14 fixed */
+  uint16_t hsl_sat[360];               /* saturation by hue, 256 = unchanged */
+  uint16_t hsl_lum[360];               /* brightness by hue, 4096 = unchanged */
+  int vig;                             /* vignette on */
+  uint16_t vig_gain[257];              /* gain by squared distance from the centre (256: a corner), 4096 = none */
   int identity;                        /* nothing to do between the two conversions */
 } develop;
 

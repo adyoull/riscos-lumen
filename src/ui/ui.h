@@ -210,6 +210,8 @@ const recipe *viewer_recipe (void);
 int viewer_shown_size (int *w, int *h);   /* after geometry */
 void viewer_button_centre (int k, int *x, int *y);   /* tests */
 int viewer_curve_rect (int r[4]);                     /* tests */
+int viewer_hsl_swatch (int k, int r[4]);              /* tests: a Colour band's swatch */
+int viewer_row_top (int p);                           /* tests: a slider's row (0: not shown) */
 cat_id viewer_item (void);             /* the photo shown, 0 if closed */
 void viewer_reload (cat_id version);   /* its recipe changed from outside */
 void viewer_apply_look (const char *look);

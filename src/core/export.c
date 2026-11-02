@@ -15,6 +15,7 @@
 #include "fsys.h"
 #include "geometry.h"
 #include "sharpen.h"
+#include "denoise.h"
 #include "thumbgen.h"
 
 #define BAND 16                        /* rows rendered at a time */
@@ -39,6 +40,8 @@ struct exporter
   int band, margin, sharp;             /* rows written a step; extra rows each side for sharpening */
   double sigma;
   int osharp;                          /* output sharpening amount, 0 for none */
+  int nlum, ncol;                      /* noise reduction */
+  double nscale;                       /* the output's scale against the full size */
   double osigma;
   int done, file_open, created;
   int full_w, full_h;                  /* the original as shown, full size */
@@ -451,6 +454,18 @@ int export_step (exporter *e, int rows)
             e->margin = sharpen_margin (e->sigma);
             e->band = 48;              /* so the margins cost less */
           }
+        /* Noise reduction: before sharpening, its radii in full-size pixels. */
+        e->nlum = (int) e->r.v[P_NOISE_LUM];
+        e->ncol = (int) e->r.v[P_NOISE_COL];
+        if (e->nlum > 0 || e->ncol > 0)
+          {
+            int m;
+            export_plan_size (e->full_w, e->full_h, &e->r, 0, &fw, &fh);
+            e->nscale = fw > 0 ? (double) (ow > oh ? ow : oh) / (fw > fh ? fw : fh) : 1;
+            m = denoise_margin (e->nlum, e->ncol, e->nscale);
+            e->margin += m;            /* sharpening reads the denoised rows round it */
+            e->band = 48;
+          }
         /* Output sharpening: in output pixels, whatever the size. */
         {
           static const int amounts[4] = { 0, 35, 70, 110 };
@@ -460,7 +475,8 @@ int export_step (exporter *e, int rows)
             {
               int m;
               e->osigma = 0.7;
-              m = sharpen_margin (e->osigma);
+              m = sharpen_margin (e->osigma) + (e->nlum > 0 || e->ncol > 0
+                                                ? denoise_margin (e->nlum, e->ncol, e->nscale) : 0);
               if (m > e->margin)
                 e->margin = m;
               e->band = 48;
@@ -489,6 +505,11 @@ int export_step (exporter *e, int rows)
       geom_rows_rgb8 (&e->g, e->img.rgb, dev_srgb_to_linear (), e->lin, a, b, a);
       develop_region (e->dev, e->g.ow, e->g.oh, 0, a);
       develop_rows (e->dev, e->lin, e->g.ow, 0, b - a, e->px, NULL);
+      if ((e->nlum > 0 || e->ncol > 0) && denoise32 (e->px, e->g.ow, b - a, e->nlum, e->ncol, e->nscale))
+        {
+          snprintf (e->err, sizeof e->err, "Not enough memory");
+          return e->done = -1;
+        }
       if (e->sharp > 0)
         sharpen32 (e->px, e->g.ow, b - a, e->sharp, e->sigma);
       if (e->osharp > 0)

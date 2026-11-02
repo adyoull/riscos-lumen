@@ -27,9 +27,10 @@ static const char *const toolbar[11] = {
 static const char *const tabs[3] = {
   "The Library tab: all photos, flagged, rejected, the last import, projects and albums. Click one to show it. "
   "Menu over a project or album to rename or remove it.",
-  "The Info tab: the photo's size, file, colour, and everything its camera recorded (EXIF).",
-  "The Adjustments tab: exposure, white balance, highlights and shadows, curves and more for the photo in the Viewer. "
-  "Your original is never changed.",
+  "The Info tab: the photo's size, caption and keywords (click them to change them), file, colour, and everything "
+  "its camera recorded (EXIF).",
+  "The Adjustments tab: exposure, white balance, curves, colour by hue (pick a band, then its sliders), noise "
+  "reduction, sharpening, vignette and more for the photo in the Viewer. Your original is never changed.",
 };
 
 static const char *const exportbox[31] = {

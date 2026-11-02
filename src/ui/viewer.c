@@ -35,6 +35,7 @@
 #include "geometry.h"
 #include "recipe.h"
 #include "sharpen.h"
+#include "denoise.h"
 #include "thumbgen.h"
 #include "ui.h"
 #include "fsys.h"
@@ -71,7 +72,8 @@
 #define COL_CROP 0xFFFFFF00u
 
 enum { V_CLOSED, V_LOADING, V_READY, V_FAILED };
-enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE, HIT_GROUP, HIT_CURVE, HIT_CURVE_TAB };
+enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE, HIT_GROUP, HIT_CURVE, HIT_CURVE_TAB,
+       HIT_HSL_BAND };
 enum { TOOL_AUTO, TOOL_CROP, TOOL_GRID, TOOL_PRESETS, TOOL_COUNT };
 enum { LINK_RESET, LINK_PICK, LINK_AUTO_WB, LINK_LEFT, LINK_RIGHT };
 /* Crop drags: which edges move (or all of it). */
@@ -285,6 +287,11 @@ static int group_rows (int g)
 #define CURVE_BOX_H 360
 static int curve_ch, curve_drag = -1;
 
+/* Colour (HSL): a row of the eight bands' swatches with the chosen one's
+   name under it, then that band's Hue, Saturation and Luminance. */
+#define HSL_SEL_H 104
+static int hsl_band = HSL_BLUE;
+
 /* The height under a group's header. */
 static int group_body (int g)
 {
@@ -292,6 +299,8 @@ static int group_body (int g)
     return 0;
   if (recipe_groups[g].curves)
     return CURVE_SEL_H + CURVE_BOX_H;
+  if (recipe_groups[g].hsl)
+    return HSL_SEL_H + 3 * ROW_H;
   return ROW_H * group_rows (g);
 }
 
@@ -308,6 +317,17 @@ static int group_top (int g)
 static int row_top (int p)
 {
   int g, q, i;
+  if (p >= P_HSL && p <= P_HSL_END)
+    {
+      /* The chosen band's three, under the swatches. */
+      if ((p - P_HSL) / 3 != hsl_band)
+        return 0;
+      for (g = 0; g < recipe_ngroups; g++)
+        if (recipe_groups[g].hsl)
+          return !group_shown (g) || (g < MAX_GROUPS && folded[g]) ? 0
+                 : group_top (g) - GROUP_H - HSL_SEL_H - ROW_H * ((p - P_HSL) % 3);
+      return 0;
+    }
   if (recipe_params[p].hidden)
     return 0;
   for (g = 0; g < recipe_ngroups; g++)
@@ -374,6 +394,29 @@ static void curve_tab_rect (int k, int r[4])
   r[2] = r[0] + w;
   r[3] = top - 6;
   r[1] = top - CURVE_SEL_H + 12;
+}
+
+static int hsl_group (void)
+{
+  int g;
+  for (g = 0; g < recipe_ngroups; g++)
+    if (recipe_groups[g].hsl)
+      return g;
+  return -1;
+}
+
+/* Band k's swatch (work area); 0 if the group is folded. */
+static int hsl_swatch (int k, int r[4])
+{
+  int g = hsl_group (), top, w = (PANEL_W - 2 * PAD - 7 * 8) / 8;
+  if (g < 0 || !group_shown (g) || (g < MAX_GROUPS && folded[g]))
+    return 0;
+  top = group_top (g) - GROUP_H;
+  r[0] = panel_x0 () + PAD + k * (w + 8);
+  r[2] = r[0] + w;
+  r[3] = top - 8;
+  r[1] = top - 52;
+  return 1;
 }
 
 /* The panel's height (it scrolls in the inspector). */
@@ -493,6 +536,12 @@ static int hit (int wx, int wy, int *what, int panel)
             }
         }
     }
+  for (k = 0; k < HSL_BANDS; k++)
+    if (hsl_swatch (k, r) && wx >= r[0] && wx <= r[2] && wy >= r[1] - 4 && wy <= r[3] + 4)
+      {
+        *what = k;
+        return HIT_HSL_BAND;
+      }
   for (p = 0; p < P_COUNT; p++)
     {
       int top = row_top (p);
@@ -782,16 +831,20 @@ no_memory:
   return -1;
 }
 
-/* Sharpening, last: on a picture at scale (its size over the full
-   size's). Not in the crop tool, where the picture is only a guide. */
+/* Noise reduction then sharpening, last: on a picture at scale (its size
+   over the full size's). Not in the crop tool, where the picture is only
+   a guide. */
 static void sharpen_pixels (uint32_t *px, int w, int h, int pic_long)
 {
   recipe r;
+  double scale = photo_long > 0 ? (double) pic_long / photo_long : 1;
   effective (&r);
-  if (r.v[P_SHARPEN] <= 0 || crop_mode || pic_long <= 0)
+  if (crop_mode || pic_long <= 0)
     return;
-  sharpen32 (px, w, h, (int) r.v[P_SHARPEN],
-             sharpen_sigma (&r, photo_long > 0 ? (double) pic_long / photo_long : 1));
+  if (r.v[P_NOISE_LUM] > 0 || r.v[P_NOISE_COL] > 0)
+    denoise32 (px, w, h, (int) r.v[P_NOISE_LUM], (int) r.v[P_NOISE_COL], scale);
+  if (r.v[P_SHARPEN] > 0)
+    sharpen32 (px, w, h, (int) r.v[P_SHARPEN], sharpen_sigma (&r, scale));
 }
 
 static int longer_side (int w, int h) { return w > h ? w : h; }
@@ -2115,6 +2168,11 @@ static void click_in (int *b, int w, int panel)
       curve_ch = what;
       force_panel ();
     }
+  else if (h == HIT_HSL_BAND && (b[2] == Button_Select || b[2] == Button_Adjust))
+    {
+      hsl_band = what;
+      force_panel ();
+    }
   else if (h == HIT_CURVE)
     curve_click (b, st, wx, wy);
   else if (h == HIT_LINK && b[2] == Button_Select)
@@ -2344,6 +2402,32 @@ static void draw_slider (int p, int ox, int oy)
   snprintf (value, sizeof value, "%s%.*f", current.v[p] > 0 && d->min < 0 ? "+" : "",
             d->decimals, (double) current.v[p]);
   draw_text (ox + PANEL_W - PAD - draw_text_width (value), mid - 9, value, COL_TEXT, COL_PANEL);
+}
+
+/* The Colour group's swatches: the chosen band framed, a dot on those changed. */
+static void draw_hsl_bands (int ox, int oy)
+{
+  static const unsigned colours[HSL_BANDS] = {
+    0x3C3CDC00u, 0x288CEB00u, 0x32D2E600u, 0x46AA4600u, 0xBEBE3C00u, 0xDC6E3C00u, 0xC8508C00u, 0xAA46D200u };
+  int k, r[4];
+  for (k = 0; k < HSL_BANDS; k++)
+    {
+      int c, changed = 0;
+      if (!hsl_swatch (k, r))
+        return;
+      for (c = 0; c < 3; c++)
+        if (current.v[HSL_PARAM (k, c)] != 0)
+          changed = 1;
+      if (k == hsl_band)
+        draw_rect (ox + r[0] - 5, oy + r[1] - 5, ox + r[2] + 5, oy + r[3] + 5, COL_TEXT);
+      draw_rect (ox + r[0] - 1, oy + r[1] - 1, ox + r[2] + 1, oy + r[3] + 1, COL_FRAME);
+      draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + r[3], colours[k]);
+      if (changed)
+        draw_rect (ox + (r[0] + r[2]) / 2 - 5, oy + (r[1] + r[3]) / 2 - 5, ox + (r[0] + r[2]) / 2 + 5,
+                   oy + (r[1] + r[3]) / 2 + 5, COL_KNOB);
+    }
+  hsl_swatch (0, r);
+  draw_text (ox + r[0], oy + r[1] - 40, recipe_hsl_bands[hsl_band], COL_TEXT, COL_PANEL);
 }
 
 static void draw_button_rect (const int r[4], const char *text, int enabled, int on, int ox, int oy)
@@ -2610,6 +2694,12 @@ static void draw_panel (int ox, int oy)
         }
       if (recipe_groups[g].curves && !(g < MAX_GROUPS && folded[g]))
         draw_curves (ox, oy);
+      if (recipe_groups[g].hsl && !(g < MAX_GROUPS && folded[g]))
+        {
+          draw_hsl_bands (ox, oy);
+          for (p = 0; p < 3; p++)
+            draw_slider (HSL_PARAM (hsl_band, p), ox, oy);
+        }
       if (!(g < MAX_GROUPS && folded[g]))
         for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
           if (!recipe_params[p].hidden)
@@ -2785,6 +2875,8 @@ int viewer_proxy_size (int *w, int *h)
 
 /* For the tests: the curves graph (work area), 0 if folded. */
 int viewer_curve_rect (int r[4]) { return curve_graph (r); }
+int viewer_hsl_swatch (int k, int r[4]) { return hsl_swatch (k, r); }
+int viewer_row_top (int p) { return row_top (p); }
 
 /* For the tests: the middle of a bottom button (0 Undo, 1 Redo, 2 Reset all), work area. */
 void viewer_button_centre (int k, int *x, int *y)
