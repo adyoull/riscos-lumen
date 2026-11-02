@@ -217,6 +217,17 @@ Fixes from a review of 0.0.23:
   Search matches the label's name.
 - Compare (O): a photo pinned on the left beside the one being looked at.
 
+## 0.0.26
+
+- A raw photo exported or printed at 1024 pixels or less was made from
+  the camera's preview inside the file, which can look quite unlike the
+  raw; now everything bigger than a thumbnail is developed.
+- The Info tab says when the LibRaw plug-in is switched off, rather than
+  that it needs installing.
+- The LumenRaw User Guide (docs/lumenraw-guide, built by
+  tools/lumenraw-guide/build.py from LibRaw's camera list), packaged in
+  the plug-in as !Lumen.Plugins.LibRaw.Guide.
+
 ## Layout
 
 ```

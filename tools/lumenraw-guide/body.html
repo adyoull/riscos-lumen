@@ -1,0 +1,327 @@
+<header class="cover">
+<div>
+<h1>LumenRaw User Guide</h1>
+<p>Camera raw files in Lumen, on RISC OS</p>
+<p>Everything about the plug-in that lets Lumen open, show, adjust and export the raw files from your camera, and a list of every camera it knows.</p>
+<span class="badge">LumenRaw 1.0 &middot; LibRaw 0.21.4</span>
+</div>
+</header>
+<main>
+
+<figure><img src="images/d4.png" alt="A raw photo from the International Space Station, developed by LumenRaw"><figcaption>A raw photo (Nikon D4, NEF) taken on the International Space Station, opened in Lumen and developed by LumenRaw.</figcaption></figure>
+
+<nav class="toc">
+<h3>Contents</h3>
+<ul>
+<li><a href="#intro">Introduction</a></li>
+<li><a href="#part1">Part I: Getting Started</a>
+<ul><li><a href="#ch1">1. What LumenRaw does</a></li><li><a href="#ch2">2. Installing LumenRaw</a></li></ul></li>
+<li><a href="#part2">Part II: Raw Photos in Lumen</a>
+<ul><li><a href="#ch3">3. Bringing raw photos in</a></li><li><a href="#ch4">4. Looking at raw photos</a></li><li><a href="#ch5">5. Adjusting, exporting and printing</a></li><li><a href="#ch6">6. What the Info tab tells you</a></li></ul></li>
+<li><a href="#part3">Part III: Looking After the Plug-in</a>
+<ul><li><a href="#ch7">7. Switching it off, adding and removing</a></li></ul></li>
+<li><a href="#part4">Part IV: Cameras</a>
+<ul><li><a href="#ch8">8. Which cameras work</a></li><li><a href="#ch9">9. If your camera isn't listed</a></li></ul></li>
+<li><a href="#part5">Part V: The Part of Tens</a>
+<ul><li><a href="#ch10">10. Ten problems and what to do about them</a></li><li><a href="#ch11">11. Ten things for experienced users</a></li></ul></li>
+<li><a href="#appA">Appendix A: Every camera LumenRaw knows</a></li>
+<li><a href="#appB">Appendix B: Raw file types</a></li>
+<li><a href="#credits">Credits and licences</a></li>
+</ul>
+</nav>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="intro">Introduction</h2>
+
+<p>Most cameras can save their photos in two ways. A <b>JPEG</b> is a finished picture: the camera has already decided the colours, the brightness and the sharpness, and thrown away whatever it didn't need. A <b>raw file</b> is what the sensor actually recorded, before any of those decisions. It holds more detail in the bright and dark parts of a scene, and leaves the decisions to you.</p>
+<p>The catch is that every camera maker has its own raw format, and most have several. Lumen doesn't read raw files itself. It hands them to a small separate program, <b>LumenRaw</b>, which is built on <b>LibRaw</b>, a free library that knows the raw files of 1,181 cameras. LumenRaw is Lumen's <b>plug-in</b> for camera raw files.</p>
+<p>Once it's installed, you won't often notice it: raw photos simply appear in Lumen's library beside your JPEGs, and you rate, adjust, export and print them in the same way. This guide explains what happens behind the scenes, how to install and look after the plug-in, and which cameras it works with.</p>
+
+<h4>About this guide</h4>
+<p>This guide is about the plug-in. Everything else about Lumen (the library, the adjustments, exporting) is in the <b>Lumen User Guide</b>, which comes with Lumen: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
+<p>The pictures are screenshots of Lumen 0.0.25 with LumenRaw 1.0 on RISC OS 5. The raw photos in them were taken by astronauts on the International Space Station and are published by NASA.</p>
+
+<h4>What we assume you know</h4>
+<p>That you have Lumen and know your way round it a little: how to import photos and open one in the Viewer. You should know the three mouse buttons (<b>Select</b>, <b>Menu</b> and <b>Adjust</b>) and how to drag a directory from a Filer window. You don't need to know anything about raw files.</p>
+
+<h4>The boxes in this guide</h4>
+<div class="box tip"><b class="label">TIP</b>A quicker or easier way to do something.</div>
+<div class="box rem"><b class="label">REMEMBER</b>Worth keeping in mind as you work.</div>
+<div class="box warn"><b class="label">WARNING</b>Get this wrong and you could lose work, or time.</div>
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>How it works underneath. You can skip these.</div>
+<div class="box try"><b class="label">TRY IT</b>A short exercise to do as you read.</div>
+
+<h4>Where to start</h4>
+<p>If you only want to know whether your camera is supported, go straight to <a href="#ch8">Chapter 8</a>, or look it up in <a href="#appA">Appendix A</a>. To install LumenRaw, go to <a href="#ch2">Chapter 2</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part1">Part I: Getting Started<small>What the plug-in is, and installing it</small></h2>
+
+<h3 class="chapter" id="ch1"><span>1</span> What LumenRaw does</h3>
+
+<p>Lumen asks LumenRaw for two things.</p>
+<ul>
+<li><b>A quick picture for the thumbnail.</b> Almost every raw file has a small JPEG inside it: the preview the camera shows on its screen. LumenRaw takes that out, which takes a moment, and Lumen makes the thumbnail from it. If a file has no preview, LumenRaw develops a small copy instead.</li>
+<li><b>The photo itself.</b> When you open a raw photo in the Viewer, zoom in, or export or print it, LumenRaw <b>develops</b> the raw data into a full-colour picture. It uses the white balance the camera chose and the camera's own colour description, so the photo looks as the camera intended, and gives the result to Lumen. From then on Lumen treats it like any other photo.</li>
+</ul>
+<p>Each time, LumenRaw also reads the camera's details for Lumen: the camera and lens, the exposure, the date, and which way up the camera was held.</p>
+
+<h4>What you can do with raw photos in Lumen</h4>
+<ul>
+<li>Import them, from a camera card or a directory, with or without JPEGs alongside.</li>
+<li>See them as thumbnails, rate, flag, label and keyword them, put them in albums and stacks.</li>
+<li>Look at them in the Viewer, at 100% and with the loupe.</li>
+<li>Adjust them with all of Lumen's tools, retouch and brush them.</li>
+<li>Export them as JPEG or PNG, and print them.</li>
+</ul>
+
+<h4>What LumenRaw doesn't do</h4>
+<ul>
+<li>It never changes or writes to your raw files. Like all of Lumen, it only reads them.</li>
+<li>It doesn't save raw files, or convert them to DNG.</li>
+<li>It doesn't correct lenses (distortion and dark corners). Lumen's Vignette adjustment can lighten dark corners by hand.</li>
+<li>It can't open every raw file ever made: see <a href="#ch9">Chapter 9</a>.</li>
+</ul>
+
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>LumenRaw is an ordinary RISC OS program that Lumen starts in the background, in a task window, once for each job, and which quits when the job is done. That keeps LibRaw's large memory needs out of Lumen itself, and means a damaged raw file can't take Lumen down with it. The details are in <a href="#ch11">Chapter 11</a>.</div>
+
+<h3 class="chapter" id="ch2"><span>2</span> Installing LumenRaw</h3>
+
+<h4>What you need</h4>
+<ul>
+<li><b>Lumen</b> 0.0.26 or later (earlier versions work, but exported raw photos of 1024 pixels or less came from the camera's preview). LumenRaw lives inside Lumen, in <code>!Lumen.Plugins.LibRaw</code>.</li>
+<li>The same computer Lumen needs: RISC OS 5.30 or later on a Raspberry Pi 4, 400 or CM4 (other ARMv7 machines should work), with the SharedUnixLibrary and ARMEABISupport modules from PackMan.</li>
+<li><b>Memory</b>: developing a raw file takes a lot of memory for a few seconds, about 300 MB for a 24 megapixel camera and more for bigger sensors. A Raspberry Pi 4 with 2 GB or more is comfortable.</li>
+</ul>
+
+<h4>With PackMan</h4>
+<ol class="steps">
+<li>Open PackMan and find the <b>LumenRaw</b> package (search for <i>LumenRaw</i>).</li>
+<li>Install it. PackMan puts it inside Lumen, in <code>!Lumen.Plugins.LibRaw</code>.</li>
+<li>If Lumen is running, quit it and start it again. Lumen looks for plug-ins when it starts.</li>
+</ol>
+<p>Lumen's <b>Add plug-in</b> window has an <b>Open PackMan</b> button that starts PackMan for you.</p>
+
+<h4>By hand, from the zip file</h4>
+<p>LumenRaw also comes as a zip file, <code>LumenRaw-1.0.zip</code>. Inside it, the plug-in is laid out as it goes into Lumen: <code>!Lumen.Plugins.LibRaw</code>.</p>
+<ol class="steps">
+<li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
+<li>Open the <code>!Lumen</code> directory inside it: hold <kbd>Shift</kbd> and double-click it, then double-click <code>Plugins</code>. You'll see a directory called <code>LibRaw</code>.</li>
+<li>In Lumen, choose <b>Plug-ins &rarr; Add plug-in...</b> from the menu on Lumen's icon bar icon.</li>
+<li>Drag the <code>LibRaw</code> directory into the Add plug-in window. Lumen copies it into its own Plugins directory, and uses it at once, without restarting.</li>
+</ol>
+<figure><img src="images/add-plugin.png" alt="The Add plug-in window"><figcaption>The Add plug-in window. Drag the LibRaw directory into it.</figcaption></figure>
+<p>You can also drag the <code>LibRaw</code> directory straight onto Lumen's main window.</p>
+
+<h4>Checking it's working</h4>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenRaw is listed as <b>Camera raw (LibRaw) 1.0</b>, with a tick when it's on.</p>
+<figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw installed and on.</figcaption></figure>
+
+<div class="box try"><b class="label">TRY IT</b>Find a raw file from your camera (its name usually ends in <code>/NEF</code>, <code>/CR2</code>, <code>/CR3</code>, <code>/ARW</code>, <code>/RAF</code>, <code>/ORF</code>, <code>/RW2</code> or <code>/DNG</code>) and drag it into Lumen's window. A thumbnail should appear within a second or two. Double-click it: after a moment the photo sharpens as LumenRaw develops it.</div>
+
+<div class="box rem"><b class="label">REMEMBER</b>Raw files you imported before LumenRaw was installed get their thumbnails as soon as Lumen finds it. You don't need to import them again.</div>
+
+<h4>Updating</h4>
+<p>Install the new version the same way: PackMan updates it in place. If you drag a new LibRaw directory into the Add plug-in window, Lumen says there's a plug-in of that name already and asks whether to <b>Replace</b> it. Quit and restart Lumen afterwards to be sure it's using the new one. Your library, ratings and adjustments aren't affected.</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part2">Part II: Raw Photos in Lumen<small>Importing, looking, adjusting and exporting</small></h2>
+
+<h3 class="chapter" id="ch3"><span>3</span> Bringing raw photos in</h3>
+
+<p>Import raw photos as you would any others: drag a directory, a camera card or the files into Lumen's window, or use <b>Import</b> on the toolbar. Lumen recognises raw files by what's in them, and by their file name ending (<a href="#appB">Appendix B</a> lists the endings).</p>
+<figure><img src="images/browser.png" alt="Raw photos in the Browser"><figcaption>Two raw photos just imported. Their thumbnails come from the previews inside the files.</figcaption></figure>
+<p>Thumbnails of raw photos are quick, because they come from the camera's own preview rather than from developing the raw data.</p>
+
+<h4>Raw and JPEG together</h4>
+<p>Many cameras can save each photo twice: a raw file and a JPEG with the same name. Lumen imports both, as two photos side by side. If you'd rather work with one of them:</p>
+<ul>
+<li>Type <code>nef</code> (or <code>cr2</code>, <code>arw</code>, and so on) in the <b>Search</b> box to show only the raw files, because Lumen searches photos' names and the ending is part of the name. Type <code>jpg</code> for the JPEGs.</li>
+<li>Or stack each pair (select both, <kbd>Ctrl</kbd>+<kbd>G</kbd>), with the one you prefer as the pick. See the Lumen User Guide, Chapter 6.</li>
+</ul>
+
+<div class="box tip"><b class="label">TIP</b>If you always shoot both and only want the raws in Lumen, copy only the raw files from the card into a directory first, and import that.</div>
+
+<h3 class="chapter" id="ch4"><span>4</span> Looking at raw photos</h3>
+
+<p>Double-click a raw photo, as for any other. Lumen shows the camera's preview straight away and asks LumenRaw to develop the photo. While it does, the bottom bar says <b>Reading a raw photo with LumenRaw</b>:</p>
+<figure><img src="images/status-reading.png" alt="Reading a raw photo with LumenRaw"><figcaption>LumenRaw at work.</figcaption></figure>
+<p>When it's done, the developed photo replaces the preview. This takes a few seconds for a typical camera, longer for big sensors.</p>
+<div class="pair">
+<figure><img src="images/preview.png" alt="The camera's preview"><figcaption>First: the preview the camera saved in the file.</figcaption></figure>
+<figure><img src="images/developed.png" alt="Developed by LumenRaw"><figcaption>A few seconds later: developed from the raw data. The shadows hold far more.</figcaption></figure>
+</div>
+<p>The two can look quite different, as here. The camera made its preview for its own small screen, sometimes with settings of its own; LumenRaw develops what the sensor recorded.</p>
+
+<h4>Half size and full size</h4>
+<p>To be quick, LumenRaw develops at <b>half size</b> when that's still big enough for what Lumen needs. A 24 megapixel camera gives a 3000 pixel wide picture at half size, which is plenty for the Viewer. For <b>100%</b> and the <b>loupe</b>, Lumen asks for the full size, which takes longer, so the first zoom into a raw photo has a short wait. <b>Exports</b> and <b>prints</b> are developed at the size they need: half size for a small export, full size for a big one.</p>
+<p>Only thumbnails use the camera's preview. Everything you see bigger, export or print is developed from the raw data.</p>
+
+<div class="box rem"><b class="label">REMEMBER</b>LumenRaw works on one raw file at a time. If you go quickly through a lot of raw photos, Lumen keeps up by showing each preview at once, and develops the one you stop on.</div>
+
+<h3 class="chapter" id="ch5"><span>5</span> Adjusting, exporting and printing</h3>
+
+<p>A developed raw photo is just a photo to the rest of Lumen. Everything in the Adjustments tab works on it: white balance, exposure, highlights and shadows, curves, colour, black and white, noise reduction, sharpening, cropping, retouching and brushing. Export and print work the same too.</p>
+
+<h4>Getting the most from raw</h4>
+<ul>
+<li><b>White balance</b> starts from the camera's own choice. If the colours are off, use <b>Pick</b> on something white or grey, as for a JPEG.</li>
+<li><b>Noise:</b> raw files show the sensor's noise honestly, where the camera would have smoothed a JPEG. Photos taken in poor light usually need some <b>Noise Reduction</b>: start with Colour at about 30.</li>
+<li><b>Sharpening:</b> a raw photo is softer than the camera's JPEG, for the same reason. A little <b>Sharpen</b> (Amount 30 to 50) makes up the difference.</li>
+<li><b>Shadows</b> often have more in them than they seem to. Try Shadows at 30 or 40.</li>
+</ul>
+
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>LumenRaw hands Lumen the developed picture in 8-bit sRGB, which Lumen then works on in 16-bit linear light. So detail the sensor kept beyond the camera's white point (the brightest highlights) is already clipped by the time Lumen sees it: Highlights brings back what's in the picture, but can't reach past white. In practice this is close to what a JPEG gives in the highlights, with much more to work with in the shadows.</div>
+
+<div class="box warn"><b class="label">WARNING</b>Exporting raw photos takes a few seconds each before Lumen's own work starts, because each one is developed again from the raw data, at full size for a big export. Exporting a hundred of them is a job to leave running.</div>
+
+<h3 class="chapter" id="ch6"><span>6</span> What the Info tab tells you</h3>
+
+<p>Select a raw photo and click the <b>Info</b> tab. The <b>Format</b> line says how Lumen read it:</p>
+<table>
+<tr><th>Format says</th><th>Meaning</th></tr>
+<tr><td>Camera raw, developed by the LibRaw plug-in</td><td>All's well: LumenRaw is installed and on.</td></tr>
+<tr><td>Camera raw: the LibRaw plug-in is switched off (Plug-ins, on the icon bar menu)</td><td>LumenRaw is installed, but switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
+<tr><td>Camera raw: needs the LibRaw plug-in (LumenRaw, from PackMan)</td><td>LumenRaw isn't installed (<a href="#ch2">Chapter 2</a>).</td></tr>
+</table>
+<figure><img src="images/info-raw.png" alt="The Info tab for a raw photo"><figcaption>A Nikon D3S raw photo in the Info tab.</figcaption></figure>
+<p>Below that are the camera's details. Lumen reads them from the raw file itself; LumenRaw adds the photo's true size and which way up it was taken, which it knows better for some makes.</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part3">Part III: Looking After the Plug-in<small>Switching it off, adding and removing</small></h2>
+
+<h3 class="chapter" id="ch7"><span>7</span> Switching it off, adding and removing</h3>
+
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon (or from the main menu over the Browser).</p>
+
+<h4>Switching it off and on</h4>
+<p>Choose <b>Camera raw (LibRaw) 1.0</b> to switch it off: the tick goes. LumenRaw stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
+<p>While it's off, raw photos keep their thumbnails, stars, albums and adjustments, but opening one shows a message instead of the photo:</p>
+<figure><img src="images/switched-off.png" alt="A raw photo with the plug-in switched off"><figcaption>With LumenRaw switched off. The Info tab says so too.</figcaption></figure>
+<p>A raw photo that's already showing in the Viewer stays as it is when you switch; the change shows from the next photo you open.</p>
+
+<div class="box tip"><b class="label">TIP</b>Switching it off is handy on a slow machine, or one short of memory, when you only want to sort and rate: thumbnails are already made, and nothing big is developed.</div>
+
+<h4>Adding a plug-in</h4>
+<p><b>Add plug-in...</b> opens the window you drag a plug-in's directory into (<a href="#ch2">Chapter 2</a>).</p>
+
+<h4>Removing it</h4>
+<p><b>Remove &rarr; Camera raw (LibRaw)</b> deletes LumenRaw from Lumen, after asking. Your raw photos stay in the library, with their stars and adjustments; they just can't be opened until you install it again.</p>
+<div class="box warn"><b class="label">WARNING</b>If PackMan installed LumenRaw, remove it with PackMan, not with Lumen's Remove. Otherwise PackMan still thinks it's there and won't install it again. Lumen reminds you when you choose Remove.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part4">Part IV: Cameras<small>Which ones work, and what to do if yours doesn't</small></h2>
+
+<h3 class="chapter" id="ch8"><span>8</span> Which cameras work</h3>
+
+<p>LumenRaw 1.0 uses LibRaw 0.21.4, which lists <b>1,181 cameras</b> from about 80 makers, from early digital cameras to models released around 2022. The whole list is in <a href="#appA">Appendix A</a>. Here's a summary of the makers with the most:</p>
+<table>
+<tr><th>Maker</th><th>Models</th><th>For example</th></tr>
+<tr><td>Canon</td><td>163</td><td>EOS R3, EOS R5, EOS R10, EOS 5D Mark IV, EOS 90D, EOS M50 Mark II; many PowerShots</td></tr>
+<tr><td>Nikon</td><td>106</td><td>Z 9, Z 6 II, Z 50, D850, D7500, D3500; Coolpix</td></tr>
+<tr><td>Sony</td><td>104</td><td>A1, A7 IV, A7R IV, A7S III, A6600; RX100 series</td></tr>
+<tr><td>Fujifilm</td><td>81</td><td>X-H2S, X-T4, X-T30 II, X-S10, X100V, GFX 100S</td></tr>
+<tr><td>Panasonic</td><td>76</td><td>DC-GH5 Mark II, DC-S1R, DMC-LX100</td></tr>
+<tr><td>Olympus / OM System</td><td>76</td><td>OM-1, E-M1 Mark III, E-M5 Mark III, E-M10 Mark IV</td></tr>
+<tr><td>Leica</td><td>56</td><td>M11, Q2, SL2</td></tr>
+<tr><td>Pentax</td><td>42</td><td>K-3 Mark III, K-1 Mark II, KP</td></tr>
+<tr><td>Samsung, Kodak, Casio</td><td>41, 42, 53</td><td>Galaxy phones, NX cameras; older compacts and DSLRs</td></tr>
+<tr><td>Medium format</td><td>120</td><td>Hasselblad, Phase One, Leaf, Mamiya, Sinar, Imacon</td></tr>
+<tr><td>Phones and drones</td><td>&ndash;</td><td>Apple iPhone (up to the 13 Pro), Google Pixel (up to the 5), Huawei, Xiaomi, OnePlus, DJI Mavic 3</td></tr>
+<tr><td>Raspberry Pi</td><td>2</td><td>The Raspberry Pi Camera and Camera V2</td></tr>
+</table>
+<div class="box tip"><b class="label">TIP</b><b>DNG</b> (Adobe's Digital Negative) is a common raw format that many cameras and phones save, and that other programs can convert to. LumenRaw reads DNG files generally, so a DNG from a camera that isn't in the list usually opens too.</div>
+
+<div class="box try"><b class="label">TRY IT</b>Look your camera up in <a href="#appA">Appendix A</a>: use your web browser's Find and type the model, such as <code>D850</code> or <code>X-T4</code>. Sony cameras are listed by their model code, with the name in brackets: <code>ILCE-7M4 (A7 IV)</code>.</div>
+
+<h3 class="chapter" id="ch9"><span>9</span> If your camera isn't listed</h3>
+
+<p>Camera makers bring out new models, and new raw formats, every year, and LibRaw 0.21.4's list stops at cameras from around 2022. A camera that's newer than the list, or a format this build of LibRaw doesn't include, may not open at all, or may open with colours that look wrong.</p>
+
+<h4>Known not to work in LumenRaw 1.0</h4>
+<ul>
+<li><b>Newer cameras</b>, for example the Canon EOS R8, R50 and R6 Mark II, Nikon Z 8 and Z f, Sony A7R V, A7C II and A6700, Fujifilm X-T5, X-H2 and X100VI, OM System OM-5 and Panasonic GH6. If your camera came out in 2023 or later, it probably isn't in the list.</li>
+<li><b>Nikon's High Efficiency raw</b> (the HE and HE* settings on the Z 9 and later). Set the camera to <b>lossless compressed</b> raw instead.</li>
+<li><b>Sigma's Foveon cameras</b> (X3F files: SD9 to SD1 Merrill, DP Merrill and Quattro). LibRaw can read these only with an extra part that LumenRaw doesn't include. The Sigma dp0 Quattro's DNG files and the Sigma fp do work.</li>
+<li><b>GoPro raw</b> (GPR files), for the same reason.</li>
+</ul>
+
+<h4>What you'll see</h4>
+<p>The thumbnail usually still appears, because it comes from the camera's preview, which LumenRaw can nearly always read. Opening the photo gives a message such as <i>The LibRaw plug-in couldn't read this raw file (not a raw file Lumen can read: Unsupported file format or not RAW file)</i>.</p>
+
+<h4>What to do</h4>
+<ol class="steps">
+<li><b>Convert to DNG.</b> Adobe's free <b>DNG Converter</b> (for Windows and macOS) turns raw files from almost any camera into DNG files, which LumenRaw reads. Keep the converter's standard settings. If your version offers <b>JPEG XL</b> compression, don't choose it: this LibRaw can't read that.</li>
+<li><b>Shoot raw and JPEG</b> until a newer LumenRaw supports your camera, and work from the JPEGs meanwhile. Keep the raw files: when support arrives, they'll open in Lumen with your stars and albums already there.</li>
+<li><b>Check the camera's settings</b>: a lossless or uncompressed raw setting often works where a newer compressed one doesn't.</li>
+</ol>
+<div class="box rem"><b class="label">REMEMBER</b>Nothing is lost if a raw file won't open. Lumen keeps it in the library, unchanged, and once a version of LumenRaw that knows your camera is installed, it simply opens.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part5">Part V: The Part of Tens<small>Quick answers</small></h2>
+
+<h3 class="chapter" id="ch10"><span>10</span> Ten problems and what to do about them</h3>
+<table>
+<tr><th>Problem</th><th>What to do</th></tr>
+<tr><td>"This is a camera raw file. Lumen reads raw files with its LibRaw plug-in..."</td><td>LumenRaw isn't installed. Install it (<a href="#ch2">Chapter 2</a>), then quit and restart Lumen.</td></tr>
+<tr><td>"...the LibRaw plug-in that reads them is switched off"</td><td>Tick <b>Camera raw (LibRaw)</b> in <b>Plug-ins</b> on Lumen's icon bar menu, then open the photo again.</td></tr>
+<tr><td>"The LibRaw plug-in couldn't read this raw file (...)"</td><td>The camera or its format isn't supported (<a href="#ch9">Chapter 9</a>), or the file is damaged. Try it from another copy, or convert it to DNG.</td></tr>
+<tr><td>"The LibRaw plug-in stopped without finishing (perhaps out of memory)"</td><td>Developing needs a lot of memory. Quit other big programs and try again; in the Task Manager, check how much free memory there is.</td></tr>
+<tr><td>A raw photo has no thumbnail</td><td>The file had no preview LumenRaw could read, and couldn't be developed either. Open it to see the message, which says why.</td></tr>
+<tr><td>The photo looks different from the camera's own JPEG</td><td>Normal: the camera applies its own look to its JPEGs. Adjust to taste, or save your settings as a preset for that camera.</td></tr>
+<tr><td>The colours look badly wrong (green or magenta)</td><td>The camera probably isn't in the list (<a href="#appA">Appendix A</a>), so LibRaw is guessing. Convert to DNG.</td></tr>
+<tr><td>A raw photo is on its side</td><td>Some cameras don't record which way up they were held. Turn it with <kbd>[</kbd> or <kbd>]</kbd> in the Viewer.</td></tr>
+<tr><td>Raw photos are slow to open</td><td>Normal for big files: a few seconds each. Go through them with the arrow keys and rate from the previews; only the one you stop on is developed.</td></tr>
+<tr><td>Remove says the plug-in was installed by PackMan</td><td>Use PackMan to remove it, so PackMan knows it's gone.</td></tr>
+</table>
+
+<h3 class="chapter" id="ch11"><span>11</span> Ten things for experienced users</h3>
+<ol>
+<li><b>It's a command-line program.</b> <code>LumenRaw thumb SRC IMAGE INFO</code> writes the camera's embedded preview (a JPEG, or a developed half-size PPM if there's none); <code>LumenRaw decode SRC IMAGE INFO MAXSIDE</code> develops the raw to a binary PPM (P6, 8-bit sRGB). Run with no arguments, it prints its version and LibRaw's.</li>
+<li><b>INFO</b> is a text file of <code>key=value</code> lines: <code>width</code>, <code>height</code> (before turning), <code>orientation</code> (as EXIF: 1, 3, 6 or 8), <code>make</code>, <code>model</code>, <code>iso</code>, <code>exposure</code> (seconds), <code>fnumber</code>, <code>focal</code> (mm), <code>taken</code> (<code>YYYY:MM:DD HH:MM:SS</code>, the camera's own clock) and <code>lens</code>; or a single <code>error=...</code> line.</li>
+<li><b>Files appear whole or not at all.</b> Both outputs are written under a temporary name (the name with <code>_t</code> added) and renamed when complete, INFO first, so Lumen never reads half a file.</li>
+<li><b>Half size:</b> <code>decode</code> uses LibRaw's half-size mode (each 2&times;2 block of sensor sites becomes one pixel, with no demosaicing, so it's fast and clean) when half the longer side is still at least MAXSIDE. Lumen asks with MAXSIDE 1600 for the Viewer, the size it needs for an export or print, and a huge size (always full) for 100%. Anything up to 256 pixels (thumbnails) uses <code>thumb</code>.</li>
+<li><b>Development settings:</b> the camera's white balance and colour matrix, AHD demosaicing, sRGB output, 8 bits per channel, not turned (Lumen turns it by the orientation). LibRaw's own complaints about damaged data are silenced, because any output would open a task window on the desktop; a damaged file still develops as far as it can.</li>
+<li><b>How Lumen runs it:</b> <code>TaskWindow "&lt;command&gt;" -wimpslot 8000K -name LumenRaw -quit</code>, one job at a time. The slot starts small and UnixLib grows it as LibRaw needs. Job files live in <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>, which Lumen clears up.</li>
+<li><b>Recognising raw files:</b> Lumen checks the start of each file (Canon CR2 and CR3, Fujifilm RAF, Olympus ORF and Panasonic RW2 have signatures of their own), and for TIFF-based formats the name's ending as well (<a href="#appB">Appendix B</a>). The EXIF in TIFF-based raws (NEF, CR2, ARW, DNG, PEF and others) is read by Lumen itself, so the Info tab is full even with the plug-in switched off.</li>
+<li><b>The plug-in description</b> is the text file <code>!Lumen.Plugins.LibRaw.Plugin</code>: <code>Name</code>, <code>Version</code>, <code>Kind: raw</code>, <code>Program: LumenRaw</code>, <code>Package: LumenRaw</code> and <code>Description</code> lines. Switched-off plug-ins are listed in <code>&lt;Choices$Write&gt;.Lumen.Plugins</code>.</li>
+<li><b>This build of LibRaw</b> (0.21.4) has no threads and no OpenMP, uses zlib and libjpeg for DNG's deflate and lossy compression, and leaves out the X3F (Foveon), GoPro GPR and old video-camera decoders, and LittleCMS. It's built with GCCSDK for ARMv7 with VFPv3 and hard float.</li>
+<li><b>Source and licences:</b> LumenRaw is &copy; Andrew Youll, 2026, under the MIT licence; its source (<code>plugins.libraw.lumenraw/cpp</code>) is part of Lumen's source. LibRaw is &copy; 2008&ndash;2024 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the exact LibRaw source it was built from is published beside each release (<code>LibRaw-0.21.4-source.zip</code>), so you can rebuild LumenRaw against a changed LibRaw.</li>
+</ol>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="appA">Appendix A: Every camera LumenRaw knows</h2>
+<p>This is LibRaw 0.21.4's own list, as built into LumenRaw 1.0: 1,181 entries, under their makers' names as LibRaw gives them. Where a camera is sold under several names, they're listed together. Notes in brackets are LibRaw's: <i>CHDK hack</i> means the camera saves raw files only with the free CHDK firmware add-on; <i>secret menu hack</i> is the same for some old Casio cameras.</p>
+<!-- CAMERAS -->
+
+<!-- ======================================================================= -->
+<h2 class="part" id="appB">Appendix B: Raw file types</h2>
+<p>Lumen treats a file as raw if it has one of these endings (after the <code>/</code> on RISC OS, or <code>.</code> elsewhere), in capitals or not, or if its contents say so.</p>
+<table>
+<tr><th>Ending</th><th>Made by</th></tr>
+<tr><td>NEF, NRW</td><td>Nikon</td></tr>
+<tr><td>CR2, CR3, CRW</td><td>Canon</td></tr>
+<tr><td>ARW, SRF, SR2</td><td>Sony</td></tr>
+<tr><td>RAF</td><td>Fujifilm</td></tr>
+<tr><td>ORF</td><td>Olympus and OM System</td></tr>
+<tr><td>RW2, RWL</td><td>Panasonic; Leica (RWL)</td></tr>
+<tr><td>PEF</td><td>Pentax</td></tr>
+<tr><td>DNG</td><td>Adobe's Digital Negative: Leica, Pentax, Ricoh, Hasselblad, phones, drones, the Raspberry Pi, and converted files</td></tr>
+<tr><td>SRW</td><td>Samsung</td></tr>
+<tr><td>3FR</td><td>Hasselblad</td></tr>
+<tr><td>IIQ</td><td>Phase One</td></tr>
+<tr><td>MOS</td><td>Leaf</td></tr>
+<tr><td>MEF</td><td>Mamiya</td></tr>
+<tr><td>ERF</td><td>Epson</td></tr>
+<tr><td>KDC, DCR</td><td>Kodak</td></tr>
+<tr><td>MRW</td><td>Minolta and Konica Minolta</td></tr>
+<tr><td>RAW</td><td>Various (Panasonic and Leica compacts, and others)</td></tr>
+<tr><td>X3F, GPR</td><td>Sigma Foveon, GoPro: recognised, but not readable by LumenRaw 1.0 (<a href="#ch9">Chapter 9</a>)</td></tr>
+</table>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="credits">Credits and licences</h2>
+<p>The photos in this guide are ISS030-E-122639 (Nikon D3S, March 2012) and ISS042-E-297200 (Nikon D4, February 2015), taken from the International Space Station and published by NASA. They're in the public domain.</p>
+<p class="small">LumenRaw is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on LibRaw, &copy; 2008&ndash;2024 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the licence is in <code>!Lumen.Plugins.LibRaw.Licence</code>. The camera list in Appendix A is LibRaw's. Product names are the trademarks of their owners and are used here only to say which cameras work.</p>
+
+</main>

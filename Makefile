@@ -13,7 +13,7 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.25
+VERSION := 0.0.26
 DATE := 01 Nov 2026
 OUT := out
 
@@ -158,19 +158,24 @@ RAW_VERSION := 1.0
 # The plug-in's release zip, laid out as it goes into Lumen (PackMan's
 # LumenRaw package maps it into Apps.Graphics.!Lumen.Plugins.LibRaw), and
 # the LibRaw source it was built from (the LGPL asks for it with the binary).
-$(OUT)/LumenRaw-$(RAW_VERSION).zip: $(OUT)/LumenRaw,ff8 plugins/libraw/ReadMe plugins/libraw/Licence plugins/libraw/Plugin
-	rm -rf $(OUT)/rawpkg && mkdir -p $(OUT)/rawpkg/!Lumen/Plugins/LibRaw
+RAW_GUIDE := docs/lumenraw-guide/index.html $(wildcard docs/lumenraw-guide/images/*.png)
+$(OUT)/LumenRaw-$(RAW_VERSION).zip: $(OUT)/LumenRaw,ff8 plugins/libraw/ReadMe plugins/libraw/Licence plugins/libraw/Plugin $(RAW_GUIDE)
+	rm -rf $(OUT)/rawpkg && mkdir -p $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Guide/images
 	cp $(OUT)/LumenRaw,ff8 $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/
 	cp plugins/libraw/ReadMe $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/ReadMe,fff
 	cp plugins/libraw/Licence $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Licence,fff
 	cp plugins/libraw/Plugin $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Plugin,fff
+	cp docs/lumenraw-guide/index.html $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Guide/index.html,faf
+	for f in docs/lumenraw-guide/images/*.png; do cp $$f $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Guide/images/$$(basename $$f),b60; done
 	$(ROZIP) $@ -C $(OUT)/rawpkg !Lumen
 $(OUT)/LibRaw-0.21.4-source.zip:
 	cd /build/src/LibRaw && git archive --format=zip --prefix=LibRaw-0.21.4/ -o $(CURDIR)/$@ HEAD
 # The guide on its own, to read on any computer.
 $(OUT)/Lumen-User-Guide.zip: $(GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ guide
-guide: $(OUT)/Lumen-User-Guide.zip
+$(OUT)/LumenRaw-User-Guide.zip: $(RAW_GUIDE)
+	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenraw-guide
+guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip
 plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-0.21.4-source.zip
 # The helper on real raw files (not in the repository: their licences
 # vary), on Linux and on ARM with RISC OS's alignment rules.

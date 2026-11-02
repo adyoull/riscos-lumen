@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LumenRaw User Guide</title>
+<style>
+:root { --ink:#1d1d1f; --paper:#fffdf7; --accent:#9a4a00; --soft:#f1f0ea; --line:#d6d3c7;
+        --tip:#2f7d4f; --rem:#2a5d9f; --warn:#b3261e; --tech:#6b4fa0; --try:#9a6a00; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family: "Homerton", "Helvetica Neue", Arial, sans-serif;
+       line-height:1.55; font-size:17px; }
+main { max-width:860px; margin:0 auto; padding:16px 18px 80px; }
+header.cover { background:#2a1606; color:#fff; padding:40px 18px 34px; }
+header.cover div { max-width:860px; margin:0 auto; }
+header.cover h1 { font-size:2.4em; margin:0 0 6px; letter-spacing:-0.5px; }
+header.cover p { margin:4px 0; font-size:1.1em; color:#f3e3cf; }
+header.cover .badge { display:inline-block; background:#ffb347; color:#2a1606; font-weight:bold; padding:3px 10px;
+                      border-radius:3px; margin-top:12px; }
+h2.part { margin-top:56px; padding:12px 14px; background:#2a1606; color:#fff; font-size:1.5em; border-radius:4px; }
+h2.part small { display:block; font-size:0.6em; font-weight:normal; color:#ead2b8; }
+h3.chapter { margin-top:40px; font-size:1.35em; border-bottom:3px solid var(--accent); padding-bottom:4px; }
+h3.chapter span { color:var(--accent); }
+h4 { margin:26px 0 6px; font-size:1.08em; }
+figure { margin:18px 0; text-align:center; }
+figure img { max-width:100%; height:auto; border:1px solid var(--line); box-shadow:0 2px 6px rgba(0,0,0,0.12); }
+figcaption { font-size:0.88em; color:#555; margin-top:6px; }
+.box { border-left:6px solid; background:var(--soft); padding:10px 14px 10px 14px; margin:18px 0; border-radius:0 4px 4px 0; }
+.box b.label { display:block; font-size:0.85em; letter-spacing:1px; margin-bottom:2px; }
+.tip { border-color:var(--tip); } .tip b.label { color:var(--tip); }
+.rem { border-color:var(--rem); } .rem b.label { color:var(--rem); }
+.warn { border-color:var(--warn); } .warn b.label { color:var(--warn); }
+.tech { border-color:var(--tech); } .tech b.label { color:var(--tech); }
+.try { border-color:var(--try); background:#fbf4e2; } .try b.label { color:var(--try); }
+kbd { font-family:inherit; font-size:0.9em; background:#fff; border:1px solid #aaa; border-bottom-width:2px;
+      border-radius:3px; padding:0 5px; white-space:nowrap; }
+code { font-family: "Corpus", "Courier New", monospace; font-size:0.92em; background:#eceae2; padding:0 3px; }
+table { border-collapse:collapse; width:100%; margin:14px 0; font-size:0.95em; }
+th, td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+th { background:var(--soft); }
+ol.steps li { margin-bottom:6px; }
+nav.toc { background:var(--soft); border:1px solid var(--line); padding:6px 18px 12px; border-radius:4px; }
+nav.toc ul { padding-left:20px; margin:4px 0; }
+nav.toc li { margin:2px 0; }
+.small { font-size:0.88em; color:#555; }
+.pair { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+.pair figure { margin:8px 0; }
+a { color:#1f5fa8; }
+p.cams { margin:2px 0 10px; font-size:0.92em; }
+span.count { font-weight:normal; font-size:0.85em; color:#777; }
+</style>
+</head>
+<body>
+<header class="cover">
+<div>
+<h1>LumenRaw User Guide</h1>
+<p>Camera raw files in Lumen, on RISC OS</p>
+<p>Everything about the plug-in that lets Lumen open, show, adjust and export the raw files from your camera, and a list of every camera it knows.</p>
+<span class="badge">LumenRaw 1.0 &middot; LibRaw 0.21.4</span>
+</div>
+</header>
+<main>
+
+<figure><img src="images/d4.png" alt="A raw photo from the International Space Station, developed by LumenRaw"><figcaption>A raw photo (Nikon D4, NEF) taken on the International Space Station, opened in Lumen and developed by LumenRaw.</figcaption></figure>
+
+<nav class="toc">
+<h3>Contents</h3>
+<ul>
+<li><a href="#intro">Introduction</a></li>
+<li><a href="#part1">Part I: Getting Started</a>
+<ul><li><a href="#ch1">1. What LumenRaw does</a></li><li><a href="#ch2">2. Installing LumenRaw</a></li></ul></li>
+<li><a href="#part2">Part II: Raw Photos in Lumen</a>
+<ul><li><a href="#ch3">3. Bringing raw photos in</a></li><li><a href="#ch4">4. Looking at raw photos</a></li><li><a href="#ch5">5. Adjusting, exporting and printing</a></li><li><a href="#ch6">6. What the Info tab tells you</a></li></ul></li>
+<li><a href="#part3">Part III: Looking After the Plug-in</a>
+<ul><li><a href="#ch7">7. Switching it off, adding and removing</a></li></ul></li>
+<li><a href="#part4">Part IV: Cameras</a>
+<ul><li><a href="#ch8">8. Which cameras work</a></li><li><a href="#ch9">9. If your camera isn't listed</a></li></ul></li>
+<li><a href="#part5">Part V: The Part of Tens</a>
+<ul><li><a href="#ch10">10. Ten problems and what to do about them</a></li><li><a href="#ch11">11. Ten things for experienced users</a></li></ul></li>
+<li><a href="#appA">Appendix A: Every camera LumenRaw knows</a></li>
+<li><a href="#appB">Appendix B: Raw file types</a></li>
+<li><a href="#credits">Credits and licences</a></li>
+</ul>
+</nav>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="intro">Introduction</h2>
+
+<p>Most cameras can save their photos in two ways. A <b>JPEG</b> is a finished picture: the camera has already decided the colours, the brightness and the sharpness, and thrown away whatever it didn't need. A <b>raw file</b> is what the sensor actually recorded, before any of those decisions. It holds more detail in the bright and dark parts of a scene, and leaves the decisions to you.</p>
+<p>The catch is that every camera maker has its own raw format, and most have several. Lumen doesn't read raw files itself. It hands them to a small separate program, <b>LumenRaw</b>, which is built on <b>LibRaw</b>, a free library that knows the raw files of 1,181 cameras. LumenRaw is Lumen's <b>plug-in</b> for camera raw files.</p>
+<p>Once it's installed, you won't often notice it: raw photos simply appear in Lumen's library beside your JPEGs, and you rate, adjust, export and print them in the same way. This guide explains what happens behind the scenes, how to install and look after the plug-in, and which cameras it works with.</p>
+
+<h4>About this guide</h4>
+<p>This guide is about the plug-in. Everything else about Lumen (the library, the adjustments, exporting) is in the <b>Lumen User Guide</b>, which comes with Lumen: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
+<p>The pictures are screenshots of Lumen 0.0.25 with LumenRaw 1.0 on RISC OS 5. The raw photos in them were taken by astronauts on the International Space Station and are published by NASA.</p>
+
+<h4>What we assume you know</h4>
+<p>That you have Lumen and know your way round it a little: how to import photos and open one in the Viewer. You should know the three mouse buttons (<b>Select</b>, <b>Menu</b> and <b>Adjust</b>) and how to drag a directory from a Filer window. You don't need to know anything about raw files.</p>
+
+<h4>The boxes in this guide</h4>
+<div class="box tip"><b class="label">TIP</b>A quicker or easier way to do something.</div>
+<div class="box rem"><b class="label">REMEMBER</b>Worth keeping in mind as you work.</div>
+<div class="box warn"><b class="label">WARNING</b>Get this wrong and you could lose work, or time.</div>
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>How it works underneath. You can skip these.</div>
+<div class="box try"><b class="label">TRY IT</b>A short exercise to do as you read.</div>
+
+<h4>Where to start</h4>
+<p>If you only want to know whether your camera is supported, go straight to <a href="#ch8">Chapter 8</a>, or look it up in <a href="#appA">Appendix A</a>. To install LumenRaw, go to <a href="#ch2">Chapter 2</a>.</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part1">Part I: Getting Started<small>What the plug-in is, and installing it</small></h2>
+
+<h3 class="chapter" id="ch1"><span>1</span> What LumenRaw does</h3>
+
+<p>Lumen asks LumenRaw for two things.</p>
+<ul>
+<li><b>A quick picture for the thumbnail.</b> Almost every raw file has a small JPEG inside it: the preview the camera shows on its screen. LumenRaw takes that out, which takes a moment, and Lumen makes the thumbnail from it. If a file has no preview, LumenRaw develops a small copy instead.</li>
+<li><b>The photo itself.</b> When you open a raw photo in the Viewer, zoom in, or export or print it, LumenRaw <b>develops</b> the raw data into a full-colour picture. It uses the white balance the camera chose and the camera's own colour description, so the photo looks as the camera intended, and gives the result to Lumen. From then on Lumen treats it like any other photo.</li>
+</ul>
+<p>Each time, LumenRaw also reads the camera's details for Lumen: the camera and lens, the exposure, the date, and which way up the camera was held.</p>
+
+<h4>What you can do with raw photos in Lumen</h4>
+<ul>
+<li>Import them, from a camera card or a directory, with or without JPEGs alongside.</li>
+<li>See them as thumbnails, rate, flag, label and keyword them, put them in albums and stacks.</li>
+<li>Look at them in the Viewer, at 100% and with the loupe.</li>
+<li>Adjust them with all of Lumen's tools, retouch and brush them.</li>
+<li>Export them as JPEG or PNG, and print them.</li>
+</ul>
+
+<h4>What LumenRaw doesn't do</h4>
+<ul>
+<li>It never changes or writes to your raw files. Like all of Lumen, it only reads them.</li>
+<li>It doesn't save raw files, or convert them to DNG.</li>
+<li>It doesn't correct lenses (distortion and dark corners). Lumen's Vignette adjustment can lighten dark corners by hand.</li>
+<li>It can't open every raw file ever made: see <a href="#ch9">Chapter 9</a>.</li>
+</ul>
+
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>LumenRaw is an ordinary RISC OS program that Lumen starts in the background, in a task window, once for each job, and which quits when the job is done. That keeps LibRaw's large memory needs out of Lumen itself, and means a damaged raw file can't take Lumen down with it. The details are in <a href="#ch11">Chapter 11</a>.</div>
+
+<h3 class="chapter" id="ch2"><span>2</span> Installing LumenRaw</h3>
+
+<h4>What you need</h4>
+<ul>
+<li><b>Lumen</b> 0.0.26 or later (earlier versions work, but exported raw photos of 1024 pixels or less came from the camera's preview). LumenRaw lives inside Lumen, in <code>!Lumen.Plugins.LibRaw</code>.</li>
+<li>The same computer Lumen needs: RISC OS 5.30 or later on a Raspberry Pi 4, 400 or CM4 (other ARMv7 machines should work), with the SharedUnixLibrary and ARMEABISupport modules from PackMan.</li>
+<li><b>Memory</b>: developing a raw file takes a lot of memory for a few seconds, about 300 MB for a 24 megapixel camera and more for bigger sensors. A Raspberry Pi 4 with 2 GB or more is comfortable.</li>
+</ul>
+
+<h4>With PackMan</h4>
+<ol class="steps">
+<li>Open PackMan and find the <b>LumenRaw</b> package (search for <i>LumenRaw</i>).</li>
+<li>Install it. PackMan puts it inside Lumen, in <code>!Lumen.Plugins.LibRaw</code>.</li>
+<li>If Lumen is running, quit it and start it again. Lumen looks for plug-ins when it starts.</li>
+</ol>
+<p>Lumen's <b>Add plug-in</b> window has an <b>Open PackMan</b> button that starts PackMan for you.</p>
+
+<h4>By hand, from the zip file</h4>
+<p>LumenRaw also comes as a zip file, <code>LumenRaw-1.0.zip</code>. Inside it, the plug-in is laid out as it goes into Lumen: <code>!Lumen.Plugins.LibRaw</code>.</p>
+<ol class="steps">
+<li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
+<li>Open the <code>!Lumen</code> directory inside it: hold <kbd>Shift</kbd> and double-click it, then double-click <code>Plugins</code>. You'll see a directory called <code>LibRaw</code>.</li>
+<li>In Lumen, choose <b>Plug-ins &rarr; Add plug-in...</b> from the menu on Lumen's icon bar icon.</li>
+<li>Drag the <code>LibRaw</code> directory into the Add plug-in window. Lumen copies it into its own Plugins directory, and uses it at once, without restarting.</li>
+</ol>
+<figure><img src="images/add-plugin.png" alt="The Add plug-in window"><figcaption>The Add plug-in window. Drag the LibRaw directory into it.</figcaption></figure>
+<p>You can also drag the <code>LibRaw</code> directory straight onto Lumen's main window.</p>
+
+<h4>Checking it's working</h4>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenRaw is listed as <b>Camera raw (LibRaw) 1.0</b>, with a tick when it's on.</p>
+<figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw installed and on.</figcaption></figure>
+
+<div class="box try"><b class="label">TRY IT</b>Find a raw file from your camera (its name usually ends in <code>/NEF</code>, <code>/CR2</code>, <code>/CR3</code>, <code>/ARW</code>, <code>/RAF</code>, <code>/ORF</code>, <code>/RW2</code> or <code>/DNG</code>) and drag it into Lumen's window. A thumbnail should appear within a second or two. Double-click it: after a moment the photo sharpens as LumenRaw develops it.</div>
+
+<div class="box rem"><b class="label">REMEMBER</b>Raw files you imported before LumenRaw was installed get their thumbnails as soon as Lumen finds it. You don't need to import them again.</div>
+
+<h4>Updating</h4>
+<p>Install the new version the same way: PackMan updates it in place. If you drag a new LibRaw directory into the Add plug-in window, Lumen says there's a plug-in of that name already and asks whether to <b>Replace</b> it. Quit and restart Lumen afterwards to be sure it's using the new one. Your library, ratings and adjustments aren't affected.</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part2">Part II: Raw Photos in Lumen<small>Importing, looking, adjusting and exporting</small></h2>
+
+<h3 class="chapter" id="ch3"><span>3</span> Bringing raw photos in</h3>
+
+<p>Import raw photos as you would any others: drag a directory, a camera card or the files into Lumen's window, or use <b>Import</b> on the toolbar. Lumen recognises raw files by what's in them, and by their file name ending (<a href="#appB">Appendix B</a> lists the endings).</p>
+<figure><img src="images/browser.png" alt="Raw photos in the Browser"><figcaption>Two raw photos just imported. Their thumbnails come from the previews inside the files.</figcaption></figure>
+<p>Thumbnails of raw photos are quick, because they come from the camera's own preview rather than from developing the raw data.</p>
+
+<h4>Raw and JPEG together</h4>
+<p>Many cameras can save each photo twice: a raw file and a JPEG with the same name. Lumen imports both, as two photos side by side. If you'd rather work with one of them:</p>
+<ul>
+<li>Type <code>nef</code> (or <code>cr2</code>, <code>arw</code>, and so on) in the <b>Search</b> box to show only the raw files, because Lumen searches photos' names and the ending is part of the name. Type <code>jpg</code> for the JPEGs.</li>
+<li>Or stack each pair (select both, <kbd>Ctrl</kbd>+<kbd>G</kbd>), with the one you prefer as the pick. See the Lumen User Guide, Chapter 6.</li>
+</ul>
+
+<div class="box tip"><b class="label">TIP</b>If you always shoot both and only want the raws in Lumen, copy only the raw files from the card into a directory first, and import that.</div>
+
+<h3 class="chapter" id="ch4"><span>4</span> Looking at raw photos</h3>
+
+<p>Double-click a raw photo, as for any other. Lumen shows the camera's preview straight away and asks LumenRaw to develop the photo. While it does, the bottom bar says <b>Reading a raw photo with LumenRaw</b>:</p>
+<figure><img src="images/status-reading.png" alt="Reading a raw photo with LumenRaw"><figcaption>LumenRaw at work.</figcaption></figure>
+<p>When it's done, the developed photo replaces the preview. This takes a few seconds for a typical camera, longer for big sensors.</p>
+<div class="pair">
+<figure><img src="images/preview.png" alt="The camera's preview"><figcaption>First: the preview the camera saved in the file.</figcaption></figure>
+<figure><img src="images/developed.png" alt="Developed by LumenRaw"><figcaption>A few seconds later: developed from the raw data. The shadows hold far more.</figcaption></figure>
+</div>
+<p>The two can look quite different, as here. The camera made its preview for its own small screen, sometimes with settings of its own; LumenRaw develops what the sensor recorded.</p>
+
+<h4>Half size and full size</h4>
+<p>To be quick, LumenRaw develops at <b>half size</b> when that's still big enough for what Lumen needs. A 24 megapixel camera gives a 3000 pixel wide picture at half size, which is plenty for the Viewer. For <b>100%</b> and the <b>loupe</b>, Lumen asks for the full size, which takes longer, so the first zoom into a raw photo has a short wait. <b>Exports</b> and <b>prints</b> are developed at the size they need: half size for a small export, full size for a big one.</p>
+<p>Only thumbnails use the camera's preview. Everything you see bigger, export or print is developed from the raw data.</p>
+
+<div class="box rem"><b class="label">REMEMBER</b>LumenRaw works on one raw file at a time. If you go quickly through a lot of raw photos, Lumen keeps up by showing each preview at once, and develops the one you stop on.</div>
+
+<h3 class="chapter" id="ch5"><span>5</span> Adjusting, exporting and printing</h3>
+
+<p>A developed raw photo is just a photo to the rest of Lumen. Everything in the Adjustments tab works on it: white balance, exposure, highlights and shadows, curves, colour, black and white, noise reduction, sharpening, cropping, retouching and brushing. Export and print work the same too.</p>
+
+<h4>Getting the most from raw</h4>
+<ul>
+<li><b>White balance</b> starts from the camera's own choice. If the colours are off, use <b>Pick</b> on something white or grey, as for a JPEG.</li>
+<li><b>Noise:</b> raw files show the sensor's noise honestly, where the camera would have smoothed a JPEG. Photos taken in poor light usually need some <b>Noise Reduction</b>: start with Colour at about 30.</li>
+<li><b>Sharpening:</b> a raw photo is softer than the camera's JPEG, for the same reason. A little <b>Sharpen</b> (Amount 30 to 50) makes up the difference.</li>
+<li><b>Shadows</b> often have more in them than they seem to. Try Shadows at 30 or 40.</li>
+</ul>
+
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>LumenRaw hands Lumen the developed picture in 8-bit sRGB, which Lumen then works on in 16-bit linear light. So detail the sensor kept beyond the camera's white point (the brightest highlights) is already clipped by the time Lumen sees it: Highlights brings back what's in the picture, but can't reach past white. In practice this is close to what a JPEG gives in the highlights, with much more to work with in the shadows.</div>
+
+<div class="box warn"><b class="label">WARNING</b>Exporting raw photos takes a few seconds each before Lumen's own work starts, because each one is developed again from the raw data, at full size for a big export. Exporting a hundred of them is a job to leave running.</div>
+
+<h3 class="chapter" id="ch6"><span>6</span> What the Info tab tells you</h3>
+
+<p>Select a raw photo and click the <b>Info</b> tab. The <b>Format</b> line says how Lumen read it:</p>
+<table>
+<tr><th>Format says</th><th>Meaning</th></tr>
+<tr><td>Camera raw, developed by the LibRaw plug-in</td><td>All's well: LumenRaw is installed and on.</td></tr>
+<tr><td>Camera raw: the LibRaw plug-in is switched off (Plug-ins, on the icon bar menu)</td><td>LumenRaw is installed, but switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
+<tr><td>Camera raw: needs the LibRaw plug-in (LumenRaw, from PackMan)</td><td>LumenRaw isn't installed (<a href="#ch2">Chapter 2</a>).</td></tr>
+</table>
+<figure><img src="images/info-raw.png" alt="The Info tab for a raw photo"><figcaption>A Nikon D3S raw photo in the Info tab.</figcaption></figure>
+<p>Below that are the camera's details. Lumen reads them from the raw file itself; LumenRaw adds the photo's true size and which way up it was taken, which it knows better for some makes.</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part3">Part III: Looking After the Plug-in<small>Switching it off, adding and removing</small></h2>
+
+<h3 class="chapter" id="ch7"><span>7</span> Switching it off, adding and removing</h3>
+
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon (or from the main menu over the Browser).</p>
+
+<h4>Switching it off and on</h4>
+<p>Choose <b>Camera raw (LibRaw) 1.0</b> to switch it off: the tick goes. LumenRaw stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
+<p>While it's off, raw photos keep their thumbnails, stars, albums and adjustments, but opening one shows a message instead of the photo:</p>
+<figure><img src="images/switched-off.png" alt="A raw photo with the plug-in switched off"><figcaption>With LumenRaw switched off. The Info tab says so too.</figcaption></figure>
+<p>A raw photo that's already showing in the Viewer stays as it is when you switch; the change shows from the next photo you open.</p>
+
+<div class="box tip"><b class="label">TIP</b>Switching it off is handy on a slow machine, or one short of memory, when you only want to sort and rate: thumbnails are already made, and nothing big is developed.</div>
+
+<h4>Adding a plug-in</h4>
+<p><b>Add plug-in...</b> opens the window you drag a plug-in's directory into (<a href="#ch2">Chapter 2</a>).</p>
+
+<h4>Removing it</h4>
+<p><b>Remove &rarr; Camera raw (LibRaw)</b> deletes LumenRaw from Lumen, after asking. Your raw photos stay in the library, with their stars and adjustments; they just can't be opened until you install it again.</p>
+<div class="box warn"><b class="label">WARNING</b>If PackMan installed LumenRaw, remove it with PackMan, not with Lumen's Remove. Otherwise PackMan still thinks it's there and won't install it again. Lumen reminds you when you choose Remove.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part4">Part IV: Cameras<small>Which ones work, and what to do if yours doesn't</small></h2>
+
+<h3 class="chapter" id="ch8"><span>8</span> Which cameras work</h3>
+
+<p>LumenRaw 1.0 uses LibRaw 0.21.4, which lists <b>1,181 cameras</b> from about 80 makers, from early digital cameras to models released around 2022. The whole list is in <a href="#appA">Appendix A</a>. Here's a summary of the makers with the most:</p>
+<table>
+<tr><th>Maker</th><th>Models</th><th>For example</th></tr>
+<tr><td>Canon</td><td>163</td><td>EOS R3, EOS R5, EOS R10, EOS 5D Mark IV, EOS 90D, EOS M50 Mark II; many PowerShots</td></tr>
+<tr><td>Nikon</td><td>106</td><td>Z 9, Z 6 II, Z 50, D850, D7500, D3500; Coolpix</td></tr>
+<tr><td>Sony</td><td>104</td><td>A1, A7 IV, A7R IV, A7S III, A6600; RX100 series</td></tr>
+<tr><td>Fujifilm</td><td>81</td><td>X-H2S, X-T4, X-T30 II, X-S10, X100V, GFX 100S</td></tr>
+<tr><td>Panasonic</td><td>76</td><td>DC-GH5 Mark II, DC-S1R, DMC-LX100</td></tr>
+<tr><td>Olympus / OM System</td><td>76</td><td>OM-1, E-M1 Mark III, E-M5 Mark III, E-M10 Mark IV</td></tr>
+<tr><td>Leica</td><td>56</td><td>M11, Q2, SL2</td></tr>
+<tr><td>Pentax</td><td>42</td><td>K-3 Mark III, K-1 Mark II, KP</td></tr>
+<tr><td>Samsung, Kodak, Casio</td><td>41, 42, 53</td><td>Galaxy phones, NX cameras; older compacts and DSLRs</td></tr>
+<tr><td>Medium format</td><td>120</td><td>Hasselblad, Phase One, Leaf, Mamiya, Sinar, Imacon</td></tr>
+<tr><td>Phones and drones</td><td>&ndash;</td><td>Apple iPhone (up to the 13 Pro), Google Pixel (up to the 5), Huawei, Xiaomi, OnePlus, DJI Mavic 3</td></tr>
+<tr><td>Raspberry Pi</td><td>2</td><td>The Raspberry Pi Camera and Camera V2</td></tr>
+</table>
+<div class="box tip"><b class="label">TIP</b><b>DNG</b> (Adobe's Digital Negative) is a common raw format that many cameras and phones save, and that other programs can convert to. LumenRaw reads DNG files generally, so a DNG from a camera that isn't in the list usually opens too.</div>
+
+<div class="box try"><b class="label">TRY IT</b>Look your camera up in <a href="#appA">Appendix A</a>: use your web browser's Find and type the model, such as <code>D850</code> or <code>X-T4</code>. Sony cameras are listed by their model code, with the name in brackets: <code>ILCE-7M4 (A7 IV)</code>.</div>
+
+<h3 class="chapter" id="ch9"><span>9</span> If your camera isn't listed</h3>
+
+<p>Camera makers bring out new models, and new raw formats, every year, and LibRaw 0.21.4's list stops at cameras from around 2022. A camera that's newer than the list, or a format this build of LibRaw doesn't include, may not open at all, or may open with colours that look wrong.</p>
+
+<h4>Known not to work in LumenRaw 1.0</h4>
+<ul>
+<li><b>Newer cameras</b>, for example the Canon EOS R8, R50 and R6 Mark II, Nikon Z 8 and Z f, Sony A7R V, A7C II and A6700, Fujifilm X-T5, X-H2 and X100VI, OM System OM-5 and Panasonic GH6. If your camera came out in 2023 or later, it probably isn't in the list.</li>
+<li><b>Nikon's High Efficiency raw</b> (the HE and HE* settings on the Z 9 and later). Set the camera to <b>lossless compressed</b> raw instead.</li>
+<li><b>Sigma's Foveon cameras</b> (X3F files: SD9 to SD1 Merrill, DP Merrill and Quattro). LibRaw can read these only with an extra part that LumenRaw doesn't include. The Sigma dp0 Quattro's DNG files and the Sigma fp do work.</li>
+<li><b>GoPro raw</b> (GPR files), for the same reason.</li>
+</ul>
+
+<h4>What you'll see</h4>
+<p>The thumbnail usually still appears, because it comes from the camera's preview, which LumenRaw can nearly always read. Opening the photo gives a message such as <i>The LibRaw plug-in couldn't read this raw file (not a raw file Lumen can read: Unsupported file format or not RAW file)</i>.</p>
+
+<h4>What to do</h4>
+<ol class="steps">
+<li><b>Convert to DNG.</b> Adobe's free <b>DNG Converter</b> (for Windows and macOS) turns raw files from almost any camera into DNG files, which LumenRaw reads. Keep the converter's standard settings. If your version offers <b>JPEG XL</b> compression, don't choose it: this LibRaw can't read that.</li>
+<li><b>Shoot raw and JPEG</b> until a newer LumenRaw supports your camera, and work from the JPEGs meanwhile. Keep the raw files: when support arrives, they'll open in Lumen with your stars and albums already there.</li>
+<li><b>Check the camera's settings</b>: a lossless or uncompressed raw setting often works where a newer compressed one doesn't.</li>
+</ol>
+<div class="box rem"><b class="label">REMEMBER</b>Nothing is lost if a raw file won't open. Lumen keeps it in the library, unchanged, and once a version of LumenRaw that knows your camera is installed, it simply opens.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part5">Part V: The Part of Tens<small>Quick answers</small></h2>
+
+<h3 class="chapter" id="ch10"><span>10</span> Ten problems and what to do about them</h3>
+<table>
+<tr><th>Problem</th><th>What to do</th></tr>
+<tr><td>"This is a camera raw file. Lumen reads raw files with its LibRaw plug-in..."</td><td>LumenRaw isn't installed. Install it (<a href="#ch2">Chapter 2</a>), then quit and restart Lumen.</td></tr>
+<tr><td>"...the LibRaw plug-in that reads them is switched off"</td><td>Tick <b>Camera raw (LibRaw)</b> in <b>Plug-ins</b> on Lumen's icon bar menu, then open the photo again.</td></tr>
+<tr><td>"The LibRaw plug-in couldn't read this raw file (...)"</td><td>The camera or its format isn't supported (<a href="#ch9">Chapter 9</a>), or the file is damaged. Try it from another copy, or convert it to DNG.</td></tr>
+<tr><td>"The LibRaw plug-in stopped without finishing (perhaps out of memory)"</td><td>Developing needs a lot of memory. Quit other big programs and try again; in the Task Manager, check how much free memory there is.</td></tr>
+<tr><td>A raw photo has no thumbnail</td><td>The file had no preview LumenRaw could read, and couldn't be developed either. Open it to see the message, which says why.</td></tr>
+<tr><td>The photo looks different from the camera's own JPEG</td><td>Normal: the camera applies its own look to its JPEGs. Adjust to taste, or save your settings as a preset for that camera.</td></tr>
+<tr><td>The colours look badly wrong (green or magenta)</td><td>The camera probably isn't in the list (<a href="#appA">Appendix A</a>), so LibRaw is guessing. Convert to DNG.</td></tr>
+<tr><td>A raw photo is on its side</td><td>Some cameras don't record which way up they were held. Turn it with <kbd>[</kbd> or <kbd>]</kbd> in the Viewer.</td></tr>
+<tr><td>Raw photos are slow to open</td><td>Normal for big files: a few seconds each. Go through them with the arrow keys and rate from the previews; only the one you stop on is developed.</td></tr>
+<tr><td>Remove says the plug-in was installed by PackMan</td><td>Use PackMan to remove it, so PackMan knows it's gone.</td></tr>
+</table>
+
+<h3 class="chapter" id="ch11"><span>11</span> Ten things for experienced users</h3>
+<ol>
+<li><b>It's a command-line program.</b> <code>LumenRaw thumb SRC IMAGE INFO</code> writes the camera's embedded preview (a JPEG, or a developed half-size PPM if there's none); <code>LumenRaw decode SRC IMAGE INFO MAXSIDE</code> develops the raw to a binary PPM (P6, 8-bit sRGB). Run with no arguments, it prints its version and LibRaw's.</li>
+<li><b>INFO</b> is a text file of <code>key=value</code> lines: <code>width</code>, <code>height</code> (before turning), <code>orientation</code> (as EXIF: 1, 3, 6 or 8), <code>make</code>, <code>model</code>, <code>iso</code>, <code>exposure</code> (seconds), <code>fnumber</code>, <code>focal</code> (mm), <code>taken</code> (<code>YYYY:MM:DD HH:MM:SS</code>, the camera's own clock) and <code>lens</code>; or a single <code>error=...</code> line.</li>
+<li><b>Files appear whole or not at all.</b> Both outputs are written under a temporary name (the name with <code>_t</code> added) and renamed when complete, INFO first, so Lumen never reads half a file.</li>
+<li><b>Half size:</b> <code>decode</code> uses LibRaw's half-size mode (each 2&times;2 block of sensor sites becomes one pixel, with no demosaicing, so it's fast and clean) when half the longer side is still at least MAXSIDE. Lumen asks with MAXSIDE 1600 for the Viewer, the size it needs for an export or print, and a huge size (always full) for 100%. Anything up to 256 pixels (thumbnails) uses <code>thumb</code>.</li>
+<li><b>Development settings:</b> the camera's white balance and colour matrix, AHD demosaicing, sRGB output, 8 bits per channel, not turned (Lumen turns it by the orientation). LibRaw's own complaints about damaged data are silenced, because any output would open a task window on the desktop; a damaged file still develops as far as it can.</li>
+<li><b>How Lumen runs it:</b> <code>TaskWindow "&lt;command&gt;" -wimpslot 8000K -name LumenRaw -quit</code>, one job at a time. The slot starts small and UnixLib grows it as LibRaw needs. Job files live in <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>, which Lumen clears up.</li>
+<li><b>Recognising raw files:</b> Lumen checks the start of each file (Canon CR2 and CR3, Fujifilm RAF, Olympus ORF and Panasonic RW2 have signatures of their own), and for TIFF-based formats the name's ending as well (<a href="#appB">Appendix B</a>). The EXIF in TIFF-based raws (NEF, CR2, ARW, DNG, PEF and others) is read by Lumen itself, so the Info tab is full even with the plug-in switched off.</li>
+<li><b>The plug-in description</b> is the text file <code>!Lumen.Plugins.LibRaw.Plugin</code>: <code>Name</code>, <code>Version</code>, <code>Kind: raw</code>, <code>Program: LumenRaw</code>, <code>Package: LumenRaw</code> and <code>Description</code> lines. Switched-off plug-ins are listed in <code>&lt;Choices$Write&gt;.Lumen.Plugins</code>.</li>
+<li><b>This build of LibRaw</b> (0.21.4) has no threads and no OpenMP, uses zlib and libjpeg for DNG's deflate and lossy compression, and leaves out the X3F (Foveon), GoPro GPR and old video-camera decoders, and LittleCMS. It's built with GCCSDK for ARMv7 with VFPv3 and hard float.</li>
+<li><b>Source and licences:</b> LumenRaw is &copy; Andrew Youll, 2026, under the MIT licence; its source (<code>plugins.libraw.lumenraw/cpp</code>) is part of Lumen's source. LibRaw is &copy; 2008&ndash;2024 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the exact LibRaw source it was built from is published beside each release (<code>LibRaw-0.21.4-source.zip</code>), so you can rebuild LumenRaw against a changed LibRaw.</li>
+</ol>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="appA">Appendix A: Every camera LumenRaw knows</h2>
+<p>This is LibRaw 0.21.4's own list, as built into LumenRaw 1.0: 1,181 entries, under their makers' names as LibRaw gives them. Where a camera is sold under several names, they're listed together. Notes in brackets are LibRaw's: <i>CHDK hack</i> means the camera saves raw files only with the free CHDK firmware add-on; <i>secret menu hack</i> is the same for some old Casio cameras.</p>
+<p class="small">Jump to: <a href="#cam-DNG">DNG</a> &middot; <a href="#cam-AgfaPhoto">AgfaPhoto</a> &middot; <a href="#cam-Alcatel">Alcatel</a> &middot; <a href="#cam-Apple">Apple</a> &middot; <a href="#cam-ASUS">ASUS</a> &middot; <a href="#cam-AutelRobotics">AutelRobotics</a> &middot; <a href="#cam-AVT">AVT</a> &middot; <a href="#cam-Baumer">Baumer</a> &middot; <a href="#cam-BlackMagic">BlackMagic</a> &middot; <a href="#cam-BQ">BQ</a> &middot; <a href="#cam-Canon">Canon</a> &middot; <a href="#cam-Casio">Casio</a> &middot; <a href="#cam-CLAUSS">CLAUSS</a> &middot; <a href="#cam-Contax">Contax</a> &middot; <a href="#cam-Creative">Creative</a> &middot; <a href="#cam-DigitalBolex">Digital Bolex</a> &middot; <a href="#cam-DJI">DJI</a> &middot; <a href="#cam-DXO">DXO</a> &middot; <a href="#cam-Epson">Epson</a> &middot; <a href="#cam-Eyedeas">Eyedeas</a> &middot; <a href="#cam-Foculus">Foculus</a> &middot; <a href="#cam-FujiFilm">FujiFilm</a> &middot; <a href="#cam-Gione">Gione</a> &middot; <a href="#cam-GITUP">GITUP</a> &middot; <a href="#cam-Google">Google</a> &middot; <a href="#cam-Hasselblad">Hasselblad</a> &middot; <a href="#cam-HTC">HTC</a> &middot; <a href="#cam-Huawei">Huawei</a> &middot; <a href="#cam-Ikonoskop">Ikonoskop</a> &middot; <a href="#cam-Imacon">Imacon</a> &middot; <a href="#cam-ISG">ISG</a> &middot; <a href="#cam-JaiPulnix">JaiPulnix</a> &middot; <a href="#cam-Kandao">Kandao</a> &middot; <a href="#cam-Kinefinity">Kinefinity</a> &middot; <a href="#cam-Kodak">Kodak</a> &middot; <a href="#cam-Konica">Konica</a> &middot; <a href="#cam-Leaf">Leaf</a> &middot; <a href="#cam-Leica">Leica</a> &middot; <a href="#cam-Lenovo">Lenovo</a> &middot; <a href="#cam-LG">LG</a> &middot; <a href="#cam-Logitech">Logitech</a> &middot; <a href="#cam-Mamiya">Mamiya</a> &middot; <a href="#cam-Matrix">Matrix</a> &middot; <a href="#cam-Meizy">Meizy</a> &middot; <a href="#cam-Micron">Micron</a> &middot; <a href="#cam-Minolta">Minolta</a> &middot; <a href="#cam-Motorola">Motorola</a> &middot; <a href="#cam-Nikon">Nikon</a> &middot; <a href="#cam-Nokia">Nokia</a> &middot; <a href="#cam-Olympus">Olympus</a> &middot; <a href="#cam-OMDigitalSolutions">OM Digital Solutions</a> &middot; <a href="#cam-OmniVision">OmniVision</a> &middot; <a href="#cam-OnePlus">OnePlus</a> &middot; <a href="#cam-Panasonic">Panasonic</a> &middot; <a href="#cam-PARROT">PARROT</a> &middot; <a href="#cam-Pentax">Pentax</a> &middot; <a href="#cam-PhaseOne">PhaseOne</a> &middot; <a href="#cam-Photron">Photron</a> &middot; <a href="#cam-Pixelink">Pixelink</a> &middot; <a href="#cam-PtGrey">PtGrey</a> &middot; <a href="#cam-RaspberryPi">RaspberryPi</a> &middot; <a href="#cam-Realme">Realme</a> &middot; <a href="#cam-Ricoh">Ricoh</a> &middot; <a href="#cam-Rollei">Rollei</a> &middot; <a href="#cam-RoverShot">RoverShot</a> &middot; <a href="#cam-Samsung">Samsung</a> &middot; <a href="#cam-Sarnoff">Sarnoff</a> &middot; <a href="#cam-Seitz">Seitz</a> &middot; <a href="#cam-Sigma">Sigma</a> &middot; <a href="#cam-Sinar">Sinar</a> &middot; <a href="#cam-SMaL">SMaL</a> &middot; <a href="#cam-Sony">Sony</a> &middot; <a href="#cam-STV680">STV680</a> &middot; <a href="#cam-SVS">SVS</a> &middot; <a href="#cam-Vivo">Vivo</a> &middot; <a href="#cam-Xiaomi">Xiaomi</a> &middot; <a href="#cam-Xiaoyi">Xiaoyi</a> &middot; <a href="#cam-Yi">Yi</a> &middot; <a href="#cam-YUNEEC">YUNEEC</a> &middot; <a href="#cam-Zeiss">Zeiss</a> &middot; <a href="#cam-Zenit">Zenit</a></p>
+<h4 id="cam-DNG">Adobe DNG <span class="count">1</span></h4>
+<p class="cams">Adobe Digital Negative (DNG)</p>
+<h4 id="cam-AgfaPhoto">AgfaPhoto <span class="count">1</span></h4>
+<p class="cams">DC-833m</p>
+<h4 id="cam-Alcatel">Alcatel <span class="count">1</span></h4>
+<p class="cams">5035D</p>
+<h4 id="cam-Apple">Apple <span class="count">15</span></h4>
+<p class="cams">iPad Pro &middot; iPhone SE &middot; iPhone 6s &middot; iPhone 6 plus &middot; iPhone 7 &middot; iPhone 7 plus &middot; iPhone 8 &middot; iPhone 8 plus &middot; iPhone X &middot; iPhone 12 Pro &middot; iPhone 12 Pro Max &middot; iPhone 13 Pro &middot; QuickTake 100 &middot; QuickTake 150 &middot; QuickTake 200</p>
+<h4 id="cam-ASUS">ASUS <span class="count">2</span></h4>
+<p class="cams">ZenPhone4 &middot; ZenPhone6</p>
+<h4 id="cam-AutelRobotics">AutelRobotics <span class="count">2</span></h4>
+<p class="cams">XB015 &middot; XT705 (EVO II)</p>
+<h4 id="cam-AVT">AVT <span class="count">5</span></h4>
+<p class="cams">F-080C &middot; F-145C &middot; F-201C &middot; F-510C &middot; F-810C</p>
+<h4 id="cam-Baumer">Baumer <span class="count">1</span></h4>
+<p class="cams">TXG14</p>
+<h4 id="cam-BlackMagic">BlackMagic <span class="count">8</span></h4>
+<p class="cams">Cinema Camera &middot; Micro Cinema Camera &middot; Pocket Cinema Camera &middot; Production Camera 4k &middot; URSA &middot; URSA Mini 4k &middot; URSA Mini 4.6k &middot; URSA Mini Pro 4.6k</p>
+<h4 id="cam-BQ">BQ <span class="count">1</span></h4>
+<p class="cams">Aquarius U</p>
+<h4 id="cam-Canon">Canon <span class="count">163</span></h4>
+<p class="cams">PowerShot 600 &middot; PowerShot A5 &middot; PowerShot A5 Zoom &middot; PowerShot A50 &middot; PowerShot A410 (CHDK hack) &middot; PowerShot A460 (CHDK hack) &middot; PowerShot A470 (CHDK hack) &middot; PowerShot A480 (CHDK hack) &middot; PowerShot A530 (CHDK hack) &middot; PowerShot A540 (CHDK hack) &middot; PowerShot A550 (CHDK hack) &middot; PowerShot A560 (CHDK hack) &middot; PowerShot A570 IS (CHDK hack) &middot; PowerShot A590 IS (CHDK hack) &middot; PowerShot A610 (CHDK hack) &middot; PowerShot A620 (CHDK hack) &middot; PowerShot A630 (CHDK hack) &middot; PowerShot A640 (CHDK hack) &middot; PowerShot A650 IS (CHDK hack) &middot; PowerShot A710 IS (CHDK hack) &middot; PowerShot A720 IS (CHDK hack) &middot; PowerShot A3300 IS (CHDK hack) &middot; PowerShot D10 (CHDK hack) &middot; PowerShot ELPH 130 IS / IXUS 140 / IXY 110F (CHDK hack) &middot; PowerShot ELPH 160 / IXUS 160 (CHDK hack) &middot; PowerShot Pro70 &middot; PowerShot Pro90 IS &middot; PowerShot Pro1 &middot; PowerShot G1 &middot; PowerShot G1 X &middot; PowerShot G1 X Mark II &middot; PowerShot G1 X Mark III &middot; PowerShot G2 &middot; PowerShot G3 &middot; PowerShot G3 X &middot; PowerShot G5 &middot; PowerShot G5 X &middot; PowerShot G5 X Mark II &middot; PowerShot G6 &middot; PowerShot G7 (CHDK hack) &middot; PowerShot G7 X &middot; PowerShot G7 X Mark II &middot; PowerShot G7 X Mark III &middot; PowerShot G9 &middot; PowerShot G9 X &middot; PowerShot G9 X Mark II &middot; PowerShot G10 &middot; PowerShot G11 &middot; PowerShot G12 &middot; PowerShot G15 &middot; PowerShot G16 &middot; PowerShot S2 IS (CHDK hack) &middot; PowerShot S3 IS (CHDK hack) &middot; PowerShot S5 IS (CHDK hack) &middot; PowerShot SD300 / IXUS 40 / IXY Digital 50 (CHDK hack) &middot; PowerShot SD750 / IXUS 75 / IXY Digital 90 (CHDK hack) &middot; PowerShot SD900 / Digital IXUS 900 Ti / IXY Digital 1000 (CHDK hack) &middot; PowerShot SD950 IS / Digital IXUS 960 IS / IXY Digital 2000 IS (CHDK hack) &middot; PowerShot SD1200 IS / Digital IXUS 95 IS / IXY Digital 110 IS (CHDK hack) &middot; PowerShot S30 &middot; PowerShot S40 &middot; PowerShot S45 &middot; PowerShot S50 &middot; PowerShot S60 &middot; PowerShot S70 &middot; PowerShot S90 &middot; PowerShot S95 &middot; PowerShot S100 &middot; PowerShot S110 &middot; PowerShot S120 &middot; PowerShot SX1 IS &middot; PowerShot SX40 HS (CHDK hack, CR2) &middot; PowerShot SX50 HS &middot; PowerShot SX60 HS &middot; PowerShot SX70 HS &middot; PowerShot SX100 IS (CHDK hack) &middot; PowerShot SX110 IS (CHDK hack) &middot; PowerShot SX120 IS (CHDK hack) &middot; PowerShot SX130 IS (CHDK hack) &middot; PowerShot SX160 IS (CHDK hack) &middot; PowerShot SX220 HS (CHDK hack) &middot; PowerShot SX510 HS (CHDK hack) &middot; PowerShot SX710 HS (CHDK hack) &middot; PowerShot SX10 IS (CHDK hack) &middot; PowerShot SX20 IS (CHDK hack) &middot; PowerShot SX30 IS (CHDK hack) &middot; EOS R &middot; EOS RP &middot; EOS R3 &middot; EOS R5 &middot; EOS R6 &middot; EOS R7 &middot; EOS R10 &middot; EOS D30 &middot; EOS D60 &middot; EOS 5DS &middot; EOS 5DS R &middot; EOS 5D &middot; EOS 5D Mark II &middot; EOS 5D Mark III &middot; EOS 5D Mark IV &middot; EOS 6D &middot; EOS 6D Mark II &middot; EOS 7D &middot; EOS 7D Mark II &middot; EOS 10D &middot; EOS 20D &middot; EOS 20Da &middot; EOS 30D &middot; EOS 40D &middot; EOS 50D &middot; EOS 60D &middot; EOS 60Da &middot; EOS 70D &middot; EOS 77D / 9000D &middot; EOS 80D &middot; EOS 90D &middot; EOS 100D / Rebel SL1 / Kiss X7 &middot; EOS 200D / Rebel SL2 / Kiss X9 &middot; EOS 250D / 200D II / Rebel SL3 / Kiss X10 &middot; EOS 300D / Digital Rebel / Kiss Digital &middot; EOS 350D / Digital Rebel XT / Kiss Digital N &middot; EOS 400D / Digital Rebel XTi / Kiss Digital X &middot; EOS 450D / Digital Rebel XSi / Kiss X2 &middot; EOS 500D / Rebel T1i / Kiss X3 &middot; EOS 550D / Rebel T2i / Kiss X4 &middot; EOS 600D / Rebel T3i / Kiss X5 &middot; EOS 650D / Rebel T4i / Kiss X6i &middot; EOS 700D / Rebel T5i / Kiss X7i &middot; EOS 750D / Rebel T6i / Kiss X8i &middot; EOS 760D / Rebel T6S / 8000D &middot; EOS 800D / Rebel T7i / Kiss X9i &middot; EOS 850D / Rebel T8i / Kiss X10i &middot; EOS 1000D / Digital Rebel XS / Kiss F &middot; EOS 1100D / Rebel T3 / Kiss X50 &middot; EOS 1200D / Kiss X70 / REBEL T5 / Hi &middot; EOS 1300D / Rebel T6 / Kiss X80 &middot; EOS 1500D / 2000D / Rebel T7 / Kiss X90 &middot; EOS 3000D / 4000D / Rebel T100 &middot; EOS D2000 &middot; EOS M &middot; EOS M2 &middot; EOS M3 &middot; EOS M5 &middot; EOS M6 &middot; EOS M6 Mark II &middot; EOS M10 &middot; EOS M50 / Kiss M &middot; EOS M50 Mark II &middot; EOS M100 &middot; EOS M200 &middot; EOS-1D C &middot; EOS-1D X &middot; EOS-1D X Mark II &middot; EOS-1D X Mark III &middot; EOS-1D &middot; EOS-1D Mark II &middot; EOS-1D Mark II N &middot; EOS-1D Mark III &middot; EOS-1D Mark IV &middot; EOS-1Ds &middot; EOS-1Ds Mark II &middot; EOS-1Ds Mark III</p>
+<h4 id="cam-Casio">Casio <span class="count">53</span></h4>
+<p class="cams">QV-2000UX (secret menu hack) &middot; QV-3000EX (secret menu hack) &middot; QV-3500EX (secret menu hack) &middot; QV-4000 (secret menu hack) &middot; QV-5700 (secret menu hack) &middot; QV-R41 &middot; QV-R51 &middot; QV-R61 &middot; EX-F1 &middot; EX-FC300S &middot; EX-FC400S &middot; EX-FH20 &middot; EX-FH25 &middot; EX-FH100 &middot; EX-S20 / M20 &middot; EX-S100 &middot; EX-Z4 &middot; EX-Z50 &middot; EX-Z500 &middot; EX-Z55 &middot; EX-Z60 &middot; EX-Z75 &middot; EX-Z750 &middot; EX-Z8 &middot; EX-Z850 &middot; EX-Z1050 &middot; EX-ZR100 &middot; EX-Z1080 &middot; EX-ZR700 &middot; EX-ZR710 &middot; EX-ZR750 &middot; EX-ZR800 &middot; EX-ZR850 &middot; EX-ZR1000 &middot; EX-ZR1100 &middot; EX-ZR1200 &middot; EX-ZR1300 &middot; EX-ZR1500 &middot; EX-ZR3000 &middot; EX-ZR3100 &middot; EX-ZR3200 &middot; EX-ZR3500 &middot; EX-ZR3600 &middot; EX-ZR3700 &middot; EX-ZR4000 / 5000 &middot; EX-ZR4100 / 5100 &middot; EX-100 &middot; EX-100F &middot; EX-100PRO &middot; EX-10 &middot; EX-P505 (secret menu hack) &middot; EX-P600 (secret menu hack) &middot; EX-P700 (secret menu hack)</p>
+<h4 id="cam-CLAUSS">CLAUSS <span class="count">1</span></h4>
+<p class="cams">pix500</p>
+<h4 id="cam-Contax">Contax <span class="count">1</span></h4>
+<p class="cams">N Digital</p>
+<h4 id="cam-Creative">Creative <span class="count">1</span></h4>
+<p class="cams">PC-CAM 600</p>
+<h4 id="cam-DigitalBolex">Digital Bolex <span class="count">2</span></h4>
+<p class="cams">D16 &middot; D16M</p>
+<h4 id="cam-DJI">DJI <span class="count">11</span></h4>
+<p class="cams">4384x3288 &middot; Mavic Air &middot; Mavic Air2 &middot; Mavic Air 2S &middot; Mavic Mini2 &middot; Mavic 3 &middot; Osmo Action &middot; Pocket &middot; Phantom4 Pro/Pro+ &middot; Zenmuse X5 &middot; Zenmuse X5R</p>
+<h4 id="cam-DXO">DXO <span class="count">1</span></h4>
+<p class="cams">One</p>
+<h4 id="cam-Epson">Epson <span class="count">3</span></h4>
+<p class="cams">R-D1 &middot; R-D1s &middot; R-D1x</p>
+<h4 id="cam-Eyedeas">Eyedeas <span class="count">1</span></h4>
+<p class="cams">E1</p>
+<h4 id="cam-Foculus">Foculus <span class="count">1</span></h4>
+<p class="cams">531C</p>
+<h4 id="cam-FujiFilm">FujiFilm <span class="count">81</span></h4>
+<p class="cams">DBP for GX680 / DX-2000 &middot; E550 &middot; E900 &middot; F500EXR / F505EXR &middot; F550EXR &middot; F600EXR / F605EXR &middot; F700 &middot; F710 &middot; F770EXR / F775EXR &middot; F800EXR &middot; F810 &middot; F900EXR &middot; S2Pro &middot; S3Pro &middot; S5Pro &middot; S20Pro &middot; S1 &middot; S100FS &middot; S5000 &middot; S5100 / S5500 &middot; S5200 / S5600 &middot; S6000fd / S6500fd &middot; S7000 &middot; S9000 / S9500 &middot; S9100 / S9600 &middot; S200EXR / S205EXR &middot; SL1000 &middot; HS10/HS11 &middot; HS20EXR / HS22EXR &middot; HS30EXR / HS33EXR / HS35EXR &middot; HS50EXR &middot; GFX 50S &middot; GFX 50S II &middot; GFX 50R &middot; GFX 100 &middot; GFX 100S &middot; X-Pro1 &middot; X-Pro2 &middot; X-Pro3 &middot; X-S1 &middot; XQ1 &middot; XQ2 &middot; X100 &middot; X100F &middot; X100S &middot; X100T &middot; X100V &middot; X10 &middot; X20 &middot; X30 &middot; X70 &middot; X-A1 &middot; X-A2 &middot; X-A3 &middot; X-A5 &middot; X-A7 &middot; X-A10 &middot; X-A20 &middot; X-E1 &middot; X-E2 &middot; X-E2S &middot; X-E3 &middot; X-E4 &middot; X-M1 &middot; XF1 &middot; XF10 &middot; X-H1 &middot; X-H2S &middot; X-T1 &middot; X-S10 &middot; X-T1 Graphite Silver &middot; X-T2 &middot; X-T3 &middot; X-T4 &middot; X-T10 &middot; X-T20 &middot; X-T30 &middot; X-T30 II &middot; X-T100 &middot; X-T200 &middot; IS-1</p>
+<h4 id="cam-Gione">Gione <span class="count">1</span></h4>
+<p class="cams">E7</p>
+<h4 id="cam-GITUP">GITUP <span class="count">3</span></h4>
+<p class="cams">GIT2 &middot; GIT2P &middot; G3 DUO (16:9 mode only)</p>
+<h4 id="cam-Google">Google <span class="count">6</span></h4>
+<p class="cams">Pixel &middot; Pixel XL &middot; Pixel 3a &middot; Pixel 4 XL &middot; Pixel 4a (5G) &middot; Pixel 5</p>
+<h4 id="cam-Hasselblad">Hasselblad <span class="count">36</span></h4>
+<p class="cams">H2D-22 &middot; H2D-39 &middot; H3DII-22 &middot; H3DII-31 &middot; H3DII-39 &middot; H3DII-50 &middot; H3D-22 &middot; H3D-31 &middot; H3D-39 &middot; H4D-60 &middot; H4D-50 &middot; H4D-40 &middot; H4D-31 &middot; H5D-60 &middot; H5D-50 &middot; H5D-50c &middot; H5D-40 &middot; H6D-100c &middot; A6D-100c &middot; CFV &middot; CFV-50 &middot; CFV II 50C &middot; CFH &middot; CF-22 &middot; CF-31 &middot; CF-39 &middot; V96C &middot; L1D-20c (DJI Mavic 2 Pro) &middot; Lusso &middot; Lunar &middot; True Zoom &middot; Stellar &middot; Stellar II &middot; HV &middot; X1D &middot; X1D II 50C</p>
+<h4 id="cam-HTC">HTC <span class="count">6</span></h4>
+<p class="cams">UltraPixel &middot; MyTouch 4G &middot; One (A9) &middot; One (M9) &middot; 10 &middot; U12</p>
+<h4 id="cam-Huawei">Huawei <span class="count">22</span></h4>
+<p class="cams">P8 Lite (PRA-LX1) &middot; P9 (EVA-L09/AL00) &middot; P10 (VTR-L09) &middot; P10+ (VKY-L09) &middot; P10 Lite (WAS-LX1A) &middot; P20 (EML-L09) &middot; P20 Lite (ANE-LX1) &middot; P20 Pro (CLT-L29/L09) &middot; P30 Pro (VOG-L29) &middot; Honor6a &middot; Honor7a pro &middot; Honor8 (FRD-L09) &middot; Honor9 &middot; Honor10 &middot; Honor20 &middot; Honor View 10 (BKL-L09) &middot; Honor View 20 (PCT-L29) &middot; Honor 20 Pro (YAL-L41) &middot; Mate8 (NXT-L29) &middot; Mate10 (BLA-L29) &middot; Mate20 Pro (LYA-L29) &middot; Mate20 Lite (SNE-LX1)</p>
+<h4 id="cam-Ikonoskop">Ikonoskop <span class="count">2</span></h4>
+<p class="cams">A-Cam dII Panchromatic &middot; A-Cam dII</p>
+<h4 id="cam-Imacon">Imacon <span class="count">4</span></h4>
+<p class="cams">Ixpress 96, 96C &middot; Ixpress 384, 384C (single shot only) &middot; Ixpress 132C &middot; Ixpress 528C (single shot only)</p>
+<h4 id="cam-ISG">ISG <span class="count">1</span></h4>
+<p class="cams">2020x1520</p>
+<h4 id="cam-JaiPulnix">JaiPulnix <span class="count">2</span></h4>
+<p class="cams">BB-500CL &middot; BB-500GE</p>
+<h4 id="cam-Kandao">Kandao <span class="count">1</span></h4>
+<p class="cams">QooCam 8K</p>
+<h4 id="cam-Kinefinity">Kinefinity <span class="count">3</span></h4>
+<p class="cams">KineMINI &middot; KineRAW Mini &middot; KineRAW S35</p>
+<h4 id="cam-Kodak">Kodak <span class="count">42</span></h4>
+<p class="cams">DC20 &middot; DC25 &middot; DC40 &middot; DC50 &middot; DC120 &middot; DCS200 &middot; DCS315C &middot; DCS330C &middot; DCS420 &middot; DCS460 &middot; DCS460M &middot; DCS520C &middot; DCS560C &middot; DCS620C &middot; DCS620X &middot; DCS660C &middot; DCS660M &middot; DCS720X &middot; DCS760C &middot; DCS760M &middot; EOSDCS1 &middot; EOSDCS3 &middot; NC2000 &middot; ProBack &middot; PB645C &middot; PB645H &middot; PB645M &middot; DCS Pro 14n &middot; DCS Pro 14nx &middot; DCS Pro SLR/c &middot; DCS Pro SLR/n &middot; C330 &middot; C603 &middot; P850 &middot; P880 &middot; PIXPRO AZ901 &middot; PIXPRO S-1 &middot; Z980 &middot; Z981 &middot; Z990 &middot; Z1015 &middot; KAI-0340</p>
+<h4 id="cam-Konica">Konica <span class="count">2</span></h4>
+<p class="cams">KD-400Z &middot; KD-510Z</p>
+<h4 id="cam-Leaf">Leaf <span class="count">37</span></h4>
+<p class="cams">AFi 5 &middot; AFi 6 &middot; AFi 7 &middot; AFi-II 6 &middot; AFi-II 7 &middot; AFi-II 10 &middot; AFi-II 10R &middot; Aptus-II 5 &middot; Aptus-II 6 &middot; Aptus-II 7 &middot; Aptus-II 8 &middot; Aptus-II 10 &middot; Aptus-II 12 &middot; Aptus-II 12R &middot; Aptus 17 &middot; Aptus 22 &middot; Aptus 54S &middot; Aptus 65 &middot; Aptus 65S &middot; Aptus 75 &middot; Aptus 75S &middot; Cantare &middot; Cantare XY &middot; CatchLight &middot; CMost &middot; Credo 40 &middot; Credo 50 &middot; Credo 60 &middot; Credo 80 &middot; DCB-II &middot; Valeo 6 &middot; Valeo 11 &middot; Valeo 17 &middot; Valeo 17wi &middot; Valeo 22 &middot; Valeo 22wi &middot; Volare</p>
+<h4 id="cam-Leica">Leica <span class="count">56</span></h4>
+<p class="cams">C (Typ 112) &middot; CL &middot; C-Lux / CAM-DC25 &middot; Digilux 2 &middot; Digilux 3 &middot; Digital-Modul-R &middot; D-LUX2 &middot; D-LUX3 &middot; D-LUX4 &middot; D-LUX5 &middot; D-LUX6 &middot; D-LUX7 &middot; D-Lux (Typ 109) &middot; M8 &middot; M8.2 &middot; M9 &middot; M10 &middot; M10-D &middot; M10-P &middot; M10-R &middot; M10 Monochrom &middot; M11 &middot; M (Typ 240) &middot; M (Typ 262) &middot; Monochrom (Typ 240) &middot; Monochrom (Typ 246) &middot; M-D (Typ 262) &middot; M-E &middot; M-P &middot; R8 &middot; Q (Typ 116) &middot; Q-P &middot; Q2 &middot; Q2 Monochrom &middot; S &middot; S2 &middot; S3 &middot; S (Typ 007) &middot; SL (Typ 601) &middot; SL2 &middot; SL2-S &middot; T (Typ 701) &middot; TL &middot; TL2 &middot; X1 &middot; X (Typ 113) &middot; X2 &middot; X-E (Typ 102) &middot; X-U (Typ 113) &middot; V-LUX1 &middot; V-LUX2 &middot; V-LUX3 &middot; V-LUX4 &middot; V-LUX5 &middot; V-Lux (Typ 114) &middot; X VARIO (Typ 107)</p>
+<h4 id="cam-Lenovo">Lenovo <span class="count">1</span></h4>
+<p class="cams">a820</p>
+<h4 id="cam-LG">LG <span class="count">7</span></h4>
+<p class="cams">G3 &middot; G4 &middot; G5 (H850) &middot; G6 &middot; V20 (F800K) &middot; V20 (H910) &middot; VS995</p>
+<h4 id="cam-Logitech">Logitech <span class="count">1</span></h4>
+<p class="cams">Fotoman Pixtura</p>
+<h4 id="cam-Mamiya">Mamiya <span class="count">1</span></h4>
+<p class="cams">ZD</p>
+<h4 id="cam-Matrix">Matrix <span class="count">1</span></h4>
+<p class="cams">4608x3288</p>
+<h4 id="cam-Meizy">Meizy <span class="count">1</span></h4>
+<p class="cams">MX4</p>
+<h4 id="cam-Micron">Micron <span class="count">1</span></h4>
+<p class="cams">2010</p>
+<h4 id="cam-Minolta">Minolta <span class="count">15</span></h4>
+<p class="cams">RD175 / Agfa ActionCam &middot; DiMAGE 5 &middot; DiMAGE 7 &middot; DiMAGE 7i &middot; DiMAGE 7Hi &middot; DiMAGE A1 &middot; DiMAGE A2 &middot; DiMAGE A200 &middot; DiMAGE G400 &middot; DiMAGE G500 &middot; DiMAGE G530 &middot; DiMAGE G600 &middot; DiMAGE Z2 &middot; Alpha/Dynax/Maxxum 5D &middot; Alpha/Dynax/Maxxum 7D</p>
+<h4 id="cam-Motorola">Motorola <span class="count">3</span></h4>
+<p class="cams">PIXL &middot; Moto G (5S) &middot; Moto G7 Play</p>
+<h4 id="cam-Nikon">Nikon <span class="count">106</span></h4>
+<p class="cams">D1 &middot; D1H &middot; D1X &middot; D2H &middot; D2Hs &middot; D2X &middot; D2Xs &middot; D3 &middot; D3s &middot; D3X &middot; D4 &middot; D4s &middot; D40 &middot; D40X &middot; D5 &middot; D50 &middot; D6 &middot; D60 &middot; D70 &middot; D70s &middot; D80 &middot; D90 &middot; D100 &middot; D200 &middot; D300 &middot; D300s &middot; D500 &middot; D600 &middot; D610 &middot; D700 &middot; D750 &middot; D780 &middot; D800 &middot; D800E &middot; D810 &middot; D810A &middot; D850 &middot; D3000 &middot; D3100 &middot; D3200 &middot; D3300 &middot; D3400 &middot; D3500 &middot; D5000 &middot; D5100 &middot; D5200 &middot; D5300 &middot; D5500 &middot; D5600 &middot; D7000 &middot; D7100 &middot; D7200 &middot; D7500 &middot; Df &middot; Z 5 &middot; Z 6 &middot; Z 6 II &middot; Z 7 &middot; Z 7 II &middot; Z 9 (HE/HE* formats are not supported yet) &middot; Z 50 &middot; Z fc &middot; 1 AW1 &middot; 1 J1 &middot; 1 J2 &middot; 1 J3 &middot; 1 J4 &middot; 1 J5 &middot; 1 S1 &middot; 1 S2 &middot; 1 V1 &middot; 1 V2 &middot; 1 V3 &middot; Coolpix 700 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 800 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 880 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 900 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 950 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 990 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 995 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 2100 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 2500 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 3200 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 3700 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 4300 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 4500 (&quot;DIAG RAW&quot; hack) &middot; Coolpix 5000 &middot; Coolpix 5400 &middot; Coolpix 5700 &middot; Coolpix 8400 &middot; Coolpix 8700 &middot; Coolpix 8800 &middot; Coolpix A &middot; Coolpix A1000 &middot; Coolpix B700 &middot; Coolpix P330 &middot; Coolpix P340 &middot; Coolpix P950 &middot; Coolpix P6000 &middot; Coolpix P1000 &middot; Coolpix P7000 &middot; Coolpix P7100 &middot; Coolpix P7700 &middot; Coolpix P7800 &middot; Coolpix S6 (&quot;DIAG RAW&quot; hack) &middot; Coolscan NEF</p>
+<h4 id="cam-Nokia">Nokia <span class="count">10</span></h4>
+<p class="cams">7 Plus &middot; 8.3 5G &middot; 9 &middot; N95 &middot; X2 &middot; 1200x1600 &middot; Lumia 930 &middot; Lumia 950 XL &middot; Lumia 1020 &middot; Lumia 1520</p>
+<h4 id="cam-Olympus">Olympus <span class="count">75</span></h4>
+<p class="cams">AIR A01 &middot; C-3030Z &middot; C-5050Z &middot; C-5060WZ &middot; C-7070WZ &middot; C-70Z / C-7000Z &middot; C-740UZ &middot; C-770UZ &middot; C-8080WZ &middot; X200 / D-560Z / C-350Z &middot; E-1 &middot; E-3 &middot; E-5 &middot; E-10 &middot; E-20 / E-20N / E-20P &middot; E-30 &middot; E-300 &middot; E-330 &middot; E-400 &middot; E-410 &middot; E-420 &middot; E-450 &middot; E-500 &middot; E-510 &middot; E-520 &middot; E-600 &middot; E-620 &middot; E-P1 &middot; E-P2 &middot; E-P3 &middot; E-P5 &middot; E-P7 &middot; E-PL1 &middot; E-PL1s &middot; E-PL2 &middot; E-PL3 &middot; E-PL5 &middot; E-PL6 &middot; E-PL7 &middot; E-PL8 &middot; E-PL9 &middot; E-PL10 &middot; E-PM1 &middot; E-PM2 &middot; E-M1 &middot; E-M1 Mark II &middot; E-M1 Mark III &middot; E-M1X &middot; E-M10 &middot; E-M10 Mark II &middot; E-M10 Mark III &middot; E-M10 Mark IV &middot; E-M5 &middot; E-M5 Mark II &middot; E-M5 Mark III &middot; Pen-F &middot; SP-310 &middot; SP-320 &middot; SP-350 &middot; SP-500UZ &middot; SP-510UZ &middot; SP-550UZ &middot; SP-560UZ &middot; SP-565UZ &middot; SP-570UZ &middot; Stylus 1 &middot; Stylus 1s &middot; SH-2 &middot; SH-3 &middot; TG-4 &middot; TG-5 &middot; TG-6 &middot; XZ-1 &middot; XZ-2 &middot; XZ-10</p>
+<h4 id="cam-OMDigitalSolutions">OM Digital Solutions <span class="count">1</span></h4>
+<p class="cams">OM-1</p>
+<h4 id="cam-OmniVision">OmniVision <span class="count">5</span></h4>
+<p class="cams">4688 &middot; OV5647 &middot; OV5648 &middot; OV8850 &middot; 13860</p>
+<h4 id="cam-OnePlus">OnePlus <span class="count">7</span></h4>
+<p class="cams">6 (A6003) &middot; 6T &middot; 7 Pro (GM1913) &middot; 8 Pro (IN2023) &middot; One &middot; A3303 &middot; A5000</p>
+<h4 id="cam-Panasonic">Panasonic <span class="count">76</span></h4>
+<p class="cams">DMC-CM1 &middot; DMC-FZ8 &middot; DMC-FZ18 &middot; DMC-FZ28 &middot; DMC-FZ30 &middot; DMC-FZ35 / FZ38 &middot; DMC-FZ40 / FZ42 / FZ45 &middot; DMC-FZ50 &middot; DMC-FZ70 / FZ72 &middot; DC-FZ80 / FZ81 / FZ82 / FZ83 / FZ85 &middot; DMC-FZ100 &middot; DMC-FZ150 &middot; DMC-FZ200 &middot; DMC-FZ300 / FZ330 &middot; DMC-FZ1000 &middot; DC-FZ1000 II / FZ1000M2 / DC-FZ10002 &middot; DMC-FZ2000 / FZ2500 / FZH1 &middot; DMC-FX150 / FX180 &middot; DMC-G1 &middot; DMC-G10 &middot; DMC-G2 &middot; DMC-G3 &middot; DMC-G5 &middot; DMC-G6 &middot; DMC-G7 / G70 &middot; DMC-G8 / G80 / G81 / G85 &middot; DC-G9 &middot; DC-G90 / G95 / G91 / G99 &middot; DC-G100 / G110 &middot; DMC-GF1 &middot; DMC-GF2 &middot; DMC-GF3 &middot; DMC-GF5 &middot; DMC-GF6 &middot; DMC-GF7 &middot; DC-GF10 / GF90 &middot; DMC-GH1 &middot; DMC-GH2 &middot; DMC-GH3 &middot; DMC-GH4 &middot; AG-GH4 &middot; DC-GH5 &middot; DC-GH5S &middot; DC-GH5 Mark II &middot; DMC-GM1 &middot; DMC-GM1s &middot; DMC-GM5 &middot; DMC-GX1 &middot; DMC-GX7 &middot; DMC-GX8 &middot; DC-GX9 / GX7mkIII &middot; DMC-GX80 / GX85, DMC-GX7mkII &middot; DC-GX800 / GX850, DC-GF9 &middot; DMC-L1 &middot; DMC-L10 &middot; DMC-LC1 &middot; DMC-LF1 &middot; DMC-LX1 &middot; DMC-LX2 &middot; DMC-LX3 &middot; DMC-LX5 &middot; DMC-LX7 &middot; DMC-LX9 / LX10 / LX15 &middot; DMC-LX100 &middot; DC-LX100M2 &middot; DC-S1 &middot; DC-S1H &middot; DC-S1R &middot; DC-S5 &middot; DMC-ZS40, DMC-TZ60 / TZ61 &middot; DMC-ZS50, DMC-TZ70 / TZ71 &middot; DMC-ZS60, DMC-TZ80 / TZ81 / TZ82 / TZ85 &middot; DC-ZS70, DC-TZ90 / TZ91 / TZ92 / TZ93 &middot; DC-ZS80, DC-TZ95 / TZ96 / TZ97 &middot; DMC-ZS100 / ZS110, DMC-TZ100 / TZ101 / TZ110, DMC-TX1 &middot; DC-ZS200 / ZS220, DC-TZ200 / TZ202 / TZ220, DC-TX2</p>
+<h4 id="cam-PARROT">PARROT <span class="count">3</span></h4>
+<p class="cams">Anafi &middot; Bebop 2 &middot; Bebop Drone</p>
+<h4 id="cam-Pentax">Pentax <span class="count">42</span></h4>
+<p class="cams">*ist D &middot; *ist DL &middot; *ist DL2 &middot; *ist DS &middot; *ist DS2 &middot; K10D &middot; K20D &middot; K100D &middot; K100D Super &middot; K110D &middot; K200D &middot; K2000/K-m &middot; KP &middot; K-x &middot; K-r &middot; K-01 &middot; K-1 &middot; K-1 Mark II &middot; K-3 &middot; K-3 Mark II &middot; K-3 Mark III &middot; K-30 &middot; K-5 &middot; K-5 II &middot; K-5 IIs &middot; K-50 &middot; K-500 &middot; K-7 &middot; K-70 &middot; K-S1 &middot; K-S2 &middot; MX-1 &middot; Q &middot; Q7 &middot; Q10 &middot; QS-1 &middot; Optio S (secret menu or hack) &middot; Optio S4 (secret menu or hack) &middot; Optio 33WR (secret menu or hack) &middot; Optio 750Z (secret menu or hack) &middot; 645D &middot; 645Z</p>
+<h4 id="cam-PhaseOne">PhaseOne <span class="count">32</span></h4>
+<p class="cams">IQ140 &middot; IQ150 &middot; IQ160 &middot; IQ180 &middot; IQ180 IR &middot; IQ250 &middot; IQ260 &middot; IQ260 Achromatic &middot; IQ280 &middot; IQ3 50MP &middot; IQ3 60MP &middot; IQ3 80MP &middot; IQ3 100MP &middot; IQ3 100MP Trichromatic &middot; IQ4 150MP &middot; LightPhase &middot; Achromatic+ &middot; H 10 &middot; H 20 &middot; H 25 &middot; P 20 &middot; P 20+ &middot; P 21 &middot; P 25 &middot; P 25+ &middot; P 30 &middot; P 30+ &middot; P 40+ &middot; P 45 &middot; P 45+ &middot; P 65 &middot; P 65+</p>
+<h4 id="cam-Photron">Photron <span class="count">1</span></h4>
+<p class="cams">BC2-HD</p>
+<h4 id="cam-Pixelink">Pixelink <span class="count">1</span></h4>
+<p class="cams">A782</p>
+<h4 id="cam-PtGrey">PtGrey <span class="count">1</span></h4>
+<p class="cams">GRAS-50S5C</p>
+<h4 id="cam-RaspberryPi">RaspberryPi <span class="count">2</span></h4>
+<p class="cams">Camera &middot; Camera V2</p>
+<h4 id="cam-Realme">Realme <span class="count">1</span></h4>
+<p class="cams">3 Pro</p>
+<h4 id="cam-Ricoh">Ricoh <span class="count">16</span></h4>
+<p class="cams">GR &middot; GR II &middot; GR III &middot; GR IIIx &middot; GR Digital &middot; GR Digital II &middot; GR Digital III &middot; GR Digital IV &middot; Caplio GX100 &middot; Caplio GX200 &middot; GXR Mount A12 &middot; GXR GR Lens A12 50mm F2.5 Macro &middot; GXR GR Lens A12 28mm F2.5 &middot; GXR Ricoh Lens A16 24-85mm F3.5-5.5 &middot; GXR Ricoh Lens S10 24-72mm F2.5-4.4 VC &middot; GXR Ricoh Lens P10 28-300 mm F3.5-5.6 VC</p>
+<h4 id="cam-Rollei">Rollei <span class="count">1</span></h4>
+<p class="cams">d530flex</p>
+<h4 id="cam-RoverShot">RoverShot <span class="count">1</span></h4>
+<p class="cams">3320af</p>
+<h4 id="cam-Samsung">Samsung <span class="count">41</span></h4>
+<p class="cams">EX1 / TL500 &middot; EX2F &middot; GX-1L &middot; GX-1S &middot; GX10 &middot; GX20 &middot; Galaxy Nexus &middot; Galaxy Note 9 &middot; Galaxy NX (EK-GN120) &middot; Galaxy S3 &middot; Galaxy S6 (SM-G920F) &middot; Galaxy S7 &middot; Galaxy S7 Edge &middot; Galaxy S8 (SM-G950U) &middot; Galaxy S9 (SM-G960F) &middot; Galaxy S9+ (SM-G965U / 965F) &middot; Galaxy S10 (SM-G973F) &middot; Galaxy S10+ (SM-G975U) &middot; NX1 &middot; NX5 &middot; NX10 &middot; NX11 &middot; NX100 &middot; NX1000 &middot; NX1100 &middot; NX20 &middot; NX200 &middot; NX210 &middot; NX2000 &middot; NX30 &middot; NX300 &middot; NX300M &middot; NX3000 &middot; NX500 &middot; NX mini / NXF1 &middot; Pro815 &middot; WB550 / WB560 / HZ15W &middot; WB2000 / TL350 &middot; WB5000 / HZ25W &middot; S85 (hacked) &middot; S850 (hacked)</p>
+<h4 id="cam-Sarnoff">Sarnoff <span class="count">1</span></h4>
+<p class="cams">4096x5440</p>
+<h4 id="cam-Seitz">Seitz <span class="count">4</span></h4>
+<p class="cams">6x17 &middot; Roundshot D3 &middot; Roundshot D2X &middot; Roundshot D2Xs</p>
+<h4 id="cam-Sigma">Sigma <span class="count">7</span></h4>
+<p class="cams">fp &middot; dp0 Quattro (DNG only) &middot; dp1 Quattro (DNG only) &middot; dp2 Quattro (DNG only) &middot; dp3 Quattro (DNG only) &middot; sd Quattro (DNG only) &middot; sd Quattro H (DNG only)</p>
+<h4 id="cam-Sinar">Sinar <span class="count">10</span></h4>
+<p class="cams">eMotion 22 &middot; eMotion 54 &middot; eSpirit 65 &middot; eMotion 75 &middot; eVolution 75 &middot; 3072x2048 (Sinarback 23) &middot; 4080x4080 (Sinarback 44) &middot; 4080x5440 &middot; STI format &middot; Sinarback 54</p>
+<h4 id="cam-SMaL">SMaL <span class="count">3</span></h4>
+<p class="cams">Ultra-Pocket 3 &middot; Ultra-Pocket 4 &middot; Ultra-Pocket 5</p>
+<h4 id="cam-Sony">Sony <span class="count">104</span></h4>
+<p class="cams">ILCE-1 (A1) &middot; ILCE-7 (A7) &middot; ILCE-7M2 (A7 II) &middot; ILCE-7M3 (A7 III) &middot; ILCE-7M4 (A7 IV) &middot; ILCE-7C (A7C) &middot; ILCE-7R (A7R) &middot; ILCE-7RM2 (A7R II) &middot; ILCE-7RM3 (A7R III) &middot; ILCE-7RM3A (A7R IIIA) &middot; ILCE-7RM4 (A7R IV) &middot; ILCE-7RM4A (A7R IVA) &middot; ILCE-7S (A7S) &middot; ILCE-7SM2 (A7S II) &middot; ILCE-7SM3 (A7S III) &middot; ILCE-9 (A9) &middot; ILCE-9M2 (A9 II) &middot; ILCA-68 (A68) &middot; ILCA-77M2 (A77-II) &middot; ILCA-99M2 (A99-II) &middot; ILCE-3000 / 3500 &middot; ILCE-5000 &middot; ILCE-5100 &middot; ILCE-6000 &middot; ILCE-6100 &middot; ILCE-6300 &middot; ILCE-6400 &middot; ILCE-6500 &middot; ILCE-6600 &middot; ILCE-QX1 &middot; DSC-F828 &middot; DSC-HX95 &middot; DSC-HX99 &middot; DSC-R1 &middot; DSC-RX0 &middot; DSC-RX0 II &middot; DSC-RX1 &middot; DSC-RX1R &middot; DSC-RX1R II &middot; DSC-RX10 &middot; DSC-RX10 II &middot; DSC-RX10 III &middot; DSC-RX10 IV &middot; DSC-RX100 &middot; DSC-RX100 II &middot; DSC-RX100 III &middot; DSC-RX100 IV &middot; DSC-RX100 V &middot; DSC-RX100 VA &middot; DSC-RX100 VI &middot; DSC-RX100 VII &middot; DSC-V3 &middot; DSLR-A100 &middot; DSLR-A200 &middot; DSLR-A230 &middot; DSLR-A290 &middot; DSLR-A300 &middot; DSLR-A330 &middot; DSLR-A350 &middot; DSLR-A380 / A390 &middot; DSLR-A450 &middot; DSLR-A500 &middot; DSLR-A550 &middot; DSLR-A560 &middot; DSLR-A580 &middot; DSLR-A700 &middot; DSLR-A850 &middot; DSLR-A900 &middot; NEX-3 &middot; NEX-3N &middot; NEX-5 &middot; NEX-5N &middot; NEX-5R &middot; NEX-5T &middot; NEX-6 &middot; NEX-7 &middot; NEX-C3 &middot; NEX-F3 &middot; NEX-VG20 &middot; NEX-VG30 &middot; NEX-VG900 &middot; SLT-A33 &middot; SLT-A35 &middot; SLT-A37 &middot; SLT-A55(V) &middot; SLT-A57 &middot; SLT-A58 &middot; SLT-A65(V) &middot; SLT-A77(V) &middot; SLT-A99(V) &middot; XCD-SX910CR &middot; IMX135-mipi 13mp &middot; IMX135-QCOM &middot; IMX072-mipi &middot; IMX214 &middot; IMX219 &middot; IMX230 &middot; IMX298-mipi 16mp &middot; IMX219-mipi 8mp &middot; Xperia 5 II (XQ-AS52) &middot; Xperia L &middot; Xperia 1 III &middot; ZV-1 (DCZV1/B) &middot; ZV-E10</p>
+<h4 id="cam-STV680">STV680 <span class="count">1</span></h4>
+<p class="cams">VGA</p>
+<h4 id="cam-SVS">SVS <span class="count">1</span></h4>
+<p class="cams">SVS625CL</p>
+<h4 id="cam-Vivo">Vivo <span class="count">1</span></h4>
+<p class="cams">X51 5G (V2006)</p>
+<h4 id="cam-Xiaomi">Xiaomi <span class="count">9</span></h4>
+<p class="cams">MI3 &middot; MI 8 &middot; MI 9 Lite &middot; MI MAX &middot; POCO M3 &middot; RedMi Note3 Pro &middot; RedMi Note7 &middot; RedMi Note 8T &middot; FIMI X8SE</p>
+<h4 id="cam-Xiaoyi">Xiaoyi <span class="count">1</span></h4>
+<p class="cams">YIAC3 (YI 4k)</p>
+<h4 id="cam-Yi">Yi <span class="count">1</span></h4>
+<p class="cams">M1</p>
+<h4 id="cam-YUNEEC">YUNEEC <span class="count">3</span></h4>
+<p class="cams">CGO3 &middot; CGO3P &middot; CGO4</p>
+<h4 id="cam-Zeiss">Zeiss <span class="count">1</span></h4>
+<p class="cams">ZX1</p>
+<h4 id="cam-Zenit">Zenit <span class="count">1</span></h4>
+<p class="cams">M</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="appB">Appendix B: Raw file types</h2>
+<p>Lumen treats a file as raw if it has one of these endings (after the <code>/</code> on RISC OS, or <code>.</code> elsewhere), in capitals or not, or if its contents say so.</p>
+<table>
+<tr><th>Ending</th><th>Made by</th></tr>
+<tr><td>NEF, NRW</td><td>Nikon</td></tr>
+<tr><td>CR2, CR3, CRW</td><td>Canon</td></tr>
+<tr><td>ARW, SRF, SR2</td><td>Sony</td></tr>
+<tr><td>RAF</td><td>Fujifilm</td></tr>
+<tr><td>ORF</td><td>Olympus and OM System</td></tr>
+<tr><td>RW2, RWL</td><td>Panasonic; Leica (RWL)</td></tr>
+<tr><td>PEF</td><td>Pentax</td></tr>
+<tr><td>DNG</td><td>Adobe's Digital Negative: Leica, Pentax, Ricoh, Hasselblad, phones, drones, the Raspberry Pi, and converted files</td></tr>
+<tr><td>SRW</td><td>Samsung</td></tr>
+<tr><td>3FR</td><td>Hasselblad</td></tr>
+<tr><td>IIQ</td><td>Phase One</td></tr>
+<tr><td>MOS</td><td>Leaf</td></tr>
+<tr><td>MEF</td><td>Mamiya</td></tr>
+<tr><td>ERF</td><td>Epson</td></tr>
+<tr><td>KDC, DCR</td><td>Kodak</td></tr>
+<tr><td>MRW</td><td>Minolta and Konica Minolta</td></tr>
+<tr><td>RAW</td><td>Various (Panasonic and Leica compacts, and others)</td></tr>
+<tr><td>X3F, GPR</td><td>Sigma Foveon, GoPro: recognised, but not readable by LumenRaw 1.0 (<a href="#ch9">Chapter 9</a>)</td></tr>
+</table>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="credits">Credits and licences</h2>
+<p>The photos in this guide are ISS030-E-122639 (Nikon D3S, March 2012) and ISS042-E-297200 (Nikon D4, February 2015), taken from the International Space Station and published by NASA. They're in the public domain.</p>
+<p class="small">LumenRaw is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on LibRaw, &copy; 2008&ndash;2024 LibRaw LLC, used under the GNU Lesser General Public License 2.1; the licence is in <code>!Lumen.Plugins.LibRaw.Licence</code>. The camera list in Appendix A is LibRaw's. Product names are the trademarks of their owners and are used here only to say which cameras work.</p>
+
+</main>
+
+</body>
+</html>
