@@ -52,6 +52,7 @@ int rawjob_available (void) { return have_helper; }
 static int switched_off;
 
 void rawjob_set_switched_off (int off) { switched_off = off; }
+int rawjob_switched_off (void) { return switched_off; }
 
 const char *rawjob_missing_message (void)
 {

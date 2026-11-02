@@ -966,7 +966,8 @@ static void info_load (int force)
         /* A camera raw file: through the plug-in. TIFF-based ones (NEF,
            CR2, ARW, DNG...) have their EXIF where a TIFF has. */
         info_add ("Format", rawjob_available () ? "Camera raw, developed by the LibRaw plug-in"
-                                                : "Camera raw: needs the LibRaw plug-in (LumenRaw, from PackMan)", 0);
+                            : rawjob_switched_off () ? "Camera raw: the LibRaw plug-in is switched off (Plug-ins, on the icon bar menu)"
+                                                     : "Camera raw: needs the LibRaw plug-in (LumenRaw, from PackMan)", 0);
         if ((buf[0] == 'I' && buf[1] == 'I') || (buf[0] == 'M' && buf[1] == 'M'))
           info_has_exif = exif_list_tiff (buf, got, info_exif_tag, NULL) > 0;
       }

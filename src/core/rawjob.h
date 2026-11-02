@@ -30,6 +30,7 @@ int rawjob_available (void);
 const char *rawjob_missing_message (void);
 /* A raw plug-in is installed but switched off: the message says so. */
 void rawjob_set_switched_off (int off);
+int rawjob_switched_off (void);
 
 typedef struct rawjob rawjob;
 rawjob *rawjob_start (const char *src, int develop, int max_side, char *err, size_t n);

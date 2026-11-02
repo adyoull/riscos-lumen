@@ -2313,6 +2313,8 @@ int main (int argc, char **argv)
     CHECK (rawjob_available (), "the raw plug-in is at work");
     choose (6, 0, -1);
     CHECK (!rawjob_available (), "switched off: raw files aren't read");
+    CHECK (rawjob_switched_off () && strstr (rawjob_missing_message (), "switched off") != NULL,
+           "and the messages say it's switched off, not missing");
     app_event (Mouse_Click, b, 0);
     pm = submenu (menu_open, 6);
     CHECK (!(item (pm, 0)[0] & 1), "Plug-ins: LibRaw not ticked");
