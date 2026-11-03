@@ -223,6 +223,11 @@ int activity_now (act_job *jobs, int max)
       printbox_status (jobs[n].text, sizeof jobs[n].text);
       jobs[n++].pct = printbox_percent ();
     }
+  if (libbox_busy () && n < max)
+    {
+      libbox_status (jobs[n].text, sizeof jobs[n].text);
+      jobs[n++].pct = libbox_percent ();
+    }
   if (rawjob_busy () && n < max)
     {
       snprintf (jobs[n].text, sizeof jobs[n].text, "Reading a raw photo with LumenRaw");

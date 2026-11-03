@@ -240,6 +240,25 @@ Fixes from a review of 0.0.23:
   contact sheets. Each photo gets its own PDriver rectangle, clipped to
   its cell, so Fill never spills into a neighbour.
 
+## 0.0.28
+
+- Libraries: Export library (the whole library, the selection, a project or
+  an album) writes a new library with every version, adjustment, rating,
+  label, caption, keyword, project, album, stack and preset, and the
+  thumbnails; optionally the originals too, in `Originals.<project>` with
+  the project's folders kept. Import library merges another library:
+  originals matched by size and hash, a version with a different recipe
+  added as another version, projects, albums, keywords and presets by
+  name; folder albums and watching stay behind. The other catalogue is
+  ATTACHed and merged in one transaction after the files are copied
+  (libxfer.c). A catalogue records its directory (`meta home`); opened
+  from elsewhere, paths under it are moved with it.
+- Check library (libcheck.c): SQLite's integrity check, orphaned rows,
+  broken stacks, missing, failed and leftover thumbnails; Repair writes
+  `Catalogue-backup` with VACUUM INTO first, REINDEXes if needed, and puts
+  versions without a project and originals without a version into a
+  "Recovered" project.
+
 ## Layout
 
 ```
@@ -257,7 +276,9 @@ third_party/sqlite/   SQLite 3.49.2 amalgamation
 ```
 
 Library on disc: `<Lumen$Library>` (default `<Choices$Write>.Lumen.Library`)
-holds `Catalogue` (SQLite) and `Thumbs` (256 subdirectories of JPEGs).
+holds `Catalogue` (SQLite) and `Thumbs` (256 subdirectories of JPEGs);
+an exported or imported library may also have `Originals`, and a repaired
+one `Catalogue-backup`.
 
 ## Building
 

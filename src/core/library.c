@@ -6,6 +6,7 @@
 #include "exif.h"
 #include "fsys.h"
 #include "library.h"
+#include "libxfer.h"
 #include "xmp.h"
 #include "thumbgen.h"
 #include "develop.h"
@@ -95,6 +96,7 @@ int lib_open (library **out, const char *root, char *err, size_t errlen)
       lib_close (l);
       return -1;
     }
+  libx_rehome (l->db, l->root);      /* moved, with originals inside it */
   l->thumbs_pending = -1;
   lib_verify_start (l);
   *out = l;

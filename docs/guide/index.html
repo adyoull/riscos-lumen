@@ -52,8 +52,8 @@ a { color:#1f5fa8; }
 <div>
 <h1>Lumen User Guide</h1>
 <p>Keeping, sorting and improving your photos on RISC OS</p>
-<p>Start here if you've never used a photo library program before. If you have, the Technical Stuff boxes and Chapter 20 are for you.</p>
-<span class="badge">Lumen 0.0.27</span>
+<p>Start here if you've never used a photo library program before. If you have, the Technical Stuff boxes and Chapter 21 are for you.</p>
+<span class="badge">Lumen 0.0.28</span>
 </div>
 </header>
 <main>
@@ -69,9 +69,9 @@ a { color:#1f5fa8; }
 <li><a href="#part3">Part III: Making Photos Better</a>
 <ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping, straightening, retouching and brushing</a></li><li><a href="#ch12">12. Styles, presets, versions and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
 <li><a href="#part4">Part IV: Sharing and Setting Up</a>
-<ul><li><a href="#ch14">14. Exporting and printing photos</a></li><li><a href="#ch15">15. Camera raw files and plug-ins</a></li><li><a href="#ch16">16. Choices</a></li><li><a href="#ch17">17. Getting help</a></li></ul></li>
+<ul><li><a href="#ch14">14. Exporting and printing photos</a></li><li><a href="#ch15">15. Backing up, moving and checking the library</a></li><li><a href="#ch16">16. Camera raw files and plug-ins</a></li><li><a href="#ch17">17. Choices</a></li><li><a href="#ch18">18. Getting help</a></li></ul></li>
 <li><a href="#part5">Part V: The Part of Tens</a>
-<ul><li><a href="#ch18">18. Ten keys to learn first</a></li><li><a href="#ch19">19. Ten problems and what to do about them</a></li><li><a href="#ch20">20. Ten things for experienced users</a></li></ul></li>
+<ul><li><a href="#ch19">19. Ten keys to learn first</a></li><li><a href="#ch20">20. Ten problems and what to do about them</a></li><li><a href="#ch21">21. Ten things for experienced users</a></li></ul></li>
 <li><a href="#appA">Appendix: keys, mouse and menus</a></li>
 <li><a href="#credits">Photo credits</a></li>
 </ul>
@@ -89,7 +89,7 @@ a { color:#1f5fa8; }
 <p>The pictures are screenshots of Lumen running on RISC OS 5, with photos by Andrew Youll: horses, eventing, jousting and dogs (see <a href="#credits">Photo credits</a>).</p>
 
 <h4>This is an early version</h4>
-<p>Lumen 0.0.27 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
+<p>Lumen 0.0.28 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>Not much. You should know the three mouse buttons (<b>Select</b> on the left, <b>Menu</b> in the middle, <b>Adjust</b> on the right), and how to drag a file or directory from a Filer window into a program. You don't need to know anything about photography.</p>
@@ -139,7 +139,7 @@ a { color:#1f5fa8; }
 <tr><th>You need</th><th>Because</th></tr>
 <tr><td>RISC OS 5.30 or later on a Raspberry Pi 4, 400 or CM4</td><td>Lumen is built for these. Other ARMv7 machines should work too.</td></tr>
 <tr><td>SharedUnixLibrary 1.16 or later, and ARMEABISupport</td><td>Lumen uses them. You can get both through PackMan. Lumen checks for them when it starts.</td></tr>
-<tr><td>LumenRaw (optional)</td><td>Only for camera raw files (<a href="#ch15">Chapter 15</a>). It's in PackMan.</td></tr>
+<tr><td>LumenRaw (optional)</td><td>Only for camera raw files (<a href="#ch16">Chapter 16</a>). It's in PackMan.</td></tr>
 <tr><td>A web browser such as NetSurf (optional)</td><td>Only for reading this guide from Lumen's menu.</td></tr>
 </table>
 
@@ -151,7 +151,7 @@ a { color:#1f5fa8; }
 <ol class="steps">
 <li>Install SharedUnixLibrary and ARMEABISupport with PackMan, if you haven't already. Most RISC OS 5 programs ported from other systems need them, so you may have them.</li>
 <li>Unzip <code>Lumen.zip</code> and copy <b>!Lumen</b> to where you keep your applications, for example <code>$.Apps.Graphics</code>. Or install the <b>Lumen</b> package with PackMan, which puts it there for you.</li>
-<li>If you take photos in camera raw, install the <b>LumenRaw</b> package from PackMan too (<a href="#ch15">Chapter 15</a>).</li>
+<li>If you take photos in camera raw, install the <b>LumenRaw</b> package from PackMan too (<a href="#ch16">Chapter 16</a>).</li>
 </ol>
 
 <h4>Starting</h4>
@@ -165,10 +165,10 @@ a { color:#1f5fa8; }
 <tr><td>Info</td><td>Lumen's version and author.</td></tr>
 <tr><td>Help...</td><td>Lumen's short help file.</td></tr>
 <tr><td>User guide</td><td>This guide, in your web browser.</td></tr>
-<tr><td>Open library</td><td>Opens Lumen's window (so does clicking the icon).</td></tr>
+<tr><td>Open library</td><td>Opens Lumen's window (so does clicking the icon). Its submenu exports, imports or checks the library (<a href="#ch15">Chapter 15</a>).</td></tr>
 <tr><td>Activity...</td><td>What Lumen is doing now, and what it has done (<a href="#ch3">Chapter 3</a>).</td></tr>
-<tr><td>Choices...</td><td>Lumen's settings (<a href="#ch16">Chapter 16</a>).</td></tr>
-<tr><td>Plug-ins</td><td>Switch plug-ins on and off, add and remove them (<a href="#ch15">Chapter 15</a>).</td></tr>
+<tr><td>Choices...</td><td>Lumen's settings (<a href="#ch17">Chapter 17</a>).</td></tr>
+<tr><td>Plug-ins</td><td>Switch plug-ins on and off, add and remove them (<a href="#ch16">Chapter 16</a>).</td></tr>
 <tr><td>Quit</td><td>Leaves Lumen.</td></tr>
 </table>
 
@@ -177,7 +177,7 @@ a { color:#1f5fa8; }
 <div class="box tip"><b class="label">TIP</b>Only one Lumen runs at a time. If you double-click !Lumen again while it's running, the one that's running opens its window instead.</div>
 
 <h4>Where your library is kept</h4>
-<p>Lumen keeps its library in your Choices directory (<code>&lt;Choices$Write&gt;.Lumen.Library</code>), so it's there every time you start. To keep it somewhere else, on a bigger disc for instance, see <a href="#ch16">Chapter 16</a>.</p>
+<p>Lumen keeps its library in your Choices directory (<code>&lt;Choices$Write&gt;.Lumen.Library</code>), so it's there every time you start. To keep it somewhere else, on a bigger disc for instance, see <a href="#ch17">Chapter 17</a>. To back it up or take it to another computer, see <a href="#ch15">Chapter 15</a>.</p>
 
 <h3 class="chapter" id="ch3"><span>3</span> Finding your way round the window</h3>
 
@@ -243,7 +243,7 @@ a { color:#1f5fa8; }
 <ul>
 <li><b>JPEG</b> photos, from any camera or phone.</li>
 <li><b>PNG</b> pictures.</li>
-<li><b>Camera raw files</b> (NEF, CR2, CR3, ARW, RAF, ORF, RW2, DNG and many more), with the LumenRaw plug-in (<a href="#ch15">Chapter 15</a>). Without it they're still imported, and their thumbnails come once the plug-in is installed.</li>
+<li><b>Camera raw files</b> (NEF, CR2, CR3, ARW, RAF, ORF, RW2, DNG and many more), with the LumenRaw plug-in (<a href="#ch16">Chapter 16</a>). Without it they're still imported, and their thumbnails come once the plug-in is installed.</li>
 </ul>
 <p>Other files in the directory are left alone. Applications (directories whose names start with <code>!</code>) are skipped.</p>
 
@@ -359,7 +359,7 @@ a { color:#1f5fa8; }
 
 <div class="box try"><b class="label">TRY IT</b>Import a directory that has directories inside it. Tick <b>Watch for new photos</b> and <b>Albums from its folders</b> on its menu. Copy a new photo into one of its directories with the Filer, then close Lumen's window and open it again: the photo arrives, in the right album, and the Activity window (<a href="#ch3">Chapter 3</a>) says so.</div>
 
-<div class="box tip"><b class="label">TIP</b>To have every directory you import from now on watched, and turned into albums, tick the Folders choices in Choices (<a href="#ch16">Chapter 16</a>). That's also where you set how often Lumen looks.</div>
+<div class="box tip"><b class="label">TIP</b>To have every directory you import from now on watched, and turned into albums, tick the Folders choices in Choices (<a href="#ch17">Chapter 17</a>). That's also where you set how often Lumen looks.</div>
 
 <h3 class="chapter" id="ch7"><span>7</span> Keywords and finding photos</h3>
 
@@ -408,7 +408,7 @@ a { color:#1f5fa8; }
 <p>Lumen checks when it starts, and whenever you open its window again. A missing photo keeps its stars and adjustments, and you can still see its thumbnail, but you can't look at it large or export it until it's found.</p>
 <p><b>To find photos again:</b> if a disc was missing, put it back and close and reopen Lumen's window. If you moved the files, drag the directory they're in now into Lumen (just that directory). Lumen recognises them by their contents and takes their new place. Nothing is imported twice.</p>
 
-<div class="box tip"><b class="label">TIP</b>If your photos are on discs that are often away, Lumen's checking can be switched off in Choices (<a href="#ch16">Chapter 16</a>).</div>
+<div class="box tip"><b class="label">TIP</b>If your photos are on discs that are often away, Lumen's checking can be switched off in Choices (<a href="#ch17">Chapter 17</a>).</div>
 
 <!-- ======================================================================= -->
 <h2 class="part" id="part3">Part III: Making Photos Better<small>Looking closely, adjusting, cropping</small></h2>
@@ -708,7 +708,54 @@ a { color:#1f5fa8; }
 
 <div class="box warn"><b class="label">WARNING</b>A PostScript printer prints in grey unless <b>Colour</b> is ticked in its Configure window in !Printers. If it isn't, the Print box says "Grey only: tick Colour in !Printers". Tick it, and choose <b>Save choices</b> on !Printers' icon bar menu so it stays ticked.</div>
 
-<h3 class="chapter" id="ch15"><span>15</span> Camera raw files and plug-ins</h3>
+<h3 class="chapter" id="ch15"><span>15</span> Backing up, moving and checking the library</h3>
+
+<p>Everything Lumen knows about your photos (stars, flags, labels, captions, keywords, every adjustment, versions, projects and albums) is in its <b>library</b>. Lumen can copy all or part of it to a new library, bring another library's photos into yours, and check the library for anything wrong. All three are on the <b>Open library</b> submenu of Lumen's icon bar menu.</p>
+<figure><img src="images/library-menu.png" alt="The Open library submenu"><figcaption>Open library &rarr; on the icon bar menu. Choosing Open library itself still opens Lumen's window.</figcaption></figure>
+
+<h4>Exporting a library</h4>
+<p>Exporting a library makes a new library: a directory you can open in Lumen on another computer, keep as a backup, or give to someone.</p>
+<ol class="steps">
+<li>For the whole library, choose <b>Open library &rarr; Export library...</b> on the icon bar menu. For some photos, select them and choose <b>Selection &rarr; Export as library...</b>. For a project or an album, click Menu over it in the Library tab and choose <b>Export as library...</b>.</li>
+<li>Give the new library a name. Leave <b>Include the original photos</b> ticked to copy the photos' files into it.</li>
+<li>Drag the directory icon into a Filer window (or type a full pathname and click <b>Save</b>).</li>
+</ol>
+<figure><img src="images/library-export.png" alt="The Export library box"><figcaption>Exporting the Dogs_and_garden project as a library, with its original photos.</figcaption></figure>
+<p>The new library has everything about the photos you chose: their versions with every adjustment, their stars, flags, labels, captions and keywords, their projects, the albums they're in (with just those photos), their stacks, your presets, and their thumbnails, so it opens ready to use. Exporting the whole library brings its smart albums and folder albums too.</p>
+<p>With <b>Include the original photos</b> ticked, the files are copied into an <b>Originals</b> directory inside the new library, in a directory for each project (the folders inside a project's folder are kept). The box says how much that is. The new library uses its own copies, so it can go to any disc or computer. Unticked, the new library refers to the photos where they are now: it's much smaller, but only of use where those files can be found.</p>
+<p>The export happens in the background, like exporting photos, and the Activity window says when it's done. Your library and its photos aren't changed.</p>
+<div class="box tip"><b class="label">TIP</b>A library exported with its originals can be moved anywhere and even renamed: when Lumen opens it from its new place, it finds the photos inside it there. To work in it, choose it as the library in Choices (<a href="#ch17">Chapter 17</a>) and start Lumen again. To bring its photos into the library you have open instead, import it.</div>
+
+<h4>Importing a library</h4>
+<p>Importing a library brings another library's photos into yours, with everything Lumen knew about them: photos you worked on on another computer, say, or that a friend exported for you.</p>
+<ol class="steps">
+<li>Drag the library's directory onto Lumen's window or its icon bar icon (or choose <b>Open library &rarr; Import library...</b> and drag it into that window).</li>
+<li>Lumen shows what would come across, before anything changes.</li>
+<li>Leave <b>Copy its photos into this library</b> ticked to copy the files into your library's <b>Originals</b> directory, and click <b>Import</b>.</li>
+</ol>
+<figure><img src="images/library-import.png" alt="The Import library window"><figcaption>Importing the DogsLib library: four photos, none of them here yet.</figcaption></figure>
+<ul>
+<li>Photos already in your library (the same file, wherever it is) aren't added twice. If the other library has a version of one with different adjustments, it comes in as another version of your photo.</li>
+<li>Projects, albums and keywords are matched by name: photos from a project called Holiday join your Holiday project, and photos from an album called Best go into your Best. You gain any presets you didn't have. A smart album comes in if you have none of that name.</li>
+<li>Folder albums and watched folders stay with the other library: a project that comes in isn't watched.</li>
+<li>When it's done, the Browser shows the new photos (<b>Last import</b>).</li>
+</ul>
+<div class="box warn"><b class="label">WARNING</b>If you untick <b>Copy its photos into this library</b>, your library refers to the photos where the other library keeps them. If that's on a USB stick, the photos show as Missing once it's unplugged (<a href="#ch8">Chapter 8</a>).</div>
+
+<h4>Checking the library</h4>
+<p>Choose <b>Open library &rarr; Check library...</b> on the icon bar menu. Lumen looks at:</p>
+<ul>
+<li>the catalogue file itself, which a power cut or a failing SD card can damage;</li>
+<li>entries that point at nothing: versions whose photo or project has gone, album places and keywords of photos that have gone, and stacks with only one photo left;</li>
+<li>thumbnails: missing files, ones that couldn't be made, and leftover files of photos no longer in the library.</li>
+</ul>
+<figure><img src="images/library-check.png" alt="Check library: problems found"><figcaption>The check found a missing thumbnail and a leftover one.</figcaption></figure>
+<p>If it finds anything, click <b>Repair</b>. Lumen first keeps a copy of the catalogue as <code>Catalogue-backup</code> in the library, then puts everything right: missing thumbnails are made again, leftover ones deleted, and broken entries mended. A photo that had lost its project isn't lost: it goes into a project called <b>Recovered</b>.</p>
+<figure><img src="images/library-repaired.png" alt="Check library: repaired"><figcaption>Repaired.</figcaption></figure>
+<div class="box tip"><b class="label">TIP</b>Photos whose files have moved aren't something Repair can mend: they're shown as Missing and found again as in <a href="#ch8">Chapter 8</a>. The check says how many there are.</div>
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>Check runs SQLite's integrity check, and Repair rebuilds damaged indexes (<code>REINDEX</code>) after writing the backup with <code>VACUUM INTO</code>. If the catalogue is damaged beyond that, Lumen says so, and Export library still copies whatever can be read into a new one. Export and import attach the other catalogue to Lumen's and copy its rows in one transaction, so a library is never left half merged; the files are copied first, a few at a time. A library's catalogue records the directory it was written in, and when it's opened from somewhere else, the paths inside it are moved with it.</div>
+
+<h3 class="chapter" id="ch16"><span>16</span> Camera raw files and plug-ins</h3>
 
 <p>Many cameras can save <b>raw</b> files: everything the sensor saw, before the camera made a JPEG of it. They hold more detail in bright and dark parts, but every camera maker has its own format. Lumen reads them with a <b>plug-in</b> called <b>LumenRaw</b>, which uses the free LibRaw library and knows over a thousand cameras.</p>
 
@@ -734,7 +781,7 @@ a { color:#1f5fa8; }
 
 <div class="box warn"><b class="label">WARNING</b>If PackMan installed a plug-in, remove it with PackMan, not with Lumen's Remove: otherwise PackMan still thinks it's there. Lumen reminds you when you choose Remove.</div>
 
-<h3 class="chapter" id="ch16"><span>16</span> Choices</h3>
+<h3 class="chapter" id="ch17"><span>17</span> Choices</h3>
 <p>Choose <b>Choices...</b> from the icon bar menu.</p>
 <figure><img src="images/choices.png" alt="Lumen's Choices"><figcaption>Lumen's Choices.</figcaption></figure>
 <table>
@@ -749,7 +796,7 @@ a { color:#1f5fa8; }
 
 <div class="box warn"><b class="label">WARNING</b>Changing the Library choice doesn't move your library: Lumen starts a new, empty one in the new place (or opens the one that's already there). To move your library, quit Lumen, copy the library directory to the new place, then set the choice to it.</div>
 
-<h3 class="chapter" id="ch17"><span>17</span> Getting help</h3>
+<h3 class="chapter" id="ch18"><span>18</span> Getting help</h3>
 <p>Lumen works with RISC OS's <b>!Help</b> program. Start !Help (double-click it in the <b>Apps</b> directory on the icon bar), then point at anything in Lumen's windows or menus, and !Help says what it is and what it does.</p>
 <figure><img src="images/help.png" alt="!Help over the Export button"><figcaption>!Help explaining the toolbar's Undo button.</figcaption></figure>
 <p><b>Help...</b> on the icon bar menu shows Lumen's short help file; <b>User guide</b> opens this guide.</p>
@@ -757,7 +804,7 @@ a { color:#1f5fa8; }
 <!-- ======================================================================= -->
 <h2 class="part" id="part5">Part V: The Part of Tens<small>Quick answers</small></h2>
 
-<h3 class="chapter" id="ch18"><span>18</span> Ten keys to learn first</h3>
+<h3 class="chapter" id="ch19"><span>19</span> Ten keys to learn first</h3>
 <table>
 <tr><th>Key</th><th>Does</th></tr>
 <tr><td><kbd>1</kbd> to <kbd>5</kbd>, <kbd>0</kbd></td><td>Stars; none</td></tr>
@@ -772,25 +819,25 @@ a { color:#1f5fa8; }
 <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export (<kbd>Ctrl</kbd>+<kbd>P</kbd> prints)</td></tr>
 </table>
 
-<h3 class="chapter" id="ch19"><span>19</span> Ten problems and what to do about them</h3>
+<h3 class="chapter" id="ch20"><span>20</span> Ten problems and what to do about them</h3>
 <table>
 <tr><th>Problem</th><th>What to do</th></tr>
 <tr><td>Lumen says it needs SharedUnixLibrary or ARMEABISupport.</td><td>Install them with PackMan, then start Lumen again.</td></tr>
 <tr><td>New photos I put in an imported directory haven't appeared.</td><td>Lumen only brings them in by itself if the project is watched: tick <b>Watch for new photos</b> on the project's menu (<a href="#ch6">Chapter 6</a>). To have it look now, close and reopen Lumen's window. Or drag the directory in again: only the new photos are added.</td></tr>
-<tr><td>A raw file has a grey thumbnail, or says to install something.</td><td>Install LumenRaw with PackMan (<a href="#ch15">Chapter 15</a>), then start Lumen again. If it's installed, check it's ticked in the Plug-ins menu: Lumen says when it's switched off.</td></tr>
+<tr><td>A raw file has a grey thumbnail, or says to install something.</td><td>Install LumenRaw with PackMan (<a href="#ch16">Chapter 16</a>), then start Lumen again. If it's installed, check it's ticked in the Plug-ins menu: Lumen says when it's switched off.</td></tr>
 <tr><td>Photos show "Missing".</td><td>Their files have moved or their disc isn't there. Put the disc back and reopen the window, or drag the files' new directory into Lumen (<a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Keys don't do anything.</td><td>Click in Lumen's window first, so it has the input focus. If you're typing in the Search box, the keys go there: click on a photo.</td></tr>
 <tr><td>A photo I rejected has disappeared.</td><td>Click <b>Rejected</b> in the Library tab, select it and give it stars again (or press <kbd>0</kbd>): rejecting took its stars away.</td></tr>
 <tr><td>Fewer photos are shown than I expected.</td><td>Check the rating filter says <b>Any rating</b>, the Search box is empty, and the Library tab has <b>Photos</b> chosen. The title bar shows what's being shown.</td></tr>
 <tr><td>My prints come out grey.</td><td>Your printer is set to print in grey: in !Printers, open its Configure window, tick <b>Colour</b>, and choose <b>Save choices</b> (<a href="#ch14">Chapter 14</a>). The Print box warns about this.</td></tr>
 <tr><td>Some photos seem to have vanished after I stacked them.</td><td>A closed stack shows only its pick. Click the number on the pick (or press <kbd>S</kbd>) to open it (<a href="#ch6">Chapter 6</a>).</td></tr>
-<tr><td>Colours look blotchy or banded.</td><td>The screen is in a mode with too few colours. Choose 16 million colours in Configure &rarr; Screen.</td></tr>
+<tr><td>Thumbnails are wrong or missing, or Lumen behaves oddly after a power cut.</td><td>Choose <b>Open library &rarr; Check library...</b> on the icon bar menu, and <b>Repair</b> if it finds anything (<a href="#ch15">Chapter 15</a>). A copy of the catalogue is kept first.</td></tr>
 
 </table>
 
-<h3 class="chapter" id="ch20"><span>20</span> Ten things for experienced users</h3>
+<h3 class="chapter" id="ch21"><span>21</span> Ten things for experienced users</h3>
 <ol>
-<li><b>The library</b> is a directory: <code>Catalogue</code> (an SQLite database) and <code>Thumbs</code> (256-pixel JPEGs in 256 subdirectories). Originals are referenced, never copied or written to. Back the directory up as you would any other.</li>
+<li><b>The library</b> is a directory: <code>Catalogue</code> (an SQLite database) and <code>Thumbs</code> (256-pixel JPEGs in 256 subdirectories). Originals are referenced where they are, never written to (only a library exported or imported with its photos has copies of them, in its own <code>Originals</code>). Back it up with <b>Export library...</b>, or copy the directory while Lumen isn't running; <b>Repair</b> leaves <code>Catalogue-backup</code> beside the catalogue.</li>
 <li><b>Choosing the library:</b> <code>Lumen$Library</code>, set before Lumen starts, wins over the Choices window. Otherwise it's the Choices setting, else <code>&lt;Choices$Write&gt;.Lumen.Library</code> (or <code>LumenLibrary</code> beside !Lumen if there's no Choices yet).</li>
 <li><b>Recognising photos:</b> each original is identified by a hash of its size and its first and last 64 KB, which is how re-imports are skipped and moved files relinked.</li>
 <li><b>Recipes:</b> adjustments are stored per photo as a short text recipe; retouch spots (<code>spot</code> lines) and brush strokes (<code>brush</code> lines, their points in ten-thousandths of the photo) are applied first, on the photo turned upright, so they stay on what they cover whatever the crop; then the pipeline runs geometry (quarter turns, straighten, perspective, crop) in 16-bit linear light, then white balance, exposure, local highlights and shadows, levels, curves and enhance, then the black and white mix and split toning (after saturation, so it tints black and white), then sharpening at the output size. A style is the look part of a recipe; while one is shown from the menu, nothing is written to the catalogue.</li>
@@ -872,16 +919,16 @@ a { color:#1f5fa8; }
 <table>
 <tr><th>Menu</th><th>Items</th></tr>
 <tr><td>Show</td><td>All photos; Flagged; Rejected; Last import; Projects &rarr;; Albums &rarr;; Rating filter &rarr;</td></tr>
-<tr><td>Selection</td><td>Rating &rarr;; Colour label &rarr;; Flag / unflag; Reject; Caption and keywords...; Select all; Clear selection; Copy adjustments; Paste adjustments; Apply preset &rarr; (Styles &rarr;, then your presets); Compare; Export...; Print...; Remove from library...</td></tr>
+<tr><td>Selection</td><td>Rating &rarr;; Colour label &rarr;; Flag / unflag; Reject; Caption and keywords...; Select all; Clear selection; Copy adjustments; Paste adjustments; Apply preset &rarr; (Styles &rarr;, then your presets); Compare; Export...; Export as library...; Print...; Remove from library...</td></tr>
 <tr><td>Album</td><td>New album from selection &rarr;; Add selection to &rarr;; Remove from this album; New smart album...</td></tr>
 <tr><td>Versions and stacks</td><td>Duplicate version; New version from original; Stack; Unstack; Make the pick; Open or close stack; Auto-stack, seconds apart &rarr;</td></tr>
 <tr><td>Thumbnail size</td><td>Small; Medium; Large</td></tr>
 <tr><td>Plug-ins</td><td>Each plug-in (ticked when on); Add plug-in...; Remove &rarr;</td></tr>
 <tr><td>Photo (Viewer)</td><td>Before and after; Zoom to 100%; Loupe &rarr;; Undo; Redo; Reset all adjustments; Auto adjust; Pick white balance; Crop; Crop shape &rarr;; Grid &rarr;; Presets &rarr; (Styles &rarr;; your presets; Save current as &rarr;; Delete &rarr;); Copy adjustments; Paste adjustments; Colour label &rarr;; Caption and keywords...; Compare with the next; Duplicate version; New version from original; Export...; Print...; Back to the Browser; Remove from library...</td></tr>
-<tr><td>A project</td><td>Rename &rarr;; Watch for new photos; Albums from its folders; Remove project from library...</td></tr>
-<tr><td>An album</td><td>Rename &rarr;; Delete album... (a smart album also: Edit smart album...; an album made from a folder: Follows its folder)</td></tr>
+<tr><td>A project</td><td>Rename &rarr;; Watch for new photos; Albums from its folders; Export as library...; Remove project from library...</td></tr>
+<tr><td>An album</td><td>Rename &rarr;; Delete album... (a smart album also: Edit smart album...; an album made from a folder: Follows its folder); Export as library...</td></tr>
 </table>
-<p>The icon bar menu: Info &rarr;; Help...; User guide; Open library; Activity...; Choices...; Plug-ins &rarr;; Quit.</p>
+<p>The icon bar menu: Info &rarr;; Help...; User guide; Open library &rarr; (Export library...; Import library...; Check library...); Activity...; Choices...; Plug-ins &rarr;; Quit.</p>
 <p>Toolbar: Inspector; Import; New; Undo; Redo; Browser; Split View; Viewer; Loupe; Export; Full Screen. Bottom bar: the photo count; what Lumen is doing (click for the Activity window); the rating filter; Search; thumbnail size.</p>
 
 <!-- ======================================================================= -->

@@ -29,6 +29,7 @@ static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40], stack_secs[6] = "2";
 static int export_after_menu, print_after_menu, compare_after_menu;
+static int libexport_after_menu;       /* Export library box: 1 the whole library, 2 the selection, 3 the group menu's */
 static int tags_after_menu;            /* 1: the selection's caption and keywords, 2: the Viewer's photo */
 static int smart_after_menu;           /* open the Smart album window: 1 a new one, 2 the group menu's album */
 static cat_keyword *keywords;          /* the keyword menu's list */
@@ -250,7 +251,7 @@ static void load_groups (void)
 
 /* Selection > ... (the order menus_selection decodes) */
 enum { SEL_RATING, SEL_LABEL, SEL_FLAG, SEL_REJECT, SEL_TAGS, SEL_ALL, SEL_CLEAR, SEL_COPY, SEL_PASTE, SEL_PRESET,
-       SEL_COMPARE, SEL_EXPORT, SEL_PRINT, SEL_REMOVE, SEL_COUNT };
+       SEL_COMPARE, SEL_EXPORT, SEL_EXPORT_LIB, SEL_PRINT, SEL_REMOVE, SEL_COUNT };
 
 /* None, Red ... Grey, each with its coloured dot (the lumlab sprites in
    !Sprites, beside the text as on a radio button); ticked: the label now
@@ -374,6 +375,7 @@ static menu *build_window_menu (void)
       set_item (selm, SEL_PRESET, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0);
       set_item (selm, SEL_COMPARE, 0, "Compare      O", MF_DOTTED, -1, nsel != 2);
       set_item (selm, SEL_EXPORT, 0, "Export...      ^E", 0, -1, nsel == 0);
+      set_item (selm, SEL_EXPORT_LIB, 0, "Export as library...", 0, -1, nsel == 0);
       set_item (selm, SEL_PRINT, 0, "Print...      ^P", MF_DOTTED, -1, nsel == 0);
       set_item (selm, SEL_REMOVE, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
     }
@@ -591,16 +593,23 @@ void menus_open_viewer_menu (int x, int y)
 
 static menu *build_iconbar_menu (void)
 {
-  menu *m, *plugm;
+  menu *m, *plugm, *libm;
   used = 0;
   plugm = build_plugins_menu ();
+  libm = new_menu ("Library", 3);
+  if (libm)
+    {
+      set_item (libm, 0, 0, "Export library...", 0, -1, 0);
+      set_item (libm, 1, 0, "Import library...", MF_DOTTED, -1, 0);
+      set_item (libm, 2, 1, "Check library...", 0, -1, 0);
+    }
   m = new_menu (APP_NAME, 8);
   if (m)
     {
       set_item (m, 0, 0, "Info", 0, info_window, info_window == -1);
       set_item (m, 1, 0, "Help...", 0, -1, 0);
       set_item (m, 2, 0, "User guide", MF_DOTTED, -1, 0);
-      set_item (m, 3, 0, "Open library", 0, -1, 0);
+      set_item (m, 3, 0, "Open library", 0, (int) libm, 0);
       set_item (m, 4, 0, "Activity...", MF_DOTTED, -1, 0);
       set_item (m, 5, 0, "Choices...", 0, -1, 0);
       set_item (m, 6, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
@@ -727,22 +736,26 @@ static menu *build_group_menu (void)
   if (group_kind == SRC_ALBUM && cat_album_is_folder (lib_cat (app_library ()), group_id))
     {
       /* Made from a folder: it follows the folder, so nothing to change here. */
-      m = new_menu ("Folder", 1);
+      m = new_menu ("Folder", 2);
       if (m)
-        set_item (m, 0, 1, "Follows its folder", 0, -1, 1);
+        {
+          set_item (m, 0, 0, "Follows its folder", MF_DOTTED, -1, 1);
+          set_item (m, 1, 1, "Export as library...", 0, -1, 0);
+        }
       return m;
     }
   if (group_kind == SRC_ALBUM)
     {
       cat_rule r;
       int smart = cat_smart_get (lib_cat (app_library ()), group_id, &r) == 1;
-      m = new_menu (smart ? "Smart album" : "Album", smart ? 3 : 2);
+      m = new_menu (smart ? "Smart album" : "Album", smart ? 4 : 3);
       if (m)
         {
           set_item (m, 0, 0, "Rename", 0, (int) ren, 0);
-          set_item (m, 1, !smart, "Delete album...", 0, -1, 0);
+          set_item (m, 1, 0, "Delete album...", smart ? 0 : MF_DOTTED, -1, 0);
           if (smart)
-            set_item (m, 2, 1, "Edit smart album...", 0, -1, 0);
+            set_item (m, 2, 0, "Edit smart album...", MF_DOTTED, -1, 0);
+          set_item (m, smart ? 3 : 2, 1, "Export as library...", 0, -1, 0);
         }
       return m;
     }
@@ -751,13 +764,14 @@ static menu *build_group_menu (void)
     char root[1024];
     int has_root = cat_project_root (lib_cat (app_library ()), group_id, root, sizeof root) == 0;
     cat_project_watching (lib_cat (app_library ()), group_id, &w, &al);
-    m = new_menu ("Project", 4);
+    m = new_menu ("Project", 5);
     if (m)
       {
         set_item (m, 0, 0, "Rename", MF_DOTTED, (int) ren, 0);
         set_item (m, 1, 0, "Watch for new photos", w ? MF_TICK : 0, -1, !has_root);
         set_item (m, 2, 0, "Albums from its folders", (al ? MF_TICK : 0) | MF_DOTTED, -1, !has_root);
-        set_item (m, 3, 1, "Remove project from library...", 0, -1, 0);
+        set_item (m, 3, 0, "Export as library...", MF_DOTTED, -1, 0);
+        set_item (m, 4, 1, "Remove project from library...", 0, -1, 0);
       }
   }
   return m;
@@ -803,12 +817,26 @@ void menus_open_keyword_menu (int x, int y)
   _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
 
+/* Where Export as library... is on the group menu. */
+static int group_export_item (void)
+{
+  cat *db = lib_cat (app_library ());
+  cat_rule r;
+  if (group_kind == SRC_PROJECT)
+    return 3;
+  if (cat_album_is_folder (db, group_id))
+    return 1;
+  return cat_smart_get (db, group_id, &r) == 1 ? 3 : 2;
+}
+
 static void group_choice (const int *c)
 {
   cat *db = lib_cat (app_library ());
   char q[240], name[64];
   cat_group_name (db, group_kind, group_id, name, sizeof name);
-  if (c[0] == 0 && c[1] == 0)
+  if (c[0] == group_export_item ())
+    libexport_after_menu = 3;
+  else if (c[0] == 0 && c[1] == 0)
     {
       if (cat_group_rename (db, group_kind, group_id, group_name))
         app_report (cat_error (db));
@@ -848,7 +876,7 @@ static void group_choice (const int *c)
           mainwin_library_changed ();
         }
     }
-  else if (c[0] == 3 && group_kind == SRC_PROJECT)
+  else if (c[0] == 4 && group_kind == SRC_PROJECT)
     {
       cat_id *ids;
       int n;
@@ -967,6 +995,7 @@ static int window_choice (const int *c)
           break;
         case SEL_COMPARE: compare_after_menu = 1; break;
         case SEL_EXPORT: export_after_menu = 1; break;
+        case SEL_EXPORT_LIB: libexport_after_menu = 2; break;
         case SEL_PRINT: print_after_menu = 1; break;
         case SEL_REMOVE: remove_after_menu = 1; break;
         }
@@ -1121,6 +1150,12 @@ int menus_selection (const int *choice)
         app_open_doc ("!Help");
       else if (choice[0] == 2)
         app_open_doc ("Guide.index/html");
+      else if (choice[0] == 3 && choice[1] == 0)
+        libexport_after_menu = 1;
+      else if (choice[0] == 3 && choice[1] == 1)
+        libbox_import_open ();
+      else if (choice[0] == 3 && choice[1] == 2)
+        libbox_check_open ();
       else if (choice[0] == 3)
         mainwin_open (NULL);
       else if (choice[0] == 4)
@@ -1184,6 +1219,37 @@ int menus_selection (const int *choice)
       print_after_menu = 0;
       if (_swix (Wimp_GetPointerInfo, _IN (1), ptr) == NULL)
         printbox_open (from_viewer, ptr[0], ptr[1]);
+      return 0;
+    }
+  if (libexport_after_menu)
+    {
+      /* The Export library box replaces the menu, at the pointer. */
+      int kind = libexport_after_menu;
+      libexport_after_menu = 0;
+      if (_swix (Wimp_GetPointerInfo, _IN (1), ptr))
+        return 0;
+      if (kind == 1)
+        libbox_export_open (NULL, -1, "The whole library", "Library", ptr[0], ptr[1]);
+      else if (kind == 2)
+        {
+          cat_id *ids;
+          int n = browser_selection (&ids);
+          libbox_export_open (ids, n, "The selection", "Photos", ptr[0], ptr[1]);
+          free (ids);
+        }
+      else
+        {
+          cat_id *ids;
+          int n;
+          char what[100], nm[64];
+          cat_group_name (lib_cat (app_library ()), group_kind, group_id, nm, sizeof nm);
+          if (cat_group_versions (lib_cat (app_library ()), group_kind, group_id, &ids, &n) == 0)
+            {
+              snprintf (what, sizeof what, "%s %s", group_kind == SRC_PROJECT ? "The project" : "The album", nm);
+              libbox_export_open (ids, n, what, nm, ptr[0], ptr[1]);
+              free (ids);
+            }
+        }
       return 0;
     }
   if (export_after_menu)
@@ -1254,7 +1320,16 @@ const char *menus_help (int window, int icon)
       case 0: return "Who made Lumen, and its version.";
       case 1: return "Shows Lumen's short help file.";
       case 2: return "Opens the Lumen User Guide in your web browser.";
-      case 3: return "Opens Lumen's window.";
+      case 3:
+        switch (c[1])
+          {
+          case 0: return "Copies the whole library to a new one: every photo, adjustment, album and keyword, and the "
+                         "originals if you choose. For a backup, or to move it to another disc or computer.";
+          case 1: return "Brings another Lumen library's photos into this one: drag its directory into the window. "
+                         "Photos already here aren't added twice.";
+          case 2: return "Checks the catalogue and the thumbnails for anything wrong, and puts it right if you ask.";
+          }
+        return "Opens Lumen's window. Its menu: export, import or check the library.";
       case 4: return "What Lumen is doing now and what it has done: imports, thumbnails, exports, watched folders.";
       case 5: return "Where the library is, how exports and thumbnails start, and checking for missing files.";
       case 7: return "Leaves Lumen. Everything is saved as you go.";
@@ -1270,6 +1345,9 @@ const char *menus_help (int window, int icon)
           return "Prints the selected photos, one to a page, on the printer chosen in !Printers.";
         if (c[1] == SEL_EXPORT)
           return "Exports the selected photos as new JPEG or PNG files.";
+        if (c[1] == SEL_EXPORT_LIB)
+          return "Makes a new Lumen library of the selected photos, with all their adjustments, keywords and albums "
+                 "(and their originals, if you choose): to take them to another computer.";
         if (c[1] == SEL_PRESET && c[2] >= 0)
           return presets_help (c + 2, 1);
         if (c[1] == SEL_TAGS)
@@ -1310,6 +1388,10 @@ const char *menus_help (int window, int icon)
                                            : "What can be done to this photo. Many have keys, shown beside them.";
   if (which == 8)
     return "Adds this keyword to the list.";
+  if (which == 7 && c[0] == group_export_item ())
+    return group_kind == SRC_PROJECT
+           ? "Makes a new Lumen library of this project's photos, with all their adjustments (and their originals, if you choose)."
+           : "Makes a new Lumen library of this album's photos, with all their adjustments (and their originals, if you choose).";
   if (which == 7)
     switch (c[0])
       {
@@ -1322,7 +1404,7 @@ const char *menus_help (int window, int icon)
                                                : "Deletes the album. Its photos stay in the library.";
       case 2: return group_kind == SRC_ALBUM ? "Changes what this smart album looks for."
                                              : "Ticked: each folder inside this project's folder is an album, under the project in the Library tab.";
-      case 3: return "Takes the project and its photos out of the library, after asking. The files aren't touched.";
+      case 4: return "Takes the project and its photos out of the library, after asking. The files aren't touched.";
       }
   return "";
 }

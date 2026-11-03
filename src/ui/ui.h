@@ -360,6 +360,32 @@ void choicewin_drop (const char *path);
 const char *choicewin_library_text (void);   /* tests */
 void choicewin_set_library_text (const char *s);
 
+/* --- libbox.c: Export library, Import library and Check library */
+int libbox_create (void);
+int libbox_export_window (void);
+int libbox_import_window (void);
+int libbox_check_window (void);
+/* versions (n < 0: the whole library); what: "The selection" etc.; the
+   name offered for the new library. */
+void libbox_export_open (const cat_id *ids, int n, const char *what, const char *suggested, int x, int y);
+int libbox_export_to (const char *path);
+void libbox_import_open (void);
+void libbox_import_drop (const char *path);   /* a library's directory dropped on Lumen */
+void libbox_check_open (void);
+void libbox_click (int *block);
+int libbox_key (int win, int key);
+void libbox_close_request (int win);
+int libbox_dragging (void);
+void libbox_drag_end (void);
+int libbox_save_ack (int *message);   /* 1 if it was for the Export library box */
+int libbox_busy (void);
+void libbox_idle (unsigned deadline);
+int libbox_percent (void);
+void libbox_status (char *out, size_t n);
+void libbox_quit (void);
+void libbox_set_name (const char *s);  /* tests */
+const char *libbox_line (int win, int k);
+
 /* --- plugwin.c: the Add plug-in window, somewhere to drop one */
 int plugwin_create (void);
 int plugwin_window (void);

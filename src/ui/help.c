@@ -173,6 +173,31 @@ const char *help_text (int window, int icon, int x, int y)
     return activitywin_part_at (x, y) ? "Clears the list of what Lumen has done (the file in Lumen's Choices too)."
                                       : "What Lumen is doing now, each with how far it has got, and what it has "
                                         "done, newest first. The list is kept between sessions.";
+  if (window == libbox_export_window ())
+    switch (icon)
+      {
+      case 0: return "Drag this to a directory display to make the new library there.";
+      case 1: return "The new library's name. Or type a full pathname and click Save.";
+      case 3: return "Ticked: the original files are copied into the new library (Originals, a directory for each "
+                     "project), so it can go to another disc or computer. Not ticked: it refers to them where they are.";
+      case 4: return "Closes the box without exporting.";
+      case 5: return "Exports to the full pathname typed in the name.";
+      default: return "Makes a new Lumen library of these photos, with all their adjustments, albums and keywords.";
+      }
+  if (window == libbox_import_window ())
+    switch (icon)
+      {
+      case 4: return "Ticked: the new photos' files are copied into this library's Originals directory. "
+                     "Not ticked: this library refers to them where they are (a disc that must stay connected).";
+      case 5: return "Closes the window without importing.";
+      case 6: return "Brings the photos in: their versions, adjustments, ratings, keywords, albums and presets.";
+      default: return "Drag another Lumen library's directory here. What would come across is shown before anything "
+                      "changes; photos already here aren't added twice.";
+      }
+  if (window == libbox_check_window ())
+    return icon == 7 ? "Puts right what the check found. A copy of the catalogue is kept first, as Catalogue-backup."
+         : icon == 6 ? "Closes the window (and stops the check, if it is still going)."
+         : "Checks the library's catalogue and thumbnails for anything wrong.";
   if (window == plugwin_window ())
     return icon == 4 ? "Starts PackMan, where Lumen's plug-ins (such as LumenRaw, for camera raw files) are installed from."
                      : "Drag a plug-in's directory here to add it to Lumen.";

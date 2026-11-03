@@ -17,6 +17,9 @@
 #include "../src/core/rawjob.h"
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
+#include "../src/core/libxfer.h"
+#include "../src/core/libcheck.h"
+#include "sqlite3.h"
 #include "../src/core/thumbgen.h"
 #include "../src/core/plugins.h"
 #include "../src/core/prefs.h"
@@ -1674,6 +1677,420 @@ static void test_lazy_thumbs (void)
   lib_close (l);
 }
 
+/* --- moving photos between libraries (libxfer) */
+
+static long long sql1 (library *l, const char *sql)
+{
+  sqlite3_stmt *s;
+  long long v = -1;
+  if (sqlite3_prepare_v2 (cat_sqlite (lib_cat (l)), sql, -1, &s, NULL) != SQLITE_OK)
+    return -2;
+  if (sqlite3_step (s) == SQLITE_ROW)
+    v = sqlite3_column_int64 (s, 0);
+  sqlite3_finalize (s);
+  return v;
+}
+
+static int xfer_drain (libxfer *x, int *list_changed)
+{
+  int guard = 0, f;
+  while (!libx_finished (x) && guard++ < 100000)
+    {
+      f = libx_work (x, frozen_now, 0);
+      if (list_changed && (f & LIB_LIST_CHANGED))
+        (*list_changed)++;
+    }
+  return guard;
+}
+
+static int file_there (const char *rel)
+{
+  char path[1024];
+  struct stat st;
+  p (path, rel);
+  return stat (path, &st) == 0;
+}
+
+static cat_id version_named (library *l, const char *name)
+{
+  cat_item *items;
+  int n, i;
+  cat_id id = 0;
+  cat_source all = { SRC_ALL, 0, 0, "" };
+  if (cat_list (lib_cat (l), &all, &items, &n))
+    return 0;
+  for (i = 0; i < n; i++)
+    if (!strcmp (items[i].name, name) && !id)
+      id = items[i].id;
+  free (items);
+  return id;
+}
+
+static void test_libxfer (void)
+{
+  library *a, *b;
+  libxfer *x;
+  libx_survey sv;
+  char err[300], path[1024], dst[1024], msg[400];
+  cat *c;
+  cat_id va, vb, vc, va2, sel[2];
+  cat_rule rule;
+  cat_details d;
+  int failed, changed = 0;
+
+  p (path, "Xfer/Trip/sub");
+  fsys_mkdirs (path);
+  p (path, "Xfer/Other");
+  fsys_mkdirs (path);
+  p (path, "Xfer/Trip/a.jpg");     make_jpeg (path, 90, 60, 1, "2024:05:01 10:00:00");
+  p (path, "Xfer/Trip/b.jpg");     make_jpeg (path, 92, 60, 1, "2024:05:01 11:00:00");
+  p (path, "Xfer/Trip/sub/c.jpg"); make_jpeg (path, 94, 60, 1, "2024:05:02 09:00:00");
+  p (path, "Xfer/Other/d.jpg");    make_jpeg (path, 96, 60, 1, "2024:06:01 09:00:00");
+  p (path, "Xfer/Other/copy-of-a.jpg"); make_jpeg (path, 90, 60, 1, "2024:05:01 10:00:00");
+
+  /* Library A: a watched project with folder albums, and everything a
+     photo can have. */
+  p (path, "XferA");
+  CHECK (lib_open (&a, path, err, sizeof err) == 0, "libxfer: library A");
+  c = lib_cat (a);
+  lib_set_new_folders (a, 1, 1);
+  p (path, "Xfer/Trip");
+  lib_import (a, path);
+  drain (a);
+  va = version_named (a, "a.jpg");
+  vb = version_named (a, "b.jpg");
+  vc = version_named (a, "c.jpg");
+  CHECK (va && vb && vc, "libxfer: three photos in A");
+  cat_set_rating (c, &va, 1, 4);
+  cat_set_recipe (c, vb, "exposure ev=0.5");
+  cat_add_keywords (c, &va, 1, "coast");
+  cat_add_keywords (c, &vc, 1, "coast, harbour");
+  cat_set_caption (c, &vc, 1, "The harbour wall");
+  cat_set_label (c, &vc, 1, 2);
+  sel[0] = va;
+  sel[1] = vb;
+  cat_album_add (c, cat_album_create (c, "Best"), sel, 2);
+  memset (&rule, 0, sizeof rule);
+  rule.min_rating = 3;
+  cat_smart_create (c, "Good", &rule);
+  va2 = cat_new_version (c, va, 0);
+  cat_set_recipe (c, va2, "enhance contrast=30");
+  cat_preset_save (c, "Warm", "wb temp=10");
+  lib_thumbs_changed (a);
+  drain (a);
+  CHECK (va2 > 0 && sql1 (a, "SELECT COUNT(*) FROM stack") == 1, "libxfer: a second version, stacked");
+
+  /* Errors first. */
+  p (dst, "Xfer");
+  CHECK (libx_export (&x, a, dst, NULL, -1, 0, err, sizeof err) == -1 && strstr (err, "already"),
+         "export: not over something already there");
+  CHECK (libx_export (&x, a, dst, sel, 0, 0, err, sizeof err) == -1, "export: nothing chosen, nothing done");
+  CHECK (libx_import_plan (&x, a, dst, &sv, err, sizeof err) == -1 && strstr (err, "isn't a Lumen library"),
+         "import: a folder of photos isn't a library");
+  CHECK (libx_import_plan (&x, a, lib_root (a), &sv, err, sizeof err) == -1 && strstr (err, "open"),
+         "import: not the library itself");
+
+  /* The whole library, with its originals. */
+  p (dst, "ExportAll");
+  CHECK (libx_export (&x, a, dst, NULL, -1, 1, err, sizeof err) == 0, "export: the whole library starts");
+  CHECK (libx_started (x) && libx_is_export (x), "export: started");
+  xfer_drain (x, NULL);
+  libx_result (x, msg, sizeof msg, &failed);
+  CHECK (!failed && strstr (msg, "Exported 3 photos to ExportAll, with their originals"), msg);
+  libx_free (x);
+  CHECK (file_there ("ExportAll/Catalogue") && file_there ("ExportAll/Originals/Trip/a.jpg")
+         && file_there ("ExportAll/Originals/Trip/sub/c.jpg"), "export: originals copied, folders kept");
+  CHECK (file_there ("Xfer/Trip/a.jpg"), "export: the originals themselves left alone");
+  snprintf (path, sizeof path, "ExportAll/Thumbs/%02x/%lld", (unsigned) (vb & 0xff), vb);
+  CHECK (file_there (path), "export: thumbnails copied, same ids");
+  p (path, "ExportAll");
+  CHECK (lib_open (&b, path, err, sizeof err) == 0, "export: the new library opens");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM version") == 4 && sql1 (b, "SELECT COUNT(*) FROM original") == 3,
+         "export: 4 versions of 3 photos");
+  CHECK (cat_get_details (lib_cat (b), vc, &d) == 0 && strstr (d.path, "ExportAll/Originals/Trip/sub/c.jpg"),
+         "export: paths point into the new library");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM album WHERE smart IS NOT NULL") == 1
+         && sql1 (b, "SELECT COUNT(*) FROM album_item ai JOIN album al ON al.id = ai.album WHERE al.name = 'Best'") == 3,
+         "export: albums and smart albums (a's second version went into Best with it)");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM album WHERE folder = 'sub'") == 1, "export: folder albums");
+  CHECK (sql1 (b, "SELECT watch FROM project") == 1, "export: the whole library keeps watching");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM version_keyword") == 4 && sql1 (b, "SELECT COUNT(*) FROM keyword") == 2,
+         "export: keywords");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM stack") == 1 && sql1 (b, "SELECT COUNT(*) FROM preset") == 1,
+         "export: stack and preset");
+  CHECK (sql1 (b, "SELECT label FROM version WHERE caption = 'The harbour wall'") == 2, "export: caption and label");
+  lib_close (b);
+
+  /* Moved: its originals are found in the new place. */
+  {
+    char from[1024], to[1024];
+    p (from, "ExportAll");
+    p (to, "Moved");
+    rename (from, to);
+    CHECK (lib_open (&b, to, err, sizeof err) == 0, "moved: opens");
+    CHECK (cat_get_details (lib_cat (b), vc, &d) == 0 && strstr (d.path, "/Moved/Originals/Trip/sub/c.jpg")
+           && !strstr (d.path, "ExportAll"), "moved: the originals inside it are found where it is now");
+    CHECK (sql1 (b, "SELECT COUNT(*) FROM project WHERE root LIKE '%/Moved/Originals/Trip'") == 1, "moved: project folder too");
+    lib_close (b);
+  }
+
+  /* A selection, without originals: only what goes with it. */
+  p (dst, "ExportSome");
+  sel[0] = va;
+  sel[1] = vc;
+  CHECK (libx_export (&x, a, dst, sel, 2, 0, err, sizeof err) == 0, "export: a selection");
+  xfer_drain (x, NULL);
+  libx_result (x, msg, sizeof msg, &failed);
+  CHECK (!failed && strstr (msg, "Exported 2 photos"), msg);
+  libx_free (x);
+  CHECK (!file_there ("ExportSome/Originals"), "export: no originals copied when not asked");
+  p (path, "ExportSome");
+  CHECK (lib_open (&b, path, err, sizeof err) == 0, "export: the selection opens");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM version") == 2, "export: just the two");
+  CHECK (cat_get_details (lib_cat (b), va, &d) == 0 && strstr (d.path, "Xfer/Trip/a.jpg"), "export: originals referred to where they are");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM stack") == 0 && sql1 (b, "SELECT COUNT(*) FROM version WHERE stack IS NOT NULL") == 0,
+         "export: a stack with one version left isn't one");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM album_item") >= 1 && sql1 (b, "SELECT COUNT(*) FROM album WHERE smart IS NOT NULL") == 0
+         && sql1 (b, "SELECT COUNT(*) FROM album_item ai JOIN album al ON al.id = ai.album WHERE al.name = 'Best'") == 1,
+         "export: Best with only a; no smart albums");
+  CHECK (sql1 (b, "SELECT watch FROM project") == 0, "export: a part isn't watched");
+  lib_close (b);
+
+  /* Import the moved library into another one that has a copy of a. */
+  p (path, "XferC");
+  lib_close (a);
+  CHECK (lib_open (&a, path, err, sizeof err) == 0, "import: library C");
+  p (path, "Xfer/Other");
+  lib_import (a, path);
+  drain (a);
+  p (path, "Moved");
+  CHECK (libx_import_plan (&x, a, path, &sv, err, sizeof err) == 0, "import: planned");
+  CHECK (sv.photos == 3 && sv.known == 1 && sv.versions == 4 && sv.new_versions == 3, "import: survey of photos and versions");
+  CHECK (sv.projects == 1 && sv.new_projects == 1 && sv.albums == 2 && sv.new_albums == 2 && sv.missing == 0,
+         "import: survey of projects and albums (folder albums stay)");
+  CHECK (!strcmp (sv.name, "Moved") && sv.bytes > 0, "import: its name, and what there is to copy");
+  CHECK (!libx_started (x), "import: nothing done before Import is clicked");
+  libx_import_go (x, 1);
+  xfer_drain (x, &changed);
+  libx_result (x, msg, sizeof msg, &failed);
+  CHECK (!failed && strstr (msg, "2 new photos and 1 more version") && strstr (msg, "1 was already here"), msg);
+  CHECK (changed == 1, "import: the list changed once");
+  libx_free (x);
+  CHECK (file_there ("XferC/Originals/Trip/b.jpg") && file_there ("XferC/Originals/Trip/sub/c.jpg")
+         && !file_there ("XferC/Originals/Trip/a.jpg"), "import: new photos copied in; the known one not");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM version") == 5, "import: 2 + 3 versions");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM version v JOIN original o ON o.id = v.original WHERE o.path LIKE '%copy-of-a.jpg'") == 2,
+         "import: a's new version joins the copy already here");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM version WHERE thumb = 1") == 5, "import: thumbnails came too");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM original WHERE batch = (SELECT MAX(batch) FROM original)") == 2,
+         "import: the new photos are the Last import");
+  CHECK (sql1 (a, "SELECT watch FROM project WHERE name = 'Trip'") == 0, "import: watching stays behind");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM album WHERE folder IS NOT NULL") == 0, "import: folder albums stay behind");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM album_item ai JOIN album al ON al.id = ai.album WHERE al.name = 'Best'") == 3,
+         "import: Best has a (the copy here), its new version and b");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM album WHERE name = 'Good' AND smart IS NOT NULL") == 1, "import: smart album");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM version_keyword vk JOIN keyword k ON k.id = vk.keyword WHERE k.name = 'coast'") == 3,
+         "import: keywords, on the known photo too");
+  CHECK (sql1 (a, "SELECT label FROM version WHERE caption = 'The harbour wall'") == 2, "import: caption and label");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM preset WHERE name = 'Warm'") == 1, "import: preset");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM version WHERE recipe = 'exposure ev=0.5'") == 1, "import: adjustments kept");
+
+  /* Again: nothing new. */
+  p (path, "Moved");
+  CHECK (libx_import_plan (&x, a, path, &sv, err, sizeof err) == 0 && sv.known == 3 && sv.new_versions == 0
+         && sv.new_albums == 0 && sv.new_projects == 0, "import again: everything is already here");
+  libx_import_go (x, 0);
+  xfer_drain (x, NULL);
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM version") == 5 && sql1 (a, "SELECT COUNT(*) FROM album") == 2,
+         "import again: nothing added twice");
+  libx_free (x);
+
+  /* Without copying: the new photos are referred to where they are. */
+  p (path, "ExportSome");
+  CHECK (libx_import_plan (&x, a, path, &sv, err, sizeof err) == 0 && sv.known == 2 && sv.new_versions == 0,
+         "import: a and c from the selection are known");
+  libx_free (x);
+  lib_close (a);
+}
+
+/* --- checking and repairing a library (libcheck) */
+
+static int run_check (library *l, libcheck_report *out, int *steps)
+{
+  libcheck *k = libcheck_start (l);
+  int n = 0;
+  if (!k)
+    return -1;
+  while (!libcheck_step (k, frozen_now, 0) && n < 100000)
+    n++;
+  *out = *libcheck_result (k);
+  if (steps)
+    *steps = n;
+  libcheck_free (k);
+  return 0;
+}
+
+static void test_libcheck (void)
+{
+  library *l;
+  libcheck *k;
+  libcheck_report r;
+  char err[400], path[1024], text[800], fixed[400];
+  int steps;
+  cat_id v1;
+
+  p (path, "CheckLib");
+  CHECK (lib_open (&l, path, err, sizeof err) == 0, "check: library");
+  p (path, "Xfer/Trip");
+  lib_import (l, path);
+  drain (l);
+  CHECK (run_check (l, &r, &steps) == 0 && !libcheck_problems (&r) && r.versions == 3, "check: a good library has no problems");
+  CHECK (steps > 256, "check: done in small steps");
+  libcheck_describe (&r, text, sizeof text);
+  CHECK (strstr (text, "All is well: 3 photos and 3 versions checked") != NULL, text);
+
+  /* Break it in every way it knows of. */
+  v1 = version_named (l, "a.jpg");
+  sqlite3_exec (cat_sqlite (lib_cat (l)),
+                "PRAGMA foreign_keys=OFF;"
+                "INSERT INTO project (name, created) VALUES ('Doomed', 0);"
+                "UPDATE version SET project = (SELECT id FROM project WHERE name = 'Doomed') WHERE name = 'b.jpg';"
+                "DELETE FROM project WHERE name = 'Doomed';"
+                "INSERT INTO original (path, size, hash) VALUES ('/nowhere/lone.jpg', 5, 5);"
+                "INSERT INTO version (original, project, name) VALUES (99999, 1, 'ghost.jpg');"
+                "INSERT INTO album (name, created) VALUES ('A', 0);"
+                "INSERT INTO album_item VALUES ((SELECT id FROM album WHERE name = 'A'), 88888, 1);"
+                "INSERT INTO keyword (name) VALUES ('k');"
+                "INSERT INTO version_keyword VALUES (88888, (SELECT id FROM keyword WHERE name = 'k'));"
+                "INSERT INTO stack (pick, open) VALUES (1, 0);"
+                "UPDATE version SET stack = (SELECT MAX(id) FROM stack) WHERE name = 'a.jpg';"
+                "UPDATE version SET thumb = 2 WHERE name = 'c.jpg';"
+                "PRAGMA foreign_keys=ON;", NULL, NULL, NULL);
+  lib_thumb_path (l, v1, path, sizeof path);
+  remove (path);
+  {
+    char spare[1024];
+    FILE *f;
+    p (spare, "CheckLib/Thumbs/0f/77777");
+    p (path, "CheckLib/Thumbs/0f");
+    fsys_mkdirs (path);
+    f = fopen (spare, "wb");
+    if (f)
+      {
+        fputs ("old thumbnail", f);
+        fclose (f);
+      }
+  }
+  CHECK (run_check (l, &r, NULL) == 0, "check: runs on a broken library");
+  CHECK (!r.damaged && r.versions_no_photo == 1 && r.versions_no_project == 1 && r.lone_originals == 1,
+         "check: a version without its photo, one without its project, a photo without a version");
+  CHECK (r.bad_album_items == 1 && r.bad_keyword_links == 1 && r.bad_stacks == 1, "check: album entry, keyword, stack of one");
+  CHECK (r.thumbs_missing == 1 && r.thumbs_failed == 1 && r.thumbs_unused == 1 && r.thumbs_unused_bytes == 13,
+         "check: thumbnail missing, failed, and one no photo uses");
+  libcheck_describe (&r, text, sizeof text);
+  CHECK (strstr (text, "1 version whose project has gone") && strstr (text, "1 thumbnail file no photo uses"), text);
+
+  /* Repair */
+  k = libcheck_start (l);
+  CHECK (libcheck_repair (k, fixed, sizeof fixed, err, sizeof err) == -1, "repair: not before the check has finished");
+  while (!libcheck_step (k, frozen_now, 0))
+    ;
+  CHECK (libcheck_repair (k, fixed, sizeof fixed, err, sizeof err) == 0, err);
+  CHECK (strstr (fixed, "Recovered") && strstr (fixed, "Catalogue-backup"), fixed);
+  libcheck_free (k);
+  CHECK (file_there ("CheckLib/Catalogue-backup") && !file_there ("CheckLib/Catalogue-backup-new"),
+         "repair: the catalogue kept first");
+  CHECK (!file_there ("CheckLib/Thumbs/0f/77777"), "repair: the unused thumbnail file went");
+  CHECK (sql1 (l, "SELECT COUNT(*) FROM version v JOIN project p ON p.id = v.project WHERE p.name = 'Recovered'") == 2,
+         "repair: b and the lone photo are in Recovered");
+  CHECK (sql1 (l, "SELECT COUNT(*) FROM version WHERE thumb = 0") >= 3, "repair: thumbnails to be made again");
+  drain (l);
+  CHECK (run_check (l, &r, NULL) == 0 && libcheck_problems (&r) == 0, "repair: checked again, all is well");
+  CHECK (r.versions == 4, "repair: 3 photos and the lone one; the ghost version gone");
+  {
+    /* The kept copy is the catalogue as it was (still broken). */
+    library *b;
+    char dir[1024], from[1024], to[1024];
+    p (dir, "CheckBackup");
+    fsys_mkdirs (dir);
+    p (from, "CheckLib/Catalogue-backup");
+    p (to, "CheckBackup/Catalogue");
+    fsys_copy_tree (from, to);
+    CHECK (lib_open (&b, dir, err, sizeof err) == 0 && sql1 (b, "SELECT COUNT(*) FROM original WHERE id NOT IN (SELECT original FROM version)") == 1, "repair: the backup is the catalogue before");
+    lib_close (b);
+  }
+  lib_close (l);
+}
+
+/* Regressions found in review: a plan gone stale, a library moved inside
+   its old place, project names that make the same leaf. */
+static void test_libxfer_more (void)
+{
+  library *a, *b;
+  libxfer *x;
+  libx_survey sv;
+  char err[300], path[1024], msg[400], from[1024], to[1024];
+  cat_id vp;
+  int failed;
+  p (path, "Stale/P"); fsys_mkdirs (path);
+  p (path, "Stale/Q"); fsys_mkdirs (path);
+  p (path, "Stale/P/p.jpg"); make_jpeg (path, 70, 50, 1, "2024:01:01 10:00:00");
+  p (path, "Stale/Q/q.jpg"); make_jpeg (path, 72, 52, 1, "2024:02:01 10:00:00");
+  p (path, "StaleA");
+  lib_open (&a, path, err, sizeof err);
+  p (path, "Stale/P"); lib_import (a, path); drain (a);
+  vp = version_named (a, "p.jpg");
+  cat_add_keywords (lib_cat (a), &vp, 1, "secret");
+  p (path, "StaleB");
+  CHECK (libx_export (&x, a, path, NULL, -1, 0, err, sizeof err) == 0, "stale: export");
+  xfer_drain (x, NULL);
+  libx_free (x);
+  CHECK (libx_import_plan (&x, a, path, &sv, err, sizeof err) == 0 && sv.known == 1, "stale: the plan sees p here");
+  /* Meanwhile p is removed and q imported (it may take p's old id). */
+  lib_remove (a, &vp, 1);
+  p (path, "Stale/Q"); lib_import (a, path); drain (a);
+  libx_import_go (x, 0);
+  xfer_drain (x, NULL);
+  libx_result (x, msg, sizeof msg, &failed);
+  CHECK (!failed && strstr (msg, "1 new photo"), msg);
+  libx_free (x);
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM version WHERE name = 'p.jpg'") == 1, "stale: p comes back");
+  CHECK (sql1 (a, "SELECT COUNT(*) FROM version_keyword vk JOIN version v ON v.id = vk.version"
+                  " WHERE v.name = 'q.jpg'") == 0, "stale: q doesn't get p's keyword");
+  lib_close (a);
+
+  /* A library moved inside the place it was: paths moved once, not again and again. */
+  p (from, "Moved");
+  p (to, "MovedTmp");
+  rename (from, to);
+  fsys_mkdirs (from);
+  p (from, "Moved/Zed");
+  rename (to, from);
+  CHECK (lib_open (&b, from, err, sizeof err) == 0, "nested move: opens");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM original WHERE path LIKE '%/Moved/Zed/Originals/Trip/%'") == 3
+         && sql1 (b, "SELECT COUNT(*) FROM original WHERE path LIKE '%Zed/Zed%'") == 0,
+         "nested move: each path moved once");
+  lib_close (b);
+
+  /* Two projects whose names make the same leaf get a directory each. */
+  p (path, "Leaf/My Trip"); fsys_mkdirs (path);
+  p (path, "Leaf/My_Trip"); fsys_mkdirs (path);
+  p (path, "Leaf/My Trip/one.jpg"); make_jpeg (path, 74, 50, 1, NULL);
+  p (path, "Leaf/My_Trip/two.jpg"); make_jpeg (path, 76, 50, 1, NULL);
+  p (path, "LeafLib");
+  lib_open (&a, path, err, sizeof err);
+  p (path, "Leaf/My Trip"); lib_import (a, path);
+  p (path, "Leaf/My_Trip"); lib_import (a, path);
+  drain (a);
+  p (path, "LeafOut");
+  CHECK (libx_export (&x, a, path, NULL, -1, 1, err, sizeof err) == 0, "leaves: export");
+  xfer_drain (x, NULL);
+  libx_free (x);
+  CHECK (file_there ("LeafOut/Originals/My_Trip/one.jpg") && file_there ("LeafOut/Originals/My_Trip_2/two.jpg"),
+         "leaves: My Trip and My_Trip in directories of their own");
+  lib_close (a);
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -1699,6 +2116,9 @@ int main (int argc, char **argv)
   test_time_slicing ();
   test_watch ();
   test_lazy_thumbs ();
+  test_libxfer ();
+  test_libcheck ();
+  test_libxfer_more ();
   printf ("test_core: %d checks, %d failed\n", checks, fails);
   return fails != 0;
 }

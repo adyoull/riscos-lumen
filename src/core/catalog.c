@@ -162,6 +162,11 @@ void cat_close (cat *c)
     }
 }
 
+struct sqlite3 *cat_sqlite (cat *c)
+{
+  return c->db;
+}
+
 const char *cat_error (cat *c)
 {
   return c->err;

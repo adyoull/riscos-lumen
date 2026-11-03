@@ -1,4 +1,4 @@
-Lumen 0.0.27 (03 Nov 2026) - test build
+Lumen 0.0.28 (03 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -8,7 +8,8 @@ captions, keywords and smart albums; versions and stacks; adjustments
 levels, curves, contrast, saturation, vibrancy, colour by hue, split
 toning, noise reduction, sharpening, vignette); Auto; crop, quarter
 turns, straighten and perspective; grids; styles and presets; copying
-adjustments between photos; exporting and printing.
+adjustments between photos; exporting and printing; exporting,
+importing and checking libraries.
 Your photos are never changed: each edit is a recipe kept in the
 library, and can be undone or reset at any time.
 
@@ -407,7 +408,7 @@ The Lumen menu
                   (one per imported folder), an album, or a rating filter
   Selection       rating, flag, reject, caption and keywords, select
                   all, clear, copy and paste adjustments, apply a
-                  preset, export, print, remove
+                  preset, export, export as library, print, remove
   Album           make a new album from the selection, add to one,
                   or remove from the album shown; a new smart album
   Versions and stacks
@@ -490,6 +491,37 @@ touched: their ratings, adjustments and album places go, and they can be
 imported again. Menu over a project or album in the Library tab renames
 it, deletes an album (its photos stay), or removes a project and all its
 photos from the library.
+
+Libraries
+---------
+The icon bar menu's Open library submenu (choosing Open library itself
+opens the window):
+  Export library  copies the whole library to a new one: every photo,
+                  version and adjustment, rating, label, caption,
+                  keyword, project, album, stack and preset, with the
+                  thumbnails. Drag the directory to a Filer window (or
+                  type a full pathname and click Save). "Include the
+                  original photos" copies the files into the new
+                  library's Originals directory, a directory for each
+                  project, so it can go to any disc or computer; it
+                  finds them there wherever it is moved to.
+                  Selection > Export as library, and Export as library
+                  on a project's or album's menu, export just those.
+  Import library  brings another library's photos into this one: drag
+                  its directory into the window (or onto Lumen
+                  anywhere). It says what would come before anything
+                  changes. Photos already here aren't added twice (a
+                  version with other adjustments comes in as another
+                  version); projects, albums and keywords are matched
+                  by name; folder albums and watching stay behind.
+                  "Copy its photos into this library" copies the new
+                  photos' files into this library's Originals.
+  Check library   checks the catalogue file and the thumbnails for
+                  anything wrong: damage, entries pointing at nothing,
+                  missing or leftover thumbnails. Repair puts it right,
+                  after keeping a copy of the catalogue as
+                  Catalogue-backup; photos that had lost their project
+                  go into one called Recovered.
 
 Missing files
 -------------

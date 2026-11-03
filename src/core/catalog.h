@@ -15,6 +15,8 @@ typedef struct cat cat;
 int cat_open (cat **out, const char *path, char *err, size_t errlen);
 void cat_close (cat *c);
 const char *cat_error (cat *c);
+/* The SQLite connection, for libxfer's work across two catalogues. */
+struct sqlite3 *cat_sqlite (cat *c);
 
 /* Wraps many changes in one transaction (much faster on SD cards). */
 int cat_begin (cat *c);

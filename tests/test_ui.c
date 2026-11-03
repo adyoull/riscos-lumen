@@ -34,6 +34,9 @@
 #define PRINTW 0x33000
 #define TAGW 0x34000
 #define SMARTW 0x35000
+#define LIBEW 0x36000
+#define LIBIW 0x37000
+#define LIBCW 0x38000
 #define FILER 0x9000
 #define TASK 0x1234
 
@@ -65,6 +68,7 @@ static int menu_state[4] = { -1, -1, -1, -1 };   /* what Wimp_GetMenuState 1 rep
 static int getmenustate0, submenu_opened;
 static unsigned smart_icon_flags[32];   /* the Smart album window's */
 static int tagw_open, smartw_open;
+static unsigned lib_icon_flags[3][16];   /* the Export, Import and Check library windows' icons */
 static unsigned choice_icon_flags[32];  /* the Choices window's icons' state (bit 21: selected) */                /* a task handle the fake Task Manager lists as another Lumen */
 
 /* TaskManager_EnumerateTasks: ourselves, a LumenRaw task window, a module
@@ -155,6 +159,19 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         r[0] = TAGW;
       else if (nwindows == 11)
         r[0] = SMARTW;
+      else if (nwindows >= 12 && nwindows <= 14)
+        {
+          int k2;
+          for (k2 = 0; k2 < 16 && k2 < b[21]; k2++)
+            lib_icon_flags[nwindows - 12][k2] = (unsigned) b[22 + 8 * k2 + 4];
+          r[0] = nwindows == 12 ? LIBEW : nwindows == 13 ? LIBIW : LIBCW;
+        }
+      else if (nwindows == 12)
+        r[0] = LIBEW;
+      else if (nwindows == 13)
+        r[0] = LIBIW;
+      else if (nwindows == 14)
+        r[0] = LIBCW;
       else
         r[0] = INFO;
       return NULL;
@@ -195,7 +212,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       return NULL;
     case Wimp_GetWindowState:
       CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP
-             || b[0] == PLUGW || b[0] == CHOICEW || b[0] == ACTW || b[0] == PRINTW || b[0] == TAGW || b[0] == SMARTW,
+             || b[0] == PLUGW || b[0] == CHOICEW || b[0] == ACTW || b[0] == PRINTW || b[0] == TAGW || b[0] == SMARTW
+             || b[0] == LIBEW || b[0] == LIBIW || b[0] == LIBCW,
              "window state: one of ours");
       if (b[0] == EXPORTW)
         {
@@ -210,6 +228,11 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         choice_icon_flags[b[1]] = (choice_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
       if (b[0] == SMARTW && b[1] >= 0 && b[1] < 32)
         smart_icon_flags[b[1]] = (smart_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
+      if ((b[0] == LIBEW || b[0] == LIBIW || b[0] == LIBCW) && b[1] >= 0 && b[1] < 16)
+        {
+          unsigned *f = &lib_icon_flags[(b[0] - LIBEW) / 0x1000][b[1]];
+          *f = (*f & ~(unsigned) b[3]) ^ (unsigned) b[2];
+        }
       return NULL;
     case Wimp_GetIconState:
       if (b[0] == PRINTW)
@@ -220,6 +243,11 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       if (b[0] == SMARTW)
         {
           b[6] = b[1] >= 0 && b[1] < 32 ? (int) smart_icon_flags[b[1]] : 0;
+          return NULL;
+        }
+      if (b[0] == LIBEW || b[0] == LIBIW || b[0] == LIBCW)
+        {
+          b[6] = b[1] >= 0 && b[1] < 16 ? (int) lib_icon_flags[(b[0] - LIBEW) / 0x1000][b[1]] : 0;
           return NULL;
         }
       CHECK (b[0] == CHOICEW, "icon state: the Choices window's");
@@ -706,8 +734,8 @@ int main (int argc, char **argv)
   fakes ();
   CHECK (app_init (lib) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 12, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity, Print, "
-                        "Caption and keywords, Smart album and Info windows");
+  CHECK (nwindows == 15, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity, Print, "
+                        "Caption and keywords, Smart album, Export library, Import library, Check library and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
   CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
@@ -2253,9 +2281,10 @@ int main (int argc, char **argv)
     browser_focus_on (0);
     click (16 + 352 + 60, -16 - 60, Button_Adjust);      /* add the second photo (Large thumbnails) */
     click (5, -5, Button_Menu);
-    CHECK (strstr (item_text (submenu (menu_open, 1), 13), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 12), "Print") != NULL, "Selection > Print..., Remove from library");
+    CHECK (strstr (item_text (submenu (menu_open, 1), 14), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 13), "Print") != NULL
+           && strstr (item_text (submenu (menu_open, 1), 12), "Export as library") != NULL, "Selection > Export as library..., Print..., Remove from library");
     asked[0] = '\0';
-    choose (1, 13, -1);
+    choose (1, 14, -1);
     CHECK (strstr (asked, "these 2 photos") != NULL, "it asks about the two");
     CHECK (browser_count () == before - 3 && viewer_item () == 0, "both gone, and the Viewer let its photo go");
 
@@ -2287,10 +2316,11 @@ int main (int argc, char **argv)
     CHECK (ng == 1 && strcmp (g[0].name, "Holiday") == 0, "the Holiday project");
     menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
     CHECK (strcmp (item_text (menu_open, 1), "Watch for new photos") == 0 && strcmp (item_text (menu_open, 2), "Albums from its folders") == 0
-           && strstr (item_text (menu_open, 3), "Remove project") != NULL, "a project's menu: Watch, Albums from its folders, Remove project");
+           && strstr (item_text (menu_open, 3), "Export as library") != NULL
+           && strstr (item_text (menu_open, 4), "Remove project") != NULL, "a project's menu: Watch, Albums from its folders, Export as library, Remove project");
     CHECK (!(item (menu_open, 1)[0] & 1) && !(item (menu_open, 2)[0] & 1), "neither ticked to start with");
     answer = 2;
-    choose (3, -1, -1);
+    choose (4, -1, -1);
     CHECK (strstr (asked, "\"Holiday\" and its 3 photos") != NULL && browser_count () == 3, "it says how many; Cancel keeps them");
     /* Watch it: a photo put in a new folder inside it comes in; albums from its folders. */
     {
@@ -2509,6 +2539,91 @@ int main (int argc, char **argv)
     snprintf ((char *) &b[11], 200, "%s/Holiday", work);
     app_event (User_Message_Recorded, b, 0);
     CHECK (strstr (choicewin_library_text (), "/Holiday") != NULL, "Choices: a directory dropped sets the library");
+  }
+  /* Libraries: export the whole library, a project; import; check. */
+  {
+    char dst[800], line[200];
+    cat_group *g;
+    fsys_entry e;
+    int ng, before = browser_count ();
+    memset (b, 0, sizeof b);
+    b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
+    app_event (Mouse_Click, b, 0);
+    CHECK (strcmp (item_text (menu_open, 3), "Open library") == 0
+           && strcmp (item_text (submenu (menu_open, 3), 0), "Export library...") == 0
+           && strcmp (item_text (submenu (menu_open, 3), 1), "Import library...") == 0
+           && strcmp (item_text (submenu (menu_open, 3), 2), "Check library...") == 0,
+           "icon bar: Open library > Export, Import, Check library");
+    choose (3, 0, -1);
+    CHECK (menu_open == (const int *) LIBEW && strstr (libbox_line (LIBEW, 0), "The whole library: ")
+           && strstr (libbox_line (LIBEW, 1), "Include the original photos (") && !strcmp (libbox_line (LIBEW, 2), "Library"),
+           "Export library...: the box, for the whole library, offering the originals");
+    CHECK ((lib_icon_flags[0][3] & (1u << 21)) != 0, "originals ticked to start with");
+    snprintf (dst, sizeof dst, "%s/UiExport", work);
+    libbox_set_name (dst);
+    key_in (LIBEW, KEY_RETURN);
+    CHECK (libbox_busy (), "Save: the export runs in the background");
+    {
+      char st[200];
+      libbox_status (st, sizeof st);
+      CHECK (strstr (st, "Exporting ") && strstr (st, "UiExport"), "its progress in the status area and Activity");
+    }
+    nulls_until_idle ();
+    snprintf (line, sizeof line, "%s/UiExport/Catalogue", work);
+    CHECK (fsys_stat (line, &e) == 0 && history_has ("to UiExport, with their originals"), "exported, in the history");
+    snprintf (line, sizeof line, "%s/UiExport/Originals", work);
+    CHECK (fsys_stat (line, &e) == 0 && e.is_dir, "the originals inside it");
+    libbox_set_name (dst);
+    key_in (LIBEW, KEY_RETURN);
+    CHECK (strstr (reported, "already something called UiExport"), "not over a library already there");
+    reported[0] = '\0';
+    key_in (LIBEW, KEY_ESCAPE);
+    /* A project's menu: Export as library... */
+    cat_groups (lib_cat (app_library ()), SRC_PROJECT, &g, &ng);
+    if (ng > 0)
+      {
+        menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
+        choose (3, -1, -1);
+        snprintf (line, sizeof line, "The project %s: %d photo", g[0].name, g[0].count);
+        CHECK (menu_open == (const int *) LIBEW && strstr (libbox_line (LIBEW, 0), line) != NULL, "a project's Export as library...");
+        key_in (LIBEW, KEY_ESCAPE);
+      }
+    free (g);
+    /* The library dropped on Lumen's window: the Import library window,
+       with what would come (all of it here already). */
+    memset (b, 0, sizeof b);
+    b[0] = 256; b[1] = 0x5678; b[2] = 93; b[4] = 3; b[5] = MAINW; b[10] = 0x1000;
+    snprintf ((char *) &b[11], 200, "%s", dst);
+    app_event (User_Message_Recorded, b, 0);
+    CHECK (strstr (libbox_line (LIBIW, 0), "From UiExport: ") && strstr (libbox_line (LIBIW, 0), "already here"),
+           "a library dropped on the window: what it holds, not imported as photos");
+    CHECK ((lib_icon_flags[1][6] & (1u << 22)) != 0 && browser_count () == before, "nothing new: Import shaded, nothing added");
+    memset (b, 0, sizeof b);
+    b[2] = Button_Select; b[3] = LIBIW; b[4] = 5;
+    app_event (Mouse_Click, b, 0);
+    /* A folder of photos dropped on the Import library window isn't one. */
+    memset (b, 0, sizeof b);
+    b[0] = 256; b[1] = 0x5678; b[2] = 94; b[4] = 3; b[5] = LIBIW; b[10] = 0x1000;
+    snprintf ((char *) &b[11], 200, "%s/Holiday", work);
+    app_event (User_Message_Recorded, b, 0);
+    CHECK (strstr (reported, "isn't a Lumen library") != NULL, "a folder of photos isn't a library");
+    reported[0] = '\0';
+    /* Check library... */
+    memset (b, 0, sizeof b);
+    b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
+    app_event (Mouse_Click, b, 0);
+    choose (3, 2, -1);
+    CHECK (libbox_busy () && strstr (libbox_line (LIBCW, 0), "Checking"), "Check library...: the check runs");
+    nulls_until_idle ();
+    CHECK (strstr (libbox_line (LIBCW, 0), "All is well") != NULL && (lib_icon_flags[2][7] & (1u << 22)),
+           "all is well; nothing to repair");
+    CHECK (history_has ("Checked the library: all is well"), "the check in the history");
+    memset (b, 0, sizeof b);
+    b[2] = Button_Select; b[3] = LIBCW; b[4] = 6;
+    app_event (Mouse_Click, b, 0);
+    memset (b, 0, sizeof b);
+    b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
+    app_event (Mouse_Click, b, 0);
   }
   /* User guide: no web browser, so it says so; with one, Filer_Run. */
   unsetenv ("Alias$@RunType_FAF");

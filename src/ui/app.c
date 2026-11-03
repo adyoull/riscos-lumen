@@ -11,6 +11,7 @@
 #include <string.h>
 #include <kernel.h>
 #include <swis.h>
+#include "libxfer.h"
 #include "ui.h"
 #include "rawjob.h"
 #include "fsys.h"
@@ -465,7 +466,7 @@ int app_init (const char *library_path)
   activity_init ();
   if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ()
       || plugwin_create () || choicewin_create () || activitywin_create () || printbox_create ()
-      || tagbox_create () || smartbox_create ())
+      || tagbox_create () || smartbox_create () || libbox_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       close_down ();
@@ -485,6 +486,7 @@ int app_init (const char *library_path)
 void app_quit (void)
 {
   printbox_quit ();                    /* a print being prepared: its scrap files go */
+  libbox_quit ();
   lib_close (lib);
   lib = NULL;
   close_down ();
@@ -493,7 +495,7 @@ void app_quit (void)
 int app_busy (void)
 {
   return viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib)
-         || rawjob_busy () || printbox_busy ();
+         || rawjob_busy () || printbox_busy () || libbox_busy ();
 }
 
 static void thumb_made (void *ctx, cat_id v)
@@ -553,7 +555,7 @@ int app_has_focus (void)
 int app_background_wait (unsigned *when)
 {
   if (!lib || viewer_busy () || thumbcache_pending () || exports_busy () || rawjob_busy () || printbox_busy ()
-      || !lib_background_only (lib) || app_has_focus ())
+      || libbox_busy () || !lib_background_only (lib) || app_has_focus ())
     return 0;
   *when = app_now () + 4;
   return 1;
@@ -576,6 +578,8 @@ static void idle (void)
     thumbcache_work (app_now, start + 1, browser_thumb_loaded);
   if (printbox_busy ())
     printbox_idle (deadline);
+  if (libbox_busy ())
+    libbox_idle (deadline);
   if (exports_busy ())
     {
       exports_idle (deadline);
@@ -627,7 +631,8 @@ static void data_load (int *b)
   const char *path = (const char *) &b[11];
   int type = b[10];
   if (b[5] != browser_window () && b[5] != mainwin_window () && b[5] != viewer_window ()
-      && b[5] != mainwin_inspector () && b[5] != -2 && b[5] != plugwin_window () && b[5] != choicewin_window ())
+      && b[5] != mainwin_inspector () && b[5] != -2 && b[5] != plugwin_window () && b[5] != choicewin_window ()
+      && b[5] != libbox_import_window ())
     return;
   if (b[5] == choicewin_window ())
     {
@@ -648,6 +653,19 @@ static void data_load (int *b)
         app_plugin_add (path);
       else
         app_report ("That isn't a Lumen plug-in: a plug-in is a directory with a Plugin file in it. "
+                    "To add photos, drag them to Lumen's main window.");
+      return;
+    }
+  /* A library: to the Import library window, or anywhere else in Lumen. */
+  if (b[5] == libbox_import_window () || ((type == FT_DIR || type == FT_APP) && libx_is_library (path)))
+    {
+      b[3] = b[2];
+      b[4] = Message_DataLoadAck;
+      _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
+      if (libx_is_library (path))
+        libbox_import_drop (path);
+      else
+        app_report ("That isn't a Lumen library: a library is a directory with a Catalogue in it. "
                     "To add photos, drag them to Lumen's main window.");
       return;
     }
@@ -745,6 +763,8 @@ static int app_event_1 (int reason, int *b, int sender)
     case Close_Window_Request:
       if (b[0] == mainwin_window ())
         mainwin_close ();
+      else if (b[0] == libbox_import_window () || b[0] == libbox_check_window ())
+        libbox_close_request (b[0]);
       else if (b[0] == activitywin_window ())
         {
           activitywin_closed ();
@@ -787,6 +807,8 @@ static int app_event_1 (int reason, int *b, int sender)
         activitywin_click (b);
       else if (b[3] == printbox_window ())
         printbox_click (b);
+      else if (b[3] == libbox_export_window () || b[3] == libbox_import_window () || b[3] == libbox_check_window ())
+        libbox_click (b);
       else if (b[3] == tagbox_window ())
         tagbox_click (b);
       else if (b[3] == smartbox_window ())
@@ -795,11 +817,14 @@ static int app_event_1 (int reason, int *b, int sender)
     case User_Drag_Box:
       if (exportbox_dragging ())
         exportbox_drag_end ();
+      else if (libbox_dragging ())
+        libbox_drag_end ();
       else
         viewer_drag_end ();
       break;
     case Key_Pressed:
       if (b[0] == exportbox_window () ? !exportbox_key (b[6])
+          : b[0] == libbox_export_window () ? !libbox_key (b[0], b[6])
           : b[0] == printbox_window () ? !printbox_key (b[6])
           : b[0] == tagbox_window () ? !tagbox_key (b[6])
           : b[0] == smartbox_window () ? !smartbox_key (b[6])
@@ -823,7 +848,8 @@ static int app_event_1 (int reason, int *b, int sender)
           help_request (b);
           break;
         case 2:                        /* Message_DataSaveAck */
-          exportbox_save_ack (b);
+          if (!libbox_save_ack (b))
+            exportbox_save_ack (b);
           break;
         case Message_TaskWindow_Ego:
         case Message_MenusDeleted:
