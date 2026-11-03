@@ -53,7 +53,7 @@ a { color:#1f5fa8; }
 <h1>Lumen User Guide</h1>
 <p>Keeping, sorting and improving your photos on RISC OS</p>
 <p>Start here if you've never used a photo library program before. If you have, the Technical Stuff boxes and Chapter 20 are for you.</p>
-<span class="badge">Lumen 0.0.26</span>
+<span class="badge">Lumen 0.0.27</span>
 </div>
 </header>
 <main>
@@ -89,7 +89,7 @@ a { color:#1f5fa8; }
 <p>The pictures are screenshots of Lumen running on RISC OS 5, with photos by Andrew Youll: horses, eventing, jousting and dogs (see <a href="#credits">Photo credits</a>).</p>
 
 <h4>This is an early version</h4>
-<p>Lumen 0.0.26 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
+<p>Lumen 0.0.27 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>Not much. You should know the three mouse buttons (<b>Select</b> on the left, <b>Menu</b> in the middle, <b>Adjust</b> on the right), and how to drag a file or directory from a Filer window into a program. You don't need to know anything about photography.</p>
@@ -678,19 +678,33 @@ a { color:#1f5fa8; }
 <ol class="steps">
 <li>Select the photos (or show one in the Viewer).</li>
 <li>Press <kbd>Ctrl</kbd>+<kbd>P</kbd>, or choose <b>Print...</b> on the Selection or Photo menu.</li>
-<li>Choose the copies and the size, and click <b>Print</b>.</li>
+<li>Choose the copies, the size and how many to a page, and click <b>Print</b>.</li>
 </ol>
-<figure><img src="images/print-box.png" alt="The Print box"><figcaption>The Print box: two photos, each at most 15 &times; 10 cm.</figcaption></figure>
+<figure><img src="images/print-box.png" alt="The Print box"><figcaption>The Print box: nine photos, four to a page, each with its name under it. The line at the bottom says how many pages that makes.</figcaption></figure>
 <table>
 <tr><th>Setting</th><th>Does</th></tr>
-<tr><td>Fit the page</td><td>Each photo as large as it fits on the paper, all of it showing.</td></tr>
-<tr><td>Fill the page</td><td>Each photo filling the printable area; a little is cut off where its shape differs from the paper's.</td></tr>
+<tr><td>Fit the page</td><td>Each photo as large as it fits on the paper (or in its space, with several to a page), all of it showing.</td></tr>
+<tr><td>Fill the page</td><td>Each photo filling the printable area (or its space); a little is cut off where its shape differs.</td></tr>
 <tr><td>Given size</td><td>At most this many centimetres wide and high, keeping the photo's shape (15 &times; 10 is the usual postcard print).</td></tr>
-<tr><td>Turn photos to suit the page</td><td>A landscape photo on a portrait page is turned a quarter, so it's printed larger.</td></tr>
+<tr><td>Per page</td><td><b>1</b>, <b>2</b>, <b>4</b>, <b>6</b> or <b>9</b> photos to a page, each in an equal space; or <b>As many as fit</b> of the given size, to cut out.</td></tr>
+<tr><td>Gap</td><td>The space between photos, in millimetres: room to cut between them.</td></tr>
+<tr><td>Names under the photos</td><td>Each photo's name printed under it: a contact sheet.</td></tr>
+<tr><td>Turn photos to suit the page</td><td>A landscape photo in a portrait space is turned a quarter, so it's printed larger.</td></tr>
 <tr><td>Sharpen for print</td><td>Makes up for the softening of ink spreading on paper.</td></tr>
 </table>
-<p>Each photo goes on its own page. Lumen first prepares each one at your printer's resolution, in the background (the bottom bar shows how far it has got), then prints them all.</p>
-<figure><img src="images/print-pages.png" alt="Two printed pages"><figcaption>The two pages printed from the box above: each photo turned to suit the page, 10 &times; 15 cm, in the middle of A4.</figcaption></figure>
+<p>Lumen first prepares each photo at your printer's resolution, in the background (the bottom bar shows how far it has got), then prints them all.</p>
+<figure><img src="images/print-pages.png" alt="Three printed pages"><figcaption>The three pages printed from the box above: four to a page, each turned to suit its tall space, with its name.</figcaption></figure>
+
+<h4>Several photos to a page</h4>
+<p>Choose how many under <b>Per page</b>. Lumen divides the printable part of the page into that many equal spaces, with the <b>Gap</b> between them, and puts a photo in each, in the order they're selected. The last page has what's left over.</p>
+<ul>
+<li>With <b>Turn photos to suit the page</b> ticked, a landscape photo in a tall space is turned on its side, so it's printed as large as it can be (as above). Untick it to keep every photo upright, smaller.</li>
+<li><b>Fill the page</b> fills each space; each photo is cut to its own space, never spilling into the next.</li>
+<li><b>As many as fit</b> uses the size you give (say 9 &times; 6 cm) and fits as many of that size on each page as it can, turning them if more fit that way. It's the way to print small prints to cut out.</li>
+<li><b>Names under the photos</b> prints each photo's name under it, so a page of small prints becomes a <b>contact sheet</b>: a quick way to show someone a shoot and let them choose.</li>
+</ul>
+<figure><img src="images/print-cut.png" alt="A contact sheet"><figcaption>As many 9 &times; 6 cm prints as fit on A4, with their names: six to a page.</figcaption></figure>
+<div class="box tip"><b class="label">TIP</b>The line at the bottom of the Print box says how many photos go on each page and how many pages that makes, so you can try the settings before printing. If a size is too big for the paper, it says so.</div>
 
 <div class="box warn"><b class="label">WARNING</b>A PostScript printer prints in grey unless <b>Colour</b> is ticked in its Configure window in !Printers. If it isn't, the Print box says "Grey only: tick Colour in !Printers". Tick it, and choose <b>Save choices</b> on !Printers' icon bar menu so it stays ticked.</div>
 

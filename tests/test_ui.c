@@ -48,7 +48,7 @@ static int opened[8], open_calls, mopened[9], iopened[8], nested_opens;
 static unsigned main_flags = 0xAF000002u;
 static int extent[4];
 static int caret_window, caret_icon = -1;
-static unsigned print_turn = 1u << 21, print_sharpen = 1u << 21;
+static unsigned print_turn = 1u << 21, print_sharpen = 1u << 21, print_names_opt;
 static int force_redraws, title_redraws;
 static int sprite_plots, smooth_plots, masked_plots, last_scale[4];
 static int stars;
@@ -214,7 +214,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
     case Wimp_GetIconState:
       if (b[0] == PRINTW)
         {
-          b[6] = (int) (b[1] == 12 ? print_turn : b[1] == 13 ? print_sharpen : 0);
+          b[6] = (int) (b[1] == 12 ? print_turn : b[1] == 13 ? print_sharpen : b[1] == 27 ? print_names_opt : 0);
           return NULL;
         }
       if (b[0] == SMARTW)
@@ -332,7 +332,10 @@ static unsigned clock_cs;
 /* A printer: PDriver_* as the classic PRM describes them, an A4 page with
    5 mm margins, 300 dpi; what the job does is recorded. */
 static int print_jobs, print_rects, print_ended, print_aborted, print_matrix[4], print_pos[2], print_rect[4];
-static int print_plot_w, print_plots, print_handle_open;
+static int print_plot_w, print_plot_h, print_plots, print_handle_open;
+/* The rectangles given for the page being made (several photos to a page,
+   and names under them), handed back one by one by DrawPage/GetRectangle. */
+static int pg_n, pg_i, pg_ids[128], pg_rects[128][4], pg_mats[128][4], pg_pos[128][2], print_pages, print_names;
 static int have_printer = 1, printer_colour = 1;
 static const _kernel_oserror *printer (int swi, int r[10])
 {
@@ -358,15 +361,43 @@ static const _kernel_oserror *printer (int swi, int r[10])
       memcpy (print_rect, (const int *) r[1], sizeof print_rect);
       memcpy (print_matrix, (const int *) r[2], sizeof print_matrix);
       memcpy (print_pos, (const int *) r[3], sizeof print_pos);
+      if (pg_n < 128)
+        {
+          pg_ids[pg_n] = r[0];
+          memcpy (pg_rects[pg_n], print_rect, sizeof print_rect);
+          memcpy (pg_mats[pg_n], print_matrix, sizeof print_matrix);
+          memcpy (pg_pos[pg_n], print_pos, sizeof print_pos);
+          pg_n++;
+        }
       print_rects++;
       return NULL;
     case PDriver_DrawPage:
       pending = 1;
-      r[0] = 1; r[2] = 0;
+      pg_i = 0;
+      print_pages++;
+      r[0] = pg_n > 0; r[2] = pg_n > 0 ? pg_ids[0] : 0;
       return NULL;
     case PDriver_GetRectangle:
+      if (++pg_i < pg_n)
+        {
+          r[0] = 1; r[2] = pg_ids[pg_i];
+          return NULL;
+        }
       r[0] = 0;
       pending = 0;
+      pg_n = 0;
+      return NULL;
+    case Font_FindFont:
+      r[0] = 5;
+      return NULL;
+    case Font_LoseFont: case ColourTrans_SetFontColours:
+      return NULL;
+    case Font_ScanString:                /* 6 points (6000 millipoints) a character */
+      r[3] = (int) strlen ((const char *) r[1]) * 6000; r[4] = 0;
+      return NULL;
+    case Font_Paint:
+      CHECK (print_handle_open && r[0] == 5 && (r[2] & 0x110) == 0x110, "a name painted, OS units, with the font, during the job");
+      print_names++;
       return NULL;
     case PDriver_EndJob:
       print_ended++;
@@ -402,6 +433,7 @@ static const _kernel_oserror *printer (int swi, int r[10])
         memset (&ii, 0, sizeof ii);
         img_read_info ((const unsigned char *) r[0], (size_t) r[4], &ii);
         print_plot_w = ii.width;
+        print_plot_h = ii.height;
       }
       print_plots++;
       return NULL;
@@ -492,7 +524,9 @@ static void fakes (void)
       { PDriver_DrawPage, "PDriver_DrawPage" }, { PDriver_GetRectangle, "PDriver_GetRectangle" },
       { PDriver_EndJob, "PDriver_EndJob" }, { PDriver_AbortJob, "PDriver_AbortJob" }, { OS_Find, "OS_Find" },
       { Hourglass_On, "Hourglass_On" }, { Hourglass_Off, "Hourglass_Off" },
-      { 0x49980, "JPEG_Info" }, { 0x49982, "JPEG_PlotScaled" } };
+      { 0x49980, "JPEG_Info" }, { 0x49982, "JPEG_PlotScaled" }, { Font_FindFont, "Font_FindFont" },
+      { Font_LoseFont, "Font_LoseFont" }, { Font_ScanString, "Font_ScanString" }, { Font_Paint, "Font_Paint" },
+      { ColourTrans_SetFontColours, "ColourTrans_SetFontColours" } };
     for (i = 0; i < sizeof pl / sizeof pl[0]; i++)
       fake_swi (pl[i].swi, pl[i].name, printer);
   }
@@ -1546,6 +1580,73 @@ int main (int argc, char **argv)
       eb[3] = EXPORTW;
       CHECK ((intptr_t) menu_open != PRINTW && !printbox_busy (), "Cancel: nothing printed");
       printer_colour = 1;
+      /* Several to a page: the layouts on A4's printable area (5 mm margins). */
+      {
+        int A[4] = { 14173, 14173, 595276 - 14173, 841890 - 14173 }, cells[64][4], n, k, ok = 1, gap = 14173;
+        n = print_grid (A, 4, 0, 0, gap, 0, 1, cells, 64);
+        for (k = 0; k < n; k++)
+          if (cells[k][0] < A[0] || cells[k][1] < A[1] || cells[k][2] > A[2] || cells[k][3] > A[3]
+              || abs ((cells[k][2] - cells[k][0]) - (cells[0][2] - cells[0][0])) > 1)
+            ok = 0;
+        CHECK (n == 4 && ok && abs (cells[1][0] - cells[0][2] - gap) <= 1 && abs (cells[0][1] - cells[2][3] - gap) <= 1,
+               "4 to a page: 2 x 2 equal cells, inside the margins, a gap between them");
+        n = print_grid (A, 2, 0, 0, gap, 0, 1, cells, 64);
+        CHECK (n == 2 && cells[0][1] > cells[1][3] && cells[0][0] == cells[1][0], "2 on a portrait page: one above the other");
+        n = print_grid (A, 6, 0, 0, gap, 0, 1, cells, 64);
+        CHECK (n == 6 && cells[1][0] > cells[0][2] && cells[2][3] < cells[0][1], "6: two across, three down");
+        CHECK (print_grid (A, 0, 15, 10, gap, 0, 1, cells, 64) == 2, "as many 15 x 10 cm as fit on A4: 2");
+        CHECK (print_grid (A, 0, 6, 4, gap, 0, 1, cells, 64) == 18, "as many 6 x 4 cm: 18 (3 across, 6 down)");
+        CHECK (print_grid (A, 0, 25, 21, gap, 0, 1, cells, 64) == 0 && print_grid (A, 0, 25, 20, gap, 0, 1, cells, 64) == 1, "25 x 21 cm: none fit (25 x 20 does, turned)");
+        n = print_grid (A, 1, 0, 0, 0, 20000, 1, cells, 64);
+        CHECK (n == 1 && cells[0][1] == A[1] + 20000 && cells[0][3] == A[3], "with names: the strip under the photo is kept for its name");
+      }
+      /* All the photos, 4 to a page, with their names. */
+      {
+        int n, before_rects = print_rects;
+        char says[80];
+        browser_select_all (1);
+        n = browser_count ();
+        caret_window = BROWSER;
+        key (0x10);
+        eb[3] = PRINTW;
+        eb[4] = 20; app_event (Mouse_Click, eb, 0);                 /* 4 per page */
+        print_names_opt = 1u << 21;
+        eb[4] = 27; app_event (Mouse_Click, eb, 0);                 /* names */
+        eb[3] = EXPORTW;
+        snprintf (says, sizeof says, "%d photos, 4 to a page: %d pages of 21.0", n, (n + 3) / 4);
+        CHECK (strstr (printbox_info (), says) != NULL, "the box says how many to a page, and how many pages");
+        print_plots = print_names = print_pages = 0;
+        key (KEY_RETURN);
+        nulls_until_idle ();
+        CHECK (print_pages == (n + 3) / 4 && print_plots == n && print_names == n && print_rects - before_rects == 2 * n,
+               "4 photos on each page, each with its name under it");
+        snprintf (says, sizeof says, "Printed %d photos, 4 to a page, on Fake printer", n);
+        CHECK (history_has (says), "in the history");
+        /* Two to a page, filling their cells: only the part of each photo inside its cell is printed. */
+        print_names_opt = 0;
+        key (0x10);
+        eb[3] = PRINTW;
+        eb[4] = 27; app_event (Mouse_Click, eb, 0);
+        eb[4] = 19; app_event (Mouse_Click, eb, 0);                 /* 2 per page */
+        eb[4] = 6; app_event (Mouse_Click, eb, 0);                  /* fill */
+        eb[3] = EXPORTW;
+        print_pages = 0;
+        key (KEY_RETURN);
+        nulls_until_idle ();
+        CHECK (print_pages == (n + 1) / 2, "2 to a page");
+        CHECK (print_rect[2] - print_rect[0] < 2 * print_plot_w || print_rect[3] - print_rect[1] < 2 * print_plot_h,
+               "filling a cell: the photo is cut to the cell, not spread over its neighbour");
+        /* As many as fit: of the given size. */
+        key (0x10);
+        eb[3] = PRINTW;
+        eb[4] = 23; app_event (Mouse_Click, eb, 0);
+        CHECK (strstr (printbox_info (), ", 2 to a page") != NULL, "as many 15 x 10 cm as fit: 2 to a page");
+        eb[4] = 18; app_event (Mouse_Click, eb, 0);                 /* back to 1 per page */
+        eb[4] = 5; app_event (Mouse_Click, eb, 0);                  /* fit */
+        eb[4] = 15; app_event (Mouse_Click, eb, 0);                 /* Cancel */
+        eb[3] = EXPORTW;
+        browser_select_all (0);
+      }
       /* Caption and keywords: Ctrl-K on two photos. */
       {
         cat_id *two;

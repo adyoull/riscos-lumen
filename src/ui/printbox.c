@@ -4,7 +4,10 @@
    printer chosen in !Printers and sets the copies, the size on the page
    (fit the page, fill it, or a given size in centimetres), whether a
    photo may be turned a quarter to suit the page, and sharpening for
-   print. One photo goes on each page.
+   print; and how many photos go on a page: one, 2, 4, 6 or 9 in equal
+   cells, or as many of a given size as fit (to cut out), with a gap
+   between them and, if asked, each photo's name under it (a contact
+   sheet).
 
    Printing is in two parts. First each photo is developed, in the
    background as an export (export.h) into a JPEG in <Wimp$ScrapDir>, at
@@ -38,12 +41,16 @@
 enum
 {
   PB_PRINTER_LABEL, PB_PRINTER, PB_COPIES_LABEL, PB_COPIES, PB_SIZE_LABEL, PB_FIT, PB_FILL, PB_GIVEN, PB_W, PB_X, PB_H, PB_CM,
-  PB_ROTATE, PB_SHARPEN, PB_INFO, PB_CANCEL, PB_PRINT, PB_COUNT
+  PB_ROTATE, PB_SHARPEN, PB_INFO, PB_CANCEL, PB_PRINT,
+  PB_PER_LABEL, PB_P1, PB_P2, PB_P4, PB_P6, PB_P9, PB_MANY, PB_GAP_LABEL, PB_GAP, PB_MM, PB_NAMES, PB_COUNT
 };
+static const int per_choices[] = { 1, 2, 4, 6, 9, 0 };   /* PB_P1 .. PB_MANY; 0: as many as fit */
 enum { SIZE_FIT, SIZE_FILL, SIZE_GIVEN };
 
-#define BOX_W 820
-#define BOX_H 520
+#define BOX_W 900
+#define BOX_H 712
+#define MAX_CELLS 64
+#define NAME_STRIP 20000             /* millipoints under a photo for its name (about 7 mm) */
 #define T_LABEL   0x17000311u
 #define T_NOTE    0x17000111u
 #define T_WRITE   0x0700F135u
@@ -52,8 +59,8 @@ enum { SIZE_FIT, SIZE_FILL, SIZE_GIVEN };
 #define T_BUTTON  0x1700313Du
 
 static int win = -1, is_open;
-static char printer_name[64] = "", copies_text[4] = "1", w_text[6] = "15", h_text[6] = "10", info[80] = "";
-static int size_mode = SIZE_FIT, rotate = 1, sharpen = 1;
+static char printer_name[64] = "", copies_text[4] = "1", w_text[6] = "15", h_text[6] = "10", info[100] = "", gap_text[4] = "5";
+static int size_mode = SIZE_FIT, rotate = 1, sharpen = 1, per_page = 1, names;
 static cat_id *box_ids;
 static int box_n;
 
@@ -62,6 +69,7 @@ typedef struct
 {
   cat_id id;
   char jpeg[256];                      /* the developed photo, in the scrap directory */
+  char name[64];
   int ready;
 } page;
 static page *pages;
@@ -69,7 +77,7 @@ static int npages, ipage, failed, copies;
 static exporter *cur;
 static char job_error[200];
 static int printing;                   /* preparing or printing */
-static int job_size_mode, job_rotate;
+static int job_size_mode, job_rotate, job_names, job_cells[MAX_CELLS][4], job_ncells;
 static double job_w_cm, job_h_cm;
 
 int printbox_window (void) { return win; }
@@ -114,11 +122,23 @@ int printbox_create (void)
   icon_at (ic + 8 * PB_X, 400, -252, 440, -208, 0x17000119u, "\xD7", NULL, 2);
   icon_at (ic + 8 * PB_H, 440, -252, 540, -208, T_WRITE, h_text, v_dec, (int) sizeof h_text);
   icon_at (ic + 8 * PB_CM, 548, -252, 760, -208, T_NOTE, "cm, at most", NULL, 12);
-  icon_at (ic + 8 * PB_ROTATE, 212, -312, 760, -268, T_OPTION | (1u << 21), "Turn photos to suit the page", v_option, 29);
-  icon_at (ic + 8 * PB_SHARPEN, 212, -372, 760, -328, T_OPTION | (1u << 21), "Sharpen for print", v_option, 18);
-  icon_at (ic + 8 * PB_INFO, 24, -432, BOX_W - 24, -388, T_NOTE, info, NULL, (int) sizeof info);
-  icon_at (ic + 8 * PB_CANCEL, BOX_W - 384, -500, BOX_W - 220, -444, T_BUTTON, "Cancel", v_cancel, 7);
-  icon_at (ic + 8 * PB_PRINT, BOX_W - 200, -504, BOX_W - 24, -440, T_BUTTON, "Print", v_print, 6);
+  icon_at (ic + 8 * PB_PER_LABEL, 24, -312, 196, -268, T_LABEL, "Per page", NULL, 9);
+  {
+    static const char *const t[] = { "1", "2", "4", "6", "9" };
+    int k;
+    for (k = 0; k < 5; k++)
+      icon_at (ic + 8 * (PB_P1 + k), 212 + k * 84, -312, 288 + k * 84, -268, T_RADIO | (2u << 16), t[k], v_radio, 2);
+  }
+  icon_at (ic + 8 * PB_MANY, 212, -372, 520, -328, T_RADIO | (2u << 16), "As many as fit", v_radio, 15);
+  icon_at (ic + 8 * PB_GAP_LABEL, 540, -372, 620, -328, T_LABEL, "Gap", NULL, 4);
+  icon_at (ic + 8 * PB_GAP, 628, -372, 708, -328, T_WRITE, gap_text, v_num, (int) sizeof gap_text);
+  icon_at (ic + 8 * PB_MM, 716, -372, 800, -328, T_NOTE, "mm", NULL, 3);
+  icon_at (ic + 8 * PB_NAMES, 212, -432, 860, -388, T_OPTION, "Names under the photos", v_option, 23);
+  icon_at (ic + 8 * PB_ROTATE, 212, -492, 860, -448, T_OPTION | (1u << 21), "Turn photos to suit the page", v_option, 29);
+  icon_at (ic + 8 * PB_SHARPEN, 212, -552, 860, -508, T_OPTION | (1u << 21), "Sharpen for print", v_option, 18);
+  icon_at (ic + 8 * PB_INFO, 24, -612, BOX_W - 24, -568, T_NOTE, info, NULL, (int) sizeof info);
+  icon_at (ic + 8 * PB_CANCEL, BOX_W - 384, -692, BOX_W - 220, -636, T_BUTTON, "Cancel", v_cancel, 7);
+  icon_at (ic + 8 * PB_PRINT, BOX_W - 200, -696, BOX_W - 24, -632, T_BUTTON, "Print", v_print, 6);
   return _swix (Wimp_CreateWindow, _IN (1) | _OUT (0), b, &win) ? -1 : 0;
 }
 
@@ -154,6 +174,12 @@ static void show_state (void)
   set_selected (PB_GIVEN, size_mode == SIZE_GIVEN);
   set_selected (PB_ROTATE, rotate);
   set_selected (PB_SHARPEN, sharpen);
+  set_selected (PB_NAMES, names);
+  {
+    int k;
+    for (k = 0; k < 6; k++)
+      set_selected (PB_P1 + k, per_page == per_choices[k]);
+  }
 }
 
 /* The printer chosen in !Printers: its name, resolution and whether it is
@@ -179,9 +205,11 @@ static int printable (int r[4], int *page_w, int *page_h)
   return _swix (PDriver_PageSize, _OUTR (1, 6), page_w, page_h, &r[0], &r[1], &r[2], &r[3]) ? -1 : 0;
 }
 
+static void update_info (void);
+
 void printbox_open (int from_viewer, int x, int y)
 {
-  int dpi, colour, r[4], pw, ph;
+  int dpi, colour;
   if (printing)
     {
       app_report ("Lumen is already printing. Wait for it to finish, then try again.");
@@ -207,16 +235,9 @@ void printbox_open (int from_viewer, int x, int y)
     box_n = browser_selection (&box_ids);
   if (box_n <= 0)
     return;
-  if (!colour)
-    snprintf (info, sizeof info, "%d photo%s. Grey only: tick Colour in !Printers", box_n, box_n == 1 ? "" : "s");
-  else if (printable (r, &pw, &ph) == 0)
-    snprintf (info, sizeof info, "%d photo%s, one to a page: %.1f \xD7 %.1f cm paper", box_n, box_n == 1 ? "" : "s",
-              pw / 72000.0 * 2.54, ph / 72000.0 * 2.54);
-  else
-    snprintf (info, sizeof info, "%d photo%s, one to a page", box_n, box_n == 1 ? "" : "s");
   show_state ();
+  update_info ();
   redraw_icon (PB_PRINTER);
-  redraw_icon (PB_INFO);
   is_open = 1;
   _swix (Wimp_CreateMenu, _INR (1, 3), win, x - 64, y);
   _swix (Wimp_SetCaretPosition, _INR (0, 5), win, PB_COPIES, 0, 0, -1, (int) strlen (copies_text));
@@ -266,6 +287,132 @@ void print_place (int pw, int ph, const int a[4], int mode, double w_cm, double 
   *out_w = (int) lround (pw * s);
   *out_h = (int) lround (ph * s);
   *turned = t;
+}
+
+/* --- the cells of a page
+   per photos (1, 2, 4, 6 or 9) share the printable area a in equal cells,
+   the grid chosen (2 x 3 or 3 x 2, say) for cells nearest a photo's 3:2;
+   or (per 0) as many cells of w x h cm as fit, turned a quarter if more
+   fit that way, the grid centred. gap (millipoints) between cells; strip
+   (millipoints) under each for its name. Out: each cell's photo part
+   (millipoints, x0 y0 x1 y1), in reading order. How many (0: none fit). */
+int print_grid (const int a[4], int per, double w_cm, double h_cm, int gap, int strip, int may_turn, int cells[][4],
+                int max)
+{
+  double aw = a[2] - a[0], ah = a[3] - a[1], cw = 0, ch = 0;
+  int c = 0, r = 0, k, n;
+  if (gap < 0)
+    gap = 0;
+  if (per > 0)
+    {
+      double best = 1e9;
+      int cc;
+      for (cc = 1; cc <= per; cc++)
+        if (per % cc == 0)
+          {
+            int rr = per / cc;
+            double w = (aw - (cc - 1) * gap) / cc, h = (ah - (rr - 1) * gap) / rr - strip, q;
+            if (w <= 0 || h <= 0)
+              continue;
+            q = fabs (log ((w > h ? w / h : h / w) / 1.5));
+            if (q < best)
+              {
+                best = q;
+                c = cc;
+                r = rr;
+                cw = w;
+                ch = h + strip;
+              }
+          }
+    }
+  else if (w_cm > 0 && h_cm > 0)
+    {
+      double gw = w_cm / 2.54 * 72000, gh = h_cm / 2.54 * 72000;
+      int t;
+      for (t = 0; t <= (may_turn ? 1 : 0); t++)
+        {
+          double w = t ? gh : gw, h = (t ? gw : gh) + strip;
+          int cc = (int) floor ((aw + gap) / (w + gap)), rr = (int) floor ((ah + gap) / (h + gap));
+          if (cc > 0 && rr > 0 && cc * rr > c * r)
+            {
+              c = cc;
+              r = rr;
+              cw = w;
+              ch = h;
+            }
+        }
+    }
+  n = c * r;
+  if (n > max)
+    n = max;
+  {
+    double x0 = a[0] + (aw - (c * cw + (c - 1) * gap)) / 2, top = a[3] - (ah - (r * ch + (r - 1) * gap)) / 2;
+    for (k = 0; k < n; k++)
+      {
+        double x = x0 + (k % c) * (cw + gap), y1 = top - (k / c) * (ch + gap);
+        cells[k][0] = (int) lround (x);
+        cells[k][2] = (int) lround (x + cw);
+        cells[k][3] = (int) lround (y1);
+        cells[k][1] = (int) lround (y1 - ch + strip);
+      }
+  }
+  return n;
+}
+
+/* The printable area, or A4 with no margins if the driver won't say. */
+static void print_area (int a[4], int *pw, int *ph)
+{
+  if (printable (a, pw, ph))
+    {
+      a[0] = 0; a[1] = 0; a[2] = 595 * 1000; a[3] = 842 * 1000;
+      *pw = a[2];
+      *ph = a[3];
+    }
+}
+
+static int gap_mp (void)
+{
+  int mm = atoi (gap_text);
+  if (mm < 0) mm = 0;
+  if (mm > 50) mm = 50;
+  return (int) lround (mm / 25.4 * 72000);
+}
+
+/* How many photos go on a page with the box's settings now (0: none fit). */
+static int cells_now (int cells[][4])
+{
+  int a[4], pw, ph;
+  print_area (a, &pw, &ph);
+  return print_grid (a, per_page, atof (w_text), atof (h_text), gap_mp (), names ? NAME_STRIP : 0, rotate, cells,
+                     MAX_CELLS);
+}
+
+/* The box's note: what will be printed, on how many pages of what paper. */
+static void update_info (void)
+{
+  int dpi = 0, colour = 1, a[4], pw, ph, per, pages;
+  static int cells[MAX_CELLS][4];
+  char what[60], paper[40] = "";
+  printer_info (printer_name, sizeof printer_name, &dpi, &colour);
+  per = cells_now (cells);
+  pages = per > 0 ? (box_n + per - 1) / per : 0;
+  if (printable (a, &pw, &ph) == 0)
+    snprintf (paper, sizeof paper, "%.1f \xD7 %.1f cm", pw / 72000.0 * 2.54, ph / 72000.0 * 2.54);
+  if (per == 1)
+    snprintf (what, sizeof what, "%d photo%s, one to a page", box_n, box_n == 1 ? "" : "s");
+  else
+    snprintf (what, sizeof what, "%d photo%s, %d to a page", box_n, box_n == 1 ? "" : "s", per);
+  if (per <= 0)
+    snprintf (info, sizeof info, "%s \xD7 %s cm photos don't fit on this paper", w_text, h_text);
+  else if (!colour)
+    snprintf (info, sizeof info, "%s. Grey only: tick Colour in !Printers", what);
+  else if (!paper[0])
+    snprintf (info, sizeof info, "%s", what);
+  else if (pages > 1 && per > 1)
+    snprintf (info, sizeof info, "%s: %d pages of %s", what, pages, paper);
+  else
+    snprintf (info, sizeof info, "%s: %s paper", what, paper);
+  redraw_icon (PB_INFO);
 }
 
 /* --- preparing: each photo developed into a scrap JPEG */
@@ -319,11 +466,11 @@ static int start_next (void)
         }
       recipe_default (&r);
       recipe_parse (&r, rtext);
-      /* How big it will be on paper, so how many pixels it needs. */
-      if (printable (a, &pw, &ph))
-        {
-          a[0] = 0; a[1] = 0; a[2] = 595 * 1000; a[3] = 842 * 1000;   /* A4 */
-        }
+      snprintf (p->name, sizeof p->name, "%s", d.name[0] ? d.name : fsys_leaf (d.path));
+      /* How big it will be on paper, so how many pixels it needs: the
+         cells are all the same size. */
+      memcpy (a, job_cells[0], sizeof a);
+      (void) pw; (void) ph;
       {
         int fw = d.width, fh = d.height;
         if (d.orientation >= 5)
@@ -432,55 +579,125 @@ static unsigned char *read_file (const char *path, size_t *len)
   return buf;
 }
 
-static const _kernel_oserror *plot_page (const page *p, int a[4], int xeig, int yeig)
+/* Where a JPEG of iw x ih pixels goes in cell c (millipoints): the part
+   of our drawing (OS units, the JPEG plotted 1:1 at 0,0) to print, the
+   matrix and where that part's bottom left goes on the paper. On paper
+   an OS unit is 400 millipoints, so the scale is the printed size over
+   (OS units * 400); turned, a quarter turn anticlockwise. Filling a cell,
+   only the part inside it is printed. */
+static void place_in (int iw, int ih, const int c[4], int xeig, int yeig, int rect[4], int m[4], int pos[2])
 {
-  size_t len = 0;
-  unsigned char *jpeg = read_file (p->jpeg, &len);
-  int iw = 0, ih = 0, w, h, turned, rect[4], m[4], pos[2], more = 0, id = 0, blk[4], ow, oh;
-  const _kernel_oserror *e;
-  static _kernel_oserror unreadable = { 0, "a prepared photo couldn't be read back (is the disc full?)" };
-  if (!jpeg)
-    return &unreadable;
-  e = _swix (JPEG_Info, _INR (0, 2) | _OUTR (2, 3), 1, jpeg, len, &iw, &ih);
-  if (e || iw <= 0 || ih <= 0)
+  int w, h, turned, ow = iw << xeig, oh = ih << yeig, f;
+  double k, px0, py0, vx0, vx1, vy0, vy1, r0, r1, r2, r3;
+  print_place (iw, ih, c, job_size_mode, job_w_cm, job_h_cm, job_rotate, &w, &h, &turned);
+  k = (turned ? (double) h : (double) w) / ow;        /* millipoints of paper per OS unit of drawing */
+  f = (int) lround (k / 400.0 * 65536);
+  px0 = c[0] + ((c[2] - c[0]) - w) / 2.0;
+  py0 = c[1] + ((c[3] - c[1]) - h) / 2.0;
+  vx0 = px0 > c[0] ? px0 : c[0];
+  vx1 = px0 + w < c[2] ? px0 + w : c[2];
+  vy0 = py0 > c[1] ? py0 : c[1];
+  vy1 = py0 + h < c[3] ? py0 + h : c[3];
+  if (!turned)
     {
-      free (jpeg);
-      return e ? e : &unreadable;
+      r0 = (vx0 - px0) / k; r2 = (vx1 - px0) / k;
+      r1 = (vy0 - py0) / k; r3 = (vy1 - py0) / k;
     }
-  print_place (iw, ih, a, job_size_mode, job_w_cm, job_h_cm, job_rotate, &w, &h, &turned);
-  /* Our drawing: the JPEG at (0,0), ow x oh OS units. On paper an OS unit
-     is 400 millipoints, so the scale is the printed size over (OS units *
-     400); turned, a quarter turn anticlockwise. */
-  ow = iw << xeig;
-  oh = ih << yeig;
-  {
-    double s = turned ? (double) h / (ow * 400.0) : (double) w / (ow * 400.0);
-    int f = (int) lround (s * 65536);
-    rect[0] = 0; rect[1] = 0; rect[2] = ow; rect[3] = oh;
-    if (!turned)
-      {
-        m[0] = f; m[1] = 0; m[2] = 0; m[3] = f;
-        pos[0] = a[0] + ((a[2] - a[0]) - w) / 2;
-        pos[1] = a[1] + ((a[3] - a[1]) - h) / 2;
-      }
-    else
-      {
-        /* x' = -s y, y' = s x: the picture's bottom left goes to the right. */
-        m[0] = 0; m[1] = f; m[2] = -f; m[3] = 0;
-        pos[0] = a[0] + ((a[2] - a[0]) - w) / 2 + w;
-        pos[1] = a[1] + ((a[3] - a[1]) - h) / 2;
-      }
-  }
-  e = _swix (PDriver_GiveRectangle, _INR (0, 4), 0, rect, m, pos, 0xFFFFFF00);
+  else
+    {
+      /* x' = Ox - k y, y' = Oy + k x, with O the placed picture's bottom right. */
+      double ox = px0 + w, oy = py0;
+      r0 = (vy0 - oy) / k; r2 = (vy1 - oy) / k;
+      r1 = (ox - vx1) / k; r3 = (ox - vx0) / k;
+    }
+  rect[0] = (int) floor (r0 + 1e-6); rect[1] = (int) floor (r1 + 1e-6);
+  rect[2] = (int) ceil (r2 - 1e-6);  rect[3] = (int) ceil (r3 - 1e-6);
+  if (rect[0] < 0) rect[0] = 0;
+  if (rect[1] < 0) rect[1] = 0;
+  if (rect[2] > ow) rect[2] = ow;
+  if (rect[3] > oh) rect[3] = oh;
+  if (!turned)
+    {
+      m[0] = f; m[1] = 0; m[2] = 0; m[3] = f;
+      pos[0] = (int) lround (px0 + k * rect[0]);
+      pos[1] = (int) lround (py0 + k * rect[1]);
+    }
+  else
+    {
+      m[0] = 0; m[1] = f; m[2] = -f; m[3] = 0;
+      pos[0] = (int) lround (px0 + w - k * rect[1]);
+      pos[1] = (int) lround (py0 + k * rect[0]);
+    }
+}
+
+/* A name under a photo: painted in the font at (0,0) of its own drawing
+   (OS units, baseline at 0), at its real size, centred in the strip under
+   the cell; cut off at the cell's width. */
+#define NAME_ABOVE 26                  /* OS units of the drawing above the baseline, and below it */
+#define NAME_BELOW 8
+static void place_name (int font, const char *name, const int c[4], int rect[4], int m[4], int pos[2])
+{
+  int tw = 0, dummy = 0, cw = c[2] - c[0], wmp;
+  if (_swix (Font_ScanString, _INR (0, 4) | _OUTR (3, 4), font, name, 1 << 8, 0x7FFFFFFF, 0x7FFFFFFF, &tw, &dummy))
+    tw = 0;
+  wmp = tw < cw ? tw : cw;             /* millipoints */
+  rect[0] = 0; rect[1] = -NAME_BELOW; rect[2] = (wmp + 399) / 400; rect[3] = NAME_ABOVE;
+  m[0] = 65536; m[1] = 0; m[2] = 0; m[3] = 65536;
+  pos[0] = c[0] + (cw - wmp) / 2;
+  pos[1] = c[1] - NAME_STRIP + (NAME_STRIP - (NAME_ABOVE + NAME_BELOW) * 400) / 2;
+}
+
+/* One page: the photos k0 .. k0 + n - 1 of the ready ones, each in its cell. */
+static const _kernel_oserror *plot_sheet (page **items, int n, int xeig, int yeig, int font)
+{
+  static _kernel_oserror unreadable = { 0, "a prepared photo couldn't be read back (is the disc full?)" };
+  unsigned char *jpeg[MAX_CELLS];
+  size_t len[MAX_CELLS];
+  const _kernel_oserror *e = NULL;
+  int i, more = 0, id = 0, blk[4];
+  memset (jpeg, 0, sizeof jpeg);
+  for (i = 0; !e && i < n; i++)
+    {
+      int iw = 0, ih = 0, rect[4], m[4], pos[2];
+      len[i] = 0;
+      if (!(jpeg[i] = read_file (items[i]->jpeg, &len[i])))
+        {
+          e = &unreadable;
+          break;
+        }
+      e = _swix (JPEG_Info, _INR (0, 2) | _OUTR (2, 3), 1, jpeg[i], len[i], &iw, &ih);
+      if (!e && (iw <= 0 || ih <= 0))
+        e = &unreadable;
+      if (e)
+        break;
+      place_in (iw, ih, job_cells[i], xeig, yeig, rect, m, pos);
+      e = _swix (PDriver_GiveRectangle, _INR (0, 4), 2 * i, rect, m, pos, 0xFFFFFF00);
+      if (!e && font > 0 && items[i]->name[0])
+        {
+          place_name (font, items[i]->name, job_cells[i], rect, m, pos);
+          e = _swix (PDriver_GiveRectangle, _INR (0, 4), 2 * i + 1, rect, m, pos, 0xFFFFFF00);
+        }
+    }
   if (!e)
     e = _swix (PDriver_DrawPage, _INR (0, 3) | _OUT (0) | _OUT (2), copies, blk, 0, 0, &more, &id);
   while (!e && more)
     {
-      e = _swix (JPEG_PlotScaled, _INR (0, 5), jpeg, 0, 0, 0, len, 0);
+      i = id / 2;
+      if (i >= 0 && i < n)
+        {
+          if (id & 1)
+            {
+              _swix (ColourTrans_SetFontColours, _INR (0, 3), font, 0xFFFFFF00, 0x00000000, 14);
+              e = _swix (Font_Paint, _INR (0, 4), font, items[i]->name, (1 << 4) | (1 << 8), 0, 0);
+            }
+          else
+            e = _swix (JPEG_PlotScaled, _INR (0, 5), jpeg[i], 0, 0, 0, len[i], 0);
+        }
       if (!e)
         e = _swix (PDriver_GetRectangle, _IN (1) | _OUT (0) | _OUT (2), blk, &more, &id);
     }
-  free (jpeg);
+  for (i = 0; i < n; i++)
+    free (jpeg[i]);
   return e;
 }
 
@@ -515,7 +732,7 @@ void printbox_quit (void)
 
 static void finish_job (void)
 {
-  int k, ready = 0, fh = 0, old = 0, a[4], pw, ph, printed = 0, xeig = 1, yeig = 1;
+  int k, ready = 0, fh = 0, old = 0, a[4], pw, ph, printed = 0, sheets = 0, xeig = 1, yeig = 1;
   const _kernel_oserror *e = NULL;
   /* The screen mode's pixel: what JPEG_PlotScaled's 1:1 means. */
   _swix (OS_ReadModeVariable, _INR (0, 1) | _OUT (2), -1, 4, &xeig);
@@ -536,12 +753,30 @@ static void finish_job (void)
         e = _swix (PDriver_SelectJob, _INR (0, 1) | _OUT (0), fh, "Lumen", &old);
       selected = fh && !e;
       _swix (Hourglass_On, 0);
-      for (k = 0; !e && k < npages; k++)
-        if (pages[k].ready)
+      {
+        static page *items[MAX_CELLS];
+        int font = 0, per = job_ncells > 0 ? job_ncells : 1, got = 0;
+        /* 9 point Homerton for the names (Font_FindFont: sizes in 1/16 point). */
+        if (job_names && _swix (Font_FindFont, _INR (1, 5) | _OUT (0), "Homerton.Medium", 9 * 16, 9 * 16, 0, 0, &font))
+          font = 0;
+        for (k = 0; !e && k <= npages; k++)
           {
-            e = plot_page (&pages[k], a, xeig, yeig);
-            printed += !e;
+            if (k < npages && pages[k].ready)
+              items[got++] = &pages[k];
+            if (got == per || (k == npages && got))
+              {
+                e = plot_sheet (items, got, xeig, yeig, font);
+                if (!e)
+                  {
+                    printed += got;
+                    sheets++;
+                  }
+                got = 0;
+              }
           }
+        if (font > 0)
+          _swix (Font_LoseFont, _IN (0), font);
+      }
       _swix (Hourglass_Off, 0);
       if (selected)
         {
@@ -574,8 +809,13 @@ static void finish_job (void)
       app_report (m);
     }
   if (printed)
-    activity_log (ACT_EXPORT, "Printed %d photo%s on %s%s", printed, printed == 1 ? "" : "s", printer_name,
-                  copies > 1 ? " (more than one copy each)" : "");
+    {
+      char on[40] = "";
+      if (sheets < printed)
+        snprintf (on, sizeof on, ", %d to a page,", job_ncells);
+      activity_log (ACT_EXPORT, "Printed %d photo%s%s on %s%s", printed, printed == 1 ? "" : "s", on, printer_name,
+                    copies > 1 ? " (more than one copy each)" : "");
+    }
   free (pages);
   pages = NULL;
   npages = ipage = failed = 0;
@@ -592,9 +832,21 @@ static void print_clicked (void)
   job_rotate = rotate;
   job_w_cm = atof (w_text);
   job_h_cm = atof (h_text);
-  if (size_mode == SIZE_GIVEN && (job_w_cm <= 0 || job_h_cm <= 0))
+  if (per_page == 0)
+    job_size_mode = SIZE_GIVEN;          /* as many as fit: of the given size */
+  if (job_size_mode == SIZE_GIVEN && (job_w_cm <= 0 || job_h_cm <= 0))
     {
       app_report ("Type the size the photos should be, in centimetres.");
+      return;
+    }
+  job_names = names;
+  job_ncells = cells_now (job_cells);
+  if (job_ncells <= 0)
+    {
+      char m[200];
+      snprintf (m, sizeof m, "%s \xD7 %s cm photos don't fit on this paper. Choose a smaller size, or fewer to a page.",
+                w_text, h_text);
+      app_report (m);
       return;
     }
   pages = calloc ((size_t) box_n, sizeof *pages);
@@ -618,19 +870,37 @@ void printbox_click (int *b)
     return;
   switch (b[4])
     {
-    case PB_FIT: size_mode = SIZE_FIT; break;
-    case PB_FILL: size_mode = SIZE_FILL; break;
-    case PB_GIVEN: size_mode = SIZE_GIVEN; break;
+    case PB_FIT: case PB_FILL:
+      size_mode = b[4] == PB_FIT ? SIZE_FIT : SIZE_FILL;
+      if (per_page == 0)
+        per_page = 1;                  /* as many as fit is of a given size */
+      show_state ();
+      update_info ();
+      break;
+    case PB_GIVEN: size_mode = SIZE_GIVEN; update_info (); break;
     case PB_W: case PB_H:
       if (size_mode != SIZE_GIVEN)
         {
           size_mode = SIZE_GIVEN;
           show_state ();
         }
+      update_info ();
       break;
-    case PB_ROTATE: case PB_SHARPEN:       /* the Wimp ticks and unticks them */
+    case PB_P1: case PB_P2: case PB_P4: case PB_P6: case PB_P9: case PB_MANY:
+      per_page = per_choices[b[4] - PB_P1];
+      if (per_page == 0 && size_mode != SIZE_GIVEN)
+        size_mode = SIZE_GIVEN;
+      show_state ();
+      update_info ();
+      break;
+    case PB_GAP:
+      update_info ();
+      break;
+    case PB_ROTATE: case PB_SHARPEN: case PB_NAMES:   /* the Wimp ticks and unticks them */
       rotate = is_on (PB_ROTATE);
       sharpen = is_on (PB_SHARPEN);
+      names = is_on (PB_NAMES);
+      update_info ();
       break;
     case PB_CANCEL: close_box (); break;
     case PB_PRINT: print_clicked (); break;

@@ -241,6 +241,7 @@ typedef struct
   cat_id original;
   int rating;                 /* 0-5, or RATING_REJECT */
   char project_name[64];
+  char name[64];              /* the version's name, as the Browser shows it */
   int versions;               /* of its original (1 if just this) */
   int version_no;             /* this one's place among them, from 1 */
 } cat_details;

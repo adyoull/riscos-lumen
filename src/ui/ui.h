@@ -436,6 +436,10 @@ void printbox_quit (void);             /* Lumen quitting: a job being prepared g
 /* Where a pw x ph photo goes on the printable area a (millipoints): its
    printed size (as placed) and whether it is turned a quarter. mode: 0 fit
    the page, 1 fill it, 2 at most w_cm x h_cm. */
+/* The cells of a page (tests): per (1, 2, 4, 6, 9, or 0 for as many w x h
+   cm cells as fit), gap and name strip in millipoints; how many. */
+int print_grid (const int a[4], int per, double w_cm, double h_cm, int gap, int strip, int may_turn, int cells[][4],
+                int max);
 void print_place (int pw, int ph, const int a[4], int mode, double w_cm, double h_cm, int may_turn, int *out_w,
                   int *out_h, int *turned);
 void plugwin_open (void);

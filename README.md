@@ -232,6 +232,14 @@ Fixes from a review of 0.0.23:
   tools/lumenraw-guide/build.py from LibRaw's camera list), packaged in
   the plug-in as !Lumen.Plugins.LibRaw.Guide.
 
+## 0.0.27
+
+- Printing several photos to a page: 1, 2, 4, 6 or 9 in equal cells (the
+  grid nearest 3:2 cells), or as many of a given size as fit (turned if
+  more fit), with a gap; names under them (Font_Paint, Homerton 9 pt) for
+  contact sheets. Each photo gets its own PDriver rectangle, clipped to
+  its cell, so Fill never spills into a neighbour.
+
 ## Layout
 
 ```

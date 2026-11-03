@@ -1,4 +1,4 @@
-Lumen 0.0.26 (02 Nov 2026) - test build
+Lumen 0.0.27 (03 Nov 2026) - test build
 =====================================
 
 A photo library and editor for RISC OS 5, in the spirit of Aperture.
@@ -324,12 +324,16 @@ background; the bottom bar shows the progress.
 Printing
 --------
 Ctrl-P (or Print... in the Selection or Photo menu) prints the selected
-photos, one to a page, on the printer chosen in !Printers. Choose the
-copies, and the size on the page: Fit the page (all of the photo, as big
-as it goes), Fill the page (to the edges of the printable area; some is
-cut off) or a given size in centimetres (at most; the shape is kept).
-"Turn photos to suit the page" turns a landscape photo on a portrait
-page; "Sharpen for print" makes up for the softening of ink and paper.
+photos on the printer chosen in !Printers. Choose the copies, and the
+size: Fit the page (all of the photo, as big as it goes), Fill the page
+(to the edges; some is cut off) or a given size in centimetres (at most;
+the shape is kept). Per page: 1, 2, 4, 6 or 9 photos to a page, each in
+an equal space (fit and fill then mean the space), or As many as fit of
+the given size, to cut out; Gap is the space between them, in mm.
+"Names under the photos" prints each one's name under it (a contact
+sheet). "Turn photos to suit the page" turns a landscape photo in a tall
+space; "Sharpen for print" makes up for the softening of ink and paper.
+The line at the bottom says how many to a page and how many pages.
 Each photo is prepared at the printer's resolution in the background,
 then printed in colour through the printer driver.
 
