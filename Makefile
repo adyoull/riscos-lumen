@@ -13,11 +13,11 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.29
+VERSION := 0.0.30
 DATE := 01 Nov 2026
 OUT := out
 
-CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/sqlite_vfs.c
+CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
 CORE_H := $(wildcard src/core/*.h)
 UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/plugwin.c src/ui/choicewin.c src/ui/activity.c src/ui/printbox.c src/ui/tagbox.c src/ui/smartbox.c src/ui/libbox.c src/ui/help.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c
 UI_H := $(wildcard src/ui/*.h)
@@ -55,7 +55,7 @@ $(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/risc
 
 $(OUT)/bench: tests/bench.c $(CORE) $(CORE_H) $(OUT)/riscos/sqlite3.o
 	$(RO_CC) $(RISCOS_CFLAGS) $(WARN) $(DEFS) -Isrc/core -Ithird_party/sqlite -I$(DEPS)/riscos/include \
-	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/fsys_riscos.c \
+	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/simd.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/fsys_riscos.c \
 	  -L$(DEPS)/riscos/lib -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
 
 checks: $(OUT)/lumen $(OUT)/bench
@@ -108,15 +108,15 @@ $(OUT)/test_core_arm: tests/test_core.c $(CORE) src/core/fsys_posix.c $(CORE_H) 
 	  tests/test_core.c $(CORE) src/core/fsys_posix.c $(OUT)/arm/sqlite3.o $(ARM_LIBS)
 test-arm: $(OUT)/test_core_arm
 	@# Both of libjpeg-turbo's paths: its NEON routines, and the plain C fallback.
-	rm -rf $(OUT)/work-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENEON=1 $(ALIGNTRAP) $(OUT)/test_core_arm $(OUT)/work-arm
-	rm -rf $(OUT)/work-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENONE=1 $(ALIGNTRAP) $(OUT)/test_core_arm $(OUT)/work-arm
+	rm -rf $(OUT)/work-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENEON=1 LUMEN_NEON=1 $(ALIGNTRAP) $(OUT)/test_core_arm $(OUT)/work-arm
+	rm -rf $(OUT)/work-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENONE=1 LUMEN_NEON=0 $(ALIGNTRAP) $(OUT)/test_core_arm $(OUT)/work-arm
 
 $(OUT)/test_develop_arm: tests/test_develop.c $(CORE) src/core/fsys_posix.c $(CORE_H) $(OUT)/arm/sqlite3.o
 	$(LINUXARM_CC) $(LINUXARM_CFLAGS) $(WARN) -Ithird_party/sqlite -I$(DEPS)/linuxarm/include -o $@ \
 	  tests/test_develop.c $(CORE) src/core/fsys_posix.c $(OUT)/arm/sqlite3.o $(ARM_LIBS)
 test-develop-arm: $(OUT)/test_develop_arm
-	rm -rf $(OUT)/work-dev-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENEON=1 $(ALIGNTRAP) $(OUT)/test_develop_arm $(OUT)/work-dev-arm
-	rm -rf $(OUT)/work-dev-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENONE=1 $(ALIGNTRAP) $(OUT)/test_develop_arm $(OUT)/work-dev-arm
+	rm -rf $(OUT)/work-dev-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENEON=1 LUMEN_NEON=1 $(ALIGNTRAP) $(OUT)/test_develop_arm $(OUT)/work-dev-arm
+	rm -rf $(OUT)/work-dev-arm && PATH="$(RISCOS_TOOLCHAIN)/bin:$$PATH" JSIMD_FORCENONE=1 LUMEN_NEON=0 $(ALIGNTRAP) $(OUT)/test_develop_arm $(OUT)/work-dev-arm
 
 H32 := $(DEPS)/host32
 $(OUT)/test_ui: tests/test_ui.c $(CORE) src/core/fsys_posix.c $(filter-out src/ui/main.c,$(UI)) $(CORE_H) $(UI_H) $(OUT)/host32/sqlite3.o $(FAKE_SRC)

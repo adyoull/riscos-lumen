@@ -270,6 +270,26 @@ Fixes from a review of 0.0.23:
 - A built-in style, Sunlit Garden: Andrew Youll's look for his dog photos
   (matched on his Labrador NEF) with a touch of glow.
 
+## 0.0.30
+
+- No flicker in the Viewer: every render (the half size while dragging or
+  previewing a style, and the full proxy) is scaled to the size shown in
+  idle time (draw_prepare) before the window is redrawn, so the redraw is
+  a 1:1 copy; and only the margins round the photo are filled with the
+  ground, so the old picture stays until the new one replaces it. (On the
+  Pi, the ground fill followed by OS_SpriteOp's scaled plot was visible as
+  a dark wipe down the photo.)
+- Raw files: the full size is read ahead in the background once the photo
+  is on screen (quietly; 100% and the loupe ask for it first if wanted
+  sooner), and the loupe shows the picture on screen enlarged until it
+  comes. The viewer's idle no longer stops while the full size is read.
+- NEON, VFPv3 kept: resample32 and sharpen32 have NEON versions (GCC
+  `#pragma GCC target ("fpu=neon")`, intrinsics) chosen at start by
+  VFPSupport_Features (simd.c, fsys_neon); same pixels as the plain code
+  (tested under ARM emulation both ways, `LUMEN_NEON`/`Lumen$NEON` 0 or 1).
+  Sharpening's kernel now sums to exactly 1024, so its blur is a shift.
+  LumenBench times both.
+
 ## Layout
 
 ```

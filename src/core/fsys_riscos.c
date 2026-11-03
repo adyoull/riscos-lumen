@@ -153,6 +153,13 @@ int fsys_canonical (const char *path, char *out, size_t n)
   return 0;
 }
 
+int fsys_neon (void)
+{
+  _kernel_swi_regs r;
+  r.r[0] = 0;
+  return _kernel_swi (0x58EC8, &r, &r) == NULL && (r.r[1] & 0xF) == 2 && ((r.r[2] >> 8) & 0xF) != 0;
+}
+
 int fsys_settype (const char *path, int filetype)
 {
   return _swix (OS_File, _INR (0, 2), 18, path, filetype) ? -1 : 0;

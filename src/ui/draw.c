@@ -243,6 +243,40 @@ static void ensure_table (const void *area, const void *sprite)
     }
 }
 
+/* Where draw_sprite_rect puts a w x h sprite in the box. 0 if it can't. */
+int draw_fit (int w, int h, int bx0, int by0, int bx1, int by1, int out[4])
+{
+  int bw = bx1 - bx0, bh = by1 - by0, mul, div, dw, dh;
+  out[0] = bx0; out[1] = by0; out[2] = bx1; out[3] = by1;
+  if (w <= 0 || h <= 0 || bw <= 0 || bh <= 0)
+    return 0;
+  if ((long long) bw * h <= (long long) bh * w)
+    {
+      mul = bw; div = w;
+    }
+  else
+    {
+      mul = bh; div = h;
+    }
+  dw = (int) ((long long) w * mul / div);
+  dh = (int) ((long long) h * mul / div);
+  out[0] = bx0 + (bw - dw) / 2;
+  out[1] = by0 + (bh - dh) / 2;
+  out[2] = out[0] + dw;
+  out[3] = out[1] + dh;
+  return 1;
+}
+
+/* Makes the smoothed copy draw_sprite_rect will plot, now, outside the
+   redraw: plotting is then a straight copy, quick enough that nothing
+   shows being drawn. */
+void draw_prepare (const void *sprite, int w, int h, int bx0, int by0, int bx1, int by1)
+{
+  int out[4];
+  if (draw_fit (w, h, bx0, by0, bx1, by1, out))
+    smoothed (sprite, w, h, (out[2] - out[0]) >> xeig, (out[3] - out[1]) >> yeig);
+}
+
 void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
                        int bx0, int by0, int bx1, int by1, int out[4])
 {

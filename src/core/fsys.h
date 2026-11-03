@@ -55,4 +55,10 @@ int fsys_canonical (const char *path, char *out, size_t n);
 int fsys_copy_tree (const char *src, const char *dst);
 int fsys_remove_tree (const char *path);
 
+/* 1 if the processor has NEON (Advanced SIMD). On RISC OS VFPSupport
+   says (VFPSupport_Features 0, SWI &58EC8: MVFR0 bits 0-3 = 2, 32
+   doubleword registers, and MVFR1 bits 8-11, the integer instructions);
+   on ARM Linux the kernel's HWCAP_NEON; elsewhere 0. */
+int fsys_neon (void);
+
 #endif

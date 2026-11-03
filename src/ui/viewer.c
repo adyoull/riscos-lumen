@@ -172,6 +172,7 @@ static void compare_pin_now (void);
 static int zoom;                       /* 0 fit, 1 decoding the full size, 2 at 100% */
 static char photo_path[1024];
 static int photo_orientation, photo_long;   /* the original's longer side */
+static int photo_raw;                  /* a camera raw file: its full size is read ahead (it is slow) */
 static thumbgen *zgen;
 static rgb_image zfull;
 static geom_plan zplan;
@@ -287,6 +288,7 @@ static recipe preview_saved;           /* the photo's own recipe meanwhile */
 static void free_photo (void)
 {
   previewing = 0;
+  photo_raw = 0;
   lummap_ok = 0;
   free_zoom ();
   thumbgen_free (tg);
@@ -963,6 +965,25 @@ static void shade (uint32_t *pix, int w, int h, int y0, int y1)
     }
 }
 
+/* The picture shown (the half-size render while the full one is being
+   made), and its copy at the size shown made now, so the redraw is a
+   straight copy: plotting it scaled in the redraw took long enough on the
+   Pi to be seen drawing down the screen. */
+static const sprite32 *shown_sprite (void)
+{
+  return show_half || full_y >= 0 ? &half_spr : &full_spr;
+}
+
+static void prepare_shown (void)
+{
+  const sprite32 *s = shown_sprite ();
+  int r[4];
+  if (!s->area || zoom == 2)
+    return;
+  image_rect (r);
+  draw_prepare ((const unsigned *) s->area + 4, s->w, s->h, r[0] + PAD, r[1] + PAD, r[2] - PAD, r[3] - PAD);
+}
+
 /* The half-size copy, all at once (it is a quarter of the pixels). */
 static void render_half (void)
 {
@@ -974,6 +995,8 @@ static void render_half (void)
   sharpen_pixels (half_spr.pixels, ghw, ghh, longer_side (hw, hh));
   shade (half_spr.pixels, ghw, ghh, 0, ghh);
   show_half = 1;
+  draw_forget ((unsigned *) half_spr.area + 4);
+  prepare_shown ();
   force_image ();
   force_hist ();
 }
@@ -1009,6 +1032,7 @@ static void render_full_until (unsigned deadline)
       geo_pending = 0;
       show_half = 0;
       hist = hist_acc;
+      prepare_shown ();
       force_image ();
       force_hist ();
       if (compare_pending != -1)
@@ -1150,9 +1174,12 @@ static void zoom_idle (unsigned deadline)
       if (r < 0 || thumbgen_take (zgen, &zfull))
         {
           char m[300];
+          int asked = zoom || loupe_on;
           snprintf (m, sizeof m, "The full-size photo couldn't be read: %s", thumbgen_error (zgen));
           free_zoom ();
-          app_report (m);
+          photo_raw = 0;               /* not read ahead again */
+          if (asked)
+            app_report (m);            /* read ahead and not wanted yet: quietly */
           force_image ();
           return;
         }
@@ -1234,8 +1261,67 @@ static void loupe_render (void)
   int cx, cy, rx, ry, x0, y0, x1, y1, w, h;
   uint32_t *out, ground = 0x2A2A2A;
   loupe_dirty = 0;
-  if (!zfull.rgb || loupe_make ())
+  if (loupe_make ())
     return;
+  if (!zfull.rgb)
+    {
+      /* Still reading the full size (a raw takes a while): the picture on
+         screen, enlarged as the full size would be, so the loupe is there
+         at once; the full size replaces it when it comes. */
+      const sprite32 *s = shown_sprite ();
+      const uint32_t *px;
+      double k, step, sx0, sy0;
+      out = (uint32_t *) (loupe_area + 4 + 11);
+      if (!s->area)
+        {
+          for (x = 0; x < d * d; x++)
+            out[x] = ground;
+          return;
+        }
+      px = s->pixels;
+      /* Shown pixels per full-size pixel: the proxy is sw x sh of the
+         original's photo_long; the half-size render a fraction of that. */
+      k = photo_long > 0 ? (double) longer_side (sw, sh) / photo_long : 1;
+      if (gw > 0)
+        k *= (double) s->w / gw;
+      if (k > 1)
+        k = 1;
+      step = k / loupe_mag;
+      sx0 = loupe_fx * s->w - d / 2.0 * step;
+      sy0 = loupe_fy * s->h - d / 2.0 * step;
+      for (y = 0; y < d; y++)
+        {
+          double fy = sy0 + (y + 0.5) * step - 0.5;
+          for (x = 0; x < d; x++)
+            {
+              double fx = sx0 + (x + 0.5) * step - 0.5;
+              int ix, iy, jx, jy, c;
+              unsigned a00, a01, a10, a11, v = 0;
+              double ax, ay;
+              if (fx < -0.5 || fy < -0.5 || fx > s->w - 0.5 || fy > s->h - 0.5)
+                {
+                  out[(size_t) y * d + x] = ground;
+                  continue;
+                }
+              fx = fx < 0 ? 0 : fx > s->w - 1 ? s->w - 1 : fx;
+              fy = fy < 0 ? 0 : fy > s->h - 1 ? s->h - 1 : fy;
+              ix = (int) fx; iy = (int) fy;
+              jx = ix + 1 < s->w ? ix + 1 : ix;
+              jy = iy + 1 < s->h ? iy + 1 : iy;
+              ax = fx - ix; ay = fy - iy;
+              a00 = px[(size_t) iy * s->w + ix]; a01 = px[(size_t) iy * s->w + jx];
+              a10 = px[(size_t) jy * s->w + ix]; a11 = px[(size_t) jy * s->w + jx];
+              for (c = 0; c < 24; c += 8)
+                {
+                  double t = (((a00 >> c) & 255) * (1 - ax) + ((a01 >> c) & 255) * ax) * (1 - ay)
+                           + (((a10 >> c) & 255) * (1 - ax) + ((a11 >> c) & 255) * ax) * ay;
+                  v |= (unsigned) (t + 0.5) << c;
+                }
+              out[(size_t) y * d + x] = v;
+            }
+        }
+      return;
+    }
   if (!lplan_ok)
     {
       recipe r;
@@ -1766,11 +1852,20 @@ void viewer_idle (void)
         zoom_render_until (app_now () + 4);   /* the 100% view follows the slider */
       return;
     }
+  /* The full size: wanted now (100% or the loupe) before anything else;
+     read ahead for a raw only once the picture on screen is finished. The
+     rest goes on meanwhile (the loupe follows the pointer, showing the
+     picture on screen enlarged until the full size comes). */
   if (zgen || (zoom == 2 && zy >= 0))
     {
-      zoom_idle (deadline);
-      if (zgen)
-        return;
+      int wanted = zoom || loupe_on;
+      if (wanted || (full_y < 0 && state == V_READY))
+        zoom_idle (wanted ? deadline : app_now () + 1);
+    }
+  else if (photo_raw && state == V_READY && full_y < 0 && !zfull.rgb && !crop_mode && !comparing && dragging == -1)
+    {
+      char e[200];
+      zgen = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, sizeof e);   /* quietly: asked for again if it fails */
     }
   loupe_track ();
   rt_brush_follow ();
@@ -1790,6 +1885,7 @@ void viewer_idle (void)
         }
       else if (r > 0)
         {
+          photo_raw = thumbgen_raw_developed (tg);
           thumbgen_free (tg);
           tg = NULL;
           state = V_READY;
@@ -3746,7 +3842,22 @@ static void draw_image (int ox, int oy)
   if (comparing)
     draw_compared (ox, oy);
   image_rect (r);
-  draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + r[3], COL_GROUND);
+  {
+    /* The photo itself covers its own place: only round it is the ground
+       filled, so a change never shows the dark ground first. */
+    const sprite32 *s = shown_sprite ();
+    int fit[4];
+    if (!(zoom == 2 && zspr.area) && (state == V_READY || state == V_LOADING) && src && s->area
+        && draw_fit (s->w, s->h, r[0] + PAD, r[1] + PAD, r[2] - PAD, r[3] - PAD, fit))
+      {
+        draw_rect (ox + r[0], oy + fit[3], ox + r[2], oy + r[3], COL_GROUND);   /* above */
+        draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + fit[1], COL_GROUND);   /* below */
+        draw_rect (ox + r[0], oy + fit[1], ox + fit[0], oy + fit[3], COL_GROUND);   /* left */
+        draw_rect (ox + fit[2], oy + fit[1], ox + r[2], oy + fit[3], COL_GROUND);   /* right */
+      }
+    else
+      draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + r[3], COL_GROUND);
+  }
   r[0] += PAD; r[1] += PAD; r[2] -= PAD; r[3] -= PAD;
   if (zoom == 2 && zspr.area)
     {
@@ -3761,13 +3872,13 @@ static void draw_image (int ox, int oy)
     }
   else if ((state == V_READY || state == V_LOADING) && (src || state == V_LOADING))
     {
-      const sprite32 *s = show_half || full_y >= 0 ? &half_spr : &full_spr;
+      const sprite32 *s = shown_sprite ();
       if (s->area)
         {
           int pr[4];
-          /* The half-size render changes on every move of a slider:
-             plotted as it is. The full one is smoothed to the size shown. */
-          draw_set_smoothing (s == &full_spr);
+          /* Both renders are plotted from their copy at the size shown
+             (prepare_shown made it when the pixels changed). */
+          draw_set_smoothing (1);
           draw_sprite_rect (s->area, (const unsigned *) s->area + 4, s->w, s->h,
                             ox + r[0], oy + r[1], ox + r[2], oy + r[3], out);
           draw_set_smoothing (1);

@@ -9,6 +9,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "fsys.h"
+#if defined(__arm__) && defined(__linux__)
+#include <sys/auxv.h>
+#endif
 
 struct fsys_dir
 {
@@ -128,6 +131,15 @@ int fsys_canonical (const char *path, char *out, size_t n)
 {
   snprintf (out, n, "%s", path);
   return 0;
+}
+
+int fsys_neon (void)
+{
+#if defined(__arm__) && defined(__linux__)
+  return (getauxval (AT_HWCAP) & (1UL << 12)) != 0;   /* HWCAP_NEON */
+#else
+  return 0;
+#endif
 }
 
 int fsys_settype (const char *path, int filetype)

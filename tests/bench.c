@@ -13,6 +13,8 @@
 #include <time.h>
 #include "develop.h"
 #include "resample.h"
+#include "sharpen.h"
+#include "simd.h"
 #include "recipe.h"
 #include "thumbgen.h"
 #ifdef __riscos
@@ -127,20 +129,40 @@ int main (void)
   printf ("Proxy, tone only:              %6.1f ms\n", tone);
   printf ("Proxy, with saturation:        %6.1f ms\n", full);
   printf ("Half size (while dragging):    %6.1f ms tone, %.1f ms with saturation\n", half_tone, half_full);
-  /* Smoothing the finished render to the size shown (a 1080p desktop). */
+  /* Smoothing the renders to the size shown (a 1080p desktop), and
+     sharpening the proxy: with the plain code and, where the processor
+     has it, with NEON. */
+  printf ("NEON: %s\n", !simd_built () ? "not in this build" : simd_neon () ? "yes, in use" : "no (plain code)");
   {
     int dw = proxy.w * 1150 / (proxy.w > proxy.h ? proxy.w : proxy.h);
     int dh = proxy.h * 1150 / (proxy.w > proxy.h ? proxy.w : proxy.h);
-    uint32_t *sm = malloc ((size_t) dw * dh * 4);
-    if (sm)
-      {
-        int k;
-        t0 = clock ();
-        for (k = 0; k < 5; k++)
-          resample32 (dst, proxy.w, proxy.h, sm, dw, dh);
-        printf ("Smoothing for the screen (%d x %d): %5.1f ms\n", dw, dh, ms_since (t0) / 5);
-        free (sm);
-      }
+    uint32_t *sm = malloc ((size_t) dw * dh * 4), *cp = malloc ((size_t) proxy.w * proxy.h * 4);
+    int pass, had = simd_neon ();
+    if (sm && cp)
+      for (pass = 0; pass < (had ? 2 : 1); pass++)
+        {
+          int k;
+          const char *which = pass ? "NEON " : "plain";
+          simd_force (pass);
+          t0 = clock ();
+          for (k = 0; k < 5; k++)
+            resample32 (dst, proxy.w, proxy.h, sm, dw, dh);
+          printf ("Smoothing the proxy for the screen (%s): %5.1f ms\n", which, ms_since (t0) / 5);
+          t0 = clock ();
+          for (k = 0; k < 5; k++)
+            resample32 (dst, proxy.w / 2, proxy.h / 2, sm, dw, dh);
+          printf ("Enlarging the half size (%s):         %5.1f ms\n", which, ms_since (t0) / 5);
+          t0 = clock ();
+          for (k = 0; k < 3; k++)
+            {
+              memcpy (cp, dst, (size_t) proxy.w * proxy.h * 4);
+              sharpen32 (cp, proxy.w, proxy.h, 80, 1.0);
+            }
+          printf ("Sharpening the proxy (%s):            %5.1f ms\n", which, ms_since (t0) / 3);
+        }
+    simd_force (-1);
+    free (sm);
+    free (cp);
   }
   printf ("Gate (slider redraw <= 50 ms while dragging): %s\n",
           half_full + 5 <= 50 ? "met" : "NOT met");

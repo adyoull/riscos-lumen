@@ -11,6 +11,7 @@
 #include "../src/core/develop.h"
 #include "../src/core/geometry.h"
 #include "../src/core/resample.h"
+#include "../src/core/simd.h"
 #include "../src/core/sharpen.h"
 #include "../src/core/export.h"
 #include "../src/core/xmp.h"
@@ -2087,6 +2088,53 @@ static void test_glow (void)
   }
 }
 
+/* NEON and plain code give the same pixels (on ARM; elsewhere there is
+   only the plain code). */
+static void test_simd (void)
+{
+  enum { W = 203, H = 77 };
+  static uint32_t src[W * H], a[700 * 300], b[700 * 300];
+  static const int sizes[][2] = { { 61, 23 }, { 400, 151 }, { 203, 77 }, { 7, 3 }, { 650, 260 } };
+  static const double sig[] = { 0.35, 0.9, 2.5, 9.0 };
+  unsigned seed = 12345;
+  int i, k, same = 1;
+  for (i = 0; i < W * H; i++)
+    {
+      seed = seed * 1103515245u + 12345u;
+      src[i] = (seed >> 8) & 0xFFFFFF;
+    }
+  if (!simd_built ())
+    {
+      CHECK (!simd_neon (), "no NEON code in this build: the plain code");
+      return;
+    }
+  for (k = 0; k < (int) (sizeof sizes / sizeof sizes[0]); k++)
+    {
+      int dw = sizes[k][0], dh = sizes[k][1];
+      simd_force (0);
+      resample32 (src, W, H, a, dw, dh);
+      simd_force (1);
+      resample32 (src, W, H, b, dw, dh);
+      if (memcmp (a, b, sizeof (uint32_t) * (size_t) dw * dh))
+        same = 0;
+    }
+  CHECK (same, "resample32: NEON gives the plain code's pixels, shrinking and enlarging");
+  same = 1;
+  for (k = 0; k < 4; k++)
+    {
+      memcpy (a, src, sizeof src);
+      memcpy (b, src, sizeof src);
+      simd_force (0);
+      sharpen32 (a, W, H, 120, sig[k]);
+      simd_force (1);
+      sharpen32 (b, W, H, 120, sig[k]);
+      if (memcmp (a, b, sizeof src))
+        same = 0;
+    }
+  CHECK (same, "sharpen32: NEON gives the plain code's pixels at every radius");
+  simd_force (-1);
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -2101,6 +2149,7 @@ int main (int argc, char **argv)
   test_geometry ();
   test_resample ();
   test_sharpen ();
+  test_simd ();
   test_curves ();
   test_highlights_shadows ();
   test_glow ();

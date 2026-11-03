@@ -108,6 +108,10 @@ void draw_sprite_rect (const void *area, const void *sprite, int w, int h,
    until draw_forget). Off: OS_SpriteOp's own (pixel-dropping) scaling,
    for pictures that change on every frame, such as while dragging. */
 void draw_set_smoothing (int on);
+/* Where draw_sprite_rect would put a w x h sprite (0: nowhere); and its
+   smoothed copy for that box made now, before the redraw. */
+int draw_fit (int w, int h, int bx0, int by0, int bx1, int by1, int out[4]);
+void draw_prepare (const void *sprite, int w, int h, int bx0, int by0, int bx1, int by1);
 /* One pixel a pixel, bottom left at (x, y). */
 void draw_sprite_at (const void *area, const void *sprite, int x, int y);
 void draw_sprite_masked (const void *area, const void *sprite, int x, int y);   /* using its mask */

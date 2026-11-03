@@ -1,4 +1,4 @@
-Lumen 0.0.29 (03 Nov 2026) - test build
+Lumen 0.0.30 (03 Nov 2026) - test build
 =====================================
 
 A photo library and non-destructive editor for RISC OS 5.
@@ -396,11 +396,19 @@ are made again with the edit.
 Speed: !Lumen.Bench measures the editing pipeline on your machine. Run it
 in a task window (Ctrl-F12):  *Run <Lumen$Dir>.Bench
 
-JPEGs are read and written with the CPU's NEON instructions when it has
-them (every ARMv7 machine RISC OS 5 runs on does); Bench's first line says
-"JPEG code: NEON" or "plain C". To compare, *Set JSIMD_FORCENONE 1 before
-running Bench (or Lumen) uses the plain C code; *Unset JSIMD_FORCENONE
-puts NEON back.
+Lumen runs on any ARMv7 processor with VFPv3. When the processor has
+NEON (every Raspberry Pi from the Pi 2 on does), JPEGs are read and
+written with it, and Lumen's own scaling of the photo to the screen and
+its sharpening use it too; without NEON the plain code gives exactly the
+same pictures. Bench says which is in use and times both. To compare:
+*Set JSIMD_FORCENONE 1 (JPEGs) and *Set Lumen$NEON 0 (Lumen's own) before
+running Bench or Lumen use the plain code; *Unset them to put NEON back.
+
+The Viewer: a change shows the new picture over the old one (it is made
+at the size shown before it is drawn, so nothing flickers). For a camera
+raw file the full size is read in the background once the photo is on
+screen, so 100% and the loupe are ready sooner; until it is, the loupe
+shows the picture on screen enlarged.
 
 Mouse
 -----
