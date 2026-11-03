@@ -290,6 +290,18 @@ Fixes from a review of 0.0.23:
   Sharpening's kernel now sums to exactly 1024, so its blur is a shift.
   LumenBench times both.
 
+## 0.0.31
+
+- resample32 rebuilt for NEON: each output row is made down first (the
+  source rows it takes, one weight per row, so a sweep along memory: 16
+  bytes at a time with NEON) into a 16-bit row, then across (a pixel's
+  four channels in four lanes, loaded straight from that row, two pixels
+  out together). The plain code does the same two passes, so the two
+  still give identical pixels. 0.0.30's NEON version worked one pixel at a
+  time and was slower than the plain code under QEMU; this one is about
+  1.3-1.8x faster shrinking and up to 1.5x enlarging there (QEMU only:
+  LumenBench on the Pi gives the real figures).
+
 ## Layout
 
 ```
