@@ -45,6 +45,10 @@ nav.toc li { margin:2px 0; }
 .pair { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
 .pair figure { margin:8px 0; }
 a { color:#1f5fa8; }
+
+.author { border-left:4px solid var(--accent); padding:4px 0 4px 16px; margin:12px 0 20px; font-style:italic; }
+.author p { margin:6px 0; }
+.author .sign { font-style:normal; font-weight:600; text-align:right; }
 </style>
 </head>
 <body>
@@ -83,10 +87,16 @@ a { color:#1f5fa8; }
 <p>Lumen keeps all your photos in one place. You show it where your photos are, and it makes a <b>library</b> of them: small pictures you can look through quickly, star ratings, albums, and everything your camera recorded about each shot. When you want to make a photo look better, you do it in Lumen too: brighter, warmer, straighter, cropped. Then you <b>export</b> a copy to share.</p>
 <p>Lumen never changes your photos. Your files stay exactly as they were, wherever they are. What you change in Lumen is kept in the library, and only goes into a new file when you export one.</p>
 
+<h4>From the author</h4>
+<div class="author">
+<p>Photography is my passion, and Lumen is my way of bringing it to RISC OS: a proper home for my photos, where I can pick out the best, bring out what I saw when I pressed the shutter, and share them. Every photo in this guide is one of my own, and you'll see them in Lumen on almost every page. I hope it brings you the same pleasure with yours.</p>
+<p class="sign">Andrew Youll</p>
+</div>
+
 <h4>About this guide</h4>
 <p>The guide comes with Lumen: choose <b>User guide</b> from the menu on Lumen's icon bar icon, and it opens in your web browser (NetSurf, for example). If no web browser is set up, Lumen tells you so. The file itself is <code>!Lumen.Guide.index/html</code>, if you'd rather open it yourself.</p>
 <p>You don't need to read it in order. If you're new to photo libraries, start at <a href="#part1">Part I</a> and do the <b>Try it</b> examples as you go. By the end of <a href="#ch5">Chapter 5</a> you'll have a library of your own, with your best photos starred. If you only want to improve one photo, go to <a href="#part3">Part III</a>.</p>
-<p>The pictures are screenshots of Lumen running on RISC OS 5, with photos by Andrew Youll: horses, eventing, jousting and dogs (see <a href="#credits">Photo credits</a>).</p>
+<p>The pictures are screenshots of Lumen running on RISC OS 5, with photos by the author, Andrew Youll: horses, eventing, jousting and dogs (see <a href="#credits">Photo credits</a>).</p>
 
 <h4>This is an early version</h4>
 <p>Lumen 0.0.31 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
@@ -949,7 +959,7 @@ a { color:#1f5fa8; }
 
 <!-- ======================================================================= -->
 <h2 class="part" id="credits">Photo credits</h2>
-<p>All the photos in this guide are by Andrew Youll, &copy; Andrew Youll, and are used with his permission. They're shown smaller than the originals, and in Chapters 6, 7 and 10 to 14 with Lumen's adjustments, styles, versions and keywords applied. The raw photos are straight from his Nikon D700.</p>
+<p>All the photos in this guide are by the author, Andrew Youll (&copy; Andrew Youll). They're shown smaller than the originals, and in Chapters 6, 7 and 10 to 14 with Lumen's adjustments, styles, versions and keywords applied. The raw photos are straight from his Nikon D700.</p>
 
 <p class="small">Lumen is &copy; Andrew Youll, 2026, and is free software under the MIT licence: you may use, change and pass it on, keeping the copyright notice. Its source code is published with each release. The licences of the code it includes (SQLite, libjpeg-turbo, libpng, zlib and UnixLib, and LibRaw in the LumenRaw plug-in) are in <code>!Lumen.Licences</code>.</p>
 
