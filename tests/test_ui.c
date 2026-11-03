@@ -740,7 +740,7 @@ int main (int argc, char **argv)
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
   CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
   CHECK (mainwin_mode () == LAYOUT_BROWSER && mainwin_tab () == TAB_LIBRARY && mainwin_inspector_on (),
-         "Aperture's start: the Browser, the inspector on its Library tab");
+         "at start: the Browser, the inspector on its Library tab");
   CHECK (iopened[3] - iopened[1] == 640 && opened[1] > iopened[3] && mopened[4] - opened[4] == 120,
          "the inspector on the left, the browser beside it, under the toolbar");
   CHECK (title_buf && strstr (title_buf, "All photos (0)") != NULL, "title: an empty library");
@@ -1439,7 +1439,7 @@ int main (int argc, char **argv)
       CHECK (strstr (text, "exposure") != NULL, "photo 3 gets Bright");
       browser_focus_on (3);
       click (16 + 352 + 60, -16 - 60, Button_Menu);
-      choose4 (1, 9, 0, 12);             /* Apply preset > Styles > Cyanotype */
+      choose4 (1, 9, 0, 13);             /* Apply preset > Styles > Cyanotype */
       browser_item (3, &it2);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "tone shadow_hue=212") != NULL && strstr (text, "saturation=-100") != NULL,
@@ -2029,7 +2029,7 @@ int main (int argc, char **argv)
     }
   }
 
-  /* ---- Aperture's layout: the toolbar, the inspector's tabs, the keys ---- */
+  /* ---- The layout: the toolbar, the inspector's tabs, the keys ---- */
   {
     int vb = vopen_calls;
     cat_item it;

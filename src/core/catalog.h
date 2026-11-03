@@ -71,7 +71,7 @@ typedef struct
   int label;                  /* colour label, CAT_LABEL_* (0 none) */
 } cat_item;
 
-/* Colour labels, as Aperture's: search and smart albums find them by name. */
+/* Colour labels: search and smart albums find them by name. */
 enum { CAT_LABEL_NONE, CAT_LABEL_RED, CAT_LABEL_ORANGE, CAT_LABEL_YELLOW, CAT_LABEL_GREEN, CAT_LABEL_BLUE,
        CAT_LABEL_PURPLE, CAT_LABEL_GREY, CAT_LABELS };
 extern const char *const cat_label_names[CAT_LABELS];

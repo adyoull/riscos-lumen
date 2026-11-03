@@ -202,6 +202,12 @@ void develop_prepare (develop *d, const recipe *r)
         d->hsl_sat[i] = (uint16_t) lround (256 * (1 + v[HSL_SAT]));          /* -100: grey, +100: twice */
         d->hsl_lum[i] = (uint16_t) lround (4096 * pow (2.0, v[HSL_LUM]));    /* a stop either way */
       }
+  /* Glow (laid on by develop_mask's grid). */
+  d->glow = r->v[P_GLOW_AMOUNT] > 0 ? (int) lround (r->v[P_GLOW_AMOUNT] / 100.0 * 256) : 0;
+  d->glow_sigma = (float) (0.01 + r->v[P_GLOW_SPREAD] / 100.0 * 0.11);
+  d->glow_high = (float) (r->v[P_GLOW_HIGH] / 100.0 * 0.85);
+  d->glow_warm = (float) (r->v[P_GLOW_WARM] / 100.0);
+  d->ggw = d->ggh = 0;                 /* none until develop_mask */
   /* Vignette: from the midpoint (as a share of the way to the corners) out,
      smoothly to 2 stops darker (or lighter) at the corners at 100. */
   d->vig = r->v[P_VIG_AMOUNT] != 0;
@@ -339,7 +345,7 @@ static inline void pixel (const develop *d, const uint16_t *s, int *r, int *g, i
 
 /* --- Highlights & Shadows */
 
-int develop_needs_mask (const develop *d) { return d->hs; }
+int develop_needs_mask (const develop *d) { return d->hs || d->glow; }
 
 /* The gain for a lightness l (0-1, as seen): at 100, shadows lift black
    surroundings by 2.4 stops, fading out by l = 0.65; highlights pull white
@@ -445,6 +451,50 @@ static void make_map (dev_lummap *m, const unsigned char *rgb, const uint16_t *l
         }
     }
   blur_map (m);
+  /* The colour map, for the glow: each cell's average, in linear light. */
+  if (w >= h)
+    {
+      m->cw = GLOW_MAP;
+      m->ch = (int) ((long long) GLOW_MAP * h / (w > 0 ? w : 1));
+    }
+  else
+    {
+      m->ch = GLOW_MAP;
+      m->cw = (int) ((long long) GLOW_MAP * w / (h > 0 ? h : 1));
+    }
+  if (m->cw < 1) m->cw = 1;
+  if (m->ch < 1) m->ch = 1;
+  for (cy = 0; cy < m->ch; cy++)
+    {
+      int y0 = (int) ((long long) cy * h / m->ch), y1 = (int) ((long long) (cy + 1) * h / m->ch);
+      for (cx = 0; cx < m->cw; cx++)
+        {
+          int x0 = (int) ((long long) cx * w / m->cw), x1 = (int) ((long long) (cx + 1) * w / m->cw);
+          int x, y, step = (x1 - x0) * (y1 - y0) > 4096 ? 2 : 1;
+          unsigned long long sr = 0, sg = 0, sb = 0;
+          unsigned long n = 0;
+          uint16_t *o = m->c + (cy * m->cw + cx) * 3;
+          if (y1 <= y0) y1 = y0 + 1;
+          if (x1 <= x0) x1 = x0 + 1;
+          for (y = y0; y < y1 && y < h; y += step)
+            for (x = x0; x < x1 && x < w; x += step)
+              {
+                size_t i = ((size_t) y * w + x) * 3;
+                if (rgb)
+                  {
+                    sr += s2l[rgb[i]]; sg += s2l[rgb[i + 1]]; sb += s2l[rgb[i + 2]];
+                  }
+                else
+                  {
+                    sr += lin[i]; sg += lin[i + 1]; sb += lin[i + 2];
+                  }
+                n++;
+              }
+          o[0] = (uint16_t) (n ? sr / n : 0);
+          o[1] = (uint16_t) (n ? sg / n : 0);
+          o[2] = (uint16_t) (n ? sb / n : 0);
+        }
+    }
 }
 
 void dev_lummap_rgb8 (dev_lummap *m, const unsigned char *rgb, int w, int h) { make_map (m, rgb, NULL, w, h); }
@@ -467,10 +517,120 @@ static double map_at (const dev_lummap *m, double u, double v)
        + (m->l[y1 * m->w + x0] * (1 - ax) + m->l[y1 * m->w + x1] * ax) * ay;
 }
 
+/* One pass of a Gaussian (sigma in cells) along rows (dx 1) or columns of
+   a w x h, 3-channel float map, edges held. */
+static void gauss_pass (float *m, int w, int h, double sigma, int along_rows)
+{
+  int rad = (int) ceil (sigma * 3), n = along_rows ? w : h, lines = along_rows ? h : w, l, i, k;
+  float *k_ = malloc (sizeof (float) * (size_t) (2 * rad + 1)), *tmp = malloc (sizeof (float) * (size_t) n * 3);
+  double sum = 0;
+  if (!k_ || !tmp)
+    {
+      free (k_);
+      free (tmp);
+      return;
+    }
+  for (k = -rad; k <= rad; k++)
+    sum += k_[k + rad] = (float) exp (-0.5 * k * k / (sigma * sigma));
+  for (k = 0; k <= 2 * rad; k++)
+    k_[k] = (float) (k_[k] / sum);
+  for (l = 0; l < lines; l++)
+    {
+      for (i = 0; i < n; i++)
+        {
+          float a = 0, b = 0, c = 0;
+          for (k = -rad; k <= rad; k++)
+            {
+              int j = i + k < 0 ? 0 : i + k >= n ? n - 1 : i + k;
+              const float *p = along_rows ? m + ((size_t) l * w + j) * 3 : m + ((size_t) j * w + l) * 3;
+              float f = k_[k + rad];
+              a += p[0] * f; b += p[1] * f; c += p[2] * f;
+            }
+          tmp[i * 3] = a; tmp[i * 3 + 1] = b; tmp[i * 3 + 2] = c;
+        }
+      for (i = 0; i < n; i++)
+        {
+          float *p = along_rows ? m + ((size_t) l * w + i) * 3 : m + ((size_t) i * w + l) * 3;
+          p[0] = tmp[i * 3]; p[1] = tmp[i * 3 + 1]; p[2] = tmp[i * 3 + 2];
+        }
+    }
+  free (k_);
+  free (tmp);
+}
+
+/* The glow's light over the output: each source cell developed, weighed
+   by its brightness above the threshold (smoothly), tinted, blurred, then
+   sampled through the geometry onto the grid. */
+static void make_glow (develop *d, const dev_lummap *m, const geom_plan *g, int src_w, int src_h, int ow, int oh)
+{
+  int n = m->cw * m->ch, i, x, y;
+  float *f = malloc (sizeof (float) * (size_t) n * 3);
+  double wr = 1 + 0.30 * d->glow_warm, wg = 1 + 0.06 * d->glow_warm, wb = 1 - 0.30 * d->glow_warm;
+  double sigma = d->glow_sigma * (m->cw > m->ch ? m->cw : m->ch);
+  if (!f)
+    return;
+  for (i = 0; i < n; i++)
+    {
+      int R, G, B;
+      double L, t;
+      pixel (d, m->c + i * 3, &R, &G, &B);
+      L = srgb_encode ((R * 0.2126 + G * 0.7152 + B * 0.0722) / 65535.0);
+      t = L <= d->glow_high ? 0 : (L - d->glow_high) / (1 - d->glow_high);
+      t = t > 1 ? 1 : t * t * (3 - 2 * t);
+      f[i * 3] = (float) (R * t * wr);
+      f[i * 3 + 1] = (float) (G * t * wg);
+      f[i * 3 + 2] = (float) (B * t * wb);
+    }
+  gauss_pass (f, m->cw, m->ch, sigma, 1);
+  gauss_pass (f, m->cw, m->ch, sigma, 0);
+  if (ow >= oh)
+    {
+      d->ggw = GLOW_GRID;
+      d->ggh = (int) ((long long) GLOW_GRID * oh / ow);
+    }
+  else
+    {
+      d->ggh = GLOW_GRID;
+      d->ggw = (int) ((long long) GLOW_GRID * ow / oh);
+    }
+  if (d->ggw < 2) d->ggw = 2;
+  if (d->ggh < 2) d->ggh = 2;
+  for (y = 0; y < d->ggh; y++)
+    for (x = 0; x < d->ggw; x++)
+      {
+        double ox = (x + 0.5) * ow / d->ggw, oy = (y + 0.5) * oh / d->ggh, sx = ox, sy = oy, fx, fy, ax, ay;
+        int x0, y0, x1, y1, c;
+        if (g)
+          geom_to_source (g, ox, oy, &sx, &sy);
+        fx = sx / src_w * m->cw - 0.5;
+        fy = sy / src_h * m->ch - 0.5;
+        fx = fx < 0 ? 0 : fx > m->cw - 1 ? m->cw - 1 : fx;
+        fy = fy < 0 ? 0 : fy > m->ch - 1 ? m->ch - 1 : fy;
+        x0 = (int) fx; y0 = (int) fy;
+        x1 = x0 + 1 < m->cw ? x0 + 1 : x0;
+        y1 = y0 + 1 < m->ch ? y0 + 1 : y0;
+        ax = fx - x0; ay = fy - y0;
+        for (c = 0; c < 3; c++)
+          {
+            double v = (f[(y0 * m->cw + x0) * 3 + c] * (1 - ax) + f[(y0 * m->cw + x1) * 3 + c] * ax) * (1 - ay)
+                     + (f[(y1 * m->cw + x0) * 3 + c] * (1 - ax) + f[(y1 * m->cw + x1) * 3 + c] * ax) * ay;
+            d->glow_px[(y * d->ggw + x) * 3 + c] = (uint16_t) (v < 0 ? 0 : v > 65535 ? 65535 : v + 0.5);
+          }
+      }
+  free (f);
+}
+
 void develop_mask (develop *d, const dev_lummap *m, const geom_plan *g, int src_w, int src_h)
 {
   int ow = g ? g->ow : src_w, oh = g ? g->oh : src_h, x, y;
   if (ow < 1 || oh < 1 || src_w < 1 || src_h < 1)
+    return;
+  if (d->glow)
+    make_glow (d, m, g, src_w, src_h, ow, oh);
+  d->fw = ow;
+  d->fh = oh;
+  d->rx = d->ry = 0;
+  if (!d->hs)
     return;
   if (ow >= oh)
     {
@@ -522,6 +682,20 @@ static void gain_row (const develop *d, int y, float *row)
     row[x] = (float) (d->gain[y0 * d->gw + x] * (1 - ay) + d->gain[y1 * d->gw + x] * ay);
 }
 
+/* The glow's light along one row of the output: grid rows interpolated. */
+static void glow_row (const develop *d, int y, float *row)
+{
+  double fy = (y + 0.5) * d->ggh / d->fh - 0.5, ay;
+  int y0, y1, x;
+  if (fy < 0) fy = 0;
+  if (fy > d->ggh - 1) fy = d->ggh - 1;
+  y0 = (int) fy;
+  y1 = y0 + 1 < d->ggh ? y0 + 1 : y0;
+  ay = fy - y0;
+  for (x = 0; x < d->ggw * 3; x++)
+    row[x] = (float) (d->glow_px[y0 * d->ggw * 3 + x] * (1 - ay) + d->glow_px[y1 * d->ggw * 3 + x] * ay);
+}
+
 /* The vignette's gain for a pixel: ny2 is the row's squared distance from
    the centre as a share of the half height; x its column in a picture fw wide. */
 static inline void vignette (const develop *d, int fw, float ny2, int x, int *R, int *G, int *B)
@@ -554,27 +728,52 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
       const uint16_t *s = src + (size_t) y * w * 3;
       uint32_t *o = dst + (size_t) y * w;
       float ny2 = d->vig ? row_ny2 (d->fh, y + d->ry) : 0;
-      if (d->hs)
+      if (d->hs || (d->glow && d->ggw))
         {
           /* Highlights & Shadows: each pixel scaled by its place's gain,
-             then the rest as usual. */
-          float row[HS_GRID];
-          double step = (double) d->gw / d->fw, fx = (d->rx + 0.5) * step - 0.5;
-          gain_row (d, y + d->ry, row);
-          for (x = 0; x < w; x++, s += 3, fx += step)
+             then the rest as usual; then the glow laid over it. */
+          float row[HS_GRID], grow[GLOW_GRID * 3];
+          double step = d->hs ? (double) d->gw / d->fw : 0, fx = d->hs ? (d->rx + 0.5) * step - 0.5 : 0;
+          double gstep = d->ggw ? (double) d->ggw / d->fw : 0, gx = d->ggw ? (d->rx + 0.5) * gstep - 0.5 : 0;
+          int glow = d->glow && d->ggw;
+          if (d->hs)
+            gain_row (d, y + d->ry, row);
+          if (glow)
+            glow_row (d, y + d->ry, grow);
+          for (x = 0; x < w; x++, s += 3, fx += step, gx += gstep)
             {
-              double f = fx < 0 ? 0 : fx > d->gw - 1 ? d->gw - 1 : fx;
-              int i = (int) f, j = i + 1 < d->gw ? i + 1 : i;
-              unsigned gn = (unsigned) (row[i] + (row[j] - row[i]) * (f - i));
-              uint16_t t[3];
-              int R, G, B, c;
+              int R, G, B;
               unsigned r, g, b;
-              for (c = 0; c < 3; c++)
+              if (d->hs)
                 {
-                  unsigned v = (s[c] * gn) >> 12;
-                  t[c] = (uint16_t) (v > 65535 ? 65535 : v);
+                  double f = fx < 0 ? 0 : fx > d->gw - 1 ? d->gw - 1 : fx;
+                  int i = (int) f, j = i + 1 < d->gw ? i + 1 : i, c;
+                  unsigned gn = (unsigned) (row[i] + (row[j] - row[i]) * (f - i));
+                  uint16_t t[3];
+                  for (c = 0; c < 3; c++)
+                    {
+                      unsigned v = (s[c] * gn) >> 12;
+                      t[c] = (uint16_t) (v > 65535 ? 65535 : v);
+                    }
+                  pixel (d, t, &R, &G, &B);
                 }
-              pixel (d, t, &R, &G, &B);
+              else
+                pixel (d, s, &R, &G, &B);
+              if (glow)
+                {
+                  /* Screen: out = 1 - (1 - out)(1 - glow * amount). */
+                  double f = gx < 0 ? 0 : gx > d->ggw - 1 ? d->ggw - 1 : gx;
+                  int i = (int) f, j = i + 1 < d->ggw ? i + 1 : i;
+                  float a = (float) (f - i);
+                  int gr = (int) (grow[i * 3] + (grow[j * 3] - grow[i * 3]) * a);
+                  int gg = (int) (grow[i * 3 + 1] + (grow[j * 3 + 1] - grow[i * 3 + 1]) * a);
+                  int gb = (int) (grow[i * 3 + 2] + (grow[j * 3 + 2] - grow[i * 3 + 2]) * a);
+                  gr = (gr * d->glow) >> 8; gg = (gg * d->glow) >> 8; gb = (gb * d->glow) >> 8;
+                  gr = gr > 65535 ? 65535 : gr; gg = gg > 65535 ? 65535 : gg; gb = gb > 65535 ? 65535 : gb;
+                  R += (int) (((unsigned) (65535 - R) * (unsigned) gr) >> 16);
+                  G += (int) (((unsigned) (65535 - G) * (unsigned) gg) >> 16);
+                  B += (int) (((unsigned) (65535 - B) * (unsigned) gb) >> 16);
+                }
               if (d->vig)
                 vignette (d, d->fw, ny2, x + d->rx, &R, &G, &B);
               r = l2s[R]; g = l2s[G]; b = l2s[B];
@@ -635,7 +834,7 @@ int develop_image (const recipe *r, rgb_image *img)
     return -1;
   retouch_rgb8 (img->rgb, img->w, img->h, r);   /* spots first, on the photo upright */
   develop_prepare (d, r);
-  if (!geometry && !d->hs)
+  if (!geometry && !develop_needs_mask (d))
     {
       develop_rgb8 (d, img);
       free (d);
@@ -658,7 +857,7 @@ int develop_image (const recipe *r, rgb_image *img)
       return -1;
     }
   dev_to_linear (img->rgb, lin, (size_t) img->w * img->h);
-  if (d->hs)
+  if (develop_needs_mask (d))
     {
       dev_lummap *m = malloc (sizeof *m);
       if (m)

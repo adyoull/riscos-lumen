@@ -1991,6 +1991,102 @@ static void test_export_options (const char *work)
   }
 }
 
+/* Glow: a bright square on a dark ground; its light spreads round it. */
+static void test_glow (void)
+{
+  enum { W = 240, H = 160 };
+  static uint16_t lin[W * H * 3];
+  static uint32_t a[W * H], b[W * H], c[W * H];
+  static develop d;
+  static dev_lummap m;
+  recipe r, back;
+  char text[600];
+  const uint16_t *s2l = dev_srgb_to_linear ();
+  int x, y;
+  for (y = 0; y < H; y++)
+    for (x = 0; x < W; x++)
+      {
+        int v = x >= 100 && x < 140 && y >= 60 && y < 100 ? 245 : 40;
+        uint16_t *p = lin + ((size_t) y * W + x) * 3;
+        p[0] = p[1] = p[2] = s2l[v];
+      }
+  dev_lummap_lin (&m, lin, W, H);
+  CHECK (m.cw == GLOW_MAP && m.ch == GLOW_MAP * 2 / 3, "glow: a colour map of 96 x 64 cells");
+
+  recipe_default (&r);
+  develop_prepare (&d, &r);
+  CHECK (!develop_needs_mask (&d), "glow: none at amount 0");
+  develop_rows (&d, lin, W, 0, H, a, NULL);
+
+  recipe_set (&r, P_GLOW_AMOUNT, 60);
+  recipe_set (&r, P_GLOW_SPREAD, 30);
+  recipe_set (&r, P_GLOW_HIGH, 60);
+  develop_prepare (&d, &r);
+  CHECK (develop_needs_mask (&d), "glow: wants the map");
+  develop_mask (&d, &m, NULL, W, H);
+  develop_rows (&d, lin, W, 0, H, b, NULL);
+  {
+    int near0 = (int) (a[80 * W + 95] & 255), near1 = (int) (b[80 * W + 95] & 255);
+    int far0 = (int) (a[5 * W + 5] & 255), far1 = (int) (b[5 * W + 5] & 255);
+    int in0 = (int) (a[80 * W + 120] & 255), in1 = (int) (b[80 * W + 120] & 255);
+    CHECK (near1 > near0 + 15, "glow: the dark ground beside the bright square lights up");
+    CHECK (far1 - far0 < (near1 - near0) / 3, "glow: far away, much less");
+    CHECK (in1 >= in0, "glow: the bright square itself isn't darkened");
+    CHECK ((b[80 * W + 95] & 255) == (b[80 * W + 95] >> 16 & 255), "glow: grey stays grey with no warmth");
+  }
+  /* Highlights: the higher, the less glows (the dark ground glows only when it is low). */
+  recipe_set (&r, P_GLOW_HIGH, 100);
+  develop_prepare (&d, &r);
+  develop_mask (&d, &m, NULL, W, H);
+  develop_rows (&d, lin, W, 0, H, c, NULL);
+  CHECK ((int) (c[80 * W + 95] & 255) < (int) (b[80 * W + 95] & 255), "glow: Highlights 100 glows less than 60");
+  recipe_set (&r, P_GLOW_HIGH, 0);
+  develop_prepare (&d, &r);
+  develop_mask (&d, &m, NULL, W, H);
+  develop_rows (&d, lin, W, 0, H, c, NULL);
+  CHECK ((int) (c[80 * W + 95] & 255) > (int) (b[80 * W + 95] & 255), "glow: Highlights 0 glows more than 60");
+  /* Warmth: the halo is redder than it is blue. */
+  recipe_set (&r, P_GLOW_HIGH, 60);
+  recipe_set (&r, P_GLOW_WARM, 80);
+  develop_prepare (&d, &r);
+  develop_mask (&d, &m, NULL, W, H);
+  develop_rows (&d, lin, W, 0, H, c, NULL);
+  CHECK ((int) (c[80 * W + 95] & 255) > (int) (c[80 * W + 95] >> 16 & 255) + 5, "glow: warmth makes the halo golden");
+  /* Wider spread reaches further. */
+  recipe_set (&r, P_GLOW_WARM, 0);
+  recipe_set (&r, P_GLOW_SPREAD, 100);
+  develop_prepare (&d, &r);
+  develop_mask (&d, &m, NULL, W, H);
+  develop_rows (&d, lin, W, 0, H, c, NULL);
+  CHECK ((int) (c[80 * W + 40] & 255) > (int) (b[80 * W + 40] & 255) + 2, "glow: more spread reaches further");
+  /* A band from row 50 is the same as all at once. */
+  develop_region (&d, W, H, 0, 0);
+  develop_rows (&d, lin, W, 0, H, a, NULL);
+  develop_region (&d, W, H, 0, 50);
+  develop_rows (&d, lin + (size_t) 50 * W * 3, W, 0, H - 50, b + (size_t) 50 * W, NULL);
+  CHECK (memcmp (a + 50 * W, b + 50 * W, sizeof (uint32_t) * W * (H - 50)) == 0, "glow: a band gives the same as the whole");
+  /* Text */
+  recipe_default (&r);
+  recipe_set (&r, P_GLOW_AMOUNT, 25);
+  recipe_set (&r, P_GLOW_WARM, 20);
+  recipe_format (&r, text, sizeof text);
+  CHECK (strstr (text, "glow amount=25 spread=40 highlights=60 warmth=20") != NULL, text);
+  recipe_parse (&back, text);
+  CHECK (recipe_equal (&r, &back), "glow: read back the same");
+  /* develop_image (thumbnails) glows too. */
+  {
+    rgb_image img;
+    img.w = W; img.h = H;
+    img.rgb = malloc ((size_t) W * H * 3);
+    for (y = 0; y < H; y++)
+      for (x = 0; x < W; x++)
+        memset (img.rgb + ((size_t) y * W + x) * 3, x >= 100 && x < 140 && y >= 60 && y < 100 ? 245 : 40, 3);
+    recipe_set (&r, P_GLOW_AMOUNT, 60);
+    CHECK (img.rgb && develop_image (&r, &img) == 0 && img.rgb[(80 * W + 95) * 3] > 55, "glow: thumbnails glow too");
+    free (img.rgb);
+  }
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -2007,6 +2103,7 @@ int main (int argc, char **argv)
   test_sharpen ();
   test_curves ();
   test_highlights_shadows ();
+  test_glow ();
   test_develop_image ();
   test_auto ();
   test_presets (argv[1]);

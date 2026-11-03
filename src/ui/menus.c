@@ -138,7 +138,7 @@ static menu *styles_menu (int shaded)
   menu *m = new_menu ("Styles", n);
   for (k = 0; m && k < n; k++)
     set_item (m, k, k == n - 1, styles_get (k)->name,
-              k == 4 || k == 8 ? MF_DOTTED : 0, -1, shaded);   /* colour; strong colour; black and white */
+              k == 5 || k == 9 ? MF_DOTTED : 0, -1, shaded);   /* colour; strong colour; black and white */
   return m;
 }
 

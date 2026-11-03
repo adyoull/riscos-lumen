@@ -1,7 +1,6 @@
 # Lumen
 
-A photo library and non-destructive editor for RISC OS 5, in the spirit of
-Apple's Aperture. Milestone 0 (import, browse, rate, flag, albums) and most
+A photo library and non-destructive editor for RISC OS 5. Milestone 0 (import, browse, rate, flag, albums) and most
 of milestone 1 (the viewer, adjustments, Auto, crop and geometry, presets),
 with keywords and smart albums, versions and stacks, exporting and printing.
 
@@ -69,7 +68,7 @@ with keywords and smart albums, versions and stacks, exporting and printing.
   exactly the pixels shown (tent filter when shrinking, bilinear when
   enlarging; 24 MB, least recently used first) and plots them 1:1. The
   half-size render shown while dragging is still plotted directly.
-- Histogram as Aperture draws it: red, green and blue overlaid with
+- Histogram: red, green and blue overlaid with
   additive overlaps, one column per pixel, smoothed, quarter guides,
   clipping marks. develop_rows now counts 256 bins per channel and
   luminance (`dev_hist`).
@@ -258,6 +257,18 @@ Fixes from a review of 0.0.23:
   `Catalogue-backup` with VACUUM INTO first, REINDEXes if needed, and puts
   versions without a project and originals without a version into a
   "Recovered" project.
+
+## 0.0.29
+
+- Glow (an Orton effect): Amount, Spread, Highlights, Warmth. The bright
+  parts of a 96-cell colour map of the source (the Highlights & Shadows
+  map, now with colour) are developed, weighed above the threshold
+  (smoothstep), tinted, blurred with a Gaussian of 1-12% of the longer
+  side, laid through the geometry onto a 96-cell grid over the output, and
+  screened over each pixel in linear light before the vignette. Same in
+  the Viewer, 100%, loupe, thumbnails, exports and prints.
+- A built-in style, Sunlit Garden: Andrew Youll's look for his dog photos
+  (matched on his Labrador NEF) with a touch of glow.
 
 ## Layout
 

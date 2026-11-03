@@ -328,7 +328,7 @@ static int groups_top (void) { return tools_top () - TOOLS_H; }
 
 static int group_shown (int g) { return recipe_groups[g].panel; }
 
-/* Groups fold away, as Aperture's do: a click on a group's name. A
+/* Groups fold away: a click on a group's name. A
    group the person hasn't folded or opened themselves is folded
    automatically, from the bottom, when the panel wouldn't fit. */
 #define MAX_GROUPS 16
@@ -1359,7 +1359,7 @@ static void draw_loupe (int ox, int oy)
   if (!loupe_shown || !loupe_area || zoom)
     return;
   draw_sprite_masked (loupe_area, loupe_area + 4, cx - loupe_os_w () / 2, cy - loupe_os_h () / 2);
-  /* A bezel, as Aperture's: dark edges round a light grey ring. */
+  /* A bezel: dark edges round a light grey ring. */
   {
     int px = 1 << draw_xeig ();
     for (k = 0; k <= 7; k++)
@@ -2841,7 +2841,7 @@ static void draw_button (int k, const char *text, int enabled, int ox, int oy)
   draw_button_rect (r, text, enabled, 0, ox, oy);
 }
 
-/* The histogram, as Aperture draws it: red, green and blue laid over
+/* The histogram: red, green and blue laid over
    each other on a dark ground, where they overlap the colours add (red
    and green make yellow, all three a light grey), so the shape of each
    channel and of the whole stays readable. One column per screen pixel,

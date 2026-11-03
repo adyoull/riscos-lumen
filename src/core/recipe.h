@@ -13,6 +13,7 @@
      noise luminance=30 colour=50
      sharpen amount=40 radius=1.0
      vignette amount=-40 midpoint=50
+     glow amount=25 spread=40 highlights=60 warmth=20
      geometry rotate=1 angle=-1.5 vertical=0 horizontal=0
      crop x0=0.050 y0=0.000 x1=0.950 y1=1.000
 
@@ -42,6 +43,7 @@ enum
   P_NOISE_LUM, P_NOISE_COL,            /* noise reduction (after develop, before sharpening) */
   P_SHARPEN, P_SHARP_RADIUS,           /* sharpen (applied after develop, at the output's size) */
   P_VIG_AMOUNT, P_VIG_MID,             /* vignette: darker (or lighter) towards the corners */
+  P_GLOW_AMOUNT, P_GLOW_SPREAD, P_GLOW_HIGH, P_GLOW_WARM,   /* glow: light from the bright parts spread round them */
   P_ROTATE, P_ANGLE, P_PERSP_V, P_PERSP_H,  /* geometry: quarter turns, straighten, perspective */
   P_CROP_X0, P_CROP_Y0, P_CROP_X1, P_CROP_Y1, /* crop, as fractions of the straightened picture */
   P_COUNT,

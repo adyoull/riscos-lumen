@@ -29,6 +29,18 @@ static const style list[] = {
     "wb temp=10\n"
     "hs shadows=18\n"
     "enhance contrast=-14 saturation=-8 vibrance=6\n" },
+  { "Sunlit Garden",
+    "Fresh greens, warm fur and skin, and a soft glow round the light",
+    "wb temp=2 tint=-2\n"
+    "exposure ev=0.10\n"
+    "hs highlights=45 shadows=10\n"
+    "levels black=5 white=99 mid=-4\n"
+    "curves rgb=0.000:0.000,0.250:0.215,0.750:0.785,1.000:1.000\n"
+    "enhance contrast=22 saturation=5 vibrance=40\n"
+    "hsl orange_saturation=-10 yellow_hue=10 yellow_saturation=10 green_hue=6 green_saturation=40 "
+    "green_luminance=-8 aqua_saturation=15\n"
+    "vignette amount=-40 midpoint=40\n"
+    "glow amount=30 spread=35 highlights=55 warmth=25\n" },
   { "Vivid Landscape",
     "Rich colour and depth for skies, water and hills",
     "hs highlights=18 shadows=16\n"

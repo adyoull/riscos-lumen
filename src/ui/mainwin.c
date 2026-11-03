@@ -1,4 +1,4 @@
-/* mainwin.c: Lumen's one main window, laid out as Aperture 3's.
+/* mainwin.c: Lumen's one main window.
 
      +--------------------------------------------------------------+
      | toolbar: Inspector Import New | Browser Split Viewer | Loupe  |
@@ -18,7 +18,7 @@
    each scrolls with its own scroll bar. Whenever the main window opens or
    changes size, the children are placed again.
 
-   Keys, as Aperture's: V cycles the layouts, I shows or hides the
+   Keys: V cycles the layouts, I shows or hides the
    inspector, W cycles its tabs, F is full screen. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -414,7 +414,7 @@ void mainwin_set_tab (int t)
   tab = t;
   if (!insp_on)
     insp_on = 1;
-  /* Adjusting needs a photo in the Viewer: Split View, as Aperture does. */
+  /* Adjusting needs a photo in the Viewer: Split View. */
   if (tab == TAB_ADJUST && mode == LAYOUT_BROWSER && browser_count () > 0)
     mainwin_set_mode (LAYOUT_SPLIT);
   relayout ();
@@ -1171,7 +1171,7 @@ static void draw_tabs (int ox, int oy)
     }
 }
 
-/* The bar along the bottom, as Aperture's: what is shown and selected,
+/* The bar along the bottom: what is shown and selected,
    the thumbnail size, and a grip to resize the window by (the window has
    no scroll bar for the Wimp's own Adjust Size icon to sit on). */
 static void size_rect (int k, int r[4])

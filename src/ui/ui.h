@@ -259,7 +259,7 @@ void viewer_set_grid (int k);          /* None, Thirds, Quarters, Fine */
 int viewer_grid (void);
 const char *viewer_grid_name (int k);
 
-/* --- mainwin.c: the one main window, Aperture's layout */
+/* --- mainwin.c: the one main window */
 enum { LAYOUT_BROWSER, LAYOUT_SPLIT, LAYOUT_VIEWER };
 enum { TAB_LIBRARY, TAB_INFO, TAB_ADJUST };
 int mainwin_create (void);

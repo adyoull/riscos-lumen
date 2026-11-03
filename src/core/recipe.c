@@ -55,6 +55,10 @@ const recipe_param recipe_params[P_COUNT] = {
   { "sharpen",  "radius",     "Radius",       0.3,   3, 1, 0.1f, 1, 0 },
   { "vignette", "amount",     "Amount",      -100, 100, 0, 1, 0, 0 },
   { "vignette", "midpoint",   "Midpoint",       0, 100, 50, 1, 0, 0 },
+  { "glow",     "amount",     "Amount",         0, 100, 0, 1, 0, 0 },
+  { "glow",     "spread",     "Spread",         0, 100, 40, 1, 0, 0 },
+  { "glow",     "highlights", "Highlights",     0, 100, 60, 1, 0, 0 },
+  { "glow",     "warmth",     "Warmth",      -100, 100, 0, 1, 0, 0 },
   { "geometry", "rotate",     "Rotate",         0,   3, 0, 1, 0, 1 },
   { "geometry", "angle",      "Straighten",   -15,  15, 0, 0.1f, 1, 0 },
   { "geometry", "vertical",   "Vertical",    -100, 100, 0, 1, 0, 0 },
@@ -78,6 +82,7 @@ const recipe_group recipe_groups[] = {
   { "Noise Reduction", P_NOISE_LUM, P_NOISE_COL, 1, 0, 0 },
   { "Sharpen", P_SHARPEN, P_SHARP_RADIUS, 1, 0, 0 },
   { "Vignette", P_VIG_AMOUNT, P_VIG_MID, 1, 0, 0 },
+  { "Glow", P_GLOW_AMOUNT, P_GLOW_WARM, 1, 0, 0 },
   { "Geometry", P_ROTATE, P_PERSP_H, 1, 0, 0 },
   { "Crop", P_CROP_X0, P_CROP_Y1, 0, 0, 0 },
 };

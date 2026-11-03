@@ -6,7 +6,11 @@ new1.sh to new7.sh in order; start-new2.sh then new8.sh; start-print.sh
 then new9.sh; start-lib.sh then new10.sh (which also leaves DogsLib in
 IXFS:$.RISCOS), start-lib.sh again then new11.sh. The icon bar menu
 (iconbar-menu) was taken by hand: Menu on the icon, cropped 1750,825 to
-1920,1080. The LumenRaw guide: guide's start.sh, then lumenraw-shots.sh.
+1920,1080. Glow (0.0.29): glow-panel from the Viewer on Labradors (Dogs_and_garden,
+Adjustments tab scrolled to the end, Amount 40, Warmth 25); glow.png and
+the styles sheet are host renders (/home/claude/look, /home/claude/styles,
+4 columns); styles-preview retaken on Leading_out with the pointer on
+Sunlit Garden. The LumenRaw guide: guide's start.sh, then lumenraw-shots.sh.
 
 The photos are Andrew Youll's own (copyright Andrew Youll, used with his
 permission), in IXFS:$.RISCOS.Photos: Eventing, Schooling, Portraits,

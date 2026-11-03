@@ -9,13 +9,13 @@ Environment: arm32, vfpv3
 Depends: SharedUnixLibrary (>= 1.16), ARMEABISupport
 Suggests: LumenRaw
 Components: Apps.Graphics.!Lumen (Movable LookAt)
-Description: Photo library and editor, in the spirit of Aperture
+Description: Photo library and non-destructive editor
  Lumen imports, browses, rates, flags and adjusts photos without
  changing them: white balance, exposure, highlights and shadows,
  levels, curves, contrast, saturation, sharpening, crop, straighten and
  perspective, with presets, undo, a loupe and a 100% view; then exports
- them as JPEG or PNG. One window laid out as Aperture's: browser,
- viewer, split view and full screen.
+ them as JPEG or PNG. One window with a browser, viewer, split view
+ and full screen.
  .
  Camera raw files need the LibRaw plug-in, a separate package
  (LumenRaw).

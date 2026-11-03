@@ -13,7 +13,7 @@
 #define TEXT_H 36
 #define STARS_H 40
 
-/* Aperture's dark grey browser, with RISC OS's light blue (Wimp colour
+/* A dark grey browser, with RISC OS's light blue (Wimp colour
    15, #00BBFF) for what is rated and focused. &BBGGRR00. */
 #define COL_BG 0x3C3C3C00u
 #define COL_SELECTED 0x60606000u

@@ -689,7 +689,7 @@ static void data_load (int *b)
 }
 
 /* A key in the main window (it has the caret): the layouts first, as
-   Aperture's (V, I, W, F); then what is showing. In Split View the
+   V, I, W and F; then what is showing. In Split View the
    Browser takes the keys that move about and rate, the Viewer the rest. */
 static int app_key (int key)
 {
