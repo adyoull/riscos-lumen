@@ -2187,6 +2187,269 @@ static void test_jpeg_scaling (void)
   free (e8.rgb);
 }
 
+/* Previews: made in the background once thumbnails are done, found by
+   their key, made again when out of date, discarded. */
+static int preview_count (const char *libdir)
+{
+  char top[1100], dir[1100], shard[8];
+  int k, n = 0;
+  fsys_join (top, sizeof top, libdir, "Previews");
+  for (k = 0; k < 256; k++)
+    {
+      fsys_dir *d;
+      fsys_entry e;
+      snprintf (shard, sizeof shard, "%02x", k);
+      fsys_join (dir, sizeof dir, top, shard);
+      if (!(d = fsys_opendir (dir)))
+        continue;
+      while (fsys_readdir (d, &e) == 1)
+        n += !e.is_dir;
+      fsys_closedir (d);
+    }
+  return n;
+}
+
+static char last_started[2400];
+static int started_only (const char *cmd, int tag)
+{
+  (void) tag;                          /* still running: never ends */
+  snprintf (last_started, sizeof last_started, "%s", cmd);
+  return 0;
+}
+
+static void preview_drain (library *l)
+{
+  int guard = 0;
+  clock_cs = 0;
+  while (lib_previews_busy (l) && guard++ < 100000)
+    lib_preview_work (l, fake_now, clock_cs + 3);
+}
+
+static void test_previews (void)
+{
+  library *l;
+  char err[256], dir[1024], path[1024], libdir[1024], pv[1300], pv2[1300];
+  cat_origin o;
+  cat_id first = 0, second = 0;
+  rgb_image img;
+  long long bytes = 0;
+  int n;
+  p (dir, "PreviewPhotos");
+  fsys_mkdirs (dir);
+  p (path, "PreviewPhotos/wide.jpg");
+  make_jpeg (path, 3000, 2000, 1, "2026:01:01 10:00:00");
+  p (path, "PreviewPhotos/turned.jpg");
+  make_jpeg (path, 2400, 1600, 6, "2026:01:01 10:01:00");   /* shown portrait */
+  p (path, "PreviewPhotos/small.jpg");
+  make_jpeg (path, 800, 600, 1, "2026:01:01 10:02:00");
+  p (libdir, "PreviewLibrary");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "previews: library");
+  CHECK (lib_previews (l) == PREVIEWS_OFF && !lib_previews_busy (l), "previews: off until set");
+  lib_import (l, dir);
+  drain (l);
+  lib_set_previews (l, PREVIEWS_RAW);
+  CHECK (!lib_preview_wanted (l, IMG_JPEG) && lib_previews_busy (l), "previews: raw only: not for JPEGs, a look through");
+  preview_drain (l);
+  CHECK (preview_count (libdir) == 0, "previews: raw only: none made for JPEGs");
+
+  lib_set_previews (l, PREVIEWS_ALL);
+  CHECK (lib_preview_wanted (l, IMG_JPEG) && lib_preview_wanted (l, IMG_PNG), "previews: all: JPEGs and PNGs");
+  lib_hold_previews (l, 1);
+  CHECK (!lib_previews_busy (l), "previews: held (the Viewer busy)");
+  lib_hold_previews (l, 0);
+  preview_drain (l);
+  CHECK (!lib_previews_busy (l) && preview_count (libdir) == 3, "previews: one for each photo");
+  if (cat_origin_below (lib_cat (l), 0, &o) == 1)
+    {
+      second = o.id;
+      if (cat_origin_below (lib_cat (l), o.id, &o) == 1)
+        first = o.id;
+    }
+  CHECK (first > 0 && second > first, "previews: walked newest first");
+  {
+    cat_id id;
+    int seen = 0, ok = 1;
+    for (id = 0; cat_origin_below (lib_cat (l), id, &o) == 1; id = o.id)
+      {
+        thumbgen *t;
+        int r, w = 0, h = 0, big = o.size > 0;
+        seen++;
+        if (!lib_preview_find (l, o.id, pv, sizeof pv))
+          {
+            ok = 0;
+            continue;
+          }
+        t = thumbgen_start (pv, NULL, 1 << 30, 1, err, sizeof err);
+        while (t && (r = thumbgen_step (t, 64)) == 0)
+          ;
+        if (t)
+          thumbgen_size (t, &w, &h);
+        thumbgen_free (t);
+        (void) big;
+        if (strstr (o.path, "wide"))
+          ok &= w == 1600 && h == 1067;
+        else if (strstr (o.path, "turned"))
+          ok &= w == 1067 && h == 1600;   /* upright, as the Viewer shows it */
+        else
+          ok &= w == 800 && h == 600;     /* smaller than 1600: as it is */
+      }
+    CHECK (seen == 3 && ok, "previews: 1600 at most, upright");
+  }
+  /* Out of date (the file changed): not found, made again, the old one gone. */
+  CHECK (lib_preview_find (l, first, pv, sizeof pv) == 1, "previews: found");
+  sqlite3_exec (cat_sqlite (lib_cat (l)), "UPDATE original SET mtime = mtime + 100", NULL, NULL, NULL);
+  CHECK (lib_preview_find (l, first, pv2, sizeof pv2) == 0 && strcmp (pv, pv2) != 0, "previews: out of date: not found");
+  lib_previews_changed (l);
+  preview_drain (l);
+  CHECK (lib_preview_find (l, first, pv2, sizeof pv2) == 1 && preview_count (libdir) == 3,
+         "previews: made again, the old ones removed");
+  {
+    char leaf[40];
+    CHECK (lib_preview_leaf (l, first, leaf, sizeof leaf) && strstr (pv2, leaf), "previews: the leaf Check library expects");
+  }
+  /* The Viewer opening the photo whose preview is being made takes it over. */
+  {
+    thumbgen *t;
+    int r = 0, w = 0, h = 0;
+    char leaf[64];
+    sqlite3_exec (cat_sqlite (lib_cat (l)), "UPDATE original SET mtime = mtime + 100", NULL, NULL, NULL);
+    lib_previews_changed (l);
+    clock_cs = 0;
+    lib_preview_work (l, fake_now, clock_cs + 1);   /* one started */
+    CHECK (lib_preview_now (l, leaf, sizeof leaf), "previews: one being made");
+    CHECK (lib_preview_adopt (l, 999999) == NULL, "previews: not handed over for another photo");
+    if (cat_origin_below (lib_cat (l), 0, &o) == 1)
+      {
+        t = lib_preview_adopt (l, o.id);
+        CHECK (t != NULL && !lib_preview_now (l, leaf, sizeof leaf), "previews: handed over to the Viewer");
+        while (t && (r = thumbgen_step (t, 64)) == 0)
+          ;
+        if (t)
+          thumbgen_size (t, &w, &h);
+        CHECK (r == 1 && (w == 1600 || h == 1600 || w == 800), "previews: and finished there");
+        if (r == 1 && thumbgen_take (t, &img) == 0)
+          {
+            CHECK (lib_preview_save (l, o.id, &img) == 1, "previews: kept by the Viewer");   /* as proxy_ready does */
+            free (img.rgb);
+          }
+        thumbgen_free (t);
+      }
+    preview_drain (l);
+  }
+  /* Check library: a preview of no photo, and one out of date. */
+  {
+    char stray[1300], d2[1100], top[1100];
+    libcheck *k;
+    const libcheck_report *r;
+    char fixed[300], e2[200], said[600];
+    FILE *f;
+    fsys_join (top, sizeof top, libdir, "Previews");
+    fsys_join (d2, sizeof d2, top, "07");
+    fsys_mkdirs (d2);
+    fsys_join (stray, sizeof stray, d2, "999991_0000beef");
+    f = fopen (stray, "wb");
+    if (f)
+      {
+        fputs ("not a preview", f);
+        fclose (f);
+      }
+    k = libcheck_start (l);
+    clock_cs = 0;
+    while (!libcheck_step (k, fake_now, clock_cs + 3))
+      ;
+    r = libcheck_result (k);
+    libcheck_describe (r, said, sizeof said);
+    CHECK (r->previews == 4 && r->previews_unused == 1 && strstr (said, "1 preview out of date or of no photo"),
+           "previews: Check library finds the one of no photo");
+    CHECK (libcheck_repair (k, fixed, sizeof fixed, e2, sizeof e2) == 0 && preview_count (libdir) == 3
+           && lib_preview_find (l, first, pv, sizeof pv) == 1, "previews: repair removes it, the others kept");
+    libcheck_free (k);
+  }
+  /* The Viewer keeps what it opened: only when wanted. */
+  img.w = 4; img.h = 3;
+  img.rgb = calloc (4 * 3, 3);
+  lib_set_previews (l, PREVIEWS_RAW);
+  CHECK (lib_preview_save (l, first, &img) == 0, "previews: the Viewer's picture not kept when not wanted");
+  lib_set_previews (l, PREVIEWS_ALL);
+  CHECK (lib_preview_save (l, first, &img) == 1 && lib_preview_find (l, first, pv, sizeof pv) == 1
+         && preview_count (libdir) == 3, "previews: the Viewer's picture kept, in place of the old");
+  free (img.rgb);
+  /* A photo removed from the library: its preview goes too. */
+  {
+    cat_source all = { SRC_ALL, 0, 0, "" };
+    cat_item *items = NULL;
+    cat_details dd;
+    int ni = 0;
+    cat_list (lib_cat (l), &all, &items, &ni);
+    CHECK (ni == 3 && cat_get_details (lib_cat (l), items[0].id, &dd) == 0 && lib_preview_find (l, dd.original, pv, sizeof pv),
+           "previews: the one to remove has one");
+    if (ni == 3)
+      CHECK (lib_remove (l, &items[0].id, 1) == 0 && !lib_preview_find (l, dd.original, pv, sizeof pv)
+             && preview_count (libdir) == 2, "previews: removed with its photo");
+    free (items);
+  }
+  n = lib_discard_previews (l, &bytes);
+  CHECK (n == 2 && bytes > 0 && preview_count (libdir) == 0 && !lib_preview_find (l, first, pv, sizeof pv),
+         "previews: discarded");
+  lib_set_previews (l, PREVIEWS_OFF);
+  CHECK (!lib_previews_busy (l), "previews: off: nothing made again");
+  lib_close (l);
+
+  /* A raw file: developed by the plug-in for its preview. */
+  {
+    const char *helper = getenv ("LUMENRAW");
+    char nef[700], scratch[1024];
+    if (helper && sample (nef, sizeof nef, "iss030e122639.NEF"))
+      {
+        cat_id id = 0;
+        thumbgen *t;
+        int r, w = 0, h = 0;
+        p (scratch, "RawScratch");
+        rawjob_setup (helper, scratch, run_now);
+        p (libdir, "PreviewRawLibrary");
+        CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "raw previews: library");
+        lib_import (l, nef);
+        drain (l);
+        lib_set_previews (l, PREVIEWS_RAW);
+        CHECK (lib_preview_wanted (l, IMG_RAW), "raw previews: wanted");
+        preview_drain (l);
+        if (cat_origin_below (lib_cat (l), 0, &o) == 1)
+          id = o.id;
+        CHECK (lib_preview_find (l, id, pv, sizeof pv) == 1, "raw previews: made");
+        t = thumbgen_start (pv, NULL, 1 << 30, 1, err, sizeof err);
+        while (t && (r = thumbgen_step (t, 64)) == 0)
+          ;
+        if (t)
+          thumbgen_size (t, &w, &h);
+        thumbgen_free (t);
+        CHECK (w == 1600 && h == 1062, "raw previews: 1600 wide, like the Viewer's");
+        /* Another plug-in (a new LumenRaw): out of date. */
+        rawjob_setup (NULL, NULL, NULL);
+        CHECK (!lib_preview_wanted (l, IMG_RAW) && lib_preview_find (l, id, pv2, sizeof pv2) == 0,
+               "raw previews: no plug-in: another key, none wanted");
+        rawjob_setup (helper, scratch, run_now);
+        CHECK (lib_preview_find (l, id, pv2, sizeof pv2) == 1, "raw previews: the same plug-in again: found");
+        lib_close (l);
+        /* The photo being opened goes to the front of the plug-in's queue. */
+        {
+          char e3[200];
+          rawjob *a, *b2, *c2;
+          rawjob_setup (helper, scratch, started_only);
+          a = rawjob_start ("first.nef", 1, 1600, e3, sizeof e3);
+          b2 = rawjob_start ("second.nef", 1, 1600, e3, sizeof e3);
+          c2 = rawjob_start ("opened.nef", 1, 1600, e3, sizeof e3);
+          CHECK (strstr (last_started, "first.nef") != NULL, "plug-in queue: the first runs");
+          rawjob_hurry (c2);
+          rawjob_free (a);
+          CHECK (strstr (last_started, "opened.nef") != NULL, "plug-in queue: the one hurried runs next");
+          rawjob_free (c2);
+          rawjob_free (b2);
+          rawjob_setup (helper, scratch, run_now);
+        }
+      }
+  }
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -2213,6 +2476,7 @@ int main (int argc, char **argv)
   test_time_slicing ();
   test_watch ();
   test_lazy_thumbs ();
+  test_previews ();
   test_libxfer ();
   test_libcheck ();
   test_libxfer_more ();

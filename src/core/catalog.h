@@ -113,6 +113,20 @@ int cat_apply_look (cat *c, const cat_id *versions, int n, const char *look);
    the next, 0 at the end. */
 int cat_original_next (cat *c, cat_id after, cat_id *id, char *path, size_t n, int *missing);
 int cat_set_missing (cat *c, cat_id original, int missing);
+
+/* What a preview of an original depends on (library.h, previews). */
+typedef struct
+{
+  cat_id id;
+  char path[1024];
+  long long size, mtime;
+  int orientation, format;    /* EXIF orientation; IMG_* */
+  int missing;
+} cat_origin;
+/* One original's (1 if found), or the next one walking down the ids from
+   before (before <= 0: from the highest). */
+int cat_origin_of (cat *c, cat_id original, cat_origin *o);
+int cat_origin_below (cat *c, cat_id before, cat_origin *o);
 /* A version's original is at path now: no longer missing. */
 int cat_relink (cat *c, cat_id version, const char *path, long long mtime);
 int cat_count_missing (cat *c);        /* versions */

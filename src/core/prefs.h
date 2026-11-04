@@ -19,6 +19,7 @@ typedef struct
   int watch_new;                       /* folders imported are watched for new photos */
   int albums_new;                      /* and get albums from the folders inside them */
   int watch_minutes;                   /* how often watched folders are looked through (0: only at start) */
+  int previews;                        /* PREVIEWS_* (library.h): 0 off, 1 raw files, 2 all photos */
 } prefs;
 
 void prefs_default (prefs *p);

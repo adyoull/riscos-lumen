@@ -322,6 +322,27 @@ Fixes from a review of 0.0.23:
   times opening at 3/8. Its gate now counts a whole frame while dragging
   (develop + enlarge + 5 ms plot); it used to leave out the enlarge.
 
+## 0.0.33
+
+- Previews: each original at 1600 (the Viewer's proxy: upright, sRGB,
+  no adjustments) kept as a JPEG (quality 92) in Previews/xx/<original>_<key>,
+  the key an FNV-1a hash of the file's size and date, its orientation,
+  the side, and for raws the plug-in's program (path, size, date). An out
+  of date preview simply isn't found and is made again (the old one goes).
+  No catalogue change.
+- Made in the background after thumbnails and the originals check, newest
+  first (Choices: Raw files, the default; All photos; None; Discard). The
+  Viewer opens from a preview when there is one, and keeps what it opened
+  from the file as the preview otherwise.
+- The photo being opened in the Viewer comes before everything else: the
+  idle loop does nothing more until it is open, its LumenRaw job goes to
+  the front of the queue (rawjob_hurry), and a background preview of the
+  same photo is handed over (lib_preview_adopt) rather than started again.
+- Check library counts previews and finds ones out of date or of no
+  photo (repair removes them); removing photos removes their previews.
+  Exported libraries don't carry previews (the new library makes its own).
+- Status bar: "Making previews: <leaf>", then "Made N previews in T".
+
 ## Layout
 
 ```

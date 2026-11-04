@@ -234,6 +234,7 @@ int app_set_prefs (const prefs *p)
     }
   the_prefs = *p;
   lib_set_new_folders (lib, p->watch_new, p->albums_new);
+  lib_set_previews (lib, p->previews);
   browser_set_size (p->thumb_size);
   mainwin_status_changed ();
   exportbox_use_prefs (p);
@@ -478,6 +479,7 @@ int app_init (const char *library_path)
   exportbox_use_prefs (&the_prefs);
   lib_set_lazy_thumbs (lib, 1);        /* thumbnails for what is on screen first */
   lib_set_new_folders (lib, the_prefs.watch_new, the_prefs.albums_new);
+  lib_set_previews (lib, the_prefs.previews);
   app_plugins_rescan ();               /* also retries raw files imported before the plug-in was installed */
   mainwin_open (NULL);
   return 0;
@@ -492,10 +494,37 @@ void app_quit (void)
   close_down ();
 }
 
+static int previews_due (void);
+
 int app_busy (void)
 {
   return viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib)
-         || rawjob_busy () || printbox_busy () || libbox_busy ();
+         || rawjob_busy () || printbox_busy () || libbox_busy () || previews_due ();
+}
+
+/* Previews are made when nothing else is going on: not while the Viewer,
+   an export, a print or a library job is busy (the raw plug-in runs one
+   job at a time, and the photo being opened comes first). */
+void app_discard_previews (void)
+{
+  long long bytes = 0;
+  int n;
+  if (!lib || !app_confirm ("Discard the library's previews? They are only copies kept so photos open quickly: "
+                            "the photos and your changes aren't touched. Unless Previews is set to None, they are made "
+                            "again in the background.", "Discard"))
+    return;
+  n = lib_discard_previews (lib, &bytes);
+  activity_log (ACT_OTHER, "%d preview%s discarded (%lld MB)%s", n, n == 1 ? "" : "s", (bytes + 524288) / 1048576,
+                lib_previews (lib) == PREVIEWS_OFF ? "" : "; they are made again in the background");
+}
+
+static int previews_due (void)
+{
+  if (!lib)
+    return 0;
+  lib_hold_previews (lib, viewer_busy () || exports_busy () || printbox_busy () || libbox_busy ()
+                          || thumbcache_pending ());
+  return !lib_busy (lib) && !lib_verifying (lib) && lib_previews_busy (lib);
 }
 
 static void thumb_made (void *ctx, cat_id v)
@@ -555,7 +584,7 @@ int app_has_focus (void)
 int app_background_wait (unsigned *when)
 {
   if (!lib || viewer_busy () || thumbcache_pending () || exports_busy () || rawjob_busy () || printbox_busy ()
-      || libbox_busy () || !lib_background_only (lib) || app_has_focus ())
+      || libbox_busy () || !(lib_background_only (lib) || previews_due ()) || app_has_focus ())
     return 0;
   *when = app_now () + 4;
   return 1;
@@ -568,9 +597,15 @@ static void idle (void)
   menus_idle ();
   if (app_next_wake (&wake) && (int) (app_now () - wake) >= 0 && !lib_busy (lib))
     app_watch_now ();
-  /* The photo being edited comes first. */
+  /* The photo being edited comes first; until the one shown is open,
+     nothing else is done (imports, thumbnails, exports, previews...). */
   if (viewer_busy ())
     viewer_idle ();
+  if (viewer_loading ())
+    {
+      browser_update_title ();
+      return;
+    }
   start = app_now ();
   deadline = start + 2;
   /* What is on screen comes first. */
@@ -598,6 +633,9 @@ static void idle (void)
           mainwin_library_changed ();
           mainwin_info_changed ();
         }
+      /* Then previews: a short slice while another program is in front. */
+      else if (previews_due ())
+        activity_previews_made (lib_preview_work (lib, app_now, app_has_focus () ? deadline : start + 1));
       browser_update_title ();
       return;
     }

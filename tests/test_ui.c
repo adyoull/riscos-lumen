@@ -2519,7 +2519,11 @@ int main (int argc, char **argv)
            && (choice_icon_flags[15] & (1u << 21)) && (choice_icon_flags[17] & (1u << 21)),
            "Choices: PNG (what the last export used), Medium thumbnails, checking files");
     CHECK (choicewin_library_text ()[0] == '\0', "Choices: library empty (the usual place)");
-    /* PNG, Large, no checking, a library elsewhere; then Save. */
+    CHECK ((choice_icon_flags[27] & (1u << 21)) && !(choice_icon_flags[28] & (1u << 21))
+           && !(choice_icon_flags[29] & (1u << 21)) && lib_previews (app_library ()) == PREVIEWS_RAW,
+           "Choices: previews of raw files (the usual)");
+    /* PNG, Large, no checking, previews of all photos, a library elsewhere; then Save. */
+    choice_icon_flags[27] = 0; choice_icon_flags[28] = 1u << 21;
     choice_icon_flags[4] = 0; choice_icon_flags[5] = 1u << 21;
     choice_icon_flags[15] = 0; choice_icon_flags[16] = 1u << 21;
     choice_icon_flags[17] = 0;
@@ -2530,8 +2534,18 @@ int main (int argc, char **argv)
     CHECK (app_prefs ()->export_format == 1 && app_prefs ()->thumb_size == 2 && !app_prefs ()->verify
            && strcmp (app_prefs ()->library, "SDFS::Pi.$.Photos.Library") == 0, "Choices: saved (the path trimmed)");
     CHECK (browser_size () == 2, "Choices: Large thumbnails at once");
+    CHECK (app_prefs ()->previews == 2 && lib_previews (app_library ()) == PREVIEWS_ALL, "Choices: previews of all photos at once");
+    {
+      /* Made in idle time once there is nothing else to do. */
+      cat_item it;
+      cat_details dd;
+      char pv[1300];
+      nulls_until_idle ();
+      CHECK (browser_item (0, &it) && cat_get_details (lib_cat (app_library ()), it.id, &dd) == 0
+             && lib_preview_find (app_library (), dd.original, pv, sizeof pv), "Choices: the previews made in idle time");
+    }
     snprintf (cf, sizeof cf, "%s/Choices", work);
-    CHECK (prefs_load (cf, &p) == 0 && p.export_format == 1 && p.thumb_size == 2 && !p.verify
+    CHECK (prefs_load (cf, &p) == 0 && p.export_format == 1 && p.thumb_size == 2 && !p.verify && p.previews == 2
            && strcmp (p.library, "SDFS::Pi.$.Photos.Library") == 0, "Choices: in the file");
     /* A directory dropped on it: the library field. */
     memset (b, 0, sizeof b);

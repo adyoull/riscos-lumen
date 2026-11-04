@@ -369,6 +369,40 @@ int cat_original_next (cat *c, cat_id after, cat_id *id, char *path, size_t n, i
   return r;
 }
 
+static int origin_row (cat *c, const char *sql, cat_id arg, cat_origin *o)
+{
+  sqlite3_stmt *s = prep (c, sql);
+  int r = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, arg);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    {
+      o->id = sqlite3_column_int64 (s, 0);
+      col_text (s, 1, o->path, sizeof o->path);
+      o->size = sqlite3_column_int64 (s, 2);
+      o->mtime = sqlite3_column_int64 (s, 3);
+      o->orientation = sqlite3_column_int (s, 4);
+      o->format = sqlite3_column_int (s, 5);
+      o->missing = sqlite3_column_int (s, 6);
+      r = 1;
+    }
+  sqlite3_finalize (s);
+  return r;
+}
+
+int cat_origin_of (cat *c, cat_id original, cat_origin *o)
+{
+  return origin_row (c, "SELECT id, path, size, mtime, orientation, format, missing FROM original WHERE id = ?1",
+                     original, o);
+}
+
+int cat_origin_below (cat *c, cat_id before, cat_origin *o)
+{
+  return origin_row (c, "SELECT id, path, size, mtime, orientation, format, missing FROM original"
+                        " WHERE id < ?1 ORDER BY id DESC LIMIT 1", before > 0 ? before : 0x7FFFFFFFFFFFFFFFLL, o);
+}
+
 int cat_set_missing (cat *c, cat_id original, int missing)
 {
   sqlite3_stmt *s = prep (c, "UPDATE original SET missing = ?2 WHERE id = ?1");

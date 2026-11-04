@@ -40,6 +40,7 @@
 #include "thumbgen.h"
 #include "ui.h"
 #include "fsys.h"
+#include "rawjob.h"
 
 #define PROXY_SIDE 1600
 #define BAND_ROWS 32
@@ -173,6 +174,9 @@ static int zoom;                       /* 0 fit, 1 decoding the full size, 2 at 
 static char photo_path[1024];
 static int photo_orientation, photo_long;   /* the original's longer side */
 static int photo_raw;                  /* a camera raw file: its full size is read ahead (it is slow) */
+static cat_id photo_original;          /* its original (for its preview, library.h) */
+static int photo_is_raw;               /* the original is a camera raw file */
+static int from_kept;                  /* opened from the library's preview, not the file */
 static thumbgen *zgen;
 static rgb_image zfull;
 static geom_plan zplan;
@@ -1551,6 +1555,10 @@ static int proxy_ready (void)
       snprintf (err, sizeof err, "Not enough memory to show this photo.");
       return -1;
     }
+  /* Opened from the file: kept as its preview, if previews are made for
+     photos like it, so it opens straight away next time. */
+  if (!from_kept && photo_original > 0)
+    lib_preview_save (app_library (), photo_original, &img);
   dev_to_linear (img.rgb, src, (size_t) sw * sh);
   free (img.rgb);
   (void) x; (void) y;
@@ -1576,6 +1584,34 @@ static void load_recipe (void)
   undo_i = 0;
 }
 
+/* The picture to work on: the library's preview of the photo if it has an
+   up-to-date one (a raw opens at once rather than being developed again),
+   else the file. */
+static thumbgen *open_proxy (const cat_details *d, char *e, size_t en)
+{
+  cat_origin o;
+  char kept[1300];
+  thumbgen *t;
+  photo_original = d->original;
+  photo_is_raw = cat_origin_of (lib_cat (app_library ()), d->original, &o) == 1 && o.format == IMG_RAW;
+  from_kept = 0;
+  if (!d->missing && lib_preview_find (app_library (), d->original, kept, sizeof kept)
+      && (t = thumbgen_start (kept, NULL, PROXY_SIDE, 1, e, en)))
+    {
+      from_kept = 1;
+      return t;
+    }
+  /* Being made in the background just now: carried on here, first. */
+  if ((t = lib_preview_adopt (app_library (), d->original)) != NULL)
+    {
+      thumbgen_hurry (t);
+      return t;
+    }
+  t = thumbgen_start (d->path, NULL, PROXY_SIDE, d->orientation, e, en);
+  thumbgen_hurry (t);                  /* ahead of thumbnails and previews waiting for the plug-in */
+  return t;
+}
+
 void viewer_show (int i)
 {
   cat_details d;
@@ -1597,8 +1633,7 @@ void viewer_show (int i)
       snprintf (err, sizeof err, "This photo is no longer in the library.");
     }
   else if (snprintf (photo_path, sizeof photo_path, "%s", d.path), photo_orientation = d.orientation,
-           photo_long = d.width > d.height ? d.width : d.height,
-           !(tg = thumbgen_start (d.path, NULL, PROXY_SIDE, d.orientation, e, sizeof e)))
+           photo_long = d.width > d.height ? d.width : d.height, !(tg = open_proxy (&d, e, sizeof e)))
     {
       fsys_entry fe;
       state = V_FAILED;
@@ -1777,6 +1812,11 @@ void viewer_shutdown (void)
   force_panel ();
 }
 
+int viewer_loading (void)
+{
+  return is_open && state == V_LOADING && tg != NULL;
+}
+
 int viewer_busy (void)
 {
   return is_open && (dragging != -1 || (state == V_LOADING && tg) || full_y >= 0 || zgen || (zoom == 2 && zy >= 0)
@@ -1885,7 +1925,7 @@ void viewer_idle (void)
         }
       else if (r > 0)
         {
-          photo_raw = thumbgen_raw_developed (tg);
+          photo_raw = from_kept ? photo_is_raw && rawjob_available () : thumbgen_raw_developed (tg);
           thumbgen_free (tg);
           tg = NULL;
           state = V_READY;

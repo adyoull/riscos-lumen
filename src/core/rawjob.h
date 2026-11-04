@@ -26,6 +26,8 @@ typedef int (*rawjob_runner) (const char *cmdline, int tag);
 /* helper NULL: no plug-in installed (rawjob_start explains). */
 void rawjob_setup (const char *helper, const char *scratch, rawjob_runner run);
 int rawjob_available (void);
+/* Identifies the plug-in in use (its program, size and date); 0 if none. */
+unsigned rawjob_stamp (void);
 /* The message for a raw file when the plug-in isn't installed. */
 const char *rawjob_missing_message (void);
 /* A raw plug-in is installed but switched off: the message says so. */
@@ -42,6 +44,8 @@ const char *rawjob_image (const rawjob *j);
    exposure, date; and its EXIF orientation. */
 void rawjob_details (const rawjob *j, img_info *info);
 void rawjob_free (rawjob *j);
+/* Waiting its turn: to the front of the queue (the photo being opened). */
+void rawjob_hurry (rawjob *j);
 
 /* From the front end: the program started with tag has ended. */
 void rawjob_ended (int tag);

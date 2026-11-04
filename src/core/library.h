@@ -3,6 +3,7 @@
    A library is a directory:
      Catalogue   the SQLite catalogue (catalog.h)
      Thumbs      256-pixel JPEG thumbnails, in 256 subdirectories by id
+     Previews    working-size copies of the originals (below), the same way
 
    Imports and thumbnail-making run as small steps: lib_work() does steps
    until the clock passes a deadline, then returns so the desktop stays
@@ -86,6 +87,52 @@ int lib_remove (library *l, const cat_id *versions, int n);
 
 /* Thumbnails were marked to be made again (cat_set_recipe): count again. */
 void lib_thumbs_changed (library *l);
+
+/* --- Previews: each original at the size the Viewer works on
+   (PREVIEW_SIDE), as it comes from the file (turned upright, in sRGB, no
+   adjustments), kept as a JPEG in Previews.xx.<original>_<key>. The key
+   is worked out from what the picture depends on (the file's size and
+   date, its orientation, and for a raw the plug-in), so a preview that is
+   out of date is simply not found, and is made again.
+
+   They are made in the background once the thumbnails are done and the
+   originals checked, newest first; the Viewer also keeps the picture it
+   opened as one. A raw file opens from its preview in a moment rather
+   than being developed again by the plug-in. */
+#define PREVIEW_SIDE 1600
+struct rgb_image;
+enum { PREVIEWS_OFF, PREVIEWS_RAW, PREVIEWS_ALL };
+void lib_set_previews (library *l, int mode);
+int lib_previews (library *l);
+/* Is one made for a photo of this format (IMG_*) with the mode set? */
+int lib_preview_wanted (library *l, int format);
+/* Anything to look at or make (lib_preview_work), and not held. */
+int lib_previews_busy (library *l);
+/* Held while the Viewer, an export or a print is busy: the raw plug-in
+   runs one job at a time, and the photo being opened comes first. */
+void lib_hold_previews (library *l, int hold);
+/* Looks through the originals again (the plug-in has changed). */
+void lib_previews_changed (library *l);
+/* Works until now() >= deadline: how many previews were made. */
+int lib_preview_work (library *l, unsigned (*now) (void), unsigned deadline);
+/* Previews still to look at or make (held or not). */
+int lib_previews_making (library *l);
+/* One being made: 1 and its photo's leaf name. */
+int lib_preview_now (library *l, char *leaf, size_t n);
+/* The preview being made in the background, if it is of this original:
+   handed over (the caller frees it; the picture is the one the preview
+   would be). NULL if another or none. */
+struct thumbgen *lib_preview_adopt (library *l, cat_id original);
+/* The up-to-date preview of an original: 1 and its path, or 0. */
+int lib_preview_find (library *l, cat_id original, char *out, size_t n);
+/* Keeps img (at most PREVIEW_SIDE, upright) as the original's preview, if
+   one is wanted for it: 1 if kept, 0 if not wanted, -1 on error. */
+int lib_preview_save (library *l, cat_id original, const struct rgb_image *img);
+/* The leaf name an original's preview has now (for Check library). 1 if
+   the original is there. */
+int lib_preview_leaf (library *l, cat_id original, char *leaf, size_t n);
+/* Removes every preview: how many, and their size in bytes. */
+int lib_discard_previews (library *l, long long *bytes);
 
 /* The last problem met while working (a file that couldn't be read), or "". */
 const char *lib_last_error (library *l);

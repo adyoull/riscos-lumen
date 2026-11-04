@@ -619,6 +619,12 @@ void thumbgen_size (const thumbgen *t, int *w, int *h)
   *h = t->out_h;
 }
 
+void thumbgen_hurry (thumbgen *t)
+{
+  if (t && t->rj)
+    rawjob_hurry (t->rj);
+}
+
 void thumbgen_free (thumbgen *t)
 {
   if (!t)

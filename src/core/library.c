@@ -10,6 +10,7 @@
 #include "xmp.h"
 #include "thumbgen.h"
 #include "develop.h"
+#include "rawjob.h"
 
 #define HEAD_BYTES (128 * 1024)       /* enough for EXIF in nearly every camera's files */
 #define HASH_BYTES (64 * 1024)
@@ -58,6 +59,13 @@ struct library
   cat_id want[LIB_WANT_MAX];
   int nwant;
   unsigned char shard_made[256];
+  /* previews */
+  int pv_mode, pv_hold, pv_done;
+  cat_id pv_below;                     /* looked through down to (not including) this original */
+  thumbgen *pv_tg;
+  cat_id pv_original;
+  char pv_leaf[64];                    /* its file's leaf name, for the status bar */
+  unsigned char pv_shard_made[256];
   char err[256];
 };
 
@@ -172,6 +180,7 @@ void lib_close (library *l)
   free (l->stack);
   fsys_closedir (l->dir);
   thumbgen_free (l->tg);
+  thumbgen_free (l->pv_tg);
   cat_close (l->db);
   free (l->head);
   free (l);
@@ -313,11 +322,25 @@ void lib_retry_failed_thumbs (library *l)
   l->thumbs_pending = -1;
 }
 
+static void remove_previews_of_gone (library *l, const cat_id *originals, int n);
+
 int lib_remove (library *l, const cat_id *v, int n)
 {
   int i;
+  cat_id *orig = malloc (sizeof *orig * (size_t) (n > 0 ? n : 1));
+  for (i = 0; orig && i < n; i++)
+    {
+      cat_details d;
+      orig[i] = cat_get_details (l->db, v[i], &d) == 0 ? d.original : 0;
+    }
   if (cat_remove_versions (l->db, v, n))
-    return -1;
+    {
+      free (orig);
+      return -1;
+    }
+  if (orig)
+    remove_previews_of_gone (l, orig, n);
+  free (orig);
   for (i = 0; i < n; i++)
     {
       char path[1100];
@@ -579,6 +602,7 @@ static int import_step (library *l)
       l->importing = 0;
       cat_tidy (l->db);                  /* a project made for photos that were all relinked */
       cat_sync_all_folder_albums (l->db);   /* folder albums follow what came in (and what moved) */
+      lib_previews_changed (l);          /* new photos to make previews of */
       return 1;                          /* finished: the counts are final */
     }
   return -1;
@@ -710,4 +734,316 @@ int lib_work (library *l, unsigned (*now) (void), unsigned deadline,
   if (in_txn)
     cat_commit (l->db);
   return changed;
+}
+
+/* --- previews ------------------------------------------------------------ */
+
+#define PREVIEW_QUALITY 92
+#define PREVIEW_LOOKS 64                 /* originals looked at in one step at most */
+
+void lib_set_previews (library *l, int mode)
+{
+  if (mode != PREVIEWS_OFF && mode != PREVIEWS_ALL)
+    mode = PREVIEWS_RAW;
+  if (l->pv_mode != mode)
+    {
+      l->pv_mode = mode;
+      lib_previews_changed (l);
+    }
+}
+
+int lib_previews (library *l) { return l->pv_mode; }
+
+void lib_hold_previews (library *l, int hold) { l->pv_hold = hold; }
+
+void lib_previews_changed (library *l)
+{
+  cat_origin o;
+  l->pv_below = 0;
+  /* An empty library: nothing to look through (no null events wanted). */
+  l->pv_done = cat_origin_below (l->db, 0, &o) != 1;
+}
+
+int lib_preview_wanted (library *l, int format)
+{
+  if (format == IMG_RAW)
+    return l->pv_mode != PREVIEWS_OFF && rawjob_available ();
+  return l->pv_mode == PREVIEWS_ALL && (format == IMG_JPEG || format == IMG_PNG);
+}
+
+int lib_previews_busy (library *l)
+{
+  return l && (l->pv_tg || (!l->pv_done && l->pv_mode != PREVIEWS_OFF)) && !l->pv_hold;
+}
+
+/* What a preview depends on, as a number. */
+static unsigned preview_key (const cat_origin *o)
+{
+  char text[160];
+  const char *c;
+  unsigned x = 2166136261u;
+  snprintf (text, sizeof text, "1 %d %lld %lld %d %u", PREVIEW_SIDE, o->size, o->mtime, o->orientation,
+            o->format == IMG_RAW ? rawjob_stamp () : 0u);
+  for (c = text; *c; c++)
+    x = (x ^ (unsigned char) *c) * 16777619u;
+  return x;
+}
+
+static void preview_dir (library *l, cat_id original, char *out, size_t n)
+{
+  char shard[8], dir[1100];
+  snprintf (shard, sizeof shard, "%02x", (unsigned) (original & 0xFF));
+  fsys_join (dir, sizeof dir, l->root, "Previews");
+  fsys_join (out, n, dir, shard);
+}
+
+static void origin_leaf (const cat_origin *o, char *leaf, size_t n)
+{
+  snprintf (leaf, n, "%lld_%08x", o->id, preview_key (o));
+}
+
+int lib_preview_leaf (library *l, cat_id original, char *leaf, size_t n)
+{
+  cat_origin o;
+  if (cat_origin_of (l->db, original, &o) != 1)
+    return 0;
+  origin_leaf (&o, leaf, n);
+  return 1;
+}
+
+static int find_origin (library *l, const cat_origin *o, char *out, size_t n)
+{
+  char dir[1100], leaf[40];
+  fsys_entry e;
+  preview_dir (l, o->id, dir, sizeof dir);
+  origin_leaf (o, leaf, sizeof leaf);
+  fsys_join (out, n, dir, leaf);
+  return fsys_stat (out, &e) == 0 && !e.is_dir && e.size > 0;
+}
+
+int lib_preview_find (library *l, cat_id original, char *out, size_t n)
+{
+  cat_origin o;
+  if (cat_origin_of (l->db, original, &o) != 1)
+    return 0;
+  return find_origin (l, &o, out, n);
+}
+
+/* Removes the original's previews other than keep (out of date). */
+static void remove_others (cat_id original, const char *dir, const char *keep)
+{
+  char prefix[32], path[1300], gone[8][40];
+  fsys_dir *d = fsys_opendir (dir);
+  fsys_entry e;
+  int n = 0, k;
+  if (!d)
+    return;
+  snprintf (prefix, sizeof prefix, "%lld_", original);
+  while (n < 8 && fsys_readdir (d, &e) == 1)
+    if (!e.is_dir && strncmp (e.name, prefix, strlen (prefix)) == 0 && strcmp (e.name, keep) != 0)
+      snprintf (gone[n++], sizeof gone[0], "%s", e.name);
+  fsys_closedir (d);
+  for (k = 0; k < n; k++)
+    {
+      fsys_join (path, sizeof path, dir, gone[k]);
+      remove (path);
+    }
+}
+
+/* Originals no longer in the library: their previews go too. */
+static void remove_previews_of_gone (library *l, const cat_id *originals, int n)
+{
+  int i;
+  for (i = 0; i < n; i++)
+    {
+      cat_origin o;
+      char dir[1100];
+      if (originals[i] <= 0 || cat_origin_of (l->db, originals[i], &o) == 1)
+        continue;
+      preview_dir (l, originals[i], dir, sizeof dir);
+      remove_others (originals[i], dir, "");
+    }
+}
+
+static int save_origin (library *l, const cat_origin *o, const rgb_image *img)
+{
+  char dir[1100], leaf[40], path[1300], tmp[1300], e[200];
+  preview_dir (l, o->id, dir, sizeof dir);
+  if (!l->pv_shard_made[o->id & 0xFF])
+    {
+      fsys_mkdirs (dir);
+      l->pv_shard_made[o->id & 0xFF] = 1;
+    }
+  origin_leaf (o, leaf, sizeof leaf);
+  fsys_join (path, sizeof path, dir, leaf);
+  fsys_join (tmp, sizeof tmp, dir, "new");
+  /* Written under another name, then renamed: a preview half written (a
+     power cut) is never taken for a whole one. */
+  remove (tmp);
+  if (img_save_jpeg (img, tmp, PREVIEW_QUALITY, e, sizeof e))
+    {
+      snprintf (l->err, sizeof l->err, "Preview: %s", e);
+      remove (tmp);
+      return -1;
+    }
+  remove (path);
+  if (rename (tmp, path))
+    {
+      snprintf (l->err, sizeof l->err, "Preview: can't rename it in %s", dir);
+      remove (tmp);
+      return -1;
+    }
+  fsys_settype (path, FT_JPEG);
+  remove_others (o->id, dir, leaf);
+  return 1;
+}
+
+int lib_preview_save (library *l, cat_id original, const rgb_image *img)
+{
+  cat_origin o;
+  if (cat_origin_of (l->db, original, &o) != 1 || !lib_preview_wanted (l, o.format))
+    return 0;
+  return save_origin (l, &o, img);
+}
+
+/* One step: 1 a preview made, 0 working, -1 nothing left (or held). */
+static int preview_step (library *l)
+{
+  if (l->pv_tg)
+    {
+      int r = thumbgen_step (l->pv_tg, ROWS_PER_STEP * 2);
+      rgb_image img;
+      cat_origin o;
+      if (r == 0)
+        return 0;
+      if (r > 0 && thumbgen_take (l->pv_tg, &img) == 0)
+        {
+          /* Kept only if the original is still as it was when started. */
+          if (cat_origin_of (l->db, l->pv_original, &o) == 1)
+            r = save_origin (l, &o, &img);
+          free (img.rgb);
+        }
+      else if (r < 0)
+        snprintf (l->err, sizeof l->err, "Preview: %s", thumbgen_error (l->pv_tg));
+      thumbgen_free (l->pv_tg);
+      l->pv_tg = NULL;
+      return r > 0;
+    }
+  if (l->pv_hold || l->pv_done || l->pv_mode == PREVIEWS_OFF)
+    return -1;
+  {
+    int looked;
+    for (looked = 0; looked < PREVIEW_LOOKS; looked++)
+      {
+        cat_origin o;
+        char path[1300], e[200];
+        if (cat_origin_below (l->db, l->pv_below, &o) != 1)
+          {
+            l->pv_done = 1;
+            return -1;
+          }
+        l->pv_below = o.id;
+        if (o.missing || !lib_preview_wanted (l, o.format) || find_origin (l, &o, path, sizeof path))
+          continue;
+        /* Upright as the Viewer shows it: a raw's orientation comes from the
+           plug-in, as the catalogue has it after its thumbnail. */
+        l->pv_tg = thumbgen_start (o.path, NULL, PREVIEW_SIDE, o.orientation, e, sizeof e);
+        if (!l->pv_tg)
+          {
+            snprintf (l->err, sizeof l->err, "Preview of %s: %s", fsys_leaf (o.path), e);
+            continue;
+          }
+        l->pv_original = o.id;
+        snprintf (l->pv_leaf, sizeof l->pv_leaf, "%s", fsys_leaf (o.path));
+        return 0;
+      }
+  }
+  return 0;
+}
+
+thumbgen *lib_preview_adopt (library *l, cat_id original)
+{
+  thumbgen *t;
+  if (!l || !l->pv_tg || l->pv_original != original)
+    return NULL;
+  t = l->pv_tg;
+  l->pv_tg = NULL;
+  return t;
+}
+
+int lib_previews_making (library *l)
+{
+  return l && (l->pv_tg != NULL || (!l->pv_done && l->pv_mode != PREVIEWS_OFF));
+}
+
+int lib_preview_now (library *l, char *leaf, size_t n)
+{
+  if (!l || !l->pv_tg)
+    return 0;
+  snprintf (leaf, n, "%s", l->pv_leaf);
+  return 1;
+}
+
+int lib_preview_work (library *l, unsigned (*now) (void), unsigned deadline)
+{
+  int made = 0, first = 1;
+  while (first || (int) (now () - deadline) < 0)
+    {
+      int r = preview_step (l);
+      first = 0;
+      if (r > 0)
+        made++;
+      if (r < 0)
+        break;
+      /* A raw is being developed by the plug-in in its task window: give
+         it the computer rather than asking again and again. */
+      if (r == 0 && l->pv_tg && rawjob_busy () && thumbgen_progress (l->pv_tg) == 0)
+        break;
+    }
+  return made;
+}
+
+int lib_discard_previews (library *l, long long *bytes)
+{
+  char top[1100], dir[1100], path[1300], shard[8];
+  int k, n = 0;
+  /* One being made carries on (a raw's plug-in job can't be stopped). */
+  *bytes = 0;
+  fsys_join (top, sizeof top, l->root, "Previews");
+  for (k = 0; k < 256; k++)
+    {
+      fsys_dir *d;
+      fsys_entry e;
+      char (*names)[40] = NULL;
+      int m = 0, cap = 0, i;
+      snprintf (shard, sizeof shard, "%02x", k);
+      fsys_join (dir, sizeof dir, top, shard);
+      if (!(d = fsys_opendir (dir)))
+        continue;
+      while (fsys_readdir (d, &e) == 1)
+        {
+          if (e.is_dir)
+            continue;
+          if (m == cap)
+            {
+              char (*nn)[40] = realloc (names, sizeof *names * (size_t) (cap = cap ? cap * 2 : 64));
+              if (!nn)
+                break;
+              names = nn;
+            }
+          snprintf (names[m++], sizeof names[0], "%s", e.name);
+          *bytes += e.size;
+        }
+      fsys_closedir (d);
+      for (i = 0; i < m; i++)
+        {
+          fsys_join (path, sizeof path, dir, names[i]);
+          if (remove (path) == 0)
+            n++;
+        }
+      free (names);
+    }
+  memset (l->pv_shard_made, 0, sizeof l->pv_shard_made);
+  lib_previews_changed (l);
+  return n;
 }

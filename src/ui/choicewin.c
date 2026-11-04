@@ -1,8 +1,9 @@
 /* choicewin.c: the Choices window (icon bar menu > Choices...). What it
    sets is kept by app.c in <Choices$Write>.Lumen.Choices (prefs.h):
    where the library is (from the next start), the Export box's starting
-   format, size and quality, the thumbnail size Lumen starts with, and
-   whether originals are checked for when Lumen opens.
+   format, size and quality, the thumbnail size Lumen starts with, which
+   photos get previews (library.h), and whether originals are checked for
+   when Lumen opens.
 
    Icon flags as in exportbox.c (classic PRM): radio buttons are type 11
    in an exclusive selection group (bits 16-20); an option button is a
@@ -20,12 +21,13 @@ enum
   C_LIB_LABEL, C_LIB, C_LIB_NOTE, C_EXPORT_LABEL, C_JPEG, C_PNG, C_QUALITY_LABEL, C_QUALITY, C_SIZE_LABEL,
   C_FULL, C_3840, C_2048, C_1024, C_THUMB_LABEL, C_SMALL, C_MEDIUM, C_LARGE, C_VERIFY, C_CANCEL, C_SAVE,
   C_FOLDERS_LABEL, C_WATCH_NEW, C_ALBUMS_NEW, C_EVERY, C_MINUTES, C_MINUTES_LABEL,
+  C_PREVIEWS_LABEL, C_PV_RAW, C_PV_ALL, C_PV_OFF, C_PV_DISCARD,
   C_COUNT
 };
 static const int size_choice[4] = { 0, 3840, 2048, 1024 };
 
 #define W 1120
-#define H 690
+#define H 754
 #define T_LABEL   0x17000311u          /* text, vcentred, indirected, right-justified */
 #define T_NOTE    0x17000111u          /* text, vcentred, indirected */
 #define T_WRITE   0x0700F135u          /* writable, white */
@@ -88,20 +90,30 @@ int choicewin_create (void)
   icon_at (ic + 8 * C_SMALL, 240, -334, 400, -290, T_RADIO | (3u << 16), t_small, v_radio, (int) sizeof t_small);
   icon_at (ic + 8 * C_MEDIUM, 420, -334, 600, -290, T_RADIO | (3u << 16), t_medium, v_radio, (int) sizeof t_medium);
   icon_at (ic + 8 * C_LARGE, 620, -334, 780, -290, T_RADIO | (3u << 16), t_large, v_radio, (int) sizeof t_large);
-  icon_at (ic + 8 * C_VERIFY, 240, -410, W - 24, -366, T_RADIO, t_verify, v_option, (int) sizeof t_verify);
+  {
+    static char t_previews[] = "Previews", t_pv_raw[] = "Raw files", t_pv_all[] = "All photos", t_pv_off[] = "None";
+    static char t_discard[] = "Discard";
+    static const char v_discard[] = "R5,3";
+    LABEL (C_PREVIEWS_LABEL, -354, t_previews);
+    icon_at (ic + 8 * C_PV_RAW, 240, -398, 430, -354, T_RADIO | (4u << 16), t_pv_raw, v_radio, (int) sizeof t_pv_raw);
+    icon_at (ic + 8 * C_PV_ALL, 450, -398, 650, -354, T_RADIO | (4u << 16), t_pv_all, v_radio, (int) sizeof t_pv_all);
+    icon_at (ic + 8 * C_PV_OFF, 670, -398, 800, -354, T_RADIO | (4u << 16), t_pv_off, v_radio, (int) sizeof t_pv_off);
+    icon_at (ic + 8 * C_PV_DISCARD, W - 200, -402, W - 24, -350, T_BUTTON, t_discard, v_discard, (int) sizeof t_discard);
+  }
+  icon_at (ic + 8 * C_VERIFY, 240, -474, W - 24, -430, T_RADIO, t_verify, v_option, (int) sizeof t_verify);
   {
     static char t_folders[] = "Folders", t_watch[] = "Watch folders I import for new photos";
     static char t_albums[] = "Make albums from the folders inside them", t_every[] = "Look in watched folders every";
     static char t_minutes[] = "minutes";
-    LABEL (C_FOLDERS_LABEL, -440, t_folders);
-    icon_at (ic + 8 * C_WATCH_NEW, 240, -484, W - 24, -440, T_RADIO, t_watch, v_option, (int) sizeof t_watch);
-    icon_at (ic + 8 * C_ALBUMS_NEW, 240, -534, W - 24, -490, T_RADIO, t_albums, v_option, (int) sizeof t_albums);
-    icon_at (ic + 8 * C_EVERY, 240, -588, 640, -544, T_NOTE, t_every, NULL, (int) sizeof t_every);
-    icon_at (ic + 8 * C_MINUTES, 650, -592, 750, -540, T_WRITE, minutes_text, v_num, (int) sizeof minutes_text);
-    icon_at (ic + 8 * C_MINUTES_LABEL, 760, -588, 960, -544, T_NOTE, t_minutes, NULL, (int) sizeof t_minutes);
+    LABEL (C_FOLDERS_LABEL, -504, t_folders);
+    icon_at (ic + 8 * C_WATCH_NEW, 240, -548, W - 24, -504, T_RADIO, t_watch, v_option, (int) sizeof t_watch);
+    icon_at (ic + 8 * C_ALBUMS_NEW, 240, -598, W - 24, -554, T_RADIO, t_albums, v_option, (int) sizeof t_albums);
+    icon_at (ic + 8 * C_EVERY, 240, -652, 640, -608, T_NOTE, t_every, NULL, (int) sizeof t_every);
+    icon_at (ic + 8 * C_MINUTES, 650, -656, 750, -604, T_WRITE, minutes_text, v_num, (int) sizeof minutes_text);
+    icon_at (ic + 8 * C_MINUTES_LABEL, 760, -652, 960, -608, T_NOTE, t_minutes, NULL, (int) sizeof t_minutes);
   }
-  icon_at (ic + 8 * C_CANCEL, W - 384, -666, W - 220, -610, T_BUTTON, t_cancel, v_cancel, (int) sizeof t_cancel);
-  icon_at (ic + 8 * C_SAVE, W - 200, -670, W - 24, -606, T_BUTTON, t_savebtn, v_save, (int) sizeof t_savebtn);
+  icon_at (ic + 8 * C_CANCEL, W - 384, -730, W - 220, -674, T_BUTTON, t_cancel, v_cancel, (int) sizeof t_cancel);
+  icon_at (ic + 8 * C_SAVE, W - 200, -734, W - 24, -670, T_BUTTON, t_savebtn, v_save, (int) sizeof t_savebtn);
   return _swix (Wimp_CreateWindow, _IN (1) | _OUT (0), b, &win) ? -1 : 0;
 }
 
@@ -135,6 +147,9 @@ static void show (const prefs *p)
     set_on (C_FULL + k, p->export_size == size_choice[k]);
   for (k = 0; k < 3; k++)
     set_on (C_SMALL + k, p->thumb_size == k);
+  set_on (C_PV_RAW, p->previews == 1);
+  set_on (C_PV_ALL, p->previews == 2);
+  set_on (C_PV_OFF, p->previews == 0);
   set_on (C_VERIFY, p->verify);
   set_on (C_WATCH_NEW, p->watch_new);
   set_on (C_ALBUMS_NEW, p->albums_new);
@@ -193,6 +208,7 @@ static void save (void)
   for (k = 0; k < 3; k++)
     if (is_on (C_SMALL + k))
       p.thumb_size = k;
+  p.previews = is_on (C_PV_ALL) ? 2 : is_on (C_PV_OFF) ? 0 : 1;
   p.verify = is_on (C_VERIFY);
   p.watch_new = is_on (C_WATCH_NEW);
   p.albums_new = is_on (C_ALBUMS_NEW);
@@ -210,6 +226,8 @@ void choicewin_click (int *b)
     return;
   if (b[4] == C_SAVE)
     save ();
+  else if (b[4] == C_PV_DISCARD)
+    app_discard_previews ();
   else if (b[4] == C_CANCEL)
     {
       if (b[2] == Button_Adjust)

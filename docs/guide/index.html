@@ -57,7 +57,7 @@ a { color:#1f5fa8; }
 <h1>Lumen User Guide</h1>
 <p>Keeping, sorting and improving your photos on RISC OS</p>
 <p>Start here if you've never used a photo library program before. If you have, the Technical Stuff boxes and Chapter 21 are for you.</p>
-<span class="badge">Lumen 0.0.32</span>
+<span class="badge">Lumen 0.0.33</span>
 </div>
 </header>
 <main>
@@ -99,7 +99,7 @@ a { color:#1f5fa8; }
 <p>The pictures are screenshots of Lumen running on RISC OS 5, with photos by the author, Andrew Youll: horses, eventing, jousting and dogs (see <a href="#credits">Photo credits</a>).</p>
 
 <h4>This is an early version</h4>
-<p>Lumen 0.0.32 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
+<p>Lumen 0.0.33 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>Not much. You should know the three mouse buttons (<b>Select</b> on the left, <b>Menu</b> in the middle, <b>Adjust</b> on the right), and how to drag a file or directory from a Filer window into a program. You don't need to know anything about photography.</p>
@@ -773,7 +773,8 @@ a { color:#1f5fa8; }
 <ul>
 <li>the catalogue file itself, which a power cut or a failing SD card can damage;</li>
 <li>entries that point at nothing: versions whose photo or project has gone, album places and keywords of photos that have gone, and stacks with only one photo left;</li>
-<li>thumbnails: missing files, ones that couldn't be made, and leftover files of photos no longer in the library.</li>
+<li>thumbnails: missing files, ones that couldn't be made, and leftover files of photos no longer in the library;</li>
+<li>previews: ones out of date, or of photos no longer in the library (<a href="#ch16">Chapter 16</a>).</li>
 </ul>
 <figure><img src="images/library-check.png" alt="Check library: problems found"><figcaption>The check found a missing thumbnail and a leftover one.</figcaption></figure>
 <p>If it finds anything, click <b>Repair</b>. Lumen first keeps a copy of the catalogue as <code>Catalogue-backup</code> in the library, then puts everything right: missing thumbnails are made again, leftover ones deleted, and broken entries mended. A photo that had lost its project isn't lost: it goes into a project called <b>Recovered</b>.</p>
@@ -789,7 +790,13 @@ a { color:#1f5fa8; }
 <p>Install the <b>LumenRaw</b> package with PackMan. It goes inside Lumen (in <code>!Lumen.Plugins.LibRaw</code>), and Lumen finds it the next time it starts. (A plug-in added from the Plug-ins menu, below, works at once, without restarting.) Raw files you imported before then get their thumbnails as soon as it's there.</p>
 
 <h4>Working with raw files</h4>
-<p>Import them as you would JPEGs. Thumbnails come from the preview the camera saved in the file, so they're quick. When you look at a raw photo in the Viewer, Lumen develops it (with the camera's own white balance and colour) in the background; a big file takes a few seconds. Everything else (stars, adjustments, export) is the same as for any photo.</p>
+<p>Import them as you would JPEGs. Thumbnails come from the preview the camera saved in the file, so they're quick. To show a raw photo in the Viewer, Lumen develops it (with the camera's own white balance and colour); a big file takes a few seconds. Everything else (stars, adjustments, export) is the same as for any photo.</p>
+
+<h4>Previews: raw photos that open at once</h4>
+<p>So you don't wait each time, Lumen keeps a <b>preview</b> of each raw photo: the photo developed at the size the Viewer works on (1600 pixels along its longer side), kept in the library beside the thumbnails. Once the thumbnails are made, Lumen makes the previews in the background, newest photos first; the status bar says <i>Making previews</i>. A photo with a preview opens in the Viewer straight away. The first time you open one without, Lumen keeps what it developed as its preview, so it's quick from then on.</p>
+<p>The photo you're looking at always comes first: until it's on the screen, Lumen does nothing else, and if its preview was being made in the background just then, the Viewer carries on with that rather than starting again.</p>
+<p>Previews are only copies: your photo files and your changes aren't touched. They take about 300 to 500 KB each. In Choices (<a href="#ch17">Chapter 17</a>) you can have them made for <b>All photos</b> (JPEGs open faster too), only <b>Raw files</b> (the usual), or <b>None</b>; <b>Discard</b> removes them all to free the space.</p>
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>Previews are JPEGs in the library's <code>Previews</code> directory, named after the photo and a number worked out from what the picture depends on: the file's size and date, its orientation, and which LumenRaw made it. If any of those changes (a new version of LumenRaw, say), the old preview simply isn't used, and a new one is made. 100%, the loupe and exports still use the photo itself, at full quality. Exported libraries don't take their previews with them: the library they go into makes its own.</div>
 <figure><img src="images/raw.png" alt="A raw photo"><figcaption>A Nikon D700 raw (NEF) photo. The Info tab says how it was read.</figcaption></figure>
 
 <p>LumenRaw has a guide of its own, the <b>LumenRaw User Guide</b>, inside the plug-in: open <code>!Lumen.Plugins.LibRaw.Guide.index/html</code>. It explains how raw photos are developed, and lists every camera LumenRaw knows.</p>
@@ -815,6 +822,7 @@ a { color:#1f5fa8; }
 <tr><td>Library</td><td>Where the library is kept. Leave it empty for the usual place, in your Choices. To use another place, type a full pathname, or drag a directory onto the window. It's used from the next time Lumen starts.</td></tr>
 <tr><td>Export</td><td>The format, size and JPEG quality the Export box starts with.</td></tr>
 <tr><td>Thumbnails</td><td>The thumbnail size Lumen starts with. Saving changes the size at once, too.</td></tr>
+<tr><td>Previews</td><td>Which photos Lumen keeps a preview of, so they open at once in the Viewer: <b>Raw files</b> (the usual), <b>All photos</b>, or <b>None</b> (<a href="#ch16">Chapter 16</a>). <b>Discard</b> removes the previews there are, after asking; unless you choose None, they are made again in the background.</td></tr>
 <tr><td>Check the photos' files are still there when Lumen opens</td><td>Switch this off if your photos are on discs that are often away, so they aren't all marked missing (<a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Folders</td><td><b>Watch folders I import for new photos</b> and <b>Make albums from the folders inside them</b> do for every directory you import from now on what the project menu does for one (<a href="#ch6">Chapter 6</a>). <b>Look in watched folders every</b> so many minutes; 0 means only when Lumen starts and when its window opens.</td></tr>
 </table>

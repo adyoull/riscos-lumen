@@ -40,6 +40,8 @@ int thumbgen_raw_developed (const thumbgen *t);
 /* The thumbnail's size, once finished (after orientation). */
 void thumbgen_size (const thumbgen *t, int *w, int *h);
 void thumbgen_free (thumbgen *t);
+/* A camera raw file waiting for the plug-in: its job goes first. */
+void thumbgen_hurry (thumbgen *t);
 int thumbgen_progress (const thumbgen *t);   /* 0-100 */
 
 /* Decoding JPEGs at any eighth of their size (3/8 for a 6000-pixel photo

@@ -181,6 +181,14 @@ void activity_thumb_made (void)
   thumbs_made++;
 }
 
+static int previews_made, was_previews;
+static unsigned previews_t0;
+
+void activity_previews_made (int n)
+{
+  previews_made += n;
+}
+
 static void plural (char *out, size_t n, int count, const char *one, const char *many)
 {
   snprintf (out, n, "%d %s", count, count == 1 ? one : many);
@@ -228,6 +236,15 @@ int activity_now (act_job *jobs, int max)
       libbox_status (jobs[n].text, sizeof jobs[n].text);
       jobs[n++].pct = libbox_percent ();
     }
+  {
+    char leaf[64];
+    if (lib_preview_now (lib, leaf, sizeof leaf) && n < max)
+      {
+        snprintf (jobs[n].text, sizeof jobs[n].text, "Making previews: %s%s", leaf,
+                  app_has_focus () ? "" : ", in spare time");
+        jobs[n++].pct = -1;
+      }
+  }
   if (rawjob_busy () && n < max)
     {
       snprintf (jobs[n].text, sizeof jobs[n].text, "Reading a raw photo with LumenRaw");
@@ -354,6 +371,23 @@ void activity_tick (void)
         }
       thumbs_made = 0;
     }
+  {
+    int making = lib_previews_making (lib);
+    if (making && !was_previews)
+      {
+        previews_made = 0;
+        previews_t0 = app_now ();
+      }
+    if (!making && was_previews && previews_made > 0)
+      {
+        char a[40], t[40];
+        plural (a, sizeof a, previews_made, "preview", "previews");
+        took (t, sizeof t, app_now () - previews_t0);
+        activity_log (ACT_THUMBS, "Made %s%s", a, t);
+        previews_made = 0;
+      }
+    was_previews = making;
+  }
   if (verifying && !was_verifying)
     verify_t0 = app_now ();
   if (!verifying && was_verifying)

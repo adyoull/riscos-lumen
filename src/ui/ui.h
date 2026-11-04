@@ -68,6 +68,8 @@ int app_event (int reason, int *block, int sender);
 int app_busy (void);
 void app_quit (void);
 void app_report (const char *msg);
+/* Choices' Discard: removes the library's previews and says how many. */
+void app_discard_previews (void);
 int app_confirm (const char *msg, const char *button);   /* 1: the button was chosen */
 unsigned app_now (void);               /* centiseconds */
 library *app_library (void);
@@ -222,6 +224,8 @@ void viewer_click (int *block);
 void viewer_drag_end (void);
 int viewer_key (int key);
 int viewer_busy (void);
+/* The photo shown is still being opened: it comes before everything else. */
+int viewer_loading (void);
 void viewer_idle (void);
 void viewer_undo (void);
 void viewer_redo (void);
@@ -407,6 +411,7 @@ void activity_log (int kind, const char *fmt, ...);
 void activity_clear (void);
 void activity_tick (void);
 void activity_thumb_made (void);
+void activity_previews_made (int n);
 int activity_now (act_job *jobs, int max);
 int activity_busy (void);
 void activity_status (char *text, size_t n, int *pct, int *busy);

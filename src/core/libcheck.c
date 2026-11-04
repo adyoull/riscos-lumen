@@ -22,6 +22,8 @@ struct libcheck
   int ngone, capgone;
   char **unused;                       /* thumbnail files of no version */
   int nunused, capunused;
+  char **pv_unused;                    /* previews of no original, or out of date */
+  int npv, cappv;
   libcheck_report r;
 };
 
@@ -132,6 +134,11 @@ static int is_number (const char *s)
   return 1;
 }
 
+static int is_number_prefix (const char *s)
+{
+  return *s >= '0' && *s <= '9';
+}
+
 static void thumbs_step (libcheck *k)
 {
   sqlite3_stmt *s;
@@ -171,15 +178,70 @@ static void thumbs_step (libcheck *k)
     k->phase = PH_FILES;
 }
 
+static void keep_path (char ***list, int *n, int *cap, const char *path)
+{
+  if (*n == *cap)
+    {
+      int c = *cap ? *cap * 2 : 64;
+      char **u = realloc (*list, sizeof *u * (size_t) c);
+      if (!u)
+        return;
+      *list = u;
+      *cap = c;
+    }
+  if (((*list)[*n] = malloc (strlen (path) + 1)) != NULL)
+    strcpy ((*list)[(*n)++], path);
+}
+
+/* Is a file in Previews the up-to-date preview of an original? */
+static int preview_in_use (library *l, const char *leaf)
+{
+  char want[40];
+  return is_number_prefix (leaf) && lib_preview_leaf (l, strtoll (leaf, NULL, 10), want, sizeof want)
+         && strcmp (want, leaf) == 0;
+}
+
+/* One Previews subdirectory: files no original uses as its preview now. */
+static void previews_shard (libcheck *k, int shard_no)
+{
+  char dir[1100], top[1100], shard[8], path[1300];
+  fsys_dir *d;
+  fsys_entry e;
+  fsys_join (top, sizeof top, lib_root (k->l), "Previews");
+  snprintf (shard, sizeof shard, "%02x", (unsigned) shard_no);
+  fsys_join (dir, sizeof dir, top, shard);
+  if (!(d = fsys_opendir (dir)))
+    return;
+  while (fsys_readdir (d, &e) == 1)
+    {
+      if (e.is_dir)
+        continue;
+      k->r.previews++;
+      k->r.previews_bytes += e.size;
+      if (preview_in_use (k->l, e.name))
+        continue;
+      fsys_join (path, sizeof path, dir, e.name);
+      keep_path (&k->pv_unused, &k->npv, &k->cappv, path);
+      k->r.previews_unused++;
+      k->r.previews_unused_bytes += e.size;
+    }
+  fsys_closedir (d);
+}
+
 static void files_step (libcheck *k)
 {
   char dir[1100], thumbs[1100], shard[8];
   fsys_dir *d;
   fsys_entry e;
   sqlite3_stmt *s;
-  if (k->shard >= 256)
+  if (k->shard >= 512)
     {
       k->phase = PH_DONE;
+      return;
+    }
+  if (k->shard >= 256)
+    {
+      previews_shard (k, k->shard++ - 256);
       return;
     }
   fsys_join (thumbs, sizeof thumbs, lib_root (k->l), "Thumbs");
@@ -256,7 +318,7 @@ int libcheck_percent (libcheck *k)
         long long most = one (k->l, "SELECT IFNULL(MAX(id), 0) FROM version");
         return most > 0 ? 5 + (int) (k->after * 45 / most) : 50;
       }
-    case PH_FILES: return 50 + k->shard * 50 / 256;
+    case PH_FILES: return 50 + k->shard * 50 / 512;
     }
   return 100;
 }
@@ -269,7 +331,8 @@ const libcheck_report *libcheck_result (libcheck *k)
 int libcheck_problems (const libcheck_report *r)
 {
   return r->damaged + r->versions_no_photo + r->versions_no_project + r->lone_originals + r->bad_album_items
-         + r->bad_keyword_links + r->bad_stacks + r->thumbs_missing + r->thumbs_failed + r->thumbs_unused;
+         + r->bad_keyword_links + r->bad_stacks + r->thumbs_missing + r->thumbs_failed + r->thumbs_unused
+         + r->previews_unused;
 }
 
 static void add (char *out, size_t n, int *first, int count, const char *one_, const char *many)
@@ -294,8 +357,9 @@ void libcheck_describe (const libcheck_report *r, char *out, size_t n)
     {
       len = strlen (out);
       if (!r->damaged)
-        snprintf (out + len, n - len, "All is well: %d photo%s and %d version%s checked, with their thumbnails.",
-                  r->originals, r->originals == 1 ? "" : "s", r->versions, r->versions == 1 ? "" : "s");
+        snprintf (out + len, n - len, "All is well: %d photo%s and %d version%s checked, with their thumbnails%s.",
+                  r->originals, r->originals == 1 ? "" : "s", r->versions, r->versions == 1 ? "" : "s",
+                  r->previews ? " and previews" : "");
     }
   else
     {
@@ -317,6 +381,13 @@ void libcheck_describe (const libcheck_report *r, char *out, size_t n)
                     (r->thumbs_unused_bytes + 1023) / 1024);
           add (out, n, &first, r->thumbs_unused, t, t);
         }
+      if (r->previews_unused)
+        {
+          char t[80];
+          snprintf (t, sizeof t, "preview%s out of date or of no photo (%lld KB)", r->previews_unused == 1 ? "" : "s",
+                    (r->previews_unused_bytes + 1023) / 1024);
+          add (out, n, &first, r->previews_unused, t, t);
+        }
       len = strlen (out);
       if (len + 2 < n)
         snprintf (out + len, n - len, ".");
@@ -337,6 +408,9 @@ void libcheck_free (libcheck *k)
   for (i = 0; i < k->nunused; i++)
     free (k->unused[i]);
   free (k->unused);
+  for (i = 0; i < k->npv; i++)
+    free (k->pv_unused[i]);
+  free (k->pv_unused);
   free (k->gone);
   free (k);
 }
@@ -518,9 +592,13 @@ int libcheck_repair (libcheck *k, char *fixed, size_t fn, char *err, size_t en)
         sqlite3_finalize (s);
       }
   }
+  /* Previews no original uses (checked again likewise). */
+  for (i = 0; i < k->npv; i++)
+    if (!preview_in_use (l, fsys_leaf (k->pv_unused[i])) && remove (k->pv_unused[i]) == 0)
+      removed_files++;
   lib_thumbs_changed (l);
   {
-    int fixes = libcheck_problems (r) - r->thumbs_unused + removed_files;
+    int fixes = libcheck_problems (r) - r->thumbs_unused - r->previews_unused + removed_files;
     snprintf (fixed, fn, "Repaired: %d problem%s put right%s%s%s", fixes, fixes == 1 ? "" : "s",
               r->versions_no_project + r->lone_originals ? "; photos that had lost their place are in the project Recovered" : "",
               r->thumbs_missing + r->thumbs_failed ? "; thumbnails are being made again" : "",

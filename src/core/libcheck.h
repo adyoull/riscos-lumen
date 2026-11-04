@@ -8,6 +8,8 @@
        versions that have gone, stacks of one or whose pick isn't in them;
      - thumbnails: ones the catalogue says are made but whose files are
        gone, ones that failed, and files for versions no longer there;
+     - previews: files that are no original's preview now (its photo has
+       gone or changed); repair removes them;
      - originals marked missing (the check of the files themselves is
        lib_verify's, and goes on in the background as ever).
 
@@ -34,6 +36,8 @@ typedef struct
   int thumbs_failed;           /* couldn't be made: tried again on repair */
   int thumbs_unused;           /* files for versions that aren't there */
   long long thumbs_unused_bytes;
+  int previews, previews_unused; /* previews (library.h), and of those no original uses as it is now */
+  long long previews_bytes, previews_unused_bytes;
   int originals_missing;       /* marked missing (not changed by repair) */
   int versions, originals;     /* how many were looked at */
 } libcheck_report;

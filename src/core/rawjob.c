@@ -21,9 +21,31 @@ static rawjob_runner runner;
 static rawjob *queue, *running;
 static int next_tag = 1;
 
+static unsigned stamp;
+
+/* Which plug-in made a raw's preview: its program's path, size and date
+   (a new version of LumenRaw makes them again). */
+unsigned rawjob_stamp (void) { return stamp; }
+
 void rawjob_setup (const char *h, const char *s, rawjob_runner run)
 {
   have_helper = h && *h;
+  stamp = 0;
+  if (have_helper)
+    {
+      fsys_entry e;
+      const char *c;
+      unsigned x = 2166136261u;
+      for (c = h; *c; c++)
+        x = (x ^ (unsigned char) *c) * 16777619u;
+      if (fsys_stat (h, &e) == 0)
+        {
+          x = (x ^ (unsigned) e.size) * 16777619u;
+          x = (x ^ (unsigned) e.mtime) * 16777619u;
+          x = (x ^ (unsigned) (e.mtime >> 32)) * 16777619u;
+        }
+      stamp = x ? x : 1;
+    }
   snprintf (helper, sizeof helper, "%s", h ? h : "");
   snprintf (scratch, sizeof scratch, "%s", s ? s : "");
   runner = run;
@@ -230,6 +252,21 @@ void rawjob_ended (int tag)
 const char *rawjob_error (const rawjob *j) { return j->err; }
 const char *rawjob_image (const rawjob *j) { return j->image; }
 void rawjob_details (const rawjob *j, img_info *info) { *info = j->info; }
+
+void rawjob_hurry (rawjob *j)
+{
+  rawjob **p;
+  if (!j || j->state != J_QUEUED || queue == j)
+    return;
+  for (p = &queue; *p; p = &(*p)->next)
+    if (*p == j)
+      {
+        *p = j->next;
+        j->next = queue;
+        queue = j;
+        break;
+      }
+}
 
 void rawjob_free (rawjob *j)
 {

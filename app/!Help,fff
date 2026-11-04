@@ -1,4 +1,4 @@
-Lumen 0.0.32 (04 Nov 2026) - test build
+Lumen 0.0.33 (04 Nov 2026) - test build
 =====================================
 
 A photo library and non-destructive editor for RISC OS 5.
@@ -450,6 +450,15 @@ viewer develops the raw data with the camera's white balance and colour
 in the background (a few seconds for a big file), at half size; 100%,
 the loupe and exports develop it in full.
 
+Previews: so a raw photo opens at once, Lumen keeps a preview of it in
+the library (Previews, beside Thumbs): the photo developed at 1600
+pixels, made in the background once the thumbnails are done, newest
+first, and kept whenever the viewer develops one itself. The photo shown
+in the viewer always comes first: until it is open Lumen does nothing
+else. A preview is made again if the file, its orientation or LumenRaw
+changes. Choices sets which photos get them (Raw files, All photos or
+None) and Discard removes them; about 300-500 KB each.
+
 Choices
 -------
 Choices... on the icon bar menu sets:
@@ -459,6 +468,8 @@ Choices... on the icon bar menu sets:
               running Lumen overrides it.
   Export      the format, size and JPEG quality the Export box starts with
   Thumbnails  the size Lumen starts with
+  Previews    which photos get previews: Raw files, All photos or None;
+              Discard removes them (made again unless None)
   Check the photos' files are still there when Lumen opens: switch off
               for a big library on discs that are often away.
   Folders     whether folders imported from now on are watched and get
