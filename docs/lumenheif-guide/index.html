@@ -65,7 +65,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 </header>
 <main>
 
-<figure><img src="images/cover.png" alt="A HEIF photo of sewing threads in Lumen"><figcaption>A HEIF photo from a Samsung phone, opened in Lumen and decoded by LumenHEIF.</figcaption></figure>
+<figure><img src="images/cover.png" alt="A HEIF photo of sewing threads in Lumen"><figcaption>A HEIF photo from a Samsung phone, opened in Lumen and decoded by LumenHEIF. (Sample photo from heic.digital, not the author's.)</figcaption></figure>
 
 <nav class="toc">
 <h3>Contents</h3>
@@ -94,7 +94,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <h4>About this guide</h4>
 <p>This guide is about the plug-in. Everything else about Lumen is in the <b>Lumen User Guide</b>: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
-<p>The pictures are screenshots of Lumen 0.0.37 with LumenHEIF 1.0 on RISC OS 5. The two HEIF photos in them, from an iPhone 12 Pro and a Samsung Galaxy A32 5G, are samples from <a href="https://heic.digital/samples/">heic.digital</a> (see <a href="#credits">Credits</a>).</p>
+<p>The pictures are screenshots of Lumen 0.0.37 with LumenHEIF 1.0 on RISC OS 5. The two HEIF photos in them, from an iPhone 12 Pro and a Samsung Galaxy A32 5G, are <b>not the author's</b>: they are sample files from <a href="https://heic.digital/samples/">heic.digital/samples</a> (see <a href="#credits">Credits</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>That you have Lumen and know your way round it a little: how to import photos and open one in the Viewer, the three mouse buttons (<b>Select</b>, <b>Menu</b> and <b>Adjust</b>), and how to drag a directory from a Filer window.</p>
@@ -166,7 +166,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <h3 class="chapter" id="ch3"><span>3</span> Bringing HEIF photos in</h3>
 
 <p>Import HEIF photos as you would any others: drag a directory or the files into Lumen's window, or use <b>Import</b> on the toolbar. Lumen knows them by their endings, <code>heic</code>, <code>heif</code> and <code>hif</code>, in capitals or not, and by the first bytes of the file, so one with another name is found too.</p>
-<figure><img src="images/browser.png" alt="HEIF photos in the Browser"><figcaption>Two HEIF photos just imported: one from an iPhone (upright), one from a Samsung phone.</figcaption></figure>
+<figure><img src="images/browser.png" alt="HEIF photos in the Browser"><figcaption>Two HEIF photos just imported: one from an iPhone (upright), one from a Samsung phone. Both are samples from heic.digital.</figcaption></figure>
 
 <div class="box warn"><b class="label">WARNING</b>Without LumenHEIF, Lumen doesn't know HEIF photos at all, so it leaves them out when it imports a directory. Once LumenHEIF is installed, import the directory again: Lumen adds the HEIF photos, and the photos already there aren't added twice.</div>
 
@@ -175,7 +175,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <h3 class="chapter" id="ch4"><span>4</span> Looking at HEIF photos</h3>
 
 <p>Double-click a HEIF photo, as for any other. Lumen asks LumenHEIF for a 1600 pixel picture for the Viewer, then the full size in the background for <b>100%</b> and the <b>loupe</b>. The full size of a big photo takes a little longer, so the first zoom into a photo may wait a moment.</p>
-<figure><img src="images/loupe.png" alt="The loupe over a HEIF photo"><figcaption>The loupe at 100% over the threads: the full-size photo, decoded by LumenHEIF.</figcaption></figure>
+<figure><img src="images/loupe.png" alt="The loupe over a HEIF photo"><figcaption>The loupe at 100% over the threads: the full-size photo, decoded by LumenHEIF. (Sample photo from heic.digital.)</figcaption></figure>
 <p>As for raw photos, Lumen keeps a <b>preview</b> of each HEIF photo in the library (Choices &gt; Previews: <b>Raw files</b> includes HEIF photos), so a photo you've looked at once opens at once next time.</p>
 
 <h4>Colour and which way up</h4>
@@ -199,7 +199,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <tr><td>HEIF photo: the LumenHEIF plug-in is switched off (Plug-ins, on the icon bar menu)</td><td>LumenHEIF is installed but switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
 <tr><td>Not known: no plug-in reads it now</td><td>LumenHEIF has been removed since the photo was imported. Install it again (<a href="#ch2">Chapter 2</a>).</td></tr>
 </table>
-<figure><img src="images/info-heif.png" alt="The Info tab for a HEIF photo"><figcaption>A Samsung HEIF photo in the Info tab. The camera and EXIF come from LumenHEIF.</figcaption></figure>
+<figure><img src="images/info-heif.png" alt="The Info tab for a HEIF photo"><figcaption>A Samsung HEIF photo (a heic.digital sample) in the Info tab. The camera and EXIF come from LumenHEIF.</figcaption></figure>
 <p>Below that are the camera's details. LumenHEIF reads them, and tells Lumen where the photo's EXIF is in the file (phones put it in different places), so the Info tab lists it in full.</p>
 
 <!-- ======================================================================= -->
@@ -273,7 +273,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <!-- ======================================================================= -->
 <h2 class="part" id="credits">Credits and licences</h2>
-<p>The two HEIF photos in this guide (old safe in a wall, from an iPhone 12 Pro; sewing threads, from a Samsung Galaxy A32 5G) are sample files from <a href="https://heic.digital/samples/">heic.digital</a>. They are not the author's.</p>
+<p>The two HEIF photos in this guide (an old safe in a wall, from an iPhone 12 Pro; sewing threads, from a Samsung Galaxy A32 5G) are <b>not the author's photos</b>. They are sample HEIC files published by heic.digital at <a href="https://heic.digital/samples/">https://heic.digital/samples/</a>, and are used here only to show LumenHEIF at work. Their copyright stays with their owners.</p>
 <p class="small">LumenHEIF is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on libheif (GNU Lesser General Public License 3) and FFmpeg's libavcodec and libavutil (GNU Lesser General Public License 2.1 or later); the licences are in <code>!Lumen.Plugins.HEIF.Licence</code>. Product names are the trademarks of their owners and are used here only to say which photos work.</p>
 
 </main>

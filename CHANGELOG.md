@@ -33,7 +33,9 @@
   off (a key, the menu).
 - LumenHEIF finds the EXIF wherever the phone put the meta box (Samsung
   phones write it after the picture data); a test sample, late.heic,
-  has it that way. The LumenHEIF User Guide, in !Lumen.Plugins.HEIF.Guide.
+  has it that way. The LumenHEIF User Guide, in !Lumen.Plugins.HEIF.Guide
+  (its HEIF photos are samples from https://heic.digital/samples/, not
+  the author's).
 - The guide's menu pictures retaken.
 - LumenHEIF-1.0-sources.zip has LumenHEIF's, libheif's and FFmpeg's
   sources and the patches, as the LGPL asks.

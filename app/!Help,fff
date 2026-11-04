@@ -487,21 +487,14 @@ else. A preview is made again if the file, its orientation or LumenRaw
 changes. Choices sets which photos get them (Raw files, All photos or
 None) and Discard removes them; about 300-500 KB each.
 
-HEIF photos
------------
-Lumen reads HEIF photos (.heic, .heif, .hif, as iPhones and many other
-phones and cameras take them) with its HEIF plug-in, a separate
-package: LumenHEIF, in PackMan or as LumenHEIF-1.0.zip on Lumen's
-release page (drag the HEIF directory in its !Lumen.Plugins into
-Plug-ins > Add plug-in). It uses libheif and the HEVC decoder from
-FFmpeg (only that), with NEON on computers that have it. Lumen itself
-knows nothing of HEIF: the plug-in says which files are its own, so
-without it HEIF photos are left alone when a folder is imported (import
-the folder again once it is installed).
-
-Thumbnails come from the photo's own thumbnail when it has one. Photos
-in Display P3 (iPhones') are converted to sRGB. They get previews like
-raw files do (Choices > Previews: Raw files covers HEIF photos too).
+Other formats
+-------------
+Lumen reads JPEG, PNG and camera raw files itself. Other formats come
+as plug-ins, which add them without a new Lumen: the first is LumenHEIF,
+for the HEIF photos (.heic) iPhones and many other phones take. Install
+one from PackMan, or drag it into Plug-ins > Add plug-in. Each has its
+own guide, in !Lumen.Plugins.<name>.Guide. Photos in a plug-in's format
+are imported once it is installed: import the folder again.
 
 Choices
 -------
@@ -534,8 +527,9 @@ running, rather than a second copy on the same library.
 
 Plug-ins
 --------
-Plug-ins add to what Lumen can do: LumenRaw (camera raw files) and
-LumenHEIF (HEIF photos). Each is a directory in !Lumen.Plugins, where PackMan puts them.
+Plug-ins add to what Lumen can do: LumenRaw (camera raw files), and
+format plug-ins for other formats. Each is a directory in
+!Lumen.Plugins, where PackMan puts them.
 Plug-ins, on the icon bar menu and the main window's menu, lists them:
 choose one to switch it off (it stays installed, unticked) or back on.
 Add plug-in... opens a window to drag a plug-in's directory into (or
@@ -636,7 +630,6 @@ domain), libjpeg-turbo (IJG, BSD and zlib licences), libpng (PNG
 Reference Library License v2), zlib (zlib licence), UnixLib (revised
 BSD, with parts under the LGPL) and GCC's runtime library (GPL 3 with
 the Runtime Library Exception). Their licences are in !Lumen.Licences;
-its ReadMe lists them. The LibRaw and HEIF plug-ins have their own
-Licence files.
+its ReadMe lists them. Each plug-in has its own Licence file.
 
 Andrew Youll, 2026

@@ -74,7 +74,7 @@ a { color:#1f5fa8; }
 <li><a href="#part3">Part III: Making Photos Better</a>
 <ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping, straightening, retouching and brushing</a></li><li><a href="#ch12">12. Styles, presets, versions and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
 <li><a href="#part4">Part IV: Sharing and Setting Up</a>
-<ul><li><a href="#ch14">14. Exporting and printing photos</a></li><li><a href="#ch15">15. Backing up, moving and checking the library</a></li><li><a href="#ch16">16. Camera raw files, HEIF photos and plug-ins</a></li><li><a href="#ch17">17. Choices</a></li><li><a href="#ch18">18. Getting help</a></li></ul></li>
+<ul><li><a href="#ch14">14. Exporting and printing photos</a></li><li><a href="#ch15">15. Backing up, moving and checking the library</a></li><li><a href="#ch16">16. Camera raw files and plug-ins</a></li><li><a href="#ch17">17. Choices</a></li><li><a href="#ch18">18. Getting help</a></li></ul></li>
 <li><a href="#part5">Part V: The Part of Tens</a>
 <ul><li><a href="#ch19">19. Ten keys to learn first</a></li><li><a href="#ch20">20. Ten problems and what to do about them</a></li><li><a href="#ch21">21. Ten things for experienced users</a></li></ul></li>
 <li><a href="#appA">Appendix: keys, mouse and menus</a></li>
@@ -129,7 +129,7 @@ a { color:#1f5fa8; }
 
 <h4>What you can do with it</h4>
 <ul>
-<li><b>Import</b> JPEG and PNG photos, camera raw files with the free LumenRaw plug-in, and phones' HEIF photos with the free LumenHEIF plug-in.</li>
+<li><b>Import</b> JPEG and PNG photos, and camera raw files with the free LumenRaw plug-in. Plug-ins add other formats.</li>
 <li><b>Browse</b> thumbnails in three sizes, and look at one photo large, at 100%, or through a round magnifier (the <b>loupe</b>).</li>
 <li><b>Rate, flag and reject</b> photos with one key each.</li>
 <li><b>Find</b> photos by name, caption, keyword, camera, date or project, and show only those with enough stars; or let a <b>smart album</b> gather them.</li>
@@ -151,7 +151,7 @@ a { color:#1f5fa8; }
 <tr><td>RISC OS 5.30 or later on a Raspberry Pi 4, 400 or CM4</td><td>Lumen is built for these. Other ARMv7 machines should work too.</td></tr>
 <tr><td>SharedUnixLibrary 1.16 or later, and ARMEABISupport</td><td>Lumen uses them. You can get both through PackMan. Lumen checks for them when it starts.</td></tr>
 <tr><td>LumenRaw (optional)</td><td>Only for camera raw files (<a href="#ch16">Chapter 16</a>). It's in PackMan, and its zip is on Lumen's release page.</td></tr>
-<tr><td>LumenHEIF (optional)</td><td>Only for HEIF photos (.heic), as iPhones and many other phones take them (<a href="#ch16">Chapter 16</a>). It's in PackMan, and its zip is on Lumen's release page.</td></tr>
+<tr><td>Format plug-ins (optional)</td><td>Only for other formats, such as LumenHEIF for iPhones' HEIF photos (<a href="#ch16">Chapter 16</a>). They're in PackMan.</td></tr>
 <tr><td>A web browser such as NetSurf (optional)</td><td>Only for reading this guide from Lumen's menu.</td></tr>
 </table>
 
@@ -256,7 +256,7 @@ a { color:#1f5fa8; }
 <li><b>JPEG</b> photos, from any camera or phone.</li>
 <li><b>PNG</b> pictures.</li>
 <li><b>Camera raw files</b> (NEF, CR2, CR3, ARW, RAF, ORF, RW2, DNG and many more), with the LumenRaw plug-in (<a href="#ch16">Chapter 16</a>). Without it they're still imported, and their thumbnails come once the plug-in is installed.</li>
-<li><b>HEIF photos</b> (HEIC, HEIF, HIF), as phones take them, with the LumenHEIF plug-in (<a href="#ch16">Chapter 16</a>). Without it they aren't imported: import the folder again once it's installed.</li>
+<li><b>Other formats</b>, once a plug-in for them is installed (<a href="#ch16">Chapter 16</a>).</li>
 </ul>
 <p>Other files in the directory are left alone. Applications (directories whose names start with <code>!</code>) are skipped.</p>
 
@@ -785,7 +785,7 @@ a { color:#1f5fa8; }
 <div class="box tip"><b class="label">TIP</b>Photos whose files have moved aren't something Repair can mend: they're shown as Missing and found again as in <a href="#ch8">Chapter 8</a>. The check says how many there are.</div>
 <div class="box tech"><b class="label">TECHNICAL STUFF</b>Check runs SQLite's integrity check, and Repair rebuilds damaged indexes (<code>REINDEX</code>) after writing the backup with <code>VACUUM INTO</code>. If the catalogue is damaged beyond that, Lumen says so, and Export library still copies whatever can be read into a new one. Export and import attach the other catalogue to Lumen's and copy its rows in one transaction, so a library is never left half merged; the files are copied first, a few at a time. A library's catalogue records the directory it was written in, and when it's opened from somewhere else, the paths inside it are moved with it.</div>
 
-<h3 class="chapter" id="ch16"><span>16</span> Camera raw files, HEIF photos and plug-ins</h3>
+<h3 class="chapter" id="ch16"><span>16</span> Camera raw files and plug-ins</h3>
 
 <p>Many cameras can save <b>raw</b> files: everything the sensor saw, before the camera made a JPEG of it. They hold more detail in bright and dark parts, but every camera maker has its own format. Lumen reads them with a <b>plug-in</b> called <b>LumenRaw</b>, which uses the free LibRaw library and knows over a thousand cameras.</p>
 
@@ -805,11 +805,9 @@ a { color:#1f5fa8; }
 <p>LumenRaw has a guide of its own, the <b>LumenRaw User Guide</b>, inside the plug-in: open <code>!Lumen.Plugins.LibRaw.Guide.index/html</code>. It explains how raw photos are developed, and lists every camera LumenRaw knows.</p>
 <div class="box rem"><b class="label">REMEMBER</b>If you open a raw photo without LumenRaw installed, Lumen tells you what to install. Its stars and albums work anyway.</div>
 
-<h4>HEIF photos: LumenHEIF</h4>
-<p>iPhones, and many other phones and cameras, save photos as <b>HEIF</b> (files ending <code>.heic</code>, <code>.heif</code> or <code>.hif</code>): the same picture as a JPEG in about half the space, compressed the way HEVC video is. Lumen reads them with a second plug-in, <b>LumenHEIF</b>. Install it as you would LumenRaw: the <b>LumenHEIF</b> package from PackMan, or the <b>HEIF</b> directory from <code>LumenHEIF-1.0.zip</code>'s <code>!Lumen.Plugins</code>, dragged into the Add plug-in window.</p>
-<p>LumenHEIF is a <b>format plug-in</b>: Lumen itself knows nothing about HEIF. The plug-in tells Lumen which files are its own, and reads them for it, so new formats can come as new plug-ins without a new Lumen. Once it's there, HEIF photos behave like any other: thumbnails (from the photo's own, when it has one), the Viewer, adjustments, previews (Choices &gt; Previews: <b>Raw files</b> includes HEIF photos), exports and printing. Phones often take photos in the wider <b>Display P3</b> colours; LumenHEIF converts those to sRGB, as Lumen does for P3 JPEGs. A photo the phone took sideways is turned the right way up, and its camera, exposure and date are on the Info tab.</p>
-<div class="box tech"><b class="label">TECHNICAL STUFF</b>LumenHEIF is libheif 1.23.7 with FFmpeg 5.1.10's HEVC decoder, cut down to just that (no other codecs, formats or programs). It's built for ARMv7 with VFPv3, like Lumen, and uses FFmpeg's NEON code where the processor has it (chosen as it starts; <code>*Set Lumen$NEON 0</code> to compare). The HEIF photos it makes are identical with and without NEON. Its sources, and FFmpeg's and libheif's, are in <code>LumenHEIF-1.0-sources.zip</code> on Lumen's release page, as their LGPL licences ask.</div>
-<p>LumenHEIF has a guide of its own, the <b>LumenHEIF User Guide</b>, inside the plug-in: open <code>!Lumen.Plugins.HEIF.Guide.index/html</code>. It explains which HEIF photos work and what to do when one doesn't.</p>
+<h4>Other formats: plug-ins</h4>
+<p>Lumen reads JPEG, PNG and camera raw files itself. Other formats come as <b>plug-ins</b>, which add them to Lumen without a new Lumen. The first is <b>LumenHEIF</b>, for the HEIF photos (<code>.heic</code>) that iPhones and many other phones take, and more may follow. Install one from PackMan, or drag it into <b>Plug-ins &rarr; Add plug-in...</b> (below). Each comes with its own guide, in <code>!Lumen.Plugins.<i>name</i>.Guide</code>.</p>
+<div class="box rem"><b class="label">REMEMBER</b>Lumen only imports photos in a plug-in's format once that plug-in is installed. If you imported a folder before, import it again: the new photos are added, and the ones already there aren't added twice.</div>
 
 <h4>The Plug-ins menu</h4>
 <p>Choose <b>Plug-ins</b> on the icon bar menu (or on the Browser's menu) to see Lumen's plug-ins.</p>
@@ -867,7 +865,7 @@ a { color:#1f5fa8; }
 <tr><th>Problem</th><th>What to do</th></tr>
 <tr><td>Lumen says it needs SharedUnixLibrary or ARMEABISupport.</td><td>Install them with PackMan, then start Lumen again.</td></tr>
 <tr><td>New photos I put in an imported directory haven't appeared.</td><td>Lumen only brings them in by itself if the project is watched: tick <b>Watch for new photos</b> on the project's menu (<a href="#ch6">Chapter 6</a>). To have it look now, close and reopen Lumen's window. Or drag the directory in again: only the new photos are added.</td></tr>
-<tr><td>A raw file or a phone's .heic photo has a grey thumbnail, or says to install something.</td><td>Install LumenRaw for raw files, or LumenHEIF for HEIF photos (<a href="#ch16">Chapter 16</a>), then start Lumen again. If it's installed, check it's ticked in the Plug-ins menu: Lumen says when it's switched off.</td></tr>
+<tr><td>A raw file has a grey thumbnail, or says to install something.</td><td>Install LumenRaw (<a href="#ch16">Chapter 16</a>), then start Lumen again. If it's installed, check it's ticked in the Plug-ins menu: Lumen says when it's switched off.</td></tr>
 <tr><td>Photos show "Missing".</td><td>Their files have moved or their disc isn't there. Put the disc back and reopen the window, or drag the files' new directory into Lumen (<a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Keys don't do anything.</td><td>Click in Lumen's window first, so it has the input focus. If you're typing in the Search box, the keys go there: click on a photo.</td></tr>
 <tr><td>A photo I rejected has disappeared.</td><td>Click <b>Rejected</b> in the Library tab, select it and give it stars again (or press <kbd>0</kbd>): rejecting took its stars away.</td></tr>
@@ -978,7 +976,7 @@ a { color:#1f5fa8; }
 <h2 class="part" id="credits">Photo credits</h2>
 <p>All the photos in this guide are by the author, Andrew Youll (&copy; Andrew Youll). They're shown smaller than the originals, and in Chapters 6, 7 and 10 to 14 with Lumen's adjustments, styles, versions and keywords applied. The raw photos are straight from his Nikon D700.</p>
 
-<p class="small">Lumen is &copy; Andrew Youll, 2026, and is free software under the MIT licence: you may use, change and pass it on, keeping the copyright notice. Its source code is published with each release. The licences of the code it includes (SQLite, libjpeg-turbo, libpng, zlib and UnixLib, LibRaw in the LumenRaw plug-in, and libheif and FFmpeg in the LumenHEIF plug-in) are in <code>!Lumen.Licences</code>.</p>
+<p class="small">Lumen is &copy; Andrew Youll, 2026, and is free software under the MIT licence: you may use, change and pass it on, keeping the copyright notice. Its source code is published with each release. The licences of the code it includes (SQLite, libjpeg-turbo, libpng, zlib and UnixLib, and LibRaw in the LumenRaw plug-in) are in <code>!Lumen.Licences</code>.</p>
 
 </main>
 </body>
