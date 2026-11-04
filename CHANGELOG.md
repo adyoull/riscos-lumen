@@ -1,13 +1,18 @@
 # Lumen changelog
 
-## 0.0.38 (4 November 2026): JPEG and PNG files with another type
+## 0.0.38 (4 November 2026): photos known by their fingerprint
 
 - JPEG and PNG files typed something else (DOS or Text, after being
-  copied from a card or a network share without MimeMap) are imported:
-  a name ending /jpg, /jpeg, /jpe or /png lets them be looked at, and
-  their contents decide, as before. One named /png that isn't a PNG is
-  reported. They are kept in the library as JPEG and PNG.
-- The guide says how Lumen knows JPEG and PNG files.
+  copied from a card or a network share without MimeMap) are imported,
+  with or without a /jpg or /png extension: Lumen looks at the first
+  bytes of files typed DOS and Text too, as it did for Data, TIFF and
+  untyped files, and of any file named like a photo. Files of other
+  types are left unopened. One named /png that isn't a PNG is reported.
+  They are kept in the library as JPEG and PNG.
+- Lumen reads only the first 4 KB of a file to tell what it is, and the
+  rest of the header only for a photo, so folders with other files in
+  them (watched ones too) are looked through more quickly.
+- The guide says how Lumen knows photos.
 
 ## 0.0.37 (4 November 2026): the plug-in API, menus and the loupe
 

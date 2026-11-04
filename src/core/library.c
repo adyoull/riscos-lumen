@@ -18,6 +18,7 @@
 #include "rawjob.h"
 
 #define HEAD_BYTES (128 * 1024)       /* enough for EXIF in nearly every camera's files */
+#define PROBE_BYTES 4200              /* enough to tell what a file is (plug-ins' signatures are in the first 4 KB) */
 #define HASH_BYTES (64 * 1024)
 #define ROWS_PER_STEP 16
 #define LIB_WANT_MAX 256
@@ -413,14 +414,17 @@ static int has_photo_extension (const char *path)
   return 0;
 }
 
-/* Which files are worth opening to look at. JPEG and PNG files are known
-   by their type, or by their name when they're typed otherwise (DOS or
-   Text from a card or a network share without MimeMap); raw files come
-   typed every way (DOS, Text, Data, TIFF or nothing), so their extension
-   lets any type through. The contents decide in the end. */
+/* Which files are worth opening to look at. Photos are known by their
+   contents, their first bytes (a fingerprint), whatever their type or
+   name. Lumen looks at files typed JPEG or PNG, at those typed in the
+   ways copying leaves files (DOS or Text from a card or a network share
+   without MimeMap, Data, TIFF, or none), and at any with a photo's
+   extension (/jpg, /png, a raw's, or one a plug-in claims). Files of other
+   types (Sprites, Obey files, BASIC...) are left unopened. */
 static int likely_image_type (int ft, const char *path)
 {
   return ft == FT_JPEG || ft == FT_PNG || ft == FT_NONE || ft == FT_DATA || ft == FT_TIFF
+         || ft == FT_TEXT || ft == FT_DOS
          || has_photo_extension (path) || img_has_raw_extension (path) || rawjob_claims_name (path);
 }
 
@@ -461,7 +465,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       l->skipped++;
       return;
     }
-  got = fread (l->head, 1, HEAD_BYTES, f);
+  /* The fingerprint first: only a photo is read further. */
+  got = fread (l->head, 1, PROBE_BYTES, f);
   fmt = img_probe_named (l->head, got, path);
   if (fmt == IMG_UNKNOWN && rawjob_kind_for (IMG_UNKNOWN, path, l->head, got) > 0)
     fmt = IMG_PLUGIN;                  /* a format plug-in claims it */
@@ -475,6 +480,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       fclose (f);
       return;
     }
+  if (got == PROBE_BYTES)
+    got += fread (l->head + got, 1, HEAD_BYTES - PROBE_BYTES, f);
   l->found++;
   if (fmt == IMG_RAW)
     img_read_raw_info (l->head, got, &info);   /* the rest comes from the plug-in with the thumbnail */

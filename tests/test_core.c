@@ -1631,7 +1631,8 @@ static void note_made (void *ctx, cat_id v)
 }
 
 /* --- JPEG and PNG files typed otherwise (DOS, Text: from a card or a
-   share without MimeMap) are found by their names; their contents decide. */
+   share without MimeMap) are found by their fingerprint (first bytes),
+   with or without a photo's name; other types are left unopened. */
 static void test_mistyped (void)
 {
   library *l;
@@ -1645,7 +1646,15 @@ static void test_mistyped (void)
   p (path, "Mistyped/text.png,fff"); make_png (path, 120, 80, 0, 0);
   p (path, "Mistyped/dos.JPG,fe4"); make_jpeg (path, 160, 120, 1, NULL);
   p (path, "Mistyped/jpeg.jpeg,fe4"); make_jpeg (path, 200, 150, 1, NULL);
-  p (path, "Mistyped/notes,fff"); make_png (path, 120, 80, 0, 0);   /* no name to go by: left */
+  p (path, "Mistyped/noname,fff"); make_png (path, 140, 90, 0, 0);  /* no name to go by: its fingerprint */
+  p (path, "Mistyped/sprite,ff9"); make_png (path, 150, 90, 0, 0);  /* typed Sprite: left unopened */
+  p (path, "Mistyped/notes,fff");
+  f = fopen (path, "wb");
+  if (f)
+    {
+      fputs ("just some notes\n", f);
+      fclose (f);
+    }
   p (path, "Mistyped/fake.png,fff");
   f = fopen (path, "wb");
   if (f)
@@ -1665,11 +1674,11 @@ static void test_mistyped (void)
       jpg += items[k].filetype == FT_JPEG;
       png += items[k].filetype == FT_PNG;
     }
-  CHECK (n == 3, "mistyped: a PNG typed Text and two JPEGs typed DOS are imported, by their names");
-  if (n != 3)
+  CHECK (n == 4, "mistyped: PNGs typed Text (one without a photo's name) and two JPEGs typed DOS are imported");
+  if (n != 4)
     for (k = 0; k < n; k++)
       fprintf (stderr, "  imported %s (type %x)\n", items[k].name, items[k].filetype);
-  CHECK (jpg == 2 && png == 1, "mistyped: kept as JPEG and PNG, whatever they were typed");
+  CHECK (jpg == 2 && png == 2, "mistyped: kept as JPEG and PNG, whatever they were typed");
   CHECK (pr.skipped == 1 && strstr (lib_last_error (l) ? lib_last_error (l) : "", "fake") != NULL,
          "mistyped: a .png that isn't one is reported");
   free (items);

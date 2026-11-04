@@ -17,6 +17,8 @@
 #define FT_PNG    0xB60
 #define FT_TIFF   0xFF0
 #define FT_DATA   0xFFD
+#define FT_TEXT   0xFFF
+#define FT_DOS    0xFE4
 #define FT_DIR    0x1000             /* as OS_File 23 reports directories */
 #define FT_APP    0x2000             /* and application directories */
 #define FT_NONE   (-1)               /* untyped */

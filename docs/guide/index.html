@@ -258,7 +258,7 @@ a { color:#1f5fa8; }
 <li><b>Camera raw files</b> (NEF, CR2, CR3, ARW, RAF, ORF, RW2, DNG and many more), with the LumenRaw plug-in (<a href="#ch16">Chapter 16</a>). Without it they're still imported, and their thumbnails come once the plug-in is installed.</li>
 <li><b>Other formats</b>, once a plug-in for them is installed (<a href="#ch16">Chapter 16</a>).</li>
 </ul>
-<p>Lumen knows JPEG and PNG files by their file type. If they have another type (DOS or Text, say, after being copied from a card or a network share), it knows them by a name ending <code>/jpg</code>, <code>/jpeg</code> or <code>/png</code>, and checks what's inside.</p>
+<p>Lumen knows photos by what's inside them, their first few bytes, so a JPEG or PNG is found even with the wrong file type (DOS or Text, say, after being copied from a card or a network share) or no extension. It looks inside files typed JPEG, PNG, DOS, Text, Data or TIFF, untyped files, and any whose name ends like a photo's (<code>/jpg</code>, <code>/png</code>, a raw file's). Files of other types, such as Sprites, are left unopened.</p>
 <p>Other files in the directory are left alone. Applications (directories whose names start with <code>!</code>) are skipped.</p>
 
 <div class="box tip"><b class="label">TIP</b>If you keep adding photos to the same directory, Lumen can watch it and bring new ones in by itself: see <a href="#ch6">Chapter 6</a>.</div>
