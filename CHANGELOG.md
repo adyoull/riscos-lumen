@@ -1,5 +1,35 @@
 # Lumen changelog
 
+## 0.0.37 (4 November 2026): HEIF photos
+
+- HEIF photos (.heic, .heif, .hif), as iPhones and many other phones
+  take them, with a new plug-in, LumenHEIF 1.0: libheif 1.23.7 with
+  FFmpeg 5.1.10 cut down to its HEVC decoder. Built for ARMv7 with
+  VFPv3, using FFmpeg's NEON code where the processor has it (the same
+  pictures either way). The photo's own thumbnail is used when it has
+  one; Display P3 photos are converted to sRGB; sideways photos are
+  turned the right way up.
+- Format plug-ins (API 1, docs/plugin-api.md): a plug-in's Plugin file
+  says which files are its own (Kind: format, Format, Extensions,
+  Signature), Lumen imports what installed plug-ins claim and runs them
+  to read them, and the plug-in says where the photo's EXIF is for the
+  Info tab. Lumen has no knowledge of HEIF itself; a new format needs
+  only a new plug-in. Each is switched on and off on its own; one for a
+  newer API is listed but not run. Previews (Raw files) cover them too.
+- The library's catalogue (schema 7) keeps where a plug-in says a
+  photo's EXIF is.
+- Menus: the Photo menu is grouped into File, Edit, View, Adjust and
+  Organise, and the Selection menu into File, Edit and Organise (every
+  item kept). Keys are shown after one space, so RISC OS lines them up
+  on the right; letter keys are shown with Shift (they work with or
+  without it). New letters for keys that couldn't be shown that way: P
+  flags (as /), X rejects (9), L the loupe (`), K the stack's pick (\).
+- The Plug-ins menu and messages name plug-ins without the library they
+  are built on ("Camera raw 1.1", "HEIF photos 1.0").
+- The guide's menu pictures retaken.
+- LumenHEIF-1.0-sources.zip has LumenHEIF's, libheif's and FFmpeg's
+  sources and the patches, as the LGPL asks.
+
 ## 0.0.36 (4 November 2026): the first public release
 
 - The same program as 0.0.35, released: version strings, "test build"

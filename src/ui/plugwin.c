@@ -60,7 +60,7 @@ int plugwin_create (void)
   }
   icon_at (ic + 8 * I_LINE1, 140, -64, W - 24, -20, T_TEXT, "Drag a plug-in's directory into this window", NULL);
   icon_at (ic + 8 * I_LINE2, 140, -112, W - 24, -68, T_TEXT, "to add it to Lumen. Plug-ins come from PackMan:", NULL);
-  icon_at (ic + 8 * I_LINE3, 140, -160, W - 24, -116, T_TEXT, "LumenRaw, for camera raw files, is one.", NULL);
+  icon_at (ic + 8 * I_LINE3, 140, -160, W - 24, -116, T_TEXT, "LumenRaw (camera raws) and LumenHEIF (phones).", NULL);
   icon_at (ic + 8 * I_PACKMAN, W - 300, -272, W - 24, -208, T_BUTTON, "Open PackMan", v_button);
   return _swix (Wimp_CreateWindow, _IN (1) | _OUT (0), b, &win) ? -1 : 0;
 }

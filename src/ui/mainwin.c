@@ -974,6 +974,36 @@ static void info_load (int force)
         if ((buf[0] == 'I' && buf[1] == 'I') || (buf[0] == 'M' && buf[1] == 'M'))
           info_has_exif = exif_list_tiff (buf, got, info_exif_tag, NULL) > 0;
       }
+    else if (buf && got && img_probe (buf, got) == IMG_UNKNOWN)
+      {
+        /* A format plug-in's photo: what it is and its EXIF, as the
+           plug-in said (Lumen knows nothing of the format itself). */
+        cat_origin o;
+        int kind = rawjob_kind_for (IMG_UNKNOWN, d.path, buf, got);
+        const plugin_info *p = rawjob_format (kind);
+        char fm[200];
+        if (!p)
+          snprintf (fm, sizeof fm, "Not known: no plug-in reads it now");
+        else if (rawjob_switched_off_kind (kind))
+          snprintf (fm, sizeof fm, "%s: the %s plug-in is switched off (Plug-ins, on the icon bar menu)", p->format, p->title);
+        else if (!rawjob_available_kind (kind))
+          snprintf (fm, sizeof fm, "%s: its plug-in, %s, can't be run", p->format, p->title);
+        else
+          snprintf (fm, sizeof fm, "%s, read by the %s plug-in", p->format, p->title);
+        info_add ("Format", fm, 0);
+        if (cat_origin_of (lib_cat (app_library ()), d.original, &o) == 1 && o.exif_length > 8
+            && o.exif_length < 4L * 1024 * 1024)
+          {
+            unsigned char *tiff = malloc ((size_t) o.exif_length);
+            FILE *ef = tiff ? fopen (d.path, "rb") : NULL;
+            if (ef && fseek (ef, (long) o.exif_offset, SEEK_SET) == 0
+                && fread (tiff, 1, (size_t) o.exif_length, ef) == (size_t) o.exif_length)
+              info_has_exif = exif_list_tiff (tiff, (size_t) o.exif_length, info_exif_tag, NULL) > 0;
+            if (ef)
+              fclose (ef);
+            free (tiff);
+          }
+      }
     else if (buf && got)
       info_has_exif = exif_list (buf, got, info_exif_tag, NULL) > 0;
     free (buf);

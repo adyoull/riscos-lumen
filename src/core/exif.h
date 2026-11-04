@@ -9,7 +9,10 @@
 #define LUMEN_EXIF_H
 #include <stddef.h>
 
-enum { IMG_UNKNOWN = 0, IMG_JPEG = 1, IMG_PNG = 2, IMG_RAW = 3 };
+/* IMG_PLUGIN: a format Lumen knows nothing of itself, read by a format
+   plug-in that claims it (by its extension or first bytes: plugins.h).
+   (4 is thumbgen's own: a picture the raw plug-in made.) */
+enum { IMG_UNKNOWN = 0, IMG_JPEG = 1, IMG_PNG = 2, IMG_RAW = 3, IMG_PLUGIN = 5 };
 
 typedef struct
 {
@@ -23,10 +26,14 @@ typedef struct
   int iso;                    /* 0 if unknown */
   long thumb_offset;          /* embedded JPEG thumbnail, from the file start; 0 if none */
   long thumb_length;
+  long exif_offset;           /* its EXIF (TIFF) data, from the file start, when a plug-in */
+  long exif_length;           /* says where it is (plug-in formats); 0 if not known */
 } img_info;
 
 /* 1 if the name ends in a camera raw extension ("/nef" or ".nef"). */
 int img_has_raw_extension (const char *name);
+/* Read by a plug-in (a camera raw, or a format a plug-in claims). */
+int img_is_plugin_format (int format);
 /* What kind of image the first bytes are. */
 int img_probe (const unsigned char *buf, size_t len);
 /* The same, knowing the file's name: camera raw files (decoded by the

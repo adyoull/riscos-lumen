@@ -1,7 +1,8 @@
 /* Copyright (c) 2026 Andrew Youll
    Released under the MIT licence: see the LICENSE file.
    SPDX-License-Identifier: MIT */
-/* rawjob: camera raw files, through the LibRaw plug-in.
+/* rawjob: camera raw files through the LibRaw plug-in, and other formats
+   through format plug-ins (docs/plugin-api.md), run the same way.
 
    The plug-in is a separate program (LumenRaw, in its own PackMan
    package) that Lumen runs once for each job. A job writes two files: the
@@ -21,10 +22,39 @@
 #define LUMEN_RAWJOB_H
 #include <stddef.h>
 #include "exif.h"
+#include "plugins.h"
 
 /* Starts the command line in the background; tag identifies it in
    rawjob_ended. 0 if started. */
 typedef int (*rawjob_runner) (const char *cmdline, int tag);
+
+/* Kinds of plug-in, each its own program, their jobs sharing the queue:
+   RAWJOB_RAW is LumenRaw (camera raw files); the others are format
+   plug-ins (plugins.h), each claiming the files it reads. The functions
+   without _kind are LumenRaw's. */
+#define RAWJOB_KINDS 8
+enum { RAWJOB_RAW = 0 };
+/* A format plug-in, as installed (switched on or off): its kind, kept for
+   as long as the same plug-in directory is there. -1 if all are in use. */
+int rawjob_set_format (const plugin_info *p);
+/* Forgets a format plug-in's kind (it has been removed). */
+void rawjob_clear_format (int kind);
+/* Its Plugin file, NULL if kind isn't a format plug-in's. */
+const plugin_info *rawjob_format (int kind);
+/* The kind of plug-in that reads a file of format (IMG_RAW, IMG_PLUGIN,
+   or IMG_UNKNOWN for one not yet looked at), by its name or first bytes
+   (head may be NULL: then they are read from path). -1 if none claims it. */
+int rawjob_kind_for (int format, const char *path, const unsigned char *head, size_t len);
+/* Whether an installed format plug-in claims a file by its name. */
+int rawjob_claims_name (const char *path);
+void rawjob_setup_kind (int kind, const char *helper, const char *scratch, rawjob_runner run);
+int rawjob_available_kind (int kind);
+unsigned rawjob_stamp_kind (int kind);
+/* What to say when a file's plug-in can't read it: not installed, or
+   switched off. kind -1: no plug-in claims the file. */
+const char *rawjob_missing_message_kind (int kind);
+void rawjob_set_switched_off_kind (int kind, int off);
+int rawjob_switched_off_kind (int kind);
 
 /* helper NULL: no plug-in installed (rawjob_start explains). */
 void rawjob_setup (const char *helper, const char *scratch, rawjob_runner run);
@@ -39,6 +69,7 @@ int rawjob_switched_off (void);
 
 typedef struct rawjob rawjob;
 rawjob *rawjob_start (const char *src, int develop, int max_side, char *err, size_t n);
+rawjob *rawjob_start_kind (int kind, const char *src, int develop, int max_side, char *err, size_t n);
 /* 0 still going (or waiting its turn), 1 done, -1 failed (rawjob_error). */
 int rawjob_poll (rawjob *j);
 const char *rawjob_error (const rawjob *j);

@@ -390,7 +390,7 @@ static unsigned long long fnv (unsigned long long h, const unsigned char *p, siz
 static int likely_image_type (int ft, const char *path)
 {
   return ft == FT_JPEG || ft == FT_PNG || ft == FT_NONE || ft == FT_DATA || ft == FT_TIFF
-         || img_has_raw_extension (path);
+         || img_has_raw_extension (path) || rawjob_claims_name (path);
 }
 
 /* Imports one file. Unreadable or non-image files are skipped quietly
@@ -403,6 +403,7 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   cat_original o;
   cat_id existing, v;
   unsigned long long h = 14695981039346656037ULL;
+  int fmt;
   if (!likely_image_type (e->filetype, path))
     return;
   {
@@ -430,7 +431,10 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       return;
     }
   got = fread (l->head, 1, HEAD_BYTES, f);
-  if (img_probe_named (l->head, got, path) == IMG_UNKNOWN)
+  fmt = img_probe_named (l->head, got, path);
+  if (fmt == IMG_UNKNOWN && rawjob_kind_for (IMG_UNKNOWN, path, l->head, got) > 0)
+    fmt = IMG_PLUGIN;                  /* a format plug-in claims it */
+  if (fmt == IMG_UNKNOWN)
     {
       if (e->filetype == FT_JPEG || e->filetype == FT_PNG)
         {
@@ -441,8 +445,16 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       return;
     }
   l->found++;
-  if (img_probe_named (l->head, got, path) == IMG_RAW)
+  if (fmt == IMG_RAW)
     img_read_raw_info (l->head, got, &info);   /* the rest comes from the plug-in with the thumbnail */
+  else if (fmt == IMG_PLUGIN)
+    {
+      /* A format plug-in claims it: all its details come from the plug-in
+         with the thumbnail. */
+      memset (&info, 0, sizeof info);
+      info.format = IMG_PLUGIN;
+      info.orientation = 1;
+    }
   else if (img_read_info (l->head, got, &info))
     {
       snprintf (l->err, sizeof l->err, "%s: can't read its size", fsys_leaf (path));
@@ -767,10 +779,10 @@ void lib_previews_changed (library *l)
   l->pv_done = cat_origin_below (l->db, 0, &o) != 1;
 }
 
-int lib_preview_wanted (library *l, int format)
+int lib_preview_wanted (library *l, int format, const char *path)
 {
-  if (format == IMG_RAW)
-    return l->pv_mode != PREVIEWS_OFF && rawjob_available ();
+  if (img_is_plugin_format (format))
+    return l->pv_mode != PREVIEWS_OFF && rawjob_available_kind (rawjob_kind_for (format, path, NULL, 0));
   return l->pv_mode == PREVIEWS_ALL && (format == IMG_JPEG || format == IMG_PNG);
 }
 
@@ -786,7 +798,7 @@ static unsigned preview_key (const cat_origin *o)
   const char *c;
   unsigned x = 2166136261u;
   snprintf (text, sizeof text, "1 %d %lld %lld %d %u", PREVIEW_SIDE, o->size, o->mtime, o->orientation,
-            o->format == IMG_RAW ? rawjob_stamp () : 0u);
+            img_is_plugin_format (o->format) ? rawjob_stamp_kind (rawjob_kind_for (o->format, o->path, NULL, 0)) : 0u);
   for (c = text; *c; c++)
     x = (x ^ (unsigned char) *c) * 16777619u;
   return x;
@@ -904,7 +916,7 @@ static int save_origin (library *l, const cat_origin *o, const rgb_image *img)
 int lib_preview_save (library *l, cat_id original, const rgb_image *img)
 {
   cat_origin o;
-  if (cat_origin_of (l->db, original, &o) != 1 || !lib_preview_wanted (l, o.format))
+  if (cat_origin_of (l->db, original, &o) != 1 || !lib_preview_wanted (l, o.format, o.path))
     return 0;
   return save_origin (l, &o, img);
 }
@@ -946,7 +958,7 @@ static int preview_step (library *l)
             return -1;
           }
         l->pv_below = o.id;
-        if (o.missing || !lib_preview_wanted (l, o.format) || find_origin (l, &o, path, sizeof path))
+        if (o.missing || !lib_preview_wanted (l, o.format, o.path) || find_origin (l, &o, path, sizeof path))
           continue;
         /* Upright as the Viewer shows it: a raw's orientation comes from the
            plug-in, as the catalogue has it after its thumbnail. */

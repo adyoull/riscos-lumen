@@ -540,15 +540,18 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
   got = fread (head, 1, sizeof head, t->f);
   rewind (t->f);
   t->format = img_probe_named (head, got, src);
-  if (t->format == IMG_RAW)
+  if (t->format == IMG_UNKNOWN && rawjob_kind_for (IMG_UNKNOWN, src, head, got) > 0)
+    t->format = IMG_PLUGIN;            /* a format plug-in claims it */
+  if (img_is_plugin_format (t->format))
     {
-      /* The plug-in does the work: the camera's preview for thumbnails,
-         developed for anything bigger. */
+      /* A plug-in does the work (LumenRaw, or a format plug-in): the
+         file's own preview for thumbnails, the photo itself for anything
+         bigger. */
       fclose (t->f);
       t->f = NULL;
       t->is_raw = 1;
       t->raw_developed = max_side > THUMBGEN_PREVIEW_SIDE;
-      t->rj = rawjob_start (src, t->raw_developed, max_side, err, errlen);
+      t->rj = rawjob_start_kind (rawjob_kind_for (t->format, src, head, got), src, t->raw_developed, max_side, err, errlen);
       if (t->rj)
         return t;
       free (t);
@@ -569,7 +572,7 @@ int thumbgen_step (thumbgen *t, int rows)
   rgb_image img;
   if (t->done)
     return t->done;
-  if (t->format == IMG_RAW)
+  if (img_is_plugin_format (t->format))
     {
       int j = rawjob_poll (t->rj);
       if (j == 0)
@@ -631,7 +634,7 @@ void thumbgen_size (const thumbgen *t, int *w, int *h)
 
 int thumbgen_raw_waiting (const thumbgen *t)
 {
-  return t && t->format == IMG_RAW && !t->done;
+  return t && img_is_plugin_format (t->format) && !t->done;
 }
 
 void thumbgen_hurry (thumbgen *t)

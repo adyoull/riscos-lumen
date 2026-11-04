@@ -12,29 +12,108 @@ enum { J_QUEUED, J_RUNNING, J_ENDED, J_DONE, J_FAILED };
 
 struct rawjob
 {
-  int state, tag;
+  int state, tag, kind;
   char src[1024], image[300], details[300], err[300];
   img_info info;
   rawjob *next;                        /* in the queue */
 };
 
-static char helper[1024], scratch[1024];
-static int have_helper;
+/* The plug-ins, one for each kind of file (RAWJOB_RAW, then format
+   plug-ins); their jobs share one queue, one at a time (each can need a
+   lot of memory). */
+static char helper[RAWJOB_KINDS][1024], scratch[1024];
+static int have_helper[RAWJOB_KINDS];
 static rawjob_runner runner;
 static rawjob *queue, *running;
 static int next_tag = 1;
 
-static unsigned stamp;
+static unsigned stamp[RAWJOB_KINDS];
+static plugin_info formats[RAWJOB_KINDS];
+static int switched_off[RAWJOB_KINDS];   /* [0] unused; dir[0] == 0: free */
 
-/* Which plug-in made a raw's preview: its program's path, size and date
-   (a new version of LumenRaw makes them again). */
-unsigned rawjob_stamp (void) { return stamp; }
+/* Which plug-in made a preview: its program's path, size and date (a new
+   version of the plug-in makes them again). */
+unsigned rawjob_stamp_kind (int kind) { return kind >= 0 && kind < RAWJOB_KINDS ? stamp[kind] : 0; }
+unsigned rawjob_stamp (void) { return stamp[RAWJOB_RAW]; }
+
+int rawjob_set_format (const plugin_info *p)
+{
+  int k, free_k = -1;
+  for (k = 1; k < RAWJOB_KINDS; k++)
+    {
+      if (formats[k].dir[0] && !strcmp (formats[k].dir, p->dir))
+        break;
+      if (!formats[k].dir[0] && free_k < 0)
+        free_k = k;
+    }
+  if (k == RAWJOB_KINDS)
+    k = free_k;
+  if (k > 0)
+    formats[k] = *p;
+  return k;
+}
+
+void rawjob_clear_format (int kind)
+{
+  if (kind > 0 && kind < RAWJOB_KINDS)
+    {
+      memset (&formats[kind], 0, sizeof formats[kind]);
+      have_helper[kind] = 0;
+      helper[kind][0] = '\0';
+      stamp[kind] = 0;
+    }
+}
+
+const plugin_info *rawjob_format (int kind)
+{
+  return kind > 0 && kind < RAWJOB_KINDS && formats[kind].dir[0] ? &formats[kind] : NULL;
+}
+
+int rawjob_claims_name (const char *path)
+{
+  int k;
+  for (k = 1; k < RAWJOB_KINDS; k++)
+    if (formats[k].dir[0] && plugins_claims_name (&formats[k], path))
+      return 1;
+  return 0;
+}
+
+int rawjob_kind_for (int format, const char *path, const unsigned char *head, size_t len)
+{
+  unsigned char buf[4200];
+  int k;
+  if (format == IMG_RAW)
+    return RAWJOB_RAW;
+  for (k = 1; k < RAWJOB_KINDS; k++)
+    if (formats[k].dir[0] && plugins_claims_name (&formats[k], path))
+      return k;
+  if (!head && path)
+    {
+      FILE *f = fopen (path, "rb");
+      if (f)
+        {
+          len = fread (buf, 1, sizeof buf, f);
+          fclose (f);
+          head = buf;
+        }
+    }
+  for (k = 1; k < RAWJOB_KINDS; k++)
+    if (formats[k].dir[0] && plugins_claims (&formats[k], NULL, head, len))
+      return k;
+  return -1;
+}
 
 void rawjob_setup (const char *h, const char *s, rawjob_runner run)
 {
-  have_helper = h && *h;
-  stamp = 0;
-  if (have_helper)
+  rawjob_setup_kind (RAWJOB_RAW, h, s, run);
+}
+
+void rawjob_setup_kind (int kind, const char *h, const char *s, rawjob_runner run)
+{
+  int clean = !rawjob_busy ();
+  have_helper[kind] = h && *h;
+  stamp[kind] = 0;
+  if (have_helper[kind])
     {
       fsys_entry e;
       const char *c;
@@ -47,14 +126,17 @@ void rawjob_setup (const char *h, const char *s, rawjob_runner run)
           x = (x ^ (unsigned) e.mtime) * 16777619u;
           x = (x ^ (unsigned) (e.mtime >> 32)) * 16777619u;
         }
-      stamp = x ? x : 1;
+      stamp[kind] = x ? x : 1;
     }
-  snprintf (helper, sizeof helper, "%s", h ? h : "");
-  snprintf (scratch, sizeof scratch, "%s", s ? s : "");
-  runner = run;
-  if (have_helper)
+  snprintf (helper[kind], sizeof helper[kind], "%s", h ? h : "");
+  if (s && *s)
+    snprintf (scratch, sizeof scratch, "%s", s);
+  if (run)
+    runner = run;
+  if (have_helper[kind] && clean)
     {
-      /* A fresh start: files left by jobs Lumen stopped waiting for. */
+      /* A fresh start: files left by jobs Lumen stopped waiting for (not
+         while a job of the other plug-in is using the directory). */
       fsys_dir *d;
       fsys_entry e;
       fsys_mkdirs (scratch);
@@ -72,20 +154,50 @@ void rawjob_setup (const char *h, const char *s, rawjob_runner run)
     }
 }
 
-int rawjob_available (void) { return have_helper; }
+int rawjob_available (void) { return have_helper[RAWJOB_RAW]; }
+int rawjob_available_kind (int kind) { return kind >= 0 && kind < RAWJOB_KINDS && have_helper[kind]; }
+int rawjob_switched_off_kind (int kind) { return kind >= 0 && kind < RAWJOB_KINDS && switched_off[kind]; }
 
-static int switched_off;
-
-void rawjob_set_switched_off (int off) { switched_off = off; }
-int rawjob_switched_off (void) { return switched_off; }
-
-const char *rawjob_missing_message (void)
+void rawjob_set_switched_off (int off) { switched_off[RAWJOB_RAW] = off; }
+int rawjob_switched_off (void) { return switched_off[RAWJOB_RAW]; }
+void rawjob_set_switched_off_kind (int kind, int off)
 {
-  if (switched_off)
-    return "This is a camera raw file, and the LibRaw plug-in that reads them is switched off. "
-           "Tick it in Plug-ins on Lumen's icon bar menu.";
-  return "This is a camera raw file. Lumen reads raw files with its LibRaw plug-in: "
-         "install LumenRaw (from PackMan, or the LumenRaw zip from Lumen's release page), then open Lumen again.";
+  if (kind >= 0 && kind < RAWJOB_KINDS)
+    switched_off[kind] = off;
+}
+
+const char *rawjob_missing_message_kind (int kind)
+{
+  static char m[400];
+  const plugin_info *p = rawjob_format (kind);
+  if (kind == RAWJOB_RAW)
+    {
+      if (switched_off[kind])
+        return "This is a camera raw file, and the LibRaw plug-in that reads them is switched off. "
+               "Tick it in Plug-ins on Lumen's icon bar menu.";
+      return "This is a camera raw file. Lumen reads raw files with its LibRaw plug-in: "
+             "install LumenRaw (from PackMan, or the LumenRaw zip from Lumen's release page), then open Lumen again.";
+    }
+  if (!p)
+    return "Lumen has no plug-in for this photo's format now (was it removed?). "
+           "Install it again, then open Lumen again.";
+  if (switched_off[kind])
+    snprintf (m, sizeof m, "This is a %s, and the %s plug-in that reads them is switched off. "
+              "Tick it in Plug-ins on Lumen's icon bar menu.", p->format, p->title);
+  else if (p->api > PLUGIN_API)
+    snprintf (m, sizeof m, "This is a %s. The %s plug-in that reads them needs a newer Lumen.", p->format, p->title);
+  else
+    snprintf (m, sizeof m, "This is a %s. The %s plug-in that reads them is missing its program: "
+              "install %s again.", p->format, p->title, p->package[0] ? p->package : p->name);
+  return m;
+}
+
+const char *rawjob_missing_message (void) { return rawjob_missing_message_kind (RAWJOB_RAW); }
+
+static const char *plugin_name (int kind)
+{
+  const plugin_info *p = rawjob_format (kind);
+  return p ? p->title : "LibRaw";
 }
 
 int rawjob_busy (void) { return queue || running; }
@@ -124,19 +236,28 @@ static void run_next (void)
   remove (j->image);
   remove (j->details);
   if (j->info.format == 1)             /* develop */
-    snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d", helper, j->src, j->image, j->details, j->info.width);
+    snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d", helper[j->kind], j->src, j->image, j->details, j->info.width);
   else
-    snprintf (cmd, sizeof cmd, "%s thumb %s %s %s", helper, j->src, j->image, j->details);
+    snprintf (cmd, sizeof cmd, "%s thumb %s %s %s", helper[j->kind], j->src, j->image, j->details);
   if (!runner || runner (cmd, j->tag))
-    fail (j, "Lumen couldn't start its LibRaw plug-in.");
+    {
+      char m[100];
+      snprintf (m, sizeof m, "Lumen couldn't start its %s plug-in.", plugin_name (j->kind));
+      fail (j, m);
+    }
 }
 
 rawjob *rawjob_start (const char *src, int develop, int max_side, char *err, size_t n)
 {
+  return rawjob_start_kind (RAWJOB_RAW, src, develop, max_side, err, n);
+}
+
+rawjob *rawjob_start_kind (int kind, const char *src, int develop, int max_side, char *err, size_t n)
+{
   rawjob *j, **p;
-  if (!have_helper)
+  if (!rawjob_available_kind (kind))
     {
-      snprintf (err, n, "%s", rawjob_missing_message ());
+      snprintf (err, n, "%s", rawjob_missing_message_kind (kind));
       return NULL;
     }
   j = calloc (1, sizeof *j);
@@ -146,6 +267,7 @@ rawjob *rawjob_start (const char *src, int develop, int max_side, char *err, siz
       return NULL;
     }
   j->tag = next_tag++;
+  j->kind = kind;
   snprintf (j->src, sizeof j->src, "%s", src);
   {
     char leaf[24];
@@ -175,7 +297,7 @@ static int read_details (rawjob *j)
   if (!f)
     return 0;
   memset (in, 0, sizeof *in);
-  in->format = IMG_RAW;
+  in->format = j->kind == RAWJOB_RAW ? IMG_RAW : IMG_PLUGIN;
   in->orientation = 1;
   while (fgets (line, sizeof line, f))
     {
@@ -187,7 +309,10 @@ static int read_details (rawjob *j)
         *e = '\0';
       if (!strcmp (line, "error"))
         {
-          snprintf (j->err, sizeof j->err, "The LibRaw plug-in couldn't read this raw file (%s).", v);
+          if (j->kind == RAWJOB_RAW)
+            snprintf (j->err, sizeof j->err, "The LibRaw plug-in couldn't read this raw file (%s).", v);
+          else
+            snprintf (j->err, sizeof j->err, "The %s plug-in couldn't read this photo (%s).", plugin_name (j->kind), v);
           fclose (f);
           return -1;
         }
@@ -201,6 +326,15 @@ static int read_details (rawjob *j)
       else if (!strcmp (line, "fnumber")) in->fnumber = atof (v);
       else if (!strcmp (line, "focal")) in->focal = atof (v);
       else if (!strcmp (line, "taken")) snprintf (in->taken, sizeof in->taken, "%s", v);
+      else if (!strcmp (line, "exif"))
+        {
+          long a = 0, b = 0;
+          if (sscanf (v, "%ld %ld", &a, &b) == 2 && a >= 0 && b > 8)
+            {
+              in->exif_offset = a;
+              in->exif_length = b;
+            }
+        }
     }
   fclose (f);
   if (in->orientation < 1 || in->orientation > 8)
@@ -239,7 +373,9 @@ int rawjob_poll (rawjob *j)
     }
   if (j->state == J_ENDED)
     {
-      fail (j, "The LibRaw plug-in stopped without finishing (perhaps out of memory).");
+      char m[160];
+      snprintf (m, sizeof m, "The %s plug-in stopped without finishing (perhaps out of memory).", plugin_name (j->kind));
+      fail (j, m);
       run_next ();
       return -1;
     }

@@ -1,0 +1,22 @@
+The sources of LumenHEIF 1.0
+============================
+
+LumenHEIF is Lumen's HEIF plug-in. It is built from:
+
+- lumenheif.c (in ffmpeg-patches): LumenHEIF itself, copyright (c) 2026
+  Andrew Youll, MIT licence. Lumen's full source, including the EXIF code
+  it uses (src/core/exif.c), is at https://github.com/adyoull/riscos-lumen
+- libheif-1.23.7.tar.gz: libheif 1.23.7 as released (tag v1.23.7), GNU
+  LGPL 3.
+- ffmpeg-5.1.10.tar.xz: FFmpeg 5.1.10 as released, GNU LGPL 2.1 or later
+  as built here (only the HEVC decoder and its parser; no GPL parts).
+- ffmpeg-patches: the changes made to FFmpeg for RISC OS (from
+  riscos-ffmpeg, plus 0101), the NEON alignment rewrite applied to its
+  ARM assembly (neon-align.py: RISC OS stops unaligned loads), and
+  build-heif.sh, the script that applies them and builds both libraries
+  as LumenHEIF uses them.
+
+To rebuild LumenHEIF with changed versions of the libraries, build them
+with build-heif.sh (or your own way, with the same options), then link
+lumenheif.c and exif.c against them, as Lumen's Makefile does (target
+LumenHEIF,ff8).

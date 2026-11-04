@@ -1,0 +1,21 @@
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
+# Lumen plug-in description (Lumen's format plug-in API: docs/plugin-api.md)
+Name: HEIF photos (libheif)
+Version: 1.0
+Kind: format
+API: 1
+Format: HEIF photo
+Extensions: heic heif hif
+Signature: 4 ftypheic
+Signature: 4 ftypheix
+Signature: 4 ftypheim
+Signature: 4 ftypheis
+Signature: 4 ftyphevc
+Signature: 4 ftyphevx
+Signature: 4 ftypmif1
+Signature: 4 ftypmsf1
+Program: LumenHEIF
+Package: LumenHEIF
+Description: Reads HEIF/HEIC photos with libheif 1.23.7 and FFmpeg's HEVC decoder

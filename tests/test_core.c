@@ -2251,12 +2251,12 @@ static void test_previews (void)
   lib_import (l, dir);
   drain (l);
   lib_set_previews (l, PREVIEWS_RAW);
-  CHECK (!lib_preview_wanted (l, IMG_JPEG) && lib_previews_busy (l), "previews: raw only: not for JPEGs, a look through");
+  CHECK (!lib_preview_wanted (l, IMG_JPEG, "x.jpg") && lib_previews_busy (l), "previews: raw only: not for JPEGs, a look through");
   preview_drain (l);
   CHECK (preview_count (libdir) == 0, "previews: raw only: none made for JPEGs");
 
   lib_set_previews (l, PREVIEWS_ALL);
-  CHECK (lib_preview_wanted (l, IMG_JPEG) && lib_preview_wanted (l, IMG_PNG), "previews: all: JPEGs and PNGs");
+  CHECK (lib_preview_wanted (l, IMG_JPEG, "x.jpg") && lib_preview_wanted (l, IMG_PNG, "x.png"), "previews: all: JPEGs and PNGs");
   lib_hold_previews (l, 1);
   CHECK (!lib_previews_busy (l), "previews: held (the Viewer busy)");
   lib_hold_previews (l, 0);
@@ -2414,7 +2414,7 @@ static void test_previews (void)
         lib_import (l, nef);
         drain (l);
         lib_set_previews (l, PREVIEWS_RAW);
-        CHECK (lib_preview_wanted (l, IMG_RAW), "raw previews: wanted");
+        CHECK (lib_preview_wanted (l, IMG_RAW, "x.nef"), "raw previews: wanted");
         preview_drain (l);
         if (cat_origin_below (lib_cat (l), 0, &o) == 1)
           id = o.id;
@@ -2428,7 +2428,7 @@ static void test_previews (void)
         CHECK (w == 1600 && h == 1062, "raw previews: 1600 wide, like the Viewer's");
         /* Another plug-in (a new LumenRaw): out of date. */
         rawjob_setup (NULL, NULL, NULL);
-        CHECK (!lib_preview_wanted (l, IMG_RAW) && lib_preview_find (l, id, pv2, sizeof pv2) == 0,
+        CHECK (!lib_preview_wanted (l, IMG_RAW, "x.nef") && lib_preview_find (l, id, pv2, sizeof pv2) == 0,
                "raw previews: no plug-in: another key, none wanted");
         rawjob_setup (helper, scratch, run_now);
         CHECK (lib_preview_find (l, id, pv2, sizeof pv2) == 1, "raw previews: the same plug-in again: found");
@@ -2451,6 +2451,173 @@ static void test_previews (void)
         }
       }
   }
+}
+
+/* A format plug-in: LumenHEIF. Lumen knows nothing of HEIF itself; its
+   Plugin file says which files are its, and the plug-in gives the rest
+   (LUMENHEIF, with the photos in tests/heif): imported, the EXIF where
+   it says, previews made. */
+static void test_heif (void)
+{
+  const char *helper = getenv ("LUMENHEIF");
+  char path[1024], libdir[1024], dir[1024], err[256], scratch[1024], pv[1300];
+  unsigned char head[256 * 1024];
+  FILE *f;
+  size_t got;
+  library *l;
+  thumbgen *t;
+  plugin_info pi;
+  int r, kind;
+  snprintf (dir, sizeof dir, "%s", getenv ("HEIF_SAMPLES") ? getenv ("HEIF_SAMPLES") : "tests/heif");
+  snprintf (path, sizeof path, "%s/plain.heic", dir);
+  f = fopen (path, "rb");
+  if (!f)
+    {
+      printf ("test_core: no tests/heif: HEIF not tested\n");
+      return;
+    }
+  got = fread (head, 1, sizeof head, f);
+  fclose (f);
+  CHECK (img_probe_named (head, got, "x.heic") == IMG_UNKNOWN && rawjob_kind_for (IMG_UNKNOWN, path, head, got) < 0,
+         "format plug-ins: Lumen itself knows nothing of HEIF");
+  CHECK (img_is_plugin_format (IMG_PLUGIN) && img_is_plugin_format (IMG_RAW) && !img_is_plugin_format (IMG_JPEG),
+         "format plug-ins: read by a plug-in, like raws");
+  /* No plug-in: not imported. */
+  p (libdir, "HeifNone");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "format plug-ins: a library");
+  lib_import (l, dir);
+  drain (l);
+  {
+    cat_source all = { SRC_ALL, 0, 0, "" };
+    cat_item *items = NULL;
+    int n = -1;
+    cat_list (lib_cat (l), &all, &items, &n);
+    CHECK (n == 0, "format plug-ins: with none for HEIF, HEIF photos aren't imported");
+    free (items);
+  }
+  lib_close (l);
+
+  /* LumenHEIF's own Plugin file says what it reads. */
+  CHECK (plugins_read ("plugins/heif", &pi) == 0 && !strcmp (pi.kind, "format") && pi.api == 1
+         && !strcmp (pi.format, "HEIF photo") && pi.nsigs == 8 && !strcmp (pi.package, "LumenHEIF"),
+         "format plug-ins: LumenHEIF's Plugin file (Kind, API, Format, Signatures)");
+  CHECK (plugins_claims_name (&pi, "SDFS::Pi.$.IMG_0001/HEIC") && plugins_claims_name (&pi, "x.heif")
+         && plugins_claims_name (&pi, "a/b.hif") && !plugins_claims_name (&pi, "x.heics")
+         && !plugins_claims_name (&pi, "x.jpg"),
+         "format plug-ins: its extensions, RISC OS and POSIX, any case");
+  {
+    unsigned char avif[32] = { 0, 0, 0, 0x1C, 'f', 't', 'y', 'p', 'a', 'v', 'i', 'f', 0, 0, 0, 0,
+                               'm', 'i', 'f', '1', 'a', 'v', 'i', 'f', 'm', 'i', 'a', 'f', 0, 0, 0, 0 };
+    CHECK (plugins_claims (&pi, "photo", head, got) && !plugins_claims (&pi, "photo", avif, sizeof avif)
+           && !plugins_claims (&pi, "photo", head, 8), "format plug-ins: its signatures, whatever the name");
+  }
+  {
+    plugin_info q;
+    memset (&q, 0, sizeof q);
+    snprintf (q.kind, sizeof q.kind, "format");
+    snprintf (q.extensions, sizeof q.extensions, "jxl");
+    CHECK (!plugins_claims (&q, "x.heic", head, got) && plugins_claims_name (&q, "x/JXL"),
+           "format plug-ins: each claims only its own");
+  }
+  kind = rawjob_set_format (&pi);
+  CHECK (kind > 0 && rawjob_set_format (&pi) == kind && rawjob_format (kind) && rawjob_claims_name ("a.HEIC")
+         && rawjob_kind_for (IMG_UNKNOWN, path, NULL, 0) == kind && rawjob_kind_for (IMG_PLUGIN, "photo", head, got) == kind
+         && rawjob_kind_for (IMG_RAW, path, NULL, 0) == RAWJOB_RAW, "format plug-ins: a kind of its own, kept");
+
+  /* Installed, but no program to run: says so, in its own words. */
+  rawjob_setup_kind (kind, NULL, NULL, NULL);
+  t = thumbgen_start (path, NULL, 256, 1, err, sizeof err);
+  CHECK (!t && strstr (err, "HEIF photo") && strstr (err, "LumenHEIF"), "format plug-ins: can't be run: install LumenHEIF again");
+  rawjob_set_switched_off_kind (kind, 1);
+  CHECK (strstr (rawjob_missing_message_kind (kind), "switched off")
+         && strstr (rawjob_missing_message_kind (kind), "the HEIF photos plug-in"), "format plug-ins: switched off: says so (its name without the library)");
+  rawjob_set_switched_off_kind (kind, 0);
+  CHECK (strstr (rawjob_missing_message_kind (-1), "no plug-in"), "format plug-ins: a photo none claims now");
+  if (!helper)
+    {
+      printf ("test_core: no LUMENHEIF: HEIF photos not imported\n");
+      rawjob_clear_format (kind);
+      return;
+    }
+  p (scratch, "HeifScratch");
+  rawjob_setup_kind (kind, helper, scratch, run_now);
+  CHECK (rawjob_available_kind (kind) && rawjob_stamp_kind (kind) != 0, "heif: the plug-in set up");
+  /* The 1600 proxy, as the Viewer asks. */
+  snprintf (path, sizeof path, "%s/thumb.heic", dir);
+  t = thumbgen_start (path, NULL, 1600, 1, err, sizeof err);
+  while (t && (r = thumbgen_step (t, 64)) == 0)
+    ;
+  {
+    int w = 0, h = 0;
+    img_info ri;
+    if (t)
+      thumbgen_size (t, &w, &h);
+    CHECK (t && r == 1 && w == 1600 && h == 1067 && thumbgen_raw_developed (t), "heif: the Viewer's 1600 picture");
+    CHECK (t && thumbgen_raw_details (t, &ri) && ri.width == 2400 && ri.height == 1600 && ri.format == IMG_PLUGIN,
+           "heif: the plug-in's details");
+  }
+  thumbgen_free (t);
+
+  p (libdir, "HeifLibrary");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "heif: library");
+  lib_import (l, dir);
+  drain (l);
+  {
+    cat_source all = { SRC_ALL, 0, 0, "" };
+    cat_item *items = NULL;
+    int n = 0, k, ready = 0, turned = 0, cam = 0, tags = -1;
+    cat_list (lib_cat (l), &all, &items, &n);
+    for (k = 0; k < n; k++)
+      {
+        cat_details d;
+        ready += items[k].thumb_state == THUMB_READY;
+        if (cat_get_details (lib_cat (l), items[k].id, &d) == 0)
+          {
+            if (strstr (d.path, "turned"))
+              turned = d.width == 800 && d.height == 1200 && d.orientation == 1;
+            if (strstr (d.path, "plain"))
+              {
+                cat_origin o;
+                cam = !strcmp (d.make, "TestCam") && d.iso == 200 && d.width == 1200
+                      && !strcmp (d.taken, "2026:11:04 12:34:56");
+                /* The Info tab: the EXIF where the plug-in said it is (at the
+                   end of the file, as libheif writes it). */
+                if (cat_origin_of (lib_cat (l), d.original, &o) == 1 && o.exif_offset > 300000 && o.exif_length > 8)
+                  {
+                    unsigned char *x = malloc ((size_t) o.exif_length);
+                    FILE *ef = fopen (d.path, "rb");
+                    if (x && ef && fseek (ef, (long) o.exif_offset, SEEK_SET) == 0
+                        && fread (x, 1, (size_t) o.exif_length, ef) == (size_t) o.exif_length)
+                      tags = exif_list_tiff (x, (size_t) o.exif_length, NULL, NULL);
+                    if (ef)
+                      fclose (ef);
+                    free (x);
+                  }
+              }
+          }
+      }
+    CHECK (n == 5 && ready == 5, "heif: the five imported, thumbnails made");
+    CHECK (turned, "heif: a turned photo upright in the catalogue (800 x 1200, orientation 1)");
+    CHECK (cam, "heif: camera, date and size in the catalogue, from the plug-in");
+    CHECK (tags > 5, "heif: the Info tab's EXIF list, where the plug-in said it is");
+    free (items);
+  }
+  lib_set_previews (l, PREVIEWS_RAW);
+  snprintf (path, sizeof path, "%s/plain.heic", dir);
+  CHECK (lib_preview_wanted (l, IMG_PLUGIN, path) && !lib_preview_wanted (l, IMG_PLUGIN, "x.jxl"),
+         "heif: previews made for them (as for raws)");
+  preview_drain (l);
+  {
+    cat_origin o;
+    int found = 0;
+    cat_id id;
+    for (id = 0; cat_origin_below (lib_cat (l), id, &o) == 1; id = o.id)
+      found += lib_preview_find (l, o.id, pv, sizeof pv);
+    CHECK (found == 5, "heif: a preview of each");
+  }
+  lib_close (l);
+  rawjob_clear_format (kind);
+  CHECK (!rawjob_format (kind) && rawjob_kind_for (IMG_UNKNOWN, path, NULL, 0) < 0, "format plug-ins: removed: forgotten");
 }
 
 int main (int argc, char **argv)
@@ -2480,6 +2647,7 @@ int main (int argc, char **argv)
   test_watch ();
   test_lazy_thumbs ();
   test_previews ();
+  test_heif ();
   test_libxfer ();
   test_libcheck ();
   test_libxfer_more ();

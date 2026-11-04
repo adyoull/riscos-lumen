@@ -16,8 +16,8 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.36
-DATE := 01 Nov 2026
+VERSION := 0.0.37
+DATE := 04 Nov 2026
 OUT := out
 
 CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
@@ -58,7 +58,7 @@ $(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/risc
 
 $(OUT)/bench: tests/bench.c $(CORE) $(CORE_H) $(OUT)/riscos/sqlite3.o
 	$(RO_CC) $(RISCOS_CFLAGS) $(WARN) $(DEFS) -Isrc/core -Ithird_party/sqlite -I$(DEPS)/riscos/include \
-	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/simd.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/fsys_riscos.c \
+	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/simd.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/fsys_riscos.c \
 	  src/core/export.c src/core/denoise.c src/core/xmp.c src/core/catalog.c src/core/sqlite_vfs.c $(OUT)/riscos/sqlite3.o \
 	  -L$(DEPS)/riscos/lib -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
 
@@ -96,8 +96,8 @@ $(OUT)/test_core_host: tests/test_core.c $(CORE) src/core/fsys_posix.c $(CORE_H)
 	gcc -O1 -g $(WARN) -fsanitize=address,undefined -Ithird_party/sqlite -I$(DEPS)/host/include -o $@ \
 	  tests/test_core.c $(CORE) src/core/fsys_posix.c $(OUT)/host/sqlite3.o \
 	  $(DEPS)/host/lib/libjpeg.a $(DEPS)/host/lib/libpng16.a -lz -lm
-test-host: $(OUT)/test_core_host $(OUT)/lumenraw-host
-	rm -rf $(OUT)/work-host && LUMENRAW=$(OUT)/lumenraw-host RAW_SAMPLES=$(RAW_SAMPLES) $(OUT)/test_core_host $(OUT)/work-host
+test-host: $(OUT)/test_core_host $(OUT)/lumenraw-host $(OUT)/lumenheif-host
+	rm -rf $(OUT)/work-host && LUMENRAW=$(OUT)/lumenraw-host LUMENHEIF=$(OUT)/lumenheif-host RAW_SAMPLES=$(RAW_SAMPLES) $(OUT)/test_core_host $(OUT)/work-host
 
 $(OUT)/test_develop_host: tests/test_develop.c $(CORE) src/core/fsys_posix.c $(CORE_H) $(OUT)/host/sqlite3.o
 	gcc -O2 -g $(WARN) -fsanitize=address,undefined -Ithird_party/sqlite -I$(DEPS)/host/include -o $@ \
@@ -187,6 +187,64 @@ plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-$(LIBRAW_VERSION)-sourc
 test-plugin: $(OUT)/lumenraw-host $(OUT)/lumenraw-arm
 	RAW_SAMPLES=$(RAW_SAMPLES) tests/test_plugin.sh $(OUT)/lumenraw-host "" $(OUT)/plugin-host
 	RAW_SAMPLES=$(RAW_SAMPLES) tests/test_plugin.sh $(OUT)/lumenraw-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/plugin-arm
+
+# --- The HEIF plug-in (LumenHEIF), a separate program in its own package --
+# deps/build-heif.sh builds FFmpeg's HEVC decoder (libavcodec, libavutil)
+# and libheif into $(DEPS)/<target>/lib.
+HEIF_SRC := plugins/heif/lumenheif.c
+HEIF_FLAGS := -O2 -Wall -Wextra
+HEIF_LIBS = $(1)/lib/libheif.a $(1)/lib/libavcodec.a $(1)/lib/libavutil.a
+$(OUT)/LumenHEIF,ff8: $(HEIF_SRC) src/core/exif.c src/core/exif.h
+	@mkdir -p $(OUT)
+	$(RO_CC) $(RISCOS_CFLAGS) $(HEIF_FLAGS) -Isrc/core -I$(DEPS)/riscos/include -c $(HEIF_SRC) -o $(OUT)/lumenheif.o
+	$(RO_CC) $(RISCOS_CFLAGS) $(HEIF_FLAGS) -Isrc/core -c src/core/exif.c -o $(OUT)/lumenheif-exif.o
+	$(RO_CXX) $(RISCOS_CFLAGS) -o $(OUT)/lumenheif.elf $(OUT)/lumenheif.o $(OUT)/lumenheif-exif.o \
+	  $(RISCOS_LDFLAGS) $(call HEIF_LIBS,$(DEPS)/riscos) -lm
+	$(CHECK_ALL) $(OUT)/lumenheif.elf
+	$(RO_STRIP) -o $(OUT)/lumenheif.stripped $(OUT)/lumenheif.elf
+	$(ELF2AIF) -e $(OUT)/lumenheif.stripped $@ >/dev/null
+$(OUT)/lumenheif-host: $(HEIF_SRC) src/core/exif.c src/core/exif.h
+	gcc $(HEIF_FLAGS) -Isrc/core -I$(DEPS)/host/include -c $(HEIF_SRC) -o $(OUT)/lumenheif-host.o
+	gcc $(HEIF_FLAGS) -Isrc/core -c src/core/exif.c -o $(OUT)/lumenheif-host-exif.o
+	g++ -no-pie -o $@ $(OUT)/lumenheif-host.o $(OUT)/lumenheif-host-exif.o $(call HEIF_LIBS,$(DEPS)/host) -lm
+$(OUT)/lumenheif-arm: $(HEIF_SRC) src/core/exif.c src/core/exif.h
+	arm-linux-gnueabihf-gcc -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard -marm -mno-unaligned-access $(HEIF_FLAGS) \
+	  -Isrc/core -I$(DEPS)/linuxarm/include -c $(HEIF_SRC) -o $(OUT)/lumenheif-arm.o
+	arm-linux-gnueabihf-gcc -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard -marm -mno-unaligned-access $(HEIF_FLAGS) \
+	  -Isrc/core -c src/core/exif.c -o $(OUT)/lumenheif-arm-exif.o
+	arm-linux-gnueabihf-g++ -no-pie -o $@ $(OUT)/lumenheif-arm.o $(OUT)/lumenheif-arm-exif.o \
+	  $(call HEIF_LIBS,$(DEPS)/linuxarm) -lm
+HEIF_VERSION := 1.0
+LIBHEIF_VERSION := 1.23.7
+FFMPEG_VERSION := 5.1.10
+# The plug-in's release zip, laid out as it goes into Lumen (PackMan's
+# LumenHEIF package maps it into Apps.Graphics.!Lumen.Plugins.HEIF), and
+# the sources it was built from (the LGPL asks for them with the binary):
+# libheif at its tag, FFmpeg's release tarball with the patches applied for
+# RISC OS, and the script that builds them.
+$(OUT)/LumenHEIF-$(HEIF_VERSION).zip: $(OUT)/LumenHEIF,ff8 plugins/heif/ReadMe plugins/heif/Licence plugins/heif/Plugin
+	rm -rf $(OUT)/heifpkg && mkdir -p $(OUT)/heifpkg/!Lumen/Plugins/HEIF
+	cp $(OUT)/LumenHEIF,ff8 $(OUT)/heifpkg/!Lumen/Plugins/HEIF/
+	cp plugins/heif/ReadMe $(OUT)/heifpkg/!Lumen/Plugins/HEIF/ReadMe,fff
+	cp plugins/heif/Licence $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Licence,fff
+	cp plugins/heif/Plugin $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Plugin,fff
+	$(ROZIP) $@ -C $(OUT)/heifpkg !Lumen
+$(OUT)/LumenHEIF-$(HEIF_VERSION)-sources.zip: deps/build-heif.sh $(wildcard deps/ffmpeg/*)
+	rm -rf $(OUT)/heifsrc && mkdir -p $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/ffmpeg-patches
+	cd /build/src/libheif-$(LIBHEIF_VERSION) && git archive --format=tar --prefix=libheif-$(LIBHEIF_VERSION)/ v$(LIBHEIF_VERSION) | gzip -9 > $(CURDIR)/$(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/libheif-$(LIBHEIF_VERSION).tar.gz
+	cp $(FFMPEG_TARBALL) $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/
+	cp deps/ffmpeg/* deps/build-heif.sh $(HEIF_SRC) $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/ffmpeg-patches/
+	cp plugins/heif/SOURCES $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/ReadMe
+	rm -f $@ && cd $(OUT)/heifsrc && zip -qr $(CURDIR)/$@ LumenHEIF-$(HEIF_VERSION)-sources
+FFMPEG_TARBALL ?= /build/src/ffmpeg-$(FFMPEG_VERSION).tar.xz
+heif-plugin: $(OUT)/LumenHEIF-$(HEIF_VERSION).zip $(OUT)/LumenHEIF-$(HEIF_VERSION)-sources.zip
+# The helper on HEIF photos made for the tests (tests/heif), on Linux, and on
+# ARM with RISC OS's alignment rules with and without NEON: the pictures
+# must match the PC's.
+test-heif: $(OUT)/lumenheif-host $(OUT)/lumenheif-arm
+	tests/test_heif.sh $(OUT)/lumenheif-host "" $(OUT)/heif-host
+	LUMEN_NEON=1 tests/test_heif.sh $(OUT)/lumenheif-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/heif-arm-neon $(OUT)/heif-host
+	LUMEN_NEON=0 tests/test_heif.sh $(OUT)/lumenheif-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/heif-arm-plain $(OUT)/heif-host
 
 # --- Screenshots: Lumen's own drawing, recorded against the Fake RISC OS ----------
 # out/shots/lumen-*.png. The window frame, menus' frames and icon bar are an

@@ -1,0 +1,28 @@
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
+# Spec for tools/riscpkg.py: the HEIF plug-in, from LumenHEIF-<ver>.zip.
+Package: LumenHEIF
+Section: Graphics
+Priority: Optional
+Licence: Free
+Maintainer: Andrew Youll <adyoull@users.noreply.github.com>
+Standards-Version: 0.4.0
+Environment: arm32, vfpv3
+Depends: Lumen (>= 0.0.37), SharedUnixLibrary (>= 1.16), ARMEABISupport
+Description: HEIF photos for Lumen (libheif)
+ Lets Lumen import, show, adjust and export HEIF/HEIC photos, as phones
+ take them, with libheif 1.23.7 and FFmpeg 5.1.10's HEVC decoder (cut
+ down to that alone): the photo's own thumbnail when it has one, Display
+ P3 photos converted to sRGB, and their EXIF. It uses NEON where the
+ computer has it (Pi 2 onwards). It goes into Lumen's Plugins directory;
+ Lumen finds it the next time it starts.
+Build-Map: !Lumen/Plugins/HEIF -> Apps/Graphics/!Lumen/Plugins/HEIF
+Build-Notice: The HEIF plug-in for Lumen, packaged for PackMan from its
+ release zip.
+ .
+ LumenHEIF is copyright (C) 2026 Andrew Youll. libheif is copyright
+ Dirk Farin and others, used under the GNU LGPL 3; FFmpeg's libavcodec
+ and libavutil are copyright the FFmpeg developers, used under the GNU
+ LGPL 2.1 or later. Their licences follow.
+Build-Copyright: !Lumen/Plugins/HEIF/Licence

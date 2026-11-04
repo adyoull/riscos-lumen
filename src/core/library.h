@@ -108,7 +108,7 @@ enum { PREVIEWS_OFF, PREVIEWS_RAW, PREVIEWS_ALL };
 void lib_set_previews (library *l, int mode);
 int lib_previews (library *l);
 /* Is one made for a photo of this format (IMG_*) with the mode set? */
-int lib_preview_wanted (library *l, int format);
+int lib_preview_wanted (library *l, int format, const char *path);
 /* Anything to look at or make (lib_preview_work), and not held. */
 int lib_previews_busy (library *l);
 /* Held while the Viewer, an export or a print is busy: the raw plug-in

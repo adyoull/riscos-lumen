@@ -178,7 +178,8 @@ static char photo_path[1024];
 static int photo_orientation, photo_long;   /* the original's longer side */
 static int photo_raw;                  /* a camera raw file: its full size is read ahead (it is slow) */
 static cat_id photo_original;          /* its original (for its preview, library.h) */
-static int photo_is_raw;               /* the original is a camera raw file */
+static int photo_is_raw;               /* the original is read by a plug-in (a camera raw or HEIF photo) */
+static int photo_kind;                 /* and which (rawjob.h's RAWJOB_*) */
 static int from_kept;                  /* opened from the library's preview, not the file */
 static thumbgen *zgen;
 static rgb_image zfull;
@@ -1596,7 +1597,8 @@ static thumbgen *open_proxy (const cat_details *d, char *e, size_t en)
   char kept[1300];
   thumbgen *t;
   photo_original = d->original;
-  photo_is_raw = cat_origin_of (lib_cat (app_library ()), d->original, &o) == 1 && o.format == IMG_RAW;
+  photo_is_raw = cat_origin_of (lib_cat (app_library ()), d->original, &o) == 1 && img_is_plugin_format (o.format);
+  photo_kind = photo_is_raw ? rawjob_kind_for (o.format, o.path, NULL, 0) : 0;
   from_kept = 0;
   if (!d->missing && lib_preview_find (app_library (), d->original, kept, sizeof kept)
       && (t = thumbgen_start (kept, NULL, PROXY_SIDE, 1, e, en)))
@@ -1928,7 +1930,7 @@ void viewer_idle (void)
         }
       else if (r > 0)
         {
-          photo_raw = from_kept ? photo_is_raw && rawjob_available () : thumbgen_raw_developed (tg);
+          photo_raw = from_kept ? photo_is_raw && rawjob_available_kind (photo_kind) : thumbgen_raw_developed (tg);
           thumbgen_free (tg);
           tg = NULL;
           state = V_READY;

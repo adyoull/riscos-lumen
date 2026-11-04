@@ -43,6 +43,95 @@ static void set (char *dst, size_t n, const char *v)
   snprintf (dst, n, "%s", v);
 }
 
+/* "4 ftypheic": the offset, then the bytes (\xNN escapes; \\ itself). */
+static void add_sig (plugin_info *p, const char *v)
+{
+  plugin_sig *g;
+  char *end;
+  long off = strtol (v, &end, 10);
+  int n = 0;
+  if (p->nsigs >= PLUGIN_SIGS || end == v || off < 0 || off > 4096)
+    return;
+  g = &p->sigs[p->nsigs];
+  while (*end == ' ' || *end == '\t')
+    end++;
+  while (*end && n < (int) sizeof g->bytes)
+    {
+      if (end[0] == '\\' && (end[1] == 'x' || end[1] == 'X') && isxdigit ((unsigned char) end[2])
+          && isxdigit ((unsigned char) end[3]))
+        {
+          char hex[3] = { end[2], end[3], 0 };
+          g->bytes[n++] = (unsigned char) strtol (hex, NULL, 16);
+          end += 4;
+        }
+      else if (end[0] == '\\' && end[1] == '\\')
+        {
+          g->bytes[n++] = '\\';
+          end += 2;
+        }
+      else
+        g->bytes[n++] = (unsigned char) *end++;
+    }
+  if (!n)
+    return;
+  g->offset = (int) off;
+  g->length = n;
+  p->nsigs++;
+}
+
+/* The extension of a RISC OS ("x/heic") or POSIX ("x.heic") name. */
+static const char *extension (const char *name)
+{
+  const char *dot = NULL, *c;
+  for (c = name; *c; c++)
+    if (*c == '/' || *c == '.')
+      dot = c;
+  return dot && dot[1] ? dot + 1 : NULL;
+}
+
+int plugins_claims_name (const plugin_info *p, const char *name)
+{
+  const char *x = name ? extension (name) : NULL, *w = p->extensions;
+  size_t n;
+  if (!x || strcmp (p->kind, "format"))
+    return 0;
+  n = strlen (x);
+  while (*w)
+    {
+      size_t k = 0;
+      while (*w == ' ')
+        w++;
+      while (w[k] && w[k] != ' ')
+        k++;
+      if (k == n)
+        {
+          size_t i;
+          for (i = 0; i < n && tolower ((unsigned char) x[i]) == w[i]; i++)
+            ;
+          if (i == n)
+            return 1;
+        }
+      w += k;
+    }
+  return 0;
+}
+
+int plugins_claims (const plugin_info *p, const char *name, const unsigned char *head, size_t len)
+{
+  int k;
+  if (strcmp (p->kind, "format"))
+    return 0;
+  if (plugins_claims_name (p, name))
+    return 1;
+  for (k = 0; head && k < p->nsigs; k++)
+    {
+      const plugin_sig *g = &p->sigs[k];
+      if ((size_t) (g->offset + g->length) <= len && memcmp (head + g->offset, g->bytes, (size_t) g->length) == 0)
+        return 1;
+    }
+  return 0;
+}
+
 int plugins_read (const char *path, plugin_info *p)
 {
   char file[1100], line[400], prog[64] = "";
@@ -74,10 +163,25 @@ int plugins_read (const char *path, plugin_info *p)
             set (p->package, sizeof p->package, colon + 1);
           else if (!strcmp (line, "Description"))
             set (p->description, sizeof p->description, colon + 1);
+          else if (!strcmp (line, "API"))
+            p->api = atoi (colon + 1);
+          else if (!strcmp (line, "Format"))
+            set (p->format, sizeof p->format, colon + 1);
+          else if (!strcmp (line, "Extensions"))
+            {
+              char *c;
+              set (p->extensions, sizeof p->extensions, colon + 1);
+              for (c = p->extensions; *c; c++)
+                *c = *c == ',' || *c == '\t' ? ' ' : (char) tolower ((unsigned char) *c);
+            }
+          else if (!strcmp (line, "Signature"))
+            add_sig (p, colon + 1);
         }
       fclose (f);
       if (!p->name[0])
         set (p->name, sizeof p->name, p->dir);
+      if (!strcmp (p->kind, "format") && !p->format[0])
+        set (p->format, sizeof p->format, p->name);
     }
   else if (find_file (path, "LumenRaw", ",ff8", file, sizeof file) == 0)
     {
@@ -90,6 +194,20 @@ int plugins_read (const char *path, plugin_info *p)
     }
   else
     return -1;
+  /* What Lumen calls it: the name without the library it is built on
+     ("Camera raw (LibRaw)" is "Camera raw"). */
+  set (p->title, sizeof p->title, p->name);
+  {
+    size_t l = strlen (p->title);
+    char *open = strrchr (p->title, '(');
+    if (l && p->title[l - 1] == ')' && open && open > p->title)
+      {
+        *open = '\0';
+        trim (p->title);
+        if (!p->title[0])
+          set (p->title, sizeof p->title, p->name);
+      }
+  }
   if (prog[0] && strchr (prog, '.') == NULL && strchr (prog, '/') == NULL)
     find_file (path, prog, ",ff8", p->program, sizeof p->program);
   return 0;

@@ -1,0 +1,14 @@
+--- a/libavcodec/arm/hevcdsp_init_neon.c	2026-11-04 15:49:44.499298096 +0000
++++ b/libavcodec/arm/hevcdsp_init_neon.c	2026-11-04 15:49:44.501553950 +0000
+@@ -25,6 +25,11 @@
+ #include "libavcodec/avcodec.h"
+ #include "hevcdsp_arm.h"
+ #if HAVE_INTRINSICS_NEON
++/* Lumen (LumenHEIF): the rest of FFmpeg is built for VFPv3 alone, so that it
++   runs on ARMv7 processors without NEON; this file is only used when the
++   processor has NEON (ff_hevc_dsp_init_arm checks have_neon), so it may use
++   NEON intrinsics. */
++#pragma GCC target ("fpu=neon")
+ #include <arm_neon.h>
+ #endif
+ 

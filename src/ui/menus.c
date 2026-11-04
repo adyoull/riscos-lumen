@@ -24,6 +24,11 @@
 #define ITEM_ICON 0x07000121u          /* text, filled, indirected; black on white */
 #define WRITABLE_ICON 0x0700F12Du      /* text, border, filled, indirected, writable */
 #define MAX_LIST 48                    /* projects or albums shown in a submenu */
+/* Keys beside menu items: the Wimp right-aligns a last word it knows as a
+   key (^X, \x8B (the Shift arrow) X, F1-F12, Esc, Tab, Delete...), after
+   one space: "Undo ^Z". A plain letter it leaves where it is, so letter
+   keys are shown with Shift (Lumen's letter keys work either way). */
+#define SH "\x8B"
 
 static char pool[32 * 1024];
 static size_t used;
@@ -88,11 +93,22 @@ static menu *new_menu (const char *title, int nitems)
   return m;
 }
 
+/* Whether text ends in a key the Wimp right-aligns ("Undo ^Z"): then the
+   menu is made a little wider, so the key stands apart from the words. */
+static int ends_in_key (const char *text)
+{
+  const char *k = strrchr (text, ' ');
+  if (!k || !*++k)
+    return 0;
+  return k[0] == '^' || (unsigned char) k[0] == 0x8B || (k[0] == 'F' && k[1] >= '1' && k[1] <= '9')
+         || !strcmp (k, "Esc") || !strcmp (k, "Delete") || !strcmp (k, "Tab") || !strcmp (k, "Return");
+}
+
 static void set_item (menu *m, int i, int last, const char *text, int flags, int submenu, int shaded)
 {
   item *it = &m->it[i];
   char *t = str (text);
-  int w = draw_text_width (text) + 64;
+  int w = draw_text_width (text) + 64 + (ends_in_key (text) ? 96 : 0);
   it->flags = flags | (last ? MF_LAST : 0);
   it->submenu = submenu;
   it->icon_flags = (int) (ITEM_ICON | (shaded ? IF_SHADED : 0));
@@ -256,6 +272,14 @@ static void load_groups (void)
 enum { SEL_RATING, SEL_LABEL, SEL_FLAG, SEL_REJECT, SEL_TAGS, SEL_ALL, SEL_CLEAR, SEL_COPY, SEL_PASTE, SEL_PRESET,
        SEL_COMPARE, SEL_EXPORT, SEL_EXPORT_LIB, SEL_PRINT, SEL_REMOVE, SEL_COUNT };
 
+/* The Selection menu grouped as the Photo menu is (vm_path): File, Edit, Organise. */
+enum { SG_FILE, SG_EDIT, SG_ORGANISE, SG_COUNT };
+static const signed char sel_file[] = { SEL_EXPORT, SEL_EXPORT_LIB, SEL_PRINT, SEL_REMOVE, -1 };
+static const signed char sel_edit[] = { SEL_ALL, SEL_CLEAR, SEL_COPY, SEL_PASTE, SEL_PRESET, -1 };
+static const signed char sel_organise[] = { SEL_RATING, SEL_LABEL, SEL_FLAG, SEL_REJECT, SEL_TAGS, SEL_COMPARE, -1 };
+static const signed char *const sg_groups[SG_COUNT] = { sel_file, sel_edit, sel_organise };
+
+
 /* None, Red ... Grey, each with its coloured dot (the lumlab sprites in
    !Sprites, beside the text as on a radio button); ticked: the label now
    (-1: none ticked). */
@@ -296,7 +320,7 @@ static menu *build_plugins_menu (void)
     set_item (rem, 0, 1, "No plug-ins", 0, -1, 1);
   for (k = 0; k < n && rem; k++)
     {
-      snprintf (label, sizeof label, "%s...", pl[k].name);
+      snprintf (label, sizeof label, "%s...", pl[k].title);
       set_item (rem, k, k == n - 1, label, 0, -1, 0);
     }
   m = new_menu ("Plug-ins", base + 2);
@@ -306,7 +330,7 @@ static menu *build_plugins_menu (void)
     set_item (m, 0, 0, "None installed", MF_DOTTED, -1, 1);
   for (k = 0; k < n; k++)
     {
-      snprintf (label, sizeof label, "%s%s%s", pl[k].name, pl[k].version[0] ? " " : "", pl[k].version);
+      snprintf (label, sizeof label, "%s%s%s", pl[k].title, pl[k].version[0] ? " " : "", pl[k].version);
       set_item (m, k, 0, label, (pl[k].enabled ? MF_TICK : 0) | (k == n - 1 ? MF_DOTTED : 0), -1, !pl[k].program[0]);
     }
   set_item (m, base, 0, "Add plug-in...", 0, -1, 0);
@@ -334,7 +358,7 @@ static menu *build_window_menu (void)
   const cat_source *s = browser_source ();
   cat_id *ids;
   int nsel = browser_selection (&ids), k;
-  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb, *apply, *plugm, *vers, *autos;
+  menu *m, *show, *selm, *sfile, *sedit, *sorg, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb, *apply, *plugm, *vers, *autos;
   static const char *const rating_names[6] = { "No stars", "1 star", "2 stars", "3 stars", "4 stars", "5 stars" };
   static const char *const filter_names[6] = { "Any rating", "1 star and up", "2 stars and up", "3 stars and up", "4 stars and up", "5 stars" };
   free (ids);
@@ -363,24 +387,39 @@ static menu *build_window_menu (void)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
   npresets = looks_presets (&presets);
   apply = apply_menu (nsel == 0);
-  selm = new_menu ("Selection", SEL_COUNT);
+  sfile = new_menu ("File", 4);
+  if (sfile)
+    {
+      set_item (sfile, 0, 0, "Export... ^E", 0, -1, nsel == 0);
+      set_item (sfile, 1, 0, "Export as library...", 0, -1, nsel == 0);
+      set_item (sfile, 2, 0, "Print... ^P", MF_DOTTED, -1, nsel == 0);
+      set_item (sfile, 3, 1, "Remove from library... Delete", 0, -1, nsel == 0);
+    }
+  sedit = new_menu ("Edit", 5);
+  if (sedit)
+    {
+      set_item (sedit, 0, 0, "Select all ^A", 0, -1, browser_count () == 0);
+      set_item (sedit, 1, 0, "Clear selection Esc", MF_DOTTED, -1, nsel == 0);
+      set_item (sedit, 2, 0, "Copy adjustments ^C", 0, -1, nsel == 0);
+      set_item (sedit, 3, 0, "Paste adjustments ^V", 0, -1, nsel == 0 || !looks_clip ());
+      set_item (sedit, 4, 1, "Apply preset", 0, (int) apply, nsel == 0);
+    }
+  sorg = new_menu ("Organise", 6);
+  if (sorg)
+    {
+      set_item (sorg, 0, 0, "Rating", 0, (int) rating, nsel == 0);
+      set_item (sorg, 1, 0, "Colour label", 0, (int) label_menu ("Colour label", -1), nsel == 0);
+      set_item (sorg, 2, 0, "Flag / unflag " SH "P", 0, -1, nsel == 0);
+      set_item (sorg, 3, 0, "Reject " SH "X", MF_DOTTED, -1, nsel == 0);
+      set_item (sorg, 4, 0, "Caption and keywords... ^K", MF_DOTTED, -1, nsel == 0);
+      set_item (sorg, 5, 1, "Compare " SH "O", 0, -1, nsel != 2);
+    }
+  selm = new_menu ("Selection", SG_COUNT);
   if (selm)
     {
-      set_item (selm, SEL_RATING, 0, "Rating", 0, (int) rating, nsel == 0);
-      set_item (selm, SEL_LABEL, 0, "Colour label", 0, (int) label_menu ("Colour label", -1), nsel == 0);
-      set_item (selm, SEL_FLAG, 0, "Flag / unflag      /", 0, -1, nsel == 0);
-      set_item (selm, SEL_REJECT, 0, "Reject      9", 0, -1, nsel == 0);
-      set_item (selm, SEL_TAGS, 0, "Caption and keywords...      ^K", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, SEL_ALL, 0, "Select all      ^A", 0, -1, browser_count () == 0);
-      set_item (selm, SEL_CLEAR, 0, "Clear selection      Esc", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, SEL_COPY, 0, "Copy adjustments      ^C", 0, -1, nsel == 0);
-      set_item (selm, SEL_PASTE, 0, "Paste adjustments      ^V", 0, -1, nsel == 0 || !looks_clip ());
-      set_item (selm, SEL_PRESET, 0, "Apply preset", MF_DOTTED, (int) apply, nsel == 0);
-      set_item (selm, SEL_COMPARE, 0, "Compare      O", MF_DOTTED, -1, nsel != 2);
-      set_item (selm, SEL_EXPORT, 0, "Export...      ^E", 0, -1, nsel == 0);
-      set_item (selm, SEL_EXPORT_LIB, 0, "Export as library...", 0, -1, nsel == 0);
-      set_item (selm, SEL_PRINT, 0, "Print...      ^P", MF_DOTTED, -1, nsel == 0);
-      set_item (selm, SEL_REMOVE, 1, "Remove from library...      Delete", 0, -1, nsel == 0);
+      set_item (selm, SG_FILE, 0, "File", 0, (int) sfile, 0);
+      set_item (selm, SG_EDIT, 0, "Edit", 0, (int) sedit, 0);
+      set_item (selm, SG_ORGANISE, 1, "Organise", 0, (int) sorg, 0);
     }
 
   newalbum = writable_menu ("Name", album_name, sizeof album_name);
@@ -421,12 +460,12 @@ static menu *build_window_menu (void)
     vers = new_menu ("Versions", 7);
     if (vers)
       {
-        set_item (vers, 0, 0, "Duplicate version      ^D", 0, -1, nsel == 0 && !focused);
+        set_item (vers, 0, 0, "Duplicate version ^D", 0, -1, nsel == 0 && !focused);
         set_item (vers, 1, 0, "New version from original", MF_DOTTED, -1, nsel == 0 && !focused);
-        set_item (vers, 2, 0, "Stack      ^G", 0, -1, nsel < 2);
-        set_item (vers, 3, 0, "Unstack      ^U", 0, -1, !stacked && nsel == 0);
-        set_item (vers, 4, 0, "Make the pick      \\", 0, -1, !stacked);
-        set_item (vers, 5, 0, "Open or close stack      S", MF_DOTTED, -1, !stacked);
+        set_item (vers, 2, 0, "Stack ^G", 0, -1, nsel < 2);
+        set_item (vers, 3, 0, "Unstack ^U", 0, -1, !stacked && nsel == 0);
+        set_item (vers, 4, 0, "Make the pick " SH "K", 0, -1, !stacked);
+        set_item (vers, 5, 0, "Open or close stack " SH "S", MF_DOTTED, -1, !stacked);
         set_item (vers, 6, 1, "Auto-stack, seconds apart", 0, (int) autos, browser_count () < 2);
       }
   }
@@ -445,9 +484,54 @@ static menu *build_window_menu (void)
   return m;
 }
 
-/* Photo > ... (the order menus_selection decodes) */
+/* The Photo menu's actions (VM_*), grouped into submenus (PM_*): File,
+   Edit, View, Adjust and Organise. vm_path turns a menu path into [action, the rest of the path]
+   (the action's own submenu: loupe, crop shape, grid, presets, labels),
+   which is what the rest of this file goes by. */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
        VM_PRESETS, VM_COPY, VM_PASTE, VM_LABEL, VM_TAGS, VM_COMPARE, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
+enum { PM_FILE, PM_EDIT, PM_VIEW, PM_ADJUST, PM_ORGANISE, PM_COUNT };
+/* A group itself (the pointer on View, say): -100 - PM_*. */
+#define VM_GROUP(pm) (-100 - (pm))
+
+static const signed char vm_file[] = { VM_EXPORT, VM_PRINT, VM_REMOVE, -1 };
+static const signed char vm_edit[] = { VM_UNDO, VM_REDO, VM_COPY, VM_PASTE, VM_RESET, -1 };
+static const signed char vm_view[] = { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_COMPARE, VM_BACK, -1 };
+static const signed char vm_adjust[] = { VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID, VM_PRESETS, -1 };
+static const signed char vm_organise[] = { VM_LABEL, VM_TAGS, VM_DUP, VM_NEW_ORIG, -1 };
+static const signed char *const pm_groups[PM_COUNT] = { vm_file, vm_edit, vm_view, vm_adjust, vm_organise };
+
+/* c: a path in a menu of groups (-1 terminated). out: [the action, the
+   rest of the path, -1]; [VM_GROUP (group), -1] on a group itself; [-1]
+   if none. */
+static void grouped_path (const int *c, const signed char *const *groups, int ngroups, int *out)
+{
+  int k, n;
+  const signed char *g;
+  out[0] = -1;
+  if (c[0] < 0 || c[0] >= ngroups)
+    return;
+  g = groups[c[0]];
+  if (c[1] < 0)
+    {
+      out[0] = VM_GROUP (c[0]);
+      out[1] = -1;
+      return;
+    }
+  for (n = 0; g[n] >= 0; n++)
+    ;
+  if (c[1] >= n)
+    return;
+  out[0] = g[c[1]];
+  for (k = 0; k < 13 && c[2 + k] >= 0; k++)
+    out[1 + k] = c[2 + k];
+  out[1 + k] = -1;
+}
+
+static void vm_path (const int *c, int *out)
+{
+  grouped_path (c, pm_groups, PM_COUNT, out);
+}
 
 /* --- styles shown as the pointer goes down the list
    The Styles item asks for Message_MenuWarning (&400C0, PRM p1017): Lumen
@@ -465,8 +549,13 @@ static int style_in_path (const int *c)
   int k = -1;
   if (which == 4 && c[0] == 0)
     k = c[1];
-  else if (which == 3 && c[0] == VM_PRESETS && c[1] == 0)
-    k = c[2];
+  else if (which == 3)
+    {
+      int v[16];
+      vm_path (c, v);
+      if (v[0] == VM_PRESETS && v[1] == 0)
+        k = v[2];
+    }
   return k >= 0 && k < styles_count () ? k : -1;
 }
 
@@ -484,7 +573,10 @@ void menus_closed (void);
 void menus_warning (const int *b)
 {
   const int *path = &b[8];
-  if ((which == 4 && path[0] == 0) || (which == 3 && path[0] == VM_PRESETS && path[1] == 0))
+  int v[16];
+  if (which == 3)
+    vm_path (path, v);
+  if ((which == 4 && path[0] == 0) || (which == 3 && v[0] == VM_PRESETS && v[1] == 0))
     watch_styles ();
   _swix (Wimp_CreateSubMenu, _INR (1, 3), b[5], b[6], b[7]);
 }
@@ -521,7 +613,7 @@ void menus_closed (void)
 
 static menu *build_viewer_menu (void)
 {
-  menu *m, *shape, *grid, *pre, *loupe_m;
+  menu *m, *shape, *grid, *pre, *loupe_m, *file, *edit, *view, *adj, *org;
   int k, crop = viewer_crop_mode ();
   used = 0;
   shape = new_menu ("Crop shape", 6);
@@ -537,37 +629,60 @@ static menu *build_viewer_menu (void)
       static const char *const mags[3] = { "100%", "200%", "400%" };
       set_item (loupe_m, k, k == 2, mags[k], viewer_loupe () == (1 << k) ? MF_TICK : 0, -1, 0);
     }
-  m = new_menu ("Photo", VM_COUNT);
+  file = new_menu ("File", 3);
+  if (file)
+    {
+      set_item (file, 0, 0, "Export... ^E", 0, -1, 0);
+      set_item (file, 1, 0, "Print... ^P", MF_DOTTED, -1, 0);
+      set_item (file, 2, 1, "Remove from library...", 0, -1, 0);
+    }
+  edit = new_menu ("Edit", 5);
+  if (edit)
+    {
+      set_item (edit, 0, 0, "Undo ^Z", 0, -1, !viewer_can_undo ());
+      set_item (edit, 1, 0, "Redo ^Y", MF_DOTTED, -1, !viewer_can_redo ());
+      set_item (edit, 2, 0, "Copy adjustments ^C", 0, -1, 0);
+      set_item (edit, 3, 0, "Paste adjustments ^V", MF_DOTTED, -1, looks_clip () == NULL);
+      set_item (edit, 4, 1, "Reset all adjustments", 0, -1, 0);
+    }
+  view = new_menu ("View", 5);
+  if (view)
+    {
+      set_item (view, 0, 0, "Before and after " SH "M", viewer_before () ? MF_TICK : 0, -1, crop);
+      set_item (view, 1, 0, "Zoom to 100% " SH "Z", viewer_zoomed () ? MF_TICK : 0, -1, crop);
+      set_item (view, 2, 0, "Loupe " SH "L", (viewer_loupe () ? MF_TICK : 0) | MF_DOTTED, (int) loupe_m, crop);
+      set_item (view, 3, 0, viewer_comparing () ? "Stop comparing " SH "O" : "Compare with the next " SH "O",
+                MF_DOTTED, -1, 0);
+      set_item (view, 4, 1, "Back to the Browser Esc", 0, -1, 0);
+    }
+  adj = new_menu ("Adjust", 6);
+  if (adj)
+    {
+      set_item (adj, 0, 0, "Auto adjust " SH "A", 0, -1, crop);
+      set_item (adj, 1, 0, "Pick white balance " SH "W", (viewer_picking () ? MF_TICK : 0) | MF_DOTTED, -1, crop);
+      set_item (adj, 2, 0, "Crop " SH "C", crop ? MF_TICK : 0, -1, 0);
+      set_item (adj, 3, 0, "Crop shape", 0, (int) shape, 0);
+      set_item (adj, 4, 0, "Grid " SH "G", MF_DOTTED, (int) grid, 0);
+      set_item (adj, 5, 1, "Presets", 0, (int) pre, 0);
+    }
+  org = new_menu ("Organise", 4);
+  if (org)
+    {
+      cat_item vi;
+      int now = viewer_index () >= 0 && browser_item (viewer_index (), &vi) ? vi.label : -1;
+      set_item (org, 0, 0, "Colour label", 0, (int) label_menu ("Colour label", now), 0);
+      set_item (org, 1, 0, "Caption and keywords... ^K", MF_DOTTED, -1, 0);
+      set_item (org, 2, 0, "Duplicate version ^D", 0, -1, 0);
+      set_item (org, 3, 1, "New version from original", 0, -1, 0);
+    }
+  m = new_menu ("Photo", PM_COUNT);
   if (m)
     {
-      set_item (m, VM_BEFORE, 0, "Before and after      M", viewer_before () ? MF_TICK : 0, -1, crop);
-      set_item (m, VM_ZOOM, 0, "Zoom to 100%      Z", viewer_zoomed () ? MF_TICK : 0, -1, crop);
-      set_item (m, VM_LOUPE, 0, "Loupe      `", viewer_loupe () ? MF_TICK : 0, (int) loupe_m, crop);
-      set_item (m, VM_UNDO, 0, "Undo      ^Z", 0, -1, !viewer_can_undo ());
-      set_item (m, VM_REDO, 0, "Redo      ^Y", 0, -1, !viewer_can_redo ());
-      set_item (m, VM_RESET, 0, "Reset all adjustments", MF_DOTTED, -1, 0);
-      set_item (m, VM_AUTO, 0, "Auto adjust      A", 0, -1, crop);
-      set_item (m, VM_PICK, 0, "Pick white balance", viewer_picking () ? MF_TICK : 0, -1, crop);
-      set_item (m, VM_CROP, 0, "Crop      C", crop ? MF_TICK : 0, -1, 0);
-      set_item (m, VM_SHAPE, 0, "Crop shape", 0, (int) shape, 0);
-      set_item (m, VM_GRID, 0, "Grid      G", MF_DOTTED, (int) grid, 0);
-      set_item (m, VM_PRESETS, 0, "Presets", 0, (int) pre, 0);
-      set_item (m, VM_COPY, 0, "Copy adjustments      ^C", 0, -1, 0);
-      set_item (m, VM_PASTE, 0, "Paste adjustments      ^V", MF_DOTTED, -1, looks_clip () == NULL);
-      {
-        cat_item vi;
-        int now = viewer_index () >= 0 && browser_item (viewer_index (), &vi) ? vi.label : -1;
-        set_item (m, VM_LABEL, 0, "Colour label", 0, (int) label_menu ("Colour label", now), 0);
-      }
-      set_item (m, VM_TAGS, 0, "Caption and keywords...      ^K", 0, -1, 0);
-      set_item (m, VM_COMPARE, 0, viewer_comparing () ? "Stop comparing      O" : "Compare with the next      O",
-                MF_DOTTED, -1, 0);
-      set_item (m, VM_DUP, 0, "Duplicate version      ^D", 0, -1, 0);
-      set_item (m, VM_NEW_ORIG, 0, "New version from original", MF_DOTTED, -1, 0);
-      set_item (m, VM_EXPORT, 0, "Export...      ^E", 0, -1, 0);
-      set_item (m, VM_PRINT, 0, "Print...      ^P", MF_DOTTED, -1, 0);
-      set_item (m, VM_BACK, 0, "Back to the Browser      Esc", MF_DOTTED, -1, 0);
-      set_item (m, VM_REMOVE, 1, "Remove from library...", 0, -1, 0);
+      set_item (m, PM_FILE, 0, "File", 0, (int) file, 0);
+      set_item (m, PM_EDIT, 0, "Edit", 0, (int) edit, 0);
+      set_item (m, PM_VIEW, 0, "View", 0, (int) view, 0);
+      set_item (m, PM_ADJUST, 0, "Adjust", 0, (int) adj, 0);
+      set_item (m, PM_ORGANISE, 1, "Organise", 0, (int) org, 0);
     }
   return m;
 }
@@ -950,6 +1065,7 @@ static void with_selection (int action, int arg)
 static int window_choice (const int *c)
 {
   cat_source s = *browser_source ();
+  int sc[16];
   switch (c[0])
     {
     case 0:                            /* Show */
@@ -978,11 +1094,12 @@ static int window_choice (const int *c)
           browser_set_source (&s);
         }
       break;
-    case 1:                            /* Selection */
-      switch (c[1])
+    case 1:                            /* Selection > File, Edit, Organise */
+      grouped_path (c + 1, sg_groups, SG_COUNT, sc);
+      switch (sc[0])
         {
-        case SEL_RATING: if (c[2] >= 0 && c[2] <= 5) with_selection (0, c[2]); break;
-        case SEL_LABEL: if (c[2] >= 0 && c[2] < CAT_LABELS) with_selection (5, c[2]); break;
+        case SEL_RATING: if (sc[1] >= 0 && sc[1] <= 5) with_selection (0, sc[1]); break;
+        case SEL_LABEL: if (sc[1] >= 0 && sc[1] < CAT_LABELS) with_selection (5, sc[1]); break;
         case SEL_FLAG: with_selection (1, 0); break;
         case SEL_REJECT: with_selection (0, RATING_REJECT); break;
         case SEL_TAGS: tags_after_menu = 1; break;
@@ -991,10 +1108,10 @@ static int window_choice (const int *c)
         case SEL_COPY: looks_copy_selection (); break;
         case SEL_PASTE: if (looks_clip ()) looks_apply_selection (looks_clip ()); break;
         case SEL_PRESET:
-          if (c[2] == 0 && styles_get (c[3]))
-            looks_apply_selection (styles_get (c[3])->recipe);
-          else if (c[2] >= 1 && c[2] <= npresets && c[2] <= MAX_LIST)
-            looks_apply_selection (presets[c[2] - 1].recipe);
+          if (sc[1] == 0 && styles_get (sc[2]))
+            looks_apply_selection (styles_get (sc[2])->recipe);
+          else if (sc[1] >= 1 && sc[1] <= npresets && sc[1] <= MAX_LIST)
+            looks_apply_selection (presets[sc[1] - 1].recipe);
           break;
         case SEL_COMPARE: compare_after_menu = 1; break;
         case SEL_EXPORT: export_after_menu = 1; break;
@@ -1051,6 +1168,7 @@ static int window_choice (const int *c)
 /* Returns 1 to quit. */
 int menus_selection (const int *choice)
 {
+  int vchoice[16];
   int ptr[5] = { 0 }, quit_requested = 0, was_style = watching_styles && style_in_path (choice) >= 0;
   if (watching_styles)
     {
@@ -1063,17 +1181,17 @@ int menus_selection (const int *choice)
     }
   if (which == 1)
     quit_requested = window_choice (choice);
-  else if (which == 3)
-    switch (choice[0])
+  else if (which == 3 && (vm_path (choice, vchoice), 1))
+    switch (vchoice[0])
       {
       case VM_BEFORE: viewer_toggle_before (); break;
       case VM_ZOOM: viewer_toggle_zoom (); break;
       case VM_LOUPE:
-        if (choice[1] >= 0)
+        if (vchoice[1] >= 0)
           {
             if (!viewer_loupe ())
               viewer_toggle_loupe ();
-            viewer_set_loupe_mag (1 << choice[1]);
+            viewer_set_loupe_mag (1 << vchoice[1]);
           }
         else
           viewer_toggle_loupe ();
@@ -1084,17 +1202,17 @@ int menus_selection (const int *choice)
       case VM_AUTO: viewer_auto (); break;
       case VM_PICK: viewer_pick_white (); break;
       case VM_CROP: viewer_toggle_crop (); break;
-      case VM_SHAPE: if (choice[1] >= 0) viewer_set_crop_shape (choice[1]); break;
-      case VM_GRID: if (choice[1] >= 0) viewer_set_grid (choice[1]); break;
-      case VM_PRESETS: if (choice[1] >= 0) presets_choice (choice + 1); break;
+      case VM_SHAPE: if (vchoice[1] >= 0) viewer_set_crop_shape (vchoice[1]); break;
+      case VM_GRID: if (vchoice[1] >= 0) viewer_set_grid (vchoice[1]); break;
+      case VM_PRESETS: if (vchoice[1] >= 0) presets_choice (vchoice + 1); break;
       case VM_COPY: looks_copy_viewer (); break;
       case VM_PASTE: if (looks_clip ()) viewer_apply_look (looks_clip ()); break;
       case VM_TAGS: tags_after_menu = 2; break;
       case VM_LABEL:
-        if (choice[1] >= 0 && choice[1] < CAT_LABELS && viewer_item ())
+        if (vchoice[1] >= 0 && vchoice[1] < CAT_LABELS && viewer_item ())
           {
             cat_id v = viewer_item ();
-            cat_set_label (lib_cat (app_library ()), &v, 1, choice[1]);
+            cat_set_label (lib_cat (app_library ()), &v, 1, vchoice[1]);
             browser_after_change ();
             mainwin_info_changed ();
           }
@@ -1342,24 +1460,34 @@ const char *menus_help (int window, int icon)
       {
       case 0: return "Which photos the Browser shows: all, flagged, rejected, the last import, a project or album, by rating.";
       case 1:
-        if (c[1] == SEL_REMOVE)
+        {
+        int sc[16];
+        grouped_path (c + 1, sg_groups, SG_COUNT, sc);
+        if (sc[0] == VM_GROUP (SG_FILE))
+          return "Export, export as a library, print or remove the selected photos.";
+        if (sc[0] == VM_GROUP (SG_EDIT))
+          return "Select all or none, copy and paste adjustments, apply a preset.";
+        if (sc[0] == VM_GROUP (SG_ORGANISE))
+          return "Rate, label, flag, reject, caption or compare the selected photos.";
+        if (sc[0] == SEL_REMOVE)
           return "Takes the selected photos out of the library, after asking. Their files are not deleted.";
-        if (c[1] == SEL_PRINT)
+        if (sc[0] == SEL_PRINT)
           return "Prints the selected photos, one to a page, on the printer chosen in !Printers.";
-        if (c[1] == SEL_EXPORT)
+        if (sc[0] == SEL_EXPORT)
           return "Exports the selected photos as new JPEG or PNG files.";
-        if (c[1] == SEL_EXPORT_LIB)
+        if (sc[0] == SEL_EXPORT_LIB)
           return "Makes a new Lumen library of the selected photos, with all their adjustments, keywords and albums "
                  "(and their originals, if you choose): to take them to another computer.";
-        if (c[1] == SEL_PRESET && c[2] >= 0)
-          return presets_help (c + 2, 1);
-        if (c[1] == SEL_TAGS)
+        if (sc[0] == SEL_PRESET && sc[1] >= 0)
+          return presets_help (sc + 1, 1);
+        if (sc[0] == SEL_TAGS)
           return "Gives the selected photos a caption and keywords, which search and smart albums find.";
-        if (c[1] == SEL_LABEL)
+        if (sc[0] == SEL_LABEL)
           return "Gives the selected photos a colour label (or None). Search and smart albums find labels by name.";
-        if (c[1] == SEL_COMPARE)
+        if (sc[0] == SEL_COMPARE)
           return "Shows the two selected photos side by side in the Viewer, to choose between them.";
         return "Rate, flag, reject, caption, select, copy and paste adjustments, export or remove the selected photos.";
+        }
       case 2:
         if (c[1] == 3)
           return "Makes an album that gathers the photos matching what you choose: words, rating, flag, dates.";
@@ -1387,8 +1515,45 @@ const char *menus_help (int window, int icon)
   if (which == 4)
     return presets_help (c, 0);
   if (which == 3)
-    return c[0] == VM_PRESETS && c[1] >= 0 ? presets_help (c + 1, 0)
-                                           : "What can be done to this photo. Many have keys, shown beside them.";
+    {
+      int v[16];
+      vm_path (c, v);
+      switch (v[0])
+        {
+        case VM_GROUP (PM_FILE): return "Export or print the photo, or take it out of the library.";
+        case VM_GROUP (PM_EDIT): return "Undo and redo, copy and paste adjustments, or reset them all.";
+        case VM_GROUP (PM_VIEW): return "How the photo is shown: before and after, 100%, the loupe, beside the next one.";
+        case VM_GROUP (PM_ADJUST): return "Auto, white balance, cropping, the grid, presets and styles.";
+        case VM_GROUP (PM_ORGANISE): return "The photo's colour label, caption and keywords, and versions of it.";
+        case VM_PRESETS:
+          if (v[1] >= 0)
+            return presets_help (v + 1, 0);
+          return "Lumen's styles and your own presets: apply one, or save the adjustments as one.";
+        case VM_BEFORE: return "Shows the photo as it came from the camera while ticked.";
+        case VM_ZOOM: return "Shows the photo at 100%, a pixel for each screen pixel; drag it to look round.";
+        case VM_LOUPE: return "A round magnifier that follows the pointer: 100%, 200% or 400%.";
+        case VM_COMPARE: return "Shows this photo beside the next, to choose between them.";
+        case VM_BACK: return "Closes the Viewer and goes back to the thumbnails.";
+        case VM_UNDO: return "Undoes the last adjustment.";
+        case VM_REDO: return "Does again what was undone.";
+        case VM_AUTO: return "Sets exposure, contrast and white balance to suit the photo.";
+        case VM_PICK: return "Click on something white or grey in the photo to set the white balance from it.";
+        case VM_RESET: return "Takes away all the adjustments: the photo as it came from the camera.";
+        case VM_COPY: return "Copies this photo's adjustments, to paste on others.";
+        case VM_PASTE: return "Gives this photo the adjustments copied from another.";
+        case VM_CROP: return "Crops and straightens: drag the corners and edges, or outside to turn it. Return when done.";
+        case VM_SHAPE: return "The crop's shape: free, the original's, square, 3:2, 4:3 or 16:9.";
+        case VM_GRID: return "Lines over the photo to help compose it.";
+        case VM_LABEL: return "Gives the photo a colour label (or None). Search and smart albums find labels by name.";
+        case VM_TAGS: return "Gives the photo a caption and keywords, which search and smart albums find.";
+        case VM_DUP: return "Makes another version of the photo, with its adjustments. The original file is shared.";
+        case VM_NEW_ORIG: return "Makes another version of the photo as it came from the camera, without adjustments.";
+        case VM_EXPORT: return "Exports the photo as a new JPEG or PNG file.";
+        case VM_PRINT: return "Prints the photo on the printer chosen in !Printers.";
+        case VM_REMOVE: return "Takes the photo out of the library, after asking. Its file is not deleted.";
+        }
+      return "What can be done to this photo. Many have keys, shown beside them.";
+    }
   if (which == 8)
     return "Adds this keyword to the list.";
   if (which == 7 && c[0] == group_export_item ())

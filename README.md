@@ -20,6 +20,8 @@ brushes, or one of fifteen styles. Then it exports or prints them.
   menu.
 - **Camera raw files:** with the LumenRaw plug-in (LibRaw), a separate zip
   on the same page.
+- **HEIF photos** (.heic, as phones take them): with the LumenHEIF plug-in
+  (libheif and FFmpeg's HEVC decoder), also on that page.
 
 I've used AI to help with this. The code, build scripts and documentation
 were written with Anthropic's Claude as a coding assistant.
@@ -35,17 +37,20 @@ were written with Anthropic's Claude as a coding assistant.
 
 1. Install SharedUnixLibrary and ARMEABISupport with PackMan, if you
    haven't already.
-2. Unzip `Lumen-0.0.36.zip` and copy `!Lumen` to where you keep your
+2. Unzip `Lumen-0.0.37.zip` and copy `!Lumen` to where you keep your
    applications, for example `$.Apps.Graphics`.
 3. For camera raw files, unzip `LumenRaw-1.1.zip`: it holds
    `!Lumen.Plugins.LibRaw`. Drag that `LibRaw` directory into Lumen's
    Plug-ins > Add plug-in window, or copy it into your
    `!Lumen.Plugins`.
-4. Double-click `!Lumen`, and drag a folder of photos into its window.
+4. For HEIF photos, likewise unzip `LumenHEIF-1.0.zip` and add its
+   `!Lumen.Plugins.HEIF` directory.
+5. Double-click `!Lumen`, and drag a folder of photos into its window.
 
 ## What it does
 
-- Imports JPEG and PNG photos (and raw files with LumenRaw), in the
+- Imports JPEG and PNG photos (raw files with LumenRaw, HEIF photos
+  with LumenHEIF), in the
   background, never copying or changing them; finds them again if they
   move; watches folders for new photos.
 - Browses thumbnails in three sizes; a viewer with a 100% view and a
@@ -107,15 +112,24 @@ make RCD_DIR=/path/to/riscos-crossdev DEPS=/path/to/deps check all
 qemu-arm-aligntrap, test_ui and test_fsys against the Fake RISC OS, and
 riscos-crossdev's checks on the RISC OS binary. `make` builds
 `out/Lumen.zip`; `make plugin` the LumenRaw plug-in and LibRaw's source
-zip (LibRaw built by `deps/build-libraw.sh`); `make guide` the two user
-guides as zips.
+zip (LibRaw built by `deps/build-libraw.sh`); `make heif-plugin` the
+LumenHEIF plug-in and its sources zip (FFmpeg and libheif built by
+`deps/build-heif.sh`, `make test-heif` testing it on x86-64 and on ARM
+with and without NEON); `make guide` the two user guides as zips.
 
 ## Status
 
-0.0.36 is the first public release. It has been tested on RISC OS 5.31 on
+0.0.36 was the first public release; 0.0.37 adds HEIF photos. 0.0.36 was tested on RISC OS 5.31 on
 a Raspberry Pi 4, and on RISC OS running on Linux (RISC OS 5.31-5 under
 QEMU); its automated tests run on Linux (x86-64, and ARM under QEMU with
 and without NEON).
+
+## Plug-ins
+
+Lumen reads JPEG and PNG itself. Other formats come from plug-ins in
+`!Lumen.Plugins`: LumenRaw for camera raw files, and format plug-ins
+such as LumenHEIF, whose `Plugin` file says which files they read. The
+format plug-in API is in [docs/plugin-api.md](docs/plugin-api.md).
 
 ## Licence
 
@@ -123,6 +137,9 @@ Lumen is copyright (c) 2026 Andrew Youll and is released under the MIT
 licence: see `LICENSE`. The LumenRaw plug-in's own code is MIT too; the
 LibRaw library it is built with is under the LGPL 2.1 (or CDDL), and its
 source ships with each release (`LibRaw-0.22.3-source.zip`). The
+LumenHEIF plug-in's own code is MIT; libheif is under the LGPL 3 and
+FFmpeg's libavcodec and libavutil under the LGPL 2.1 or later, and
+their sources and the patches ship as `LumenHEIF-1.0-sources.zip`. The
 libraries built into Lumen keep their own licences, collected in
 `app/Licences` (installed as `!Lumen.Licences`): SQLite (public domain),
 libjpeg-turbo, libpng, zlib and UnixLib (BSD-style, with LGPL parts:

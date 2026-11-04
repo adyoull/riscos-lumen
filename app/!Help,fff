@@ -1,4 +1,4 @@
-Lumen 0.0.36 (04 Nov 2026)
+Lumen 0.0.37 (04 Nov 2026)
 ==========================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -109,8 +109,8 @@ window opens).
 Keys in the Browser
 -------------------
   0 to 5        set the rating of the selected photos
-  9             reject (rejected photos leave All photos)
-  /             flag or unflag
+  9 or X        reject (rejected photos leave All photos)
+  / or P        flag or unflag
   Cursor keys   move to the next photo; Page Up/Down, Home, End too
   Ctrl-A        select all
   Escape        clear the selection
@@ -122,7 +122,7 @@ Keys in the Browser
   Ctrl-D        a duplicate version of each (with its adjustments)
   Ctrl-G        stack the selected photos (the focused one the pick)
   Ctrl-U        unstack them
-  \             make the focused photo its stack's pick
+  \ or K        make the focused photo its stack's pick
   S             open or close the focused photo's stack
   O             compare the selected photos: the first pinned on the
                 left, the next beside it (see Comparing)
@@ -153,7 +153,7 @@ The tools above the sliders:
   Crop          shows the whole photo with the crop over it. Drag a
                 corner or an edge, drag inside to move it, or drag
                 outside to draw a new one. Return (or Done) crops, Escape
-                puts the old crop back. Photo > Crop shape fixes the
+                puts the old crop back. Photo > Adjust > Crop shape fixes the
                 shape: Original, Square, 3:2, 4:3, 16:9 (it follows the
                 crop's way round, so a tall crop is 2:3)
   Grid          None, Thirds, Quarters, Fine; while you straighten, a
@@ -168,7 +168,8 @@ Under the histogram: the photo's place, its flag, its colour label (the
 row of dots: click one to give the photo that label, its own again to
 take it off) and its stars.
 
-Styles (Presets > Styles, or Selection > Apply preset > Styles for many
+Styles (Photo > Adjust > Presets > Styles, or Selection > Edit > Apply
+preset > Styles for many
 photos at once): Faded Film, Warm Vintage, Golden Hour, Soft Portrait,
 Sunlit Garden, Vivid Landscape; Teal & Orange, Cross Process, Bleach Bypass, Nordic
 Matte; Classic Black & White, High-Contrast Noir, Sepia, Cyanotype and
@@ -263,7 +264,7 @@ or copied adjustments. They are in exports, prints and thumbnails.
 
 Comparing
 ---------
-O with photos selected in the Browser (or Selection > Compare) pins the
+O with photos selected in the Browser (or Selection > Organise > Compare) pins the
 first on the left and shows the next beside it; in the Viewer, O pins
 the photo shown. Left and Right change the photo on the right (the keys
 rate and label it); Return pins it instead and shows the next. O or
@@ -271,7 +272,8 @@ Escape stops comparing.
 
 Colour labels
 -------------
-Selection > Colour label (or Photo > Colour label) gives the selected
+Selection > Organise > Colour label (or Photo > Organise > Colour
+label) gives the selected
 photos a coloured dot: Red, Orange, Yellow, Green, Blue, Purple, Grey,
 or None. The dot shows beside the name in the Browser; searching for
 the colour's name finds them.
@@ -282,7 +284,7 @@ Keys in the Viewer and Split View
   Z             100%: the full-size photo, a pixel a pixel (or click the
                 photo). Drag to move about; click, Z or Escape for the
                 whole photo again
-  `             the loupe: a round magnifier that follows the pointer
+  ` or L        the loupe: a round magnifier that follows the pointer
                 over the photo (100%, 200% or 400% of the full-size
                 photo; Adjust-click on the photo to change, Select to
                 pin it in place, ` or Escape to put it away)
@@ -308,7 +310,7 @@ Keys in the Viewer and Split View
 
 Exporting
 ---------
-Ctrl-E (or Export... in the Selection or Photo menu) opens the Export
+Ctrl-E (or File > Export... in the Selection or Photo menu) opens the Export
 box. Drag its icon to a directory display, or into another program, or
 type a full pathname and click Save. In the box:
   Format      JPEG (with its quality) or PNG
@@ -332,7 +334,7 @@ background; the bottom bar shows the progress.
 
 Printing
 --------
-Ctrl-P (or Print... in the Selection or Photo menu) prints the selected
+Ctrl-P (or File > Print... in the Selection or Photo menu) prints the selected
 photos on the printer chosen in !Printers. Choose the copies, and the
 size: Fit the page (all of the photo, as big as it goes), Fill the page
 (to the edges; some is cut off) or a given size in centimetres (at most;
@@ -351,7 +353,7 @@ PostScript printers print in grey unless their Configure window in
 
 Captions, keywords and smart albums
 -----------------------------------
-Ctrl-K (or Selection > Caption and keywords..., or a click on Caption or
+Ctrl-K (or Selection > Organise > Caption and keywords..., or a click on Caption or
 Keywords in the Info tab) opens a window for the selected photos' caption
 and keywords. Keywords are words or short phrases with commas between:
 places, people, subjects. The menu button beside them lists the keywords
@@ -435,15 +437,31 @@ The Lumen menu
 --------------
   Show            All photos, Flagged, Rejected, Last import, a project
                   (one per imported folder), an album, or a rating filter
-  Selection       rating, flag, reject, caption and keywords, select
-                  all, clear, copy and paste adjustments, apply a
-                  preset, export, export as library, print, remove
+  Selection       File: export, export as library, print, remove;
+                  Edit: select all, clear, copy and paste adjustments,
+                  apply a preset; Organise: rating, colour label,
+                  flag, reject, caption and keywords, compare
   Album           make a new album from the selection, add to one,
                   or remove from the album shown; a new smart album
   Versions and stacks
                   duplicate versions, stack and unstack, the pick,
                   open or close a stack, auto-stack
   Thumbnail size  Small, Medium, Large
+
+The Photo menu (Menu over the photo in the Viewer)
+--------------
+  File            Export..., Print..., Remove from library...
+  Edit            undo, redo, copy and paste adjustments, reset all
+  View            before and after, 100%, the loupe, compare with the
+                  next, back to the Browser
+  Adjust          Auto, pick white balance, crop, crop shape, the grid,
+                  presets and styles
+  Organise        colour label, caption and keywords, duplicate
+                  version, new version from the original
+
+Menus show keys beside their items. Letter keys are shown with Shift
+(the arrow), as RISC OS lines them up, but work with or without it:
+Shift-M and M are both before and after.
 
 Camera raw files
 ----------------
@@ -470,6 +488,22 @@ in the viewer always comes first: until it is open Lumen does nothing
 else. A preview is made again if the file, its orientation or LumenRaw
 changes. Choices sets which photos get them (Raw files, All photos or
 None) and Discard removes them; about 300-500 KB each.
+
+HEIF photos
+-----------
+Lumen reads HEIF photos (.heic, .heif, .hif, as iPhones and many other
+phones and cameras take them) with its HEIF plug-in, a separate
+package: LumenHEIF, in PackMan or as LumenHEIF-1.0.zip on Lumen's
+release page (drag the HEIF directory in its !Lumen.Plugins into
+Plug-ins > Add plug-in). It uses libheif and the HEVC decoder from
+FFmpeg (only that), with NEON on computers that have it. Lumen itself
+knows nothing of HEIF: the plug-in says which files are its own, so
+without it HEIF photos are left alone when a folder is imported (import
+the folder again once it is installed).
+
+Thumbnails come from the photo's own thumbnail when it has one. Photos
+in Display P3 (iPhones') are converted to sRGB. They get previews like
+raw files do (Choices > Previews: Raw files covers HEIF photos too).
 
 Choices
 -------
@@ -502,8 +536,8 @@ running, rather than a second copy on the same library.
 
 Plug-ins
 --------
-Plug-ins add to what Lumen can do; LumenRaw (camera raw files) is the
-first. Each is a directory in !Lumen.Plugins, where PackMan puts them.
+Plug-ins add to what Lumen can do: LumenRaw (camera raw files) and
+LumenHEIF (HEIF photos). Each is a directory in !Lumen.Plugins, where PackMan puts them.
 Plug-ins, on the icon bar menu and the main window's menu, lists them:
 choose one to switch it off (it stays installed, unticked) or back on.
 Add plug-in... opens a window to drag a plug-in's directory into (or
@@ -513,7 +547,11 @@ package in PackMan instead, so PackMan knows. Lumen remembers which are
 off in its Choices.
 
 A plug-in's directory has a text file, Plugin, saying what it is:
-Name, Version, Kind (raw), Program, Package and Description lines.
+Name, Version, Kind, Program, Package and Description lines. A format
+plug-in (Kind: format) also says which files are its own (Extensions
+and Signature lines) and what one is called (Format); Lumen imports
+the files it claims and runs it to read them, so a new format needs
+only a new plug-in. Lumen's source has the API, docs/plugin-api.md.
 
 Exported files
 --------------
@@ -527,7 +565,8 @@ is written instead.
 
 Removing photos
 ---------------
-Delete (or Selection > Remove from library, or the Photo menu) takes the
+Delete (or Selection > File > Remove from library, or Photo > File)
+takes the
 selected photos out of the library, after asking. Their files are never
 touched: their ratings, adjustments and album places go, and they can be
 imported again. Menu over a project or album in the Library tab renames
@@ -547,7 +586,7 @@ opens the window):
                   library's Originals directory, a directory for each
                   project, so it can go to any disc or computer; it
                   finds them there wherever it is moved to.
-                  Selection > Export as library, and Export as library
+                  Selection > File > Export as library, and Export as library
                   on a project's or album's menu, export just those.
   Import library  brings another library's photos into this one: drag
                   its directory into the window (or onto Lumen
@@ -600,6 +639,7 @@ domain), libjpeg-turbo (IJG, BSD and zlib licences), libpng (PNG
 Reference Library License v2), zlib (zlib licence), UnixLib (revised
 BSD, with parts under the LGPL) and GCC's runtime library (GPL 3 with
 the Runtime Library Exception). Their licences are in !Lumen.Licences;
-its ReadMe lists them. The LibRaw plug-in has its own Licence file.
+its ReadMe lists them. The LibRaw and HEIF plug-ins have their own
+Licence files.
 
 Andrew Youll, 2026

@@ -6,6 +6,8 @@
    entries (tag, type, count, value or offset), IFD0 linking to the EXIF
    IFD (tag &8769) and to IFD1, which holds the thumbnail's offset and
    length (tags &201, &202). */
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "exif.h"
 
@@ -195,6 +197,12 @@ int img_has_raw_extension (const char *name)
     }
   return 0;
 }
+
+int img_is_plugin_format (int format)
+{
+  return format == IMG_RAW || format == IMG_PLUGIN;
+}
+
 
 int img_probe_named (const unsigned char *buf, size_t len, const char *name)
 {
@@ -733,7 +741,8 @@ static void list_ifd (const tiff *t, size_t ifd, int group, lister *ls, int dept
         format_value (t, e, group, tag, type, count, value, sizeof value);
       if (!value[0])
         continue;
-      ls->fn (ls->ctx, groups[group], name, value);
+      if (ls->fn)
+        ls->fn (ls->ctx, groups[group], name, value);
       ls->count++;
     }
 }

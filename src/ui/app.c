@@ -246,7 +246,7 @@ int app_set_prefs (const prefs *p)
 
 static plugin_info plugin_list[PLUGINS_MAX];
 static int nplugins;
-static char plugins_dir[700], plugins_state[700], raw_helper[1024];
+static char plugins_dir[700], plugins_state[700], helpers[RAWJOB_KINDS][1024];
 
 int app_plugins (const plugin_info **list)
 {
@@ -270,29 +270,27 @@ static void plugin_paths (void)
     snprintf (plugins_state, sizeof plugins_state, "<Choices$Write>.Lumen.Plugins");
 }
 
+/* One kind of plug-in: its program (switched on and usable), or none. */
+static int set_helper (int kind, const plugin_info *pi, int off, const char *scratch)
+{
+  rawjob_set_switched_off_kind (kind, !pi && off);
+  if (!strcmp (pi ? pi->program : "", helpers[kind]))
+    return 0;                          /* the same as before: jobs carry on */
+  snprintf (helpers[kind], sizeof helpers[kind], "%s", pi ? pi->program : "");
+  if (pi)
+    rawjob_setup_kind (kind, helpers[kind], scratch, run_in_task_window);
+  else
+    rawjob_setup_kind (kind, NULL, NULL, NULL);
+  return pi != NULL;
+}
+
 void app_plugins_rescan (void)
 {
-  const plugin_info *raw;
   char scratch[700];
+  int kind, k, changed = 0;
   if (!plugins_dir[0])
     plugin_paths ();
   nplugins = plugins_dir[0] ? plugins_scan (plugins_dir, plugins_state, plugin_list, PLUGINS_MAX) : 0;
-  raw = plugins_find (plugin_list, nplugins, "raw");
-  {
-    int k, off = 0;
-    for (k = 0; k < nplugins; k++)
-      if (!strcmp (plugin_list[k].kind, "raw") && !plugin_list[k].enabled)
-        off = 1;
-    rawjob_set_switched_off (!raw && off);
-  }
-  if (!strcmp (raw ? raw->program : "", raw_helper))
-    return;                            /* the same as before: jobs carry on */
-  snprintf (raw_helper, sizeof raw_helper, "%s", raw ? raw->program : "");
-  if (!raw)
-    {
-      rawjob_setup (NULL, NULL, NULL);
-      return;
-    }
   {
     const char *v = getenv ("Lumen$Scratch");   /* the tests' own */
     if (v && *v)
@@ -300,9 +298,40 @@ void app_plugins_rescan (void)
     else if (fsys_canonical ("<Wimp$ScrapDir>.LumenRaw", scratch, sizeof scratch))
       snprintf (scratch, sizeof scratch, "<Wimp$ScrapDir>.LumenRaw");
   }
-  rawjob_setup (raw_helper, scratch, run_in_task_window);
-  if (lib)
-    lib_retry_failed_thumbs (lib);     /* raw files imported while there was no plug-in */
+  /* Camera raw files: LumenRaw. */
+  {
+    const plugin_info *pi = plugins_find (plugin_list, nplugins, "raw");
+    int off = 0;
+    for (k = 0; k < nplugins; k++)
+      if (!strcmp (plugin_list[k].kind, "raw") && !plugin_list[k].enabled)
+        off = 1;
+    changed |= set_helper (RAWJOB_RAW, pi, off, scratch);
+  }
+  /* Format plug-ins: each its own kind, kept while it is installed. Ones
+     gone are forgotten; ones for a newer API are listed but not run. */
+  for (kind = 1; kind < RAWJOB_KINDS; kind++)
+    {
+      const plugin_info *f = rawjob_format (kind);
+      int there = 0;
+      for (k = 0; f && k < nplugins; k++)
+        there |= !strcmp (plugin_list[k].dir, f->dir) && !strcmp (plugin_list[k].kind, "format");
+      if (f && !there)
+        {
+          rawjob_clear_format (kind);
+          set_helper (kind, NULL, 0, scratch);
+        }
+    }
+  for (k = 0; k < nplugins; k++)
+    if (!strcmp (plugin_list[k].kind, "format"))
+      {
+        const plugin_info *pi = &plugin_list[k];
+        int usable = pi->enabled && pi->program[0] && pi->api >= 1 && pi->api <= PLUGIN_API;
+        kind = rawjob_set_format (pi);
+        if (kind > 0)
+          changed |= set_helper (kind, usable ? pi : NULL, !pi->enabled, scratch);
+      }
+  if (changed && lib)
+    lib_retry_failed_thumbs (lib);     /* photos imported while there was no plug-in */
 }
 
 /* A plug-in can't change under a job that is running it. */
@@ -735,6 +764,17 @@ static void data_load (int *b)
 static int app_key (int key)
 {
   int mode = mainwin_mode ();
+  /* Letters for the keys the menus can't show beside their items (the
+     Wimp right-aligns only Shift or Ctrl and a letter, or a named key):
+     P flags (as /), X rejects (9), K makes the stack's pick (backslash),
+     L the loupe (`). */
+  switch (key)
+    {
+    case 'p': case 'P': key = '/'; break;
+    case 'x': case 'X': key = '9'; break;
+    case 'k': case 'K': key = '\\'; break;
+    case 'l': case 'L': key = '`'; break;
+    }
   int browsing = key == KEY_LEFT || key == KEY_RIGHT || key == KEY_UP || key == KEY_DOWN || key == KEY_HOME
                  || key == KEY_END || key == KEY_PAGEUP || key == KEY_PAGEDOWN || (key >= '0' && key <= '5')
                  || key == '9' || key == '/' || key == KEY_RETURN || key == KEY_CTRL_A;
