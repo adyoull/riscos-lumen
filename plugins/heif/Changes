@@ -12,6 +12,8 @@ LumenHEIF changes
   where the processor has it, with exactly the same pictures either way.
 - The photo's own thumbnail is used when it has one; Display P3 photos
   are converted to sRGB; sideways photos are turned the right way up.
+- Each photo's encoding (HEVC or AV1, bits a channel, chroma, tiles) for
+  Lumen's Info tab, and HEIF and AVIF named as separate formats.
 - The EXIF is found wherever the file keeps it (Samsung phones write it
   after the picture data), so Lumen's Info tab lists it.
 - A format plug-in (Lumen's plug-in API 1): it needs Lumen 0.0.37 or

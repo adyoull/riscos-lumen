@@ -29,33 +29,42 @@ The directory holds a text file called `Plugin`, with one `Key: value`
 per line. Lines starting with `#` are comments.
 
 ```
-Name: HEIF photos (libheif)
-Version: 1.0
+Name: HEIF and AVIF photos (libheif)
+Version: 1.1
 Kind: format
 API: 1
 Format: HEIF photo
 Extensions: heic heif hif
 Signature: 4 ftypheic
 Signature: 4 ftypmif1
+Format: AVIF photo
+Extensions: avif
+Signature: 4 ftypavif
 Program: LumenHEIF
 Package: LumenHEIF
-Description: Reads HEIF/HEIC photos with libheif and FFmpeg's HEVC decoder
+Description: Reads HEIF photos (HEVC) and AVIF photos (AV1) with libheif
 ```
+
+A plug-in can read several formats. Each `Format` line starts one, and the
+`Extensions` and `Signature` lines after it belong to that format, until
+the next `Format` line.
 
 | Key | Meaning |
 | --- | --- |
 | `Name` | A longer name, such as "HEIF photos (libheif)". Lumen uses it only when there is no `Package`. |
 | `Kind` | `format` for these plug-ins. (`raw` is LumenRaw's.) |
 | `API` | The version of this API that the plug-in follows: `1`. Lumen lists a plug-in that asks for a newer API but doesn't run it, and says a newer Lumen is needed. |
-| `Format` | The name for one of its files, used in Lumen's messages and on the Info tab, such as "This is a HEIF photo...". |
-| `Extensions` | The file extensions it claims, separated by spaces, in any case: `heic` matches `IMG_0001/HEIC` on RISC OS and `IMG_0001.heic` elsewhere. |
-| `Signature` | Bytes it claims at an offset in the file: the offset in decimal, a space, then the bytes. `\xNN` gives any byte, `\\` a backslash, and `\x20` a space at the end. A file matches if any one signature matches. At most 16 signatures, each up to 24 bytes, within the first 4 KB of the file. |
+| `Format` | Starts a format, and names one of its files, for Lumen's messages and the Info tab: "This is an AVIF photo...", "AVIF photo, read by the LumenHEIF plug-in". At most 6 formats. |
+| `Extensions` | The file extensions this format claims, separated by spaces, in any case: `heic` matches `IMG_0001/HEIC` on RISC OS and `IMG_0001.heic` elsewhere. |
+| `Signature` | Bytes this format claims at an offset in the file: the offset in decimal, a space, then the bytes. `\xNN` gives any byte, `\\` a backslash, and `\x20` a space at the end. A file matches if any one signature matches. At most 12 signatures a format, each up to 24 bytes, within the first 4 KB of the file. |
 | `Program` | The program in the directory that Lumen runs (`LumenHEIF,ff8`, an absolute file). |
 | `Package` | The PackMan package it comes in, such as LumenHEIF. Lumen calls the plug-in by this name in its Plug-ins menu (followed by `Version`) and in its messages. |
 | `Description` | One line about it. |
 
-A file is the plug-in's if its extension is one of `Extensions`, or if
-its first bytes match a `Signature`. Lumen reads JPEG and PNG files
+A file is the plug-in's if its extension is one of a format's
+`Extensions`, or if its first bytes match a format's `Signature`; the
+extension is looked at first, so `photo.avif` is an AVIF photo whatever
+its bytes. Lumen reads JPEG and PNG files
 itself, whatever their names, and camera raw files go to LumenRaw. Lumen
 imports a file a format plug-in claims even while that plug-in is
 switched off, because it is still installed. Files that no installed
@@ -89,6 +98,7 @@ in one of two ways:
 | `make`, `model` | The camera. |
 | `iso`, `exposure`, `fnumber`, `focal` | Exposure details: `exposure` in seconds, `focal` in mm. |
 | `taken` | When the photo was taken, as `YYYY:MM:DD HH:MM:SS`. |
+| `encoding` | How the photo is encoded, in a few words, for the Info tab's Encoding line: the codec, then bits a channel, chroma subsampling and anything else worth knowing, such as `HEVC, 10 bits, 4:2:0` or `AV1, 8 bits, 4:2:0, in tiles`. |
 | `exif` | `OFFSET LENGTH`: where the photo's EXIF data (a TIFF header, `II*\0` or `MM\0*`, and its IFDs) is in `SRC`, as a byte offset and length. Lumen lists it on the Info tab. Leave it out if there's no EXIF. |
 | `error` | Something went wrong. The value says what, in a few words, and Lumen shows it. |
 

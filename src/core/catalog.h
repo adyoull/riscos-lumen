@@ -126,6 +126,7 @@ typedef struct
   int orientation, format;    /* EXIF orientation; IMG_* */
   int missing;
   long long exif_offset, exif_length;   /* where a format plug-in says its EXIF is; 0 if not known */
+  char encoding[48];          /* how a format plug-in says it is encoded; "" if not known */
 } cat_origin;
 /* One original's (1 if found), or the next one walking down the ids from
    before (before <= 0: from the highest). */

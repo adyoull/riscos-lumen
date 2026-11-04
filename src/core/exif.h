@@ -28,6 +28,7 @@ typedef struct
   long thumb_length;
   long exif_offset;           /* its EXIF (TIFF) data, from the file start, when a plug-in */
   long exif_length;           /* says where it is (plug-in formats); 0 if not known */
+  char encoding[48];          /* how a plug-in's photo is encoded ("AV1, 10 bits, 4:2:0"), or "" */
 } img_info;
 
 /* 1 if the name ends in a camera raw extension ("/nef" or ".nef"). */

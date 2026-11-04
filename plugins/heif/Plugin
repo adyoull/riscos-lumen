@@ -6,8 +6,8 @@ Name: HEIF and AVIF photos (libheif)
 Version: 1.1
 Kind: format
 API: 1
-Format: HEIF or AVIF photo
-Extensions: heic heif hif avif
+Format: HEIF photo
+Extensions: heic heif hif
 Signature: 4 ftypheic
 Signature: 4 ftypheix
 Signature: 4 ftypheim
@@ -16,6 +16,8 @@ Signature: 4 ftyphevc
 Signature: 4 ftyphevx
 Signature: 4 ftypmif1
 Signature: 4 ftypmsf1
+Format: AVIF photo
+Extensions: avif
 Signature: 4 ftypavif
 Signature: 4 ftypavis
 Program: LumenHEIF

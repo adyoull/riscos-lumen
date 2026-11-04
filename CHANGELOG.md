@@ -10,11 +10,16 @@
   where a photo's EXIF is, so the Info tab lists it. Lumen holds no
   knowledge of those formats itself: a new format needs only a new
   plug-in, not a new Lumen. Camera raw stays built in (LumenRaw).
+- A plug-in can read several formats, each with its own name,
+  extensions and signatures (Format lines), so Lumen names each file
+  rightly ("This is an AVIF photo..."); and it can say how each photo is
+  encoded (encoding=, such as "AV1, 10 bits, 4:2:0"), shown on the Info
+  tab as Encoding.
 - Each plug-in is switched on and off on its own; one written for a
   newer API is listed but not run, and Lumen says it needs a newer Lumen.
   Previews (Raw files) cover format plug-ins' photos too.
 - The library's catalogue (schema 7) keeps where a plug-in says a
-  photo's EXIF is.
+  photo's EXIF is, and its encoding.
 - The Plug-ins menu and messages name plug-ins by their package
   ("LumenRaw 1.1"). The Add plug-in window no longer lists plug-ins.
 

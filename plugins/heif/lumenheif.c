@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libheif/heif.h>
+#include <libheif/heif_items.h>
 #include <libavutil/cpu.h>
 #include <dav1d/dav1d.h>
 #include "exif.h"
@@ -411,10 +412,47 @@ static void exif_place (const char *path, char *out, size_t n)
 
 /* --- the photo's details --- */
 
-static void describe (const char *src, const struct heif_image_handle *h, int w, int hh, char *t, size_t n)
+/* "encoding=HEVC, 10 bits, 4:2:0" (", in tiles" for a grid): the codec
+   from the file's coded items (a grid's own item is "grid"), the bits a
+   channel and the chroma subsampling from the photo's handle. */
+static void encoding (struct heif_context *ctx, const struct heif_image_handle *h, char *out, size_t n)
+{
+  const char *codec = NULL, *sub = "";
+  int k, count = heif_context_get_number_of_items (ctx), grid = 0, bits;
+  heif_item_id *ids = count > 0 ? malloc (sizeof *ids * (size_t) count) : NULL;
+  enum heif_colorspace cs;
+  enum heif_chroma ch;
+  uint32_t me = heif_item_get_item_type (ctx, heif_image_handle_get_item_id (h));
+  grid = me == 0x67726964u;                              /* 'grid' */
+  if (me == 0x68766331u || me == 0x68657631u)            /* 'hvc1', 'hev1' */
+    codec = "HEVC";
+  else if (me == 0x61763031u)                            /* 'av01' */
+    codec = "AV1";
+  if (!codec && ids)
+    {
+      count = heif_context_get_list_of_item_IDs (ctx, ids, count);
+      for (k = 0; k < count && !codec; k++)
+        {
+          uint32_t ty = heif_item_get_item_type (ctx, ids[k]);
+          codec = ty == 0x68766331u || ty == 0x68657631u ? "HEVC" : ty == 0x61763031u ? "AV1" : NULL;
+        }
+    }
+  free (ids);
+  bits = heif_image_handle_get_luma_bits_per_pixel (h);
+  if (heif_image_handle_get_preferred_decoding_colorspace (h, &cs, &ch).code == heif_error_Ok)
+    sub = cs == heif_colorspace_monochrome ? ", monochrome" : ch == heif_chroma_420 ? ", 4:2:0"
+          : ch == heif_chroma_422 ? ", 4:2:2" : ch == heif_chroma_444 ? ", 4:4:4" : "";
+  if (bits > 0)
+    snprintf (out, n, "encoding=%s, %d bits%s%s\n", codec ? codec : "unknown", bits, sub, grid ? ", in tiles" : "");
+  else
+    snprintf (out, n, "encoding=%s%s%s\n", codec ? codec : "unknown", sub, grid ? ", in tiles" : "");
+}
+
+static void describe (const char *src, struct heif_context *ctx, const struct heif_image_handle *h, int w, int hh,
+                      char *t, size_t n)
 {
   img_info in;
-  char place[64];
+  char place[64], enc[80];
   heif_item_id id;
   memset (&in, 0, sizeof in);
   if (heif_image_handle_get_list_of_metadata_block_IDs (h, "Exif", &id, 1) == 1)
@@ -431,10 +469,11 @@ static void describe (const char *src, const struct heif_image_handle *h, int w,
       free (d);
     }
   exif_place (src, place, sizeof place);
+  encoding (ctx, h, enc, sizeof enc);
   snprintf (t, n,
             "width=%d\nheight=%d\norientation=1\nmake=%s\nmodel=%s\niso=%d\nexposure=%g\n"
-            "fnumber=%g\nfocal=%g\ntaken=%s\nlens=\n%s",
-            w, hh, in.make, in.model, in.iso, in.exposure, in.fnumber, in.focal, in.taken, place);
+            "fnumber=%g\nfocal=%g\ntaken=%s\nlens=\n%s%s",
+            w, hh, in.make, in.model, in.iso, in.exposure, in.fnumber, in.focal, in.taken, place, enc);
 }
 
 /* --- decoding --- */
@@ -577,7 +616,7 @@ int main (int argc, char **argv)
     return fail (info, "no photo in the file", e.message);
   w = heif_image_handle_get_width (h);
   hh = heif_image_handle_get_height (h);
-  describe (src, h, w, hh, t, sizeof t);
+  describe (src, ctx, h, w, hh, t, sizeof t);
   if (write_info (info, t))
     return 1;
 

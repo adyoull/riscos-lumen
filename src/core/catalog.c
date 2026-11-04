@@ -123,9 +123,11 @@ static int upgrade (cat *c)
   if (v < 6 && step (c, "ALTER TABLE version ADD COLUMN label INTEGER NOT NULL DEFAULT 0;"
                         "UPDATE meta SET value = 6 WHERE key = 'schema';"))
     return -1;
-  /* Schema 7 (0.0.37): where a format plug-in says a photo's EXIF is. */
+  /* Schema 7 (0.0.37): where a format plug-in says a photo's EXIF is,
+     and how it says the photo is encoded. */
   if (v < 7 && step (c, "ALTER TABLE original ADD COLUMN exif_offset INTEGER NOT NULL DEFAULT 0;"
                         "ALTER TABLE original ADD COLUMN exif_length INTEGER NOT NULL DEFAULT 0;"
+                        "ALTER TABLE original ADD COLUMN encoding TEXT;"
                         "UPDATE meta SET value = 7 WHERE key = 'schema';"))
     return -1;
   return 0;
@@ -395,6 +397,7 @@ static int origin_row (cat *c, const char *sql, cat_id arg, cat_origin *o)
       o->missing = sqlite3_column_int (s, 6);
       o->exif_offset = sqlite3_column_int64 (s, 7);
       o->exif_length = sqlite3_column_int64 (s, 8);
+      col_text (s, 9, o->encoding, sizeof o->encoding);
       r = 1;
     }
   sqlite3_finalize (s);
@@ -403,13 +406,13 @@ static int origin_row (cat *c, const char *sql, cat_id arg, cat_origin *o)
 
 int cat_origin_of (cat *c, cat_id original, cat_origin *o)
 {
-  return origin_row (c, "SELECT id, path, size, mtime, orientation, format, missing, exif_offset, exif_length FROM original WHERE id = ?1",
+  return origin_row (c, "SELECT id, path, size, mtime, orientation, format, missing, exif_offset, exif_length, encoding FROM original WHERE id = ?1",
                      original, o);
 }
 
 int cat_origin_below (cat *c, cat_id before, cat_origin *o)
 {
-  return origin_row (c, "SELECT id, path, size, mtime, orientation, format, missing, exif_offset, exif_length"
+  return origin_row (c, "SELECT id, path, size, mtime, orientation, format, missing, exif_offset, exif_length, encoding"
                         " FROM original WHERE id < ?1 ORDER BY id DESC LIMIT 1", before > 0 ? before : 0x7FFFFFFFFFFFFFFFLL, o);
 }
 
@@ -466,7 +469,8 @@ int cat_set_original_info (cat *c, cat_id version, const img_info *in)
                              " fnumber = CASE WHEN ?10 > 0 THEN ?10 ELSE fnumber END,"
                              " focal = CASE WHEN ?11 > 0 THEN ?11 ELSE focal END,"
                              " exif_offset = CASE WHEN ?13 > 0 THEN ?12 ELSE exif_offset END,"
-                             " exif_length = CASE WHEN ?13 > 0 THEN ?13 ELSE exif_length END"
+                             " exif_length = CASE WHEN ?13 > 0 THEN ?13 ELSE exif_length END,"
+                             " encoding = COALESCE(?14, encoding)"
                              " WHERE id = (SELECT original FROM version WHERE id = ?1)");
   int rc = 0;
   if (!s)
@@ -484,6 +488,7 @@ int cat_set_original_info (cat *c, cat_id version, const img_info *in)
   sqlite3_bind_double (s, 11, in->focal);
   sqlite3_bind_int64 (s, 12, in->exif_offset);
   sqlite3_bind_int64 (s, 13, in->exif_length);
+  bind_text_or_null (s, 14, in->encoding);
   if (sqlite3_step (s) != SQLITE_DONE)
     rc = fail (c, "details");
   sqlite3_finalize (s);

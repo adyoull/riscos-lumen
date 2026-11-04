@@ -44,7 +44,7 @@ static void set (char *dst, size_t n, const char *v)
 }
 
 /* "4 ftypheic": the offset, then the bytes (\xNN escapes; \\ itself). */
-static void add_sig (plugin_info *p, const char *v)
+static void add_sig (plugin_format *p, const char *v)
 {
   plugin_sig *g;
   char *end;
@@ -89,13 +89,10 @@ static const char *extension (const char *name)
   return dot && dot[1] ? dot + 1 : NULL;
 }
 
-int plugins_claims_name (const plugin_info *p, const char *name)
+static int format_claims_name (const plugin_format *p, const char *x)
 {
-  const char *x = name ? extension (name) : NULL, *w = p->extensions;
-  size_t n;
-  if (!x || strcmp (p->kind, "format"))
-    return 0;
-  n = strlen (x);
+  const char *w = p->extensions;
+  size_t n = strlen (x);
   while (*w)
     {
       size_t k = 0;
@@ -116,20 +113,42 @@ int plugins_claims_name (const plugin_info *p, const char *name)
   return 0;
 }
 
+int plugins_claims_name (const plugin_info *p, const char *name)
+{
+  const char *x = name ? extension (name) : NULL;
+  int f;
+  if (!x || strcmp (p->kind, "format"))
+    return 0;
+  for (f = 0; f < p->nformats; f++)
+    if (format_claims_name (&p->formats[f], x))
+      return f + 1;
+  return 0;
+}
+
 int plugins_claims (const plugin_info *p, const char *name, const unsigned char *head, size_t len)
 {
-  int k;
+  int f, k, by_name;
   if (strcmp (p->kind, "format"))
     return 0;
-  if (plugins_claims_name (p, name))
-    return 1;
-  for (k = 0; head && k < p->nsigs; k++)
-    {
-      const plugin_sig *g = &p->sigs[k];
-      if ((size_t) (g->offset + g->length) <= len && memcmp (head + g->offset, g->bytes, (size_t) g->length) == 0)
-        return 1;
-    }
+  if ((by_name = plugins_claims_name (p, name)))
+    return by_name;
+  for (f = 0; head && f < p->nformats; f++)
+    for (k = 0; k < p->formats[f].nsigs; k++)
+      {
+        const plugin_sig *g = &p->formats[f].sigs[k];
+        if ((size_t) (g->offset + g->length) <= len && memcmp (head + g->offset, g->bytes, (size_t) g->length) == 0)
+          return f + 1;
+      }
   return 0;
+}
+
+/* The format the next Extensions or Signature line is for: the last one
+   a Format line started, or a first one without a name of its own. */
+static plugin_format *current_format (plugin_info *p)
+{
+  if (!p->nformats)
+    p->nformats = 1;
+  return &p->formats[p->nformats - 1];
 }
 
 int plugins_read (const char *path, plugin_info *p)
@@ -166,22 +185,38 @@ int plugins_read (const char *path, plugin_info *p)
           else if (!strcmp (line, "API"))
             p->api = atoi (colon + 1);
           else if (!strcmp (line, "Format"))
-            set (p->format, sizeof p->format, colon + 1);
+            {
+              /* a new format, unless the first has had no name yet */
+              if (p->nformats && (p->formats[p->nformats - 1].name[0] || p->nformats == 0))
+                {
+                  if (p->nformats >= PLUGIN_FORMATS)
+                    continue;
+                  p->nformats++;
+                }
+              set (current_format (p)->name, sizeof p->formats[0].name, colon + 1);
+            }
           else if (!strcmp (line, "Extensions"))
             {
+              plugin_format *fm = current_format (p);
               char *c;
-              set (p->extensions, sizeof p->extensions, colon + 1);
-              for (c = p->extensions; *c; c++)
+              set (fm->extensions, sizeof fm->extensions, colon + 1);
+              for (c = fm->extensions; *c; c++)
                 *c = *c == ',' || *c == '\t' ? ' ' : (char) tolower ((unsigned char) *c);
             }
           else if (!strcmp (line, "Signature"))
-            add_sig (p, colon + 1);
+            add_sig (current_format (p), colon + 1);
         }
       fclose (f);
       if (!p->name[0])
         set (p->name, sizeof p->name, p->dir);
-      if (!strcmp (p->kind, "format") && !p->format[0])
-        set (p->format, sizeof p->format, p->name);
+      if (!strcmp (p->kind, "format"))
+        {
+          int k;
+          current_format (p);          /* at least one */
+          for (k = 0; k < p->nformats; k++)
+            if (!p->formats[k].name[0])
+              set (p->formats[k].name, sizeof p->formats[k].name, p->name);
+        }
     }
   else if (find_file (path, "LumenRaw", ",ff8", file, sizeof file) == 0)
     {

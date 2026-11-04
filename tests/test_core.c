@@ -2499,8 +2499,10 @@ static void test_heif (void)
 
   /* LumenHEIF's own Plugin file says what it reads. */
   CHECK (plugins_read ("plugins/heif", &pi) == 0 && !strcmp (pi.kind, "format") && pi.api == 1
-         && !strcmp (pi.format, "HEIF or AVIF photo") && pi.nsigs == 10 && !strcmp (pi.package, "LumenHEIF"),
-         "format plug-ins: LumenHEIF's Plugin file (Kind, API, Format, Signatures)");
+         && pi.nformats == 2 && !strcmp (pi.formats[0].name, "HEIF photo") && pi.formats[0].nsigs == 8
+         && !strcmp (pi.formats[1].name, "AVIF photo") && pi.formats[1].nsigs == 2 && !strcmp (pi.formats[1].extensions, "avif")
+         && !strcmp (pi.package, "LumenHEIF"),
+         "format plug-ins: LumenHEIF's Plugin file (Kind, API, two Formats with their Extensions and Signatures)");
   CHECK (plugins_claims_name (&pi, "SDFS::Pi.$.IMG_0001/HEIC") && plugins_claims_name (&pi, "x.heif")
          && plugins_claims_name (&pi, "a/b.hif") && plugins_claims_name (&pi, "Photos.Lake/AVIF") && !plugins_claims_name (&pi, "x.heics")
          && !plugins_claims_name (&pi, "x.jpg"),
@@ -2510,6 +2512,10 @@ static void test_heif (void)
                                'm', 'i', 'f', '1', 'a', 'v', 'i', 'f', 'm', 'i', 'a', 'f', 0, 0, 0, 0 };
     unsigned char mp4[32] = { 0, 0, 0, 0x1C, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 0, 0,
                               'i', 's', 'o', 'm', 'a', 'v', 'c', '1', 'm', 'p', '4', '1', 0, 0, 0, 0 };
+    CHECK (plugins_claims (&pi, "photo", head, got) == 1 && plugins_claims (&pi, "photo", avif, sizeof avif) == 2
+           && plugins_claims_name (&pi, "x.HEIC") == 1 && plugins_claims_name (&pi, "x/avif") == 2
+           && plugins_claims (&pi, "x.avif", head, got) == 2,
+           "format plug-ins: which of its formats a file is in (its name first, then its bytes)");
     CHECK (plugins_claims (&pi, "photo", head, got) && plugins_claims (&pi, "photo", avif, sizeof avif)
            && !plugins_claims (&pi, "photo", mp4, sizeof mp4) && !plugins_claims (&pi, "photo", head, 8),
            "format plug-ins: its signatures (HEIC and AVIF, not an MP4 film), whatever the name");
@@ -2518,7 +2524,8 @@ static void test_heif (void)
     plugin_info q;
     memset (&q, 0, sizeof q);
     snprintf (q.kind, sizeof q.kind, "format");
-    snprintf (q.extensions, sizeof q.extensions, "jxl");
+    q.nformats = 1;
+    snprintf (q.formats[0].extensions, sizeof q.formats[0].extensions, "jxl");
     CHECK (!plugins_claims (&q, "x.heic", head, got) && plugins_claims_name (&q, "x/JXL"),
            "format plug-ins: each claims only its own");
   }
@@ -2530,12 +2537,21 @@ static void test_heif (void)
   /* Installed, but no program to run: says so, in its own words. */
   rawjob_setup_kind (kind, NULL, NULL, NULL);
   t = thumbgen_start (path, NULL, 256, 1, err, sizeof err);
-  CHECK (!t && strstr (err, "HEIF or AVIF photo") && strstr (err, "LumenHEIF"), "format plug-ins: can't be run: install LumenHEIF again");
+  CHECK (!t && strstr (err, "This is a HEIF photo") && strstr (err, "LumenHEIF"), "format plug-ins: can't be run: install LumenHEIF again");
   rawjob_set_switched_off_kind (kind, 1);
   CHECK (strstr (rawjob_missing_message_kind (kind), "switched off")
          && strstr (rawjob_missing_message_kind (kind), "the LumenHEIF plug-in"), "format plug-ins: switched off: says so (by its package's name)");
   rawjob_set_switched_off_kind (kind, 0);
   CHECK (strstr (rawjob_missing_message_kind (-1), "no plug-in"), "format plug-ins: a photo none claims now");
+  {
+    char avpath[1100];
+    snprintf (avpath, sizeof avpath, "%s/plain.avif", dir);
+    CHECK (!strcmp (rawjob_format_name (kind, avpath, NULL, 0), "AVIF photo")
+           && !strcmp (rawjob_format_name (kind, path, NULL, 0), "HEIF photo")
+           && strstr (rawjob_missing_message_for (kind, avpath), "This is an AVIF photo")
+           && strstr (rawjob_missing_message_for (kind, path), "This is a HEIF photo"),
+           "format plug-ins: each file named by its own format (a HEIF photo, an AVIF photo)");
+  }
   if (!helper)
     {
       printf ("test_core: no LUMENHEIF: HEIF photos not imported\n");
@@ -2568,7 +2584,7 @@ static void test_heif (void)
   {
     cat_source all = { SRC_ALL, 0, 0, "" };
     cat_item *items = NULL;
-    int n = 0, k, ready = 0, turned = 0, cam = 0, tags = -1;
+    int n = 0, k, ready = 0, turned = 0, cam = 0, tags = -1, enc = 0;
     cat_list (lib_cat (l), &all, &items, &n);
     for (k = 0; k < n; k++)
       {
@@ -2576,6 +2592,16 @@ static void test_heif (void)
         ready += items[k].thumb_state == THUMB_READY;
         if (cat_get_details (lib_cat (l), items[k].id, &d) == 0)
           {
+            {
+              cat_origin eo;
+              if (cat_origin_of (lib_cat (l), d.original, &eo) == 1)
+                {
+                  if (strstr (d.path, "plain.heic"))
+                    enc += !strcmp (eo.encoding, "HEVC, 8 bits, 4:2:0");
+                  if (strstr (d.path, "deep.avif"))
+                    enc += !strcmp (eo.encoding, "AV1, 10 bits, 4:2:0");
+                }
+            }
             if (strstr (d.path, "turned"))
               turned = d.width == 800 && d.height == 1200 && d.orientation == 1;
             if (strstr (d.path, "plain"))
@@ -2603,6 +2629,7 @@ static void test_heif (void)
     CHECK (turned, "heif: a turned photo upright in the catalogue (800 x 1200, orientation 1)");
     CHECK (cam, "heif: camera, date and size in the catalogue, from the plug-in");
     CHECK (tags > 5, "heif: the Info tab's EXIF list, where the plug-in said it is");
+    CHECK (enc == 2, "format plug-ins: each photo's encoding kept in the catalogue (HEVC 8-bit, AV1 10-bit)");
     free (items);
   }
   lib_set_previews (l, PREVIEWS_RAW);

@@ -14,15 +14,19 @@
      Package: LumenRaw            the PackMan package it came in, if any
      Description: Reads the raw files of ...
 
-   A format plug-in (Kind: format) reads photos in a format Lumen doesn't
-   know itself, and says in its Plugin file which files are its own:
+   A format plug-in (Kind: format) reads photos in formats Lumen doesn't
+   know itself, and says in its Plugin file which files are its own, a
+   Format line starting each format it reads:
 
      Kind: format
      API: 1                       the version of the format plug-in API it follows
      Format: HEIF photo           what one of its files is called, in messages
      Extensions: heic heif hif    the names it claims ("/heic" or ".heic", any case)
      Signature: 4 ftypheic        and/or the bytes at an offset it claims (\xNN for
-     Signature: 4 ftypmif1        any byte); up to PLUGIN_SIGS of them
+     Signature: 4 ftypmif1        any byte); up to PLUGIN_SIGS a format
+     Format: AVIF photo           the next format: up to PLUGIN_FORMATS
+     Extensions: avif
+     Signature: 4 ftypavif
 
    Lumen imports any file one of them claims, and runs its program for
    thumbnails and pictures as it runs LumenRaw: docs/plugin-api.md has the
@@ -38,7 +42,8 @@
 #include <stddef.h>
 
 #define PLUGINS_MAX 32
-#define PLUGIN_SIGS 16
+#define PLUGIN_SIGS 12                 /* a format */
+#define PLUGIN_FORMATS 6               /* a plug-in */
 #define PLUGIN_API 1                   /* the format plug-in API this Lumen follows */
 
 typedef struct
@@ -46,6 +51,15 @@ typedef struct
   int offset, length;
   unsigned char bytes[24];
 } plugin_sig;
+
+/* One format a format plug-in reads. */
+typedef struct
+{
+  char name[48];                       /* "HEIF photo" */
+  char extensions[160];                /* "heic heif hif", lower case */
+  int nsigs;
+  plugin_sig sigs[PLUGIN_SIGS];
+} plugin_format;
 
 typedef struct
 {
@@ -60,16 +74,15 @@ typedef struct
   int enabled;
   /* Kind: format */
   int api;                             /* 0 if it gives none */
-  char format[48];                     /* "HEIF photo" */
-  char extensions[160];                /* "heic heif hif", lower case */
-  int nsigs;
-  plugin_sig sigs[PLUGIN_SIGS];
+  int nformats;                        /* at least 1 for Kind: format */
+  plugin_format formats[PLUGIN_FORMATS];
 } plugin_info;
 
-/* 1 if the plug-in claims the file: its name's extension, or the first
-   len bytes of it (head may be NULL). */
+/* Whether the plug-in claims the file, by its name's extension or the
+   first len bytes of it (head may be NULL): 1 + the format's index, 0 if
+   not. */
 int plugins_claims (const plugin_info *p, const char *name, const unsigned char *head, size_t len);
-/* Whether it claims the name alone (for choosing which files to look at). */
+/* The same by the name alone (for choosing which files to look at). */
 int plugins_claims_name (const plugin_info *p, const char *name);
 
 /* Fills out[] from plugins_dir, at most max, sorted by name; the

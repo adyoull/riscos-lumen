@@ -53,6 +53,11 @@ unsigned rawjob_stamp_kind (int kind);
 /* What to say when a file's plug-in can't read it: not installed, or
    switched off. kind -1: no plug-in claims the file. */
 const char *rawjob_missing_message_kind (int kind);
+/* The same for a file: names the format it is in ("This is an AVIF photo..."). */
+const char *rawjob_missing_message_for (int kind, const char *path);
+/* Which of the plug-in's formats a file is in, by name ("AVIF photo"); its
+   first if the file can't be looked at. head may be NULL (read from path). */
+const char *rawjob_format_name (int kind, const char *path, const unsigned char *head, size_t len);
 void rawjob_set_switched_off_kind (int kind, int off);
 int rawjob_switched_off_kind (int kind);
 

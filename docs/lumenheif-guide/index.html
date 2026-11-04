@@ -197,11 +197,12 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>Select a HEIF photo and click the <b>Info</b> tab. The <b>Format</b> line says how Lumen read it:</p>
 <table>
 <tr><th>Format says</th><th>Meaning</th></tr>
-<tr><td>HEIF photo, read by the LumenHEIF plug-in</td><td>All's well: LumenHEIF is installed and on.</td></tr>
+<tr><td>HEIF photo (or AVIF photo), read by the LumenHEIF plug-in</td><td>All's well: LumenHEIF is installed and on.</td></tr>
 <tr><td>HEIF photo: the LumenHEIF plug-in is switched off (Plug-ins, on the icon bar menu)</td><td>LumenHEIF is installed but switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
 <tr><td>Not known: no plug-in reads it now</td><td>LumenHEIF has been removed since the photo was imported. Install it again (<a href="#ch2">Chapter 2</a>).</td></tr>
 </table>
-<figure><img src="images/info-heif.png" alt="The Info tab for a HEIF photo"><figcaption>A Samsung HEIF photo (a heic.digital sample) in the Info tab. The camera and EXIF come from LumenHEIF.</figcaption></figure>
+<figure><img src="images/info-heif.png" alt="The Info tab for a HEIF photo"><figcaption>A Samsung HEIF photo (a heic.digital sample) in the Info tab. Its encoding, camera and EXIF come from LumenHEIF.</figcaption></figure>
+<p>Under it, <b>Encoding</b> says how the photo is coded: <b>HEVC</b> for HEIF or <b>AV1</b> for AVIF, its bits a channel (8, 10 or 12), its colour subsampling (4:2:0 is usual for phones) and <b>in tiles</b> if it's stored as a grid of tiles, as iPhones do.</p>
 <p>Below that are the camera's details. LumenHEIF reads them, and tells Lumen where the photo's EXIF is in the file (phones put it in different places), so the Info tab lists it in full.</p>
 
 <!-- ======================================================================= -->
@@ -235,7 +236,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <h4>AVIF</h4>
 <p>LumenHEIF reads AVIF still photos (<code>.avif</code>), whose picture is coded with <b>AV1</b>, with 8, 10 or 12 bits a channel, as Android phones, cameras, image editors and web sites save them.</p>
-<figure><img src="images/avif.png" alt="An AVIF photo in Lumen"><figcaption>An AVIF photo in the Viewer (a sample from aviftools.net, not the author's). It has no EXIF, so the Info tab says so.</figcaption></figure>
+<figure><img src="images/avif.png" alt="An AVIF photo in Lumen"><figcaption>An AVIF photo in the Viewer (a sample from aviftools.net, not the author's). The Info tab names it an AVIF photo, encoded with AV1; it has no EXIF.</figcaption></figure>
 
 <h4>Not read by LumenHEIF 1.1</h4>
 <ul>
@@ -265,9 +266,9 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <h3 class="chapter" id="ch10"><span>10</span> Ten things for experienced users</h3>
 <ol>
 <li><b>It's a command-line program.</b> <code>LumenHEIF thumb SRC IMAGE INFO</code> writes the photo's own thumbnail (or the photo, 512 pixels at most) as a binary PPM; <code>LumenHEIF decode SRC IMAGE INFO MAXSIDE</code> decodes the photo to a PPM no bigger than MAXSIDE (0: full size). Run with no arguments, it prints its version and libheif's.</li>
-<li><b>INFO</b> is a text file of <code>key=value</code> lines: <code>width</code>, <code>height</code> (as turned), <code>orientation</code> (always 1: the picture comes upright), <code>make</code>, <code>model</code>, <code>iso</code>, <code>exposure</code>, <code>fnumber</code>, <code>focal</code>, <code>taken</code>, and <code>exif=OFFSET LENGTH</code>, where the EXIF's TIFF data is in the file; or <code>error=...</code>.</li>
+<li><b>INFO</b> is a text file of <code>key=value</code> lines: <code>width</code>, <code>height</code> (as turned), <code>orientation</code> (always 1: the picture comes upright), <code>make</code>, <code>model</code>, <code>iso</code>, <code>exposure</code>, <code>fnumber</code>, <code>focal</code>, <code>taken</code>, <code>encoding</code> (such as <code>HEVC, 8 bits, 4:2:0, in tiles</code>), and <code>exif=OFFSET LENGTH</code>, where the EXIF's TIFF data is in the file; or <code>error=...</code>.</li>
 <li><b>Files appear whole or not at all:</b> written under a temporary name and renamed when complete.</li>
-<li><b>The plug-in description</b>, <code>!Lumen.Plugins.HEIF.Plugin</code>, follows Lumen's format plug-in API 1: <code>Kind: format</code>, <code>API: 1</code>, <code>Format: HEIF or AVIF photo</code>, <code>Extensions: heic heif hif avif</code> and <code>Signature</code> lines for the HEIF and AVIF brands (<code>ftypheic</code>, <code>ftypmif1</code>, <code>ftypavif</code> and others at offset 4). The API is <code>docs/plugin-api.md</code> in Lumen's source.</li>
+<li><b>The plug-in description</b>, <code>!Lumen.Plugins.HEIF.Plugin</code>, follows Lumen's format plug-in API 1: <code>Kind: format</code>, <code>API: 1</code>, two formats, each with its own <code>Extensions</code> and <code>Signature</code> lines: <code>Format: HEIF photo</code> (<code>heic heif hif</code>; <code>ftypheic</code>, <code>ftypmif1</code> and others at offset 4) and <code>Format: AVIF photo</code> (<code>avif</code>; <code>ftypavif</code>, <code>ftypavis</code>). The API is <code>docs/plugin-api.md</code> in Lumen's source.</li>
 <li><b>Finding the EXIF:</b> LumenHEIF walks the file's top-level boxes to the <code>meta</code> box, wherever it is (iPhones put it first; Samsung phones after the picture data), finds the <code>Exif</code> item in <code>iinf</code> and its place in <code>iloc</code>.</li>
 <li><b>Colour:</b> a photo whose colour (nclx) or ICC profile says Display P3 is converted to sRGB by a 3&times;3 matrix in linear light. Other photos are taken to be sRGB.</li>
 <li><b>NEON:</b> FFmpeg's HEVC NEON code and dav1d's AV1 NEON code (motion compensation, inverse transforms, loop filters) are used when VFPSupport_Features says the processor has NEON, and switched off otherwise. <code>*Set Lumen$NEON 0</code> forces the plain code. Both give identical pictures, checked against the PC by the tests.</li>

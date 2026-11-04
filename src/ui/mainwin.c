@@ -979,19 +979,23 @@ static void info_load (int force)
         /* A format plug-in's photo: what it is and its EXIF, as the
            plug-in said (Lumen knows nothing of the format itself). */
         cat_origin o;
-        int kind = rawjob_kind_for (IMG_UNKNOWN, d.path, buf, got);
+        int kind = rawjob_kind_for (IMG_UNKNOWN, d.path, buf, got), have_o;
         const plugin_info *p = rawjob_format (kind);
+        const char *fmt = rawjob_format_name (kind, d.path, buf, got);
         char fm[200];
         if (!p)
           snprintf (fm, sizeof fm, "Not known: no plug-in reads it now");
         else if (rawjob_switched_off_kind (kind))
-          snprintf (fm, sizeof fm, "%s: the %s plug-in is switched off (Plug-ins, on the icon bar menu)", p->format, p->title);
+          snprintf (fm, sizeof fm, "%s: the %s plug-in is switched off (Plug-ins, on the icon bar menu)", fmt, p->title);
         else if (!rawjob_available_kind (kind))
-          snprintf (fm, sizeof fm, "%s: its plug-in, %s, can't be run", p->format, p->title);
+          snprintf (fm, sizeof fm, "%s: its plug-in, %s, can't be run", fmt, p->title);
         else
-          snprintf (fm, sizeof fm, "%s, read by the %s plug-in", p->format, p->title);
+          snprintf (fm, sizeof fm, "%s, read by the %s plug-in", fmt, p->title);
         info_add ("Format", fm, 0);
-        if (cat_origin_of (lib_cat (app_library ()), d.original, &o) == 1 && o.exif_length > 8
+        have_o = cat_origin_of (lib_cat (app_library ()), d.original, &o) == 1;
+        if (have_o && o.encoding[0])
+          info_add ("Encoding", o.encoding, 0);
+        if (have_o && o.exif_length > 8
             && o.exif_length < 4L * 1024 * 1024)
           {
             unsigned char *tiff = malloc ((size_t) o.exif_length);

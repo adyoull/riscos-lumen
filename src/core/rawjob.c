@@ -166,10 +166,40 @@ void rawjob_set_switched_off_kind (int kind, int off)
     switched_off[kind] = off;
 }
 
+/* The name of the format a file is in ("AVIF photo"): which of the
+   plug-in's formats claims it (the first if the file can't be looked at). */
+const char *rawjob_format_name (int kind, const char *path, const unsigned char *head, size_t len)
+{
+  const plugin_info *p = rawjob_format (kind);
+  unsigned char buf[4200];
+  int f;
+  if (!p)
+    return "";
+  if (!head && path)
+    {
+      FILE *fp = fopen (path, "rb");
+      if (fp)
+        {
+          len = fread (buf, 1, sizeof buf, fp);
+          fclose (fp);
+          head = buf;
+        }
+    }
+  f = plugins_claims (p, path, head, head ? len : 0);
+  return p->formats[f > 0 ? f - 1 : 0].name;
+}
+
 const char *rawjob_missing_message_kind (int kind)
+{
+  return rawjob_missing_message_for (kind, NULL);
+}
+
+const char *rawjob_missing_message_for (int kind, const char *path)
 {
   static char m[400];
   const plugin_info *p = rawjob_format (kind);
+  const char *fmt = p ? rawjob_format_name (kind, path, NULL, 0) : "";
+  const char *an = strchr ("AEIOUaeiou", fmt[0]) && fmt[0] ? "an" : "a";
   if (kind == RAWJOB_RAW)
     {
       if (switched_off[kind])
@@ -182,13 +212,13 @@ const char *rawjob_missing_message_kind (int kind)
     return "Lumen has no plug-in for this photo's format now (was it removed?). "
            "Install it again, then open Lumen again.";
   if (switched_off[kind])
-    snprintf (m, sizeof m, "This is a %s, and the %s plug-in that reads them is switched off. "
-              "Tick it in Plug-ins on Lumen's icon bar menu.", p->format, p->title);
+    snprintf (m, sizeof m, "This is %s %s, and the %s plug-in that reads them is switched off. "
+              "Tick it in Plug-ins on Lumen's icon bar menu.", an, fmt, p->title);
   else if (p->api > PLUGIN_API)
-    snprintf (m, sizeof m, "This is a %s. The %s plug-in that reads them needs a newer Lumen.", p->format, p->title);
+    snprintf (m, sizeof m, "This is %s %s. The %s plug-in that reads them needs a newer Lumen.", an, fmt, p->title);
   else
-    snprintf (m, sizeof m, "This is a %s. The %s plug-in that reads them is missing its program: "
-              "install %s again.", p->format, p->title, p->package[0] ? p->package : p->name);
+    snprintf (m, sizeof m, "This is %s %s. The %s plug-in that reads them is missing its program: "
+              "install %s again.", an, fmt, p->title, p->package[0] ? p->package : p->name);
   return m;
 }
 
@@ -257,7 +287,7 @@ rawjob *rawjob_start_kind (int kind, const char *src, int develop, int max_side,
   rawjob *j, **p;
   if (!rawjob_available_kind (kind))
     {
-      snprintf (err, n, "%s", rawjob_missing_message_kind (kind));
+      snprintf (err, n, "%s", rawjob_missing_message_for (kind, src));
       return NULL;
     }
   j = calloc (1, sizeof *j);
@@ -326,6 +356,7 @@ static int read_details (rawjob *j)
       else if (!strcmp (line, "fnumber")) in->fnumber = atof (v);
       else if (!strcmp (line, "focal")) in->focal = atof (v);
       else if (!strcmp (line, "taken")) snprintf (in->taken, sizeof in->taken, "%s", v);
+      else if (!strcmp (line, "encoding")) snprintf (in->encoding, sizeof in->encoding, "%s", v);
       else if (!strcmp (line, "exif"))
         {
           long a = 0, b = 0;

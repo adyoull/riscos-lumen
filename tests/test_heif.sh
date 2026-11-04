@@ -42,6 +42,12 @@ for n in plain late; do
   check "[ -n \"$e\" ] && tiff_at \"$here/heif/$n.heic\" ${e%% *}" "$n: exif= says where its EXIF (a TIFF header) is ($e)"
 done
 check "cmp -s $work/late.ppm $work/plain.ppm" "late: meta after the picture data (as phones write it): the same picture"
+# encoding= says how each is coded
+check "grep -qx 'encoding=HEVC, 8 bits, 4:2:0' $work/plain.info" "plain: encoding HEVC, 8 bits, 4:2:0"
+check "grep -qx 'encoding=HEVC, 8 bits, 4:2:0, in tiles' $work/thumb.info" "thumb: encoding HEVC, in tiles"
+check "grep -qx 'encoding=HEVC, 10 bits, 4:2:0' $work/deep.info" "deep: encoding HEVC, 10 bits"
+check "grep -qx 'encoding=AV1, 8 bits, 4:2:0' $work/avif-plain.info" "avif plain: encoding AV1, 8 bits"
+check "grep -qx 'encoding=AV1, 10 bits, 4:2:0' $work/avif-deep.info" "avif deep: encoding AV1, 10 bits"
 # AVIF (AV1 inside, dav1d)
 check "[ \$(dims $work/avif-plain.ppm) = 1200x800 ] && grep -q '^make=TestCam' $work/avif-plain.info && grep -q '^taken=2026:11:04 12:34:56' $work/avif-plain.info" "avif plain: 1200 x 800, its EXIF"
 e=$(sed -n 's/^exif=//p' "$work/avif-plain.info")
