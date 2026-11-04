@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* autoadj.c: see autoadj.h. The picture is sampled on a grid (about
    60,000 pixels), so it takes the same time for any size. */
 #include <math.h>

@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* menus.c: Lumen's menus, built in code (Wimp_CreateMenu block: a 28-byte
    header, then 24-byte items: menu flags, submenu, icon flags, icon data).
    Every menu is rebuilt into the same static pool each time it opens, so

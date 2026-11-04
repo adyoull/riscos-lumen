@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* LumenRaw: Lumen's raw plug-in. A small program built on LibRaw that
    Lumen runs in the background (in a task window) for each raw file job:
 

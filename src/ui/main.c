@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* Lumen's poll loop. Null events are asked for only while there is
    background work, so an idle Lumen costs the desktop nothing. */
 #include <stdio.h>

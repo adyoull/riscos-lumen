@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* develop.c: see develop.h. Float maths only when building tables;
    the per-pixel work is integer. */
 #include <math.h>

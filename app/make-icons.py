@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 """Draws Lumen's icons: a lens with a six-blade iris, the blades twisted
    like a real aperture round a hexagonal opening, in the RISC OS desktop's
    own colours: the Wimp's dark blue (colour 8, #004499) and light blue

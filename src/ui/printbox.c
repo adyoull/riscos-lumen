@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* printbox.c: printing photos through the RISC OS printer drivers.
 
    The Print box (a transient dialogue, as the Export box) shows the

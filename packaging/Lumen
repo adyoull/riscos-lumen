@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Spec for tools/riscpkg.py: Lumen, from its release zip Lumen.zip.
 Package: Lumen
 Section: Graphics

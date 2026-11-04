@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* autoadj: automatic adjustments worked out from the picture itself.
 
    White balance uses the same model as develop.c (temperature moves red

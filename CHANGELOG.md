@@ -376,3 +376,5 @@ Fixes from a review of 0.0.23:
   undefined instruction), so raw files are timed by Lumen itself. The
   help no longer says to drag the photo into the task window (that types
   its contents): Shift-drag, or type the pathname.
+
+Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see the LICENSE file.

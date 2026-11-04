@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Part 3: adjustments, adjusted, panel-top/bottom, before, loupe, crop, photo menu, presets (on Gallop, after new2.sh).
 cd $HOME/rol
 C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K=$HOME/guide/crop.py; SH="timeout 20 $HOME/guide/shot.sh"

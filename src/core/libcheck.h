@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* libcheck: checking a library and putting right what is wrong.
 
    The check reads; nothing is changed:

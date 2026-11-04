@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* resample: photo-quality scaling of 32bpp pixels (&00BBGGRR or any
    order: the three low bytes are treated alike).
 

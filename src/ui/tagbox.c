@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* tagbox.c: the Caption and keywords window.
 
    For one photo it shows its caption and keywords to change; for several

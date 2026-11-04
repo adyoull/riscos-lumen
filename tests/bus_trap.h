@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* bus_trap.h: on ARM Linux (the QEMU alignment-trap tests), a SIGBUS
    handler that says where the misaligned access was before stopping, since
    there's no debugger in the container. Look the address up with

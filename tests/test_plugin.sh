@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # The LumenRaw helper on real raw files: tests/test_plugin.sh HELPER WRAPPER WORKDIR
 # (WRAPPER: how to run it, e.g. under QEMU with the alignment trap; "" for
 # none). The raw files come from $RAW_SAMPLES (not kept in the repository:

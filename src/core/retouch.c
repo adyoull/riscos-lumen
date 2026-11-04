@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* retouch.c: see retouch.h. */
 #include <math.h>
 #include <stdlib.h>

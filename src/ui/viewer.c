@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* viewer.c: one photo, large, with the adjustments panel beside it.
 
    Opening a photo shows its thumbnail at once (enlarged), decodes a proxy

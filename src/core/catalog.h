@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* catalog: the library's SQLite catalogue. Originals are files on disc,
    never written; a version is one recipe applied to an original (milestone
    0 makes one version per original and leaves the recipe empty). Every

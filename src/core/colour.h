@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* colour: photos in other colour spaces, shown and exported as sRGB.
 
    Lumen works in sRGB. A JPEG or PNG that says it is Adobe RGB (1998) or

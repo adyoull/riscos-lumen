@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* Lumen's portable core on Linux: x86-64 for speed, and ARM under
    qemu-arm-aligntrap with RISC OS's alignment rules. Makes its own
    fixtures (JPEGs with EXIF, PNGs, a non-image, an application directory),

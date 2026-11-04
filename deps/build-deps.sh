@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Builds libjpeg-turbo and libpng statically for three targets:
 #   riscos   - arm-riscos-gnueabihf (the app)
 #   host     - x86-64 Linux (fast unit tests)

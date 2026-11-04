@@ -1,5 +1,7 @@
 Lumen 0.0.36 (04 Nov 2026)
 ==========================
+Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
+!Lumen.Licences.Lumen.
 
 A photo library and non-destructive editor for RISC OS 5.
 Lumen has importing, browsing, rating, flagging and albums;

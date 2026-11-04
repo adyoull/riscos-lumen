@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 ps -eo pid,args | grep '[r]ol-run\|[r]ol-kvm' | awk '{print $1}' | xargs -r kill 2>/dev/null; sleep 3
 cd $HOME/rol
 export ROL_HARDDISC=$HOME/rol/hd-print/HardDisc4

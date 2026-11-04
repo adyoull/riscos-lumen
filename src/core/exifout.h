@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* exifout: the EXIF block written into an exported picture.
 
    From the original's own EXIF (a JPEG's APP1 block, or a TIFF-based raw

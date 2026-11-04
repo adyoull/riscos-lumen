@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* retouch: the recipe's spots (recipe.h) painted out of a picture, before
    geometry, on the photo as it is turned upright.
 

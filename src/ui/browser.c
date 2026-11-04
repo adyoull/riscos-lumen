@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* browser.c: the library window. A grid of thumbnails with names, star
    ratings and flags, scrolling vertically; the number of columns follows
    the window's width. The window is built in code (Wimp_CreateWindow block,

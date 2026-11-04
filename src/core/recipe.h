@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* recipe: a version's adjustments. Originals are never changed; a version
    is an original plus a recipe, stored in the catalogue as text, one line
    per adjustment, only the ones that differ from their defaults:

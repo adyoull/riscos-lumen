@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* libxfer.c: see libxfer.h. The other library's catalogue is ATTACHed to
    this one's connection as "x" while its rows are read or written. */
 #include <stdio.h>

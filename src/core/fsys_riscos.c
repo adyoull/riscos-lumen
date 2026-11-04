@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* fsys on RISC OS: OS_GBPB 10 to read directories, OS_File 17/8 for
    single objects, OS_FSControl 37 to canonicalise. Block layouts from the
    PRMs (OS_GBPB 10 Buffer, OS_File 23 and 17, OS_File 8). */

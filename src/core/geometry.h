@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* geometry: rotation by quarter turns, straightening, perspective
    (keystone) correction and cropping, applied to a 16-bit linear image.
 

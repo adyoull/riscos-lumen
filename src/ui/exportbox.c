@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* exportbox.c: the Export dialogue, a standard RISC OS save box, and the
    queue of exports it starts.
 

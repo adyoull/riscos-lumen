@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* thumbgen.c: see thumbgen.h. libjpeg and libpng report errors by
    longjmp; each call into them sits under a setjmp in the same function. */
 #include <setjmp.h>

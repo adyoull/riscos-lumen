@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* draw.c: plotting helpers for the redraw loop.
    ColourTrans_SetGCOL (PRM p78): R0 &BBGGRR00, R3 flags (0: foreground),
    R4 GCOL action (0: set). OS_Plot (p442): 4 move, 85 triangle fill,

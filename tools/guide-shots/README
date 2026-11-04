@@ -19,3 +19,5 @@ NEFs). They are not kept in the repository.
 
 The styles sheet is made on the host: render.c and sheet.py in
 ~/styles (Lumen's develop on a small copy of Upright).
+
+Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see the LICENSE file.

@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* denoise.c: see denoise.h. */
 #include <stdlib.h>
 #include <string.h>

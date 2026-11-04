@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* colour.c: see colour.h. ICC layout from ICC.1:2010 (header 128 bytes,
    then the tag table: count, then signature/offset/size for each; 'desc'
    is a textDescriptionType in v2 profiles, multiLocalizedUnicodeType 'mluc'

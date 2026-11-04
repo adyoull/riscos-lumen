@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* looks.c: a look is the tone and colour part of a recipe (no geometry),
    as text. Copy and Paste carry one between photos; a preset is a named
    one kept in the catalogue. */

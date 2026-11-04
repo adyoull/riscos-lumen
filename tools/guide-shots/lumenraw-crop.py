@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # crop.py SHOT NAME x0 y0 x1 y1 [WIDTH] -> /build/lumen/docs/lumenraw-guide/images/NAME.png
 import sys
 from PIL import Image

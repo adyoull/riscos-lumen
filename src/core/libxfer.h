@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* libxfer: moving photos between libraries.
 
    Export writes some or all of a library's photos to a new library (a

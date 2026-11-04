@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* thumbcache.c: thumbnails as 32bpp sprites, each in its own little sprite
    area (Format Of Sprite Area, PRM p1178; Format Of Sprite, p1177): a
    16-byte area header, a 44-byte sprite header, then rows of

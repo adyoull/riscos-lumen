@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* styles.c: Lumen's built-in looks (see styles.h).
 
    Each is a recipe's look lines, as a preset stores them: generic darkroom

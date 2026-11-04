@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* choicewin.c: the Choices window (icon bar menu > Choices...). What it
    sets is kept by app.c in <Choices$Write>.Lumen.Choices (prefs.h):
    where the library is (from the next start), the Export box's starting

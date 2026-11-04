@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* fsys: the little Lumen needs from a filing system, the same on RISC OS
    (fsys_riscos.c: OS_GBPB 10, OS_File) and Linux (fsys_posix.c, for tests).
 

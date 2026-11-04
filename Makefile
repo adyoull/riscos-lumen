@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Lumen: a photo library and non-destructive editor for RISC OS 5.
 #
 #   make            out/Lumen.zip (the !Lumen application, checked)

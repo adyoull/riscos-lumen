@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* xmp: a photo's caption and keywords as an XMP packet, the form photo
    programs read and write them in (Lightroom, digiKam, darktable, Photos):
    dc:description for the caption, dc:subject for the keywords.

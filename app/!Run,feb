@@ -1,3 +1,6 @@
+| Copyright (c) 2026 Andrew Youll
+| Released under the MIT licence: see !Lumen.Licences.Lumen.
+| SPDX-License-Identifier: MIT
 | !Run for !Lumen, a photo library and editor
 | !RunImage is a UnixLib program converted to Absolute (AIF), so it needs
 | SharedUnixLibrary and ARMEABISupport (both from PackMan).

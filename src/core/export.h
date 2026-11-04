@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* export: writes a version (an original through its recipe) as a new
    JPEG or PNG, at full size or smaller, a few rows at a time so the
    desktop stays usable.

@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* exif.c: see exif.h. TIFF/EXIF layout from the EXIF 2.32 specification:
    a TIFF header ("II" or "MM", 42, offset of IFD0), IFDs of 12-byte
    entries (tag, type, count, value or offset), IFD0 linking to the EXIF

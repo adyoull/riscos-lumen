@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* Lumen's desktop front end: the declarations its parts share.
    Block layouts are from the PRMs (2026 Reader Edition); page numbers are
    given where a layout is used. */

@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* Screenshot harness: runs Lumen's desktop front end against the Fake
    RISC OS, as test_ui does, and records what it draws (rectangles,
    triangles, text, sprites, menus, its window's state) to OUT/ops.txt at

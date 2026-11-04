@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* help.c: interactive help. !Help (or any help program) sends
    Message_HelpRequest (&502, PRM p1016) for whatever is under the
    pointer: +20 the pointer's x, y, +28 buttons, +32 window, +36 icon.

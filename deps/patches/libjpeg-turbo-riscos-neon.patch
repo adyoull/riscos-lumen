@@ -1,3 +1,8 @@
+Lumen's patch to libjpeg-turbo (RISC OS NEON detection; byte stores in the
+NEON Huffman encoder). The patch itself: Copyright (c) 2026 Andrew Youll
+Released under the MIT licence: see the LICENSE file.
+SPDX-License-Identifier: MIT
+
 diff --git a/simd/arm/aarch32/jsimd.c b/simd/arm/aarch32/jsimd.c
 index 04d6452..2569f74 100644
 --- a/simd/arm/aarch32/jsimd.c

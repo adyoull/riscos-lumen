@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* The develop pipeline and recipes on Linux (x86-64, and ARM under
    qemu-arm-aligntrap). Usage: test_develop WORKDIR */
 #include <math.h>

@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* prefs: Lumen's Choices, a small text file of "key value" lines in
    <Choices$Write>.Lumen.Choices. Unknown keys are ignored and missing ones
    keep their defaults, so older and newer Lumens can share the file. */

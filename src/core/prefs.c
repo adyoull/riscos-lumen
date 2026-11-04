@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* prefs.c: see prefs.h. */
 #include <ctype.h>
 #include <stdio.h>

@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # LumenRaw guide pictures (after guide/start.sh): Andrew's D700 NEFs.
 cd $HOME/rol
 C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K="python3 $HOME/lrguide/crop.py"; SH="timeout 20 $HOME/guide/shot.sh"

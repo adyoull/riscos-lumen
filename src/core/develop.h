@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* develop: applies a recipe to pixels.
 
    The working image is 16-bit linear RGB (0-65535 = 0.0-1.0 linear light,

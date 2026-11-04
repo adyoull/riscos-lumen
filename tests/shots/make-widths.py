@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 """Writes widths.h: the advance of each Latin-1 character in OS units, for
    the font render.py draws text with (standing in for the desktop font),
    so Lumen's text measuring in the harness matches the picture."""

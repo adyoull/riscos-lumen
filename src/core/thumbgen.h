@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* thumbgen: makes a thumbnail (a small JPEG) from a JPEG or PNG, a few
    rows at a time, so the desktop stays responsive while it works.
 

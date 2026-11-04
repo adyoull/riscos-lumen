@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* plugwin.c: the Add plug-in window (Plug-ins > Add plug-in... on Lumen's
    menus). It is somewhere to drop a plug-in's directory (app.c's
    data_load does the adding), says where plug-ins come from, and has a

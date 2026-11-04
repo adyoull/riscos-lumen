@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* LumenBench: times the editing pipeline on the machine it runs on, for
    milestone 1's gate (a slider's redraw within 50 ms).
 

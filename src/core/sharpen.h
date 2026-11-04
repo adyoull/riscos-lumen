@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* sharpen: unsharp masking on luminance, the last step after develop.
 
    Each pixel's red, green and blue move by the same amount: the

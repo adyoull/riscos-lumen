@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Builds the LumenRaw guide: CSS (Lumen guide family, amber cover) + body + camera appendix from LibRaw's list.
 import html, re, collections, os
 HERE = os.path.dirname(os.path.abspath(__file__))

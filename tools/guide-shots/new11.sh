@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Import library and Check library (after start-lib.sh and new10.sh's DogsLib): import Eventing, drop
 # DogsLib on Lumen (library-import), Import; a thumbnail deleted and a stray one added on the host,
 # Check library... (library-check), Repair (library-repaired).

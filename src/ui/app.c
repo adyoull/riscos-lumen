@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* app.c: the Wimp task. Starts up, puts an icon on the icon bar, opens the
    library, and dispatches Wimp_Poll events. Background work (imports,
    thumbnails, loading thumbnails for display) runs on null events in

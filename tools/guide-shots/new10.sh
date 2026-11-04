@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Export as library (after start-lib.sh): import Dogs_and_garden, rate Labradors 4, the project's
 # menu > Export as library... (library-export), named DogsLib and dragged to IXFS:$.RISCOS; the
 # icon bar menu's Open library submenu (library-menu).

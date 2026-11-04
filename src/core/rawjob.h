@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* rawjob: camera raw files, through the LibRaw plug-in.
 
    The plug-in is a separate program (LumenRaw, in its own PackMan

@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* smartbox.c: the Smart album window, to make a smart album or change one.
 
    A smart album holds the photos that match its rule now (catalog.h):

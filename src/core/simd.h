@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* simd: whether Lumen's NEON routines are used.
 
    Lumen is built for ARMv7 with VFPv3, so it runs on every ARMv7

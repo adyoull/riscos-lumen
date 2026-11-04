@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* libcheck.c: see libcheck.h. */
 #include <stdio.h>
 #include <stdlib.h>

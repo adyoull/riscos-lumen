@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Printing (after start-print.sh): import Dogs_and_garden and Eventing, tick Colour in !Printers' Configure,
 # then print all nine 4 to a page with names (print-box, print-pages) and as many 9 x 6 cm as fit (print-cut).
 # The Print box opens at the bottom right here. Pages go to /RISCOS/lumen.ps and are rendered with gs.

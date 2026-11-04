@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* denoise: noise reduction, after develop and before sharpening.
 
    Colour noise (blotches of colour in dark, high-ISO areas) is taken out

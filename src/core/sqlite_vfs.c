@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* A small SQLite VFS on POSIX calls (UnixLib on RISC OS, glibc in tests).
    SQLite is built with SQLITE_OS_OTHER=1, so this is its only VFS.
 

@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 # Builds LibRaw (0.22.3, /build/src/LibRaw) as a static library for the
 # LumenRaw plug-in, for three targets:
 #   riscos   - arm-riscos-gnueabihf (the plug-in)

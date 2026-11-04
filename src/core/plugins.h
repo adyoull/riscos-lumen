@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* plugins: what is in Lumen's Plugins directory, and which are switched on.
 
    Each plug-in is a directory in !Lumen.Plugins (PackMan puts them

@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* naming: export file names from a pattern, for exports of several photos.
 
    A pattern is text with tokens in curly brackets:

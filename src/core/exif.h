@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* exif: reads what the library shows from the start of a JPEG or PNG file:
    pixel size, and for JPEG the EXIF orientation, capture time, camera and
    exposure. Byte-at-a-time reads only (no unaligned access), bounds checked

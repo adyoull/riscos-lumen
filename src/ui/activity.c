@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* activity.c: what Lumen is doing, and what it has done.
 
    The status area in the main window's bottom bar shows the most

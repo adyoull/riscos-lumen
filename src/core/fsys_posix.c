@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* fsys on Linux, for the tests. Filetypes come from a ",xxx" suffix
    (riscos-crossdev's convention for typed files) or a known extension. */
 #include <dirent.h>

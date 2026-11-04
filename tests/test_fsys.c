@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* fsys_riscos.c against the Fake RISC OS: OS_GBPB 10 records (word
    aligned, read over several calls), filetypes and dates from load and
    exec addresses, directories, OS_File 8 to create a path. */

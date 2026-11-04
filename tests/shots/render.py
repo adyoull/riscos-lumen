@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
 """Turns shot's record (ops.txt) into PNG screenshots.
 
    Everything inside Lumen's window and menus is drawn from what Lumen

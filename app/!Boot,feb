@@ -1,3 +1,6 @@
+| Copyright (c) 2026 Andrew Youll
+| Released under the MIT licence: see !Lumen.Licences.Lumen.
+| SPDX-License-Identifier: MIT
 | !Boot for !Lumen: the Filer runs this when it first sees the application
 If "<Lumen$Dir>"="" Then Set Lumen$Dir <Obey$Dir>
 IconSprites <Obey$Dir>.!Sprites

@@ -1,3 +1,6 @@
+/* Copyright (c) 2026 Andrew Youll
+   Released under the MIT licence: see the LICENSE file.
+   SPDX-License-Identifier: MIT */
 /* exifout.c: see exifout.h. TIFF and EXIF layout from the EXIF 2.32
    specification (as in exif.c). Every value is read a byte at a time in
    the original's byte order and written little-endian. */
