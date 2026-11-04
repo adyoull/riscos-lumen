@@ -1,4 +1,4 @@
-Lumen 0.0.31 (03 Nov 2026) - test build
+Lumen 0.0.32 (04 Nov 2026) - test build
 =====================================
 
 A photo library and non-destructive editor for RISC OS 5.
@@ -403,6 +403,11 @@ its sharpening use it too; without NEON the plain code gives exactly the
 same pictures. Bench says which is in use and times both. To compare:
 *Set JSIMD_FORCENONE 1 (JPEGs) and *Set Lumen$NEON 0 (Lumen's own) before
 running Bench or Lumen use the plain code; *Unset them to put NEON back.
+
+*Set Lumen$JPEGEighths 1 lets Lumen decode JPEGs at any eighth of their
+size (3/8 for a 6000-pixel photo shown at 1600) rather than only a half,
+a quarter or an eighth. That is fewer pixels, but the NEON code covers
+only the halvings, so Bench times both: use it if it's quicker for you.
 
 The Viewer: a change shows the new picture over the old one (it is made
 at the size shown before it is drawn, so nothing flickers). For a camera

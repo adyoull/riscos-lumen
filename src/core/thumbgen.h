@@ -5,8 +5,9 @@
      while ((r = thumbgen_step (t, 16)) == 0) ... return to the Wimp ...
      thumbgen_free (t);
 
-   JPEGs are decoded with libjpeg's DCT scaling (1/2, 1/4, 1/8) as close to
-   the thumbnail size as it allows, then box-filtered down; PNGs are read
+   JPEGs are decoded with libjpeg's DCT scaling (1/2, 1/4, 1/8; or any
+   eighth, see thumbgen_eighths) as close to the thumbnail size as it
+   allows, then box-filtered down; PNGs are read
    row by row and box-filtered. The EXIF orientation is applied at the end.
    Photos in Adobe RGB or Display P3 are converted to sRGB (colour.h). */
 #ifndef LUMEN_THUMBGEN_H
@@ -40,6 +41,16 @@ int thumbgen_raw_developed (const thumbgen *t);
 void thumbgen_size (const thumbgen *t, int *w, int *h);
 void thumbgen_free (thumbgen *t);
 int thumbgen_progress (const thumbgen *t);   /* 0-100 */
+
+/* Decoding JPEGs at any eighth of their size (3/8 for a 6000-pixel photo
+   shown at 1600) rather than only 1/2, 1/4 and 1/8: fewer pixels, but
+   libjpeg-turbo has NEON code only for the halvings. Off unless
+   Lumen$JPEGEighths (LUMEN_JPEG_EIGHTHS) is 1; 0/1 sets it, -1 goes back
+   to the variable. */
+void thumbgen_eighths (int on);
+int thumbgen_eighths_on (void);
+/* The scale m (decoding at m/8) for a JPEG whose longer side is longer. */
+int thumbgen_jpeg_eighths (int longer, int max_side);
 
 typedef struct rgb_image rgb_image;
 /* Once finished: hands over the image (free img->rgb). 0 on success. */

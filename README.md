@@ -302,6 +302,26 @@ Fixes from a review of 0.0.23:
   1.3-1.8x faster shrinking and up to 1.5x enlarging there (QEMU only:
   LumenBench on the Pi gives the real figures).
 
+## 0.0.32
+
+- Opening a JPEG is quicker. Pi 4 LumenBench (0.0.31) put opening a
+  6000 x 4000 JPEG at 1600 at 710 ms. Most of it was thumbgen's box filter
+  doing a 64-bit division for every pixel (a library call on ARM): it now
+  works out each source column's target column once. Same pixels (a test
+  compares it with the filter worked out directly). Under QEMU: 1850 ms to
+  750 ms. Thumbnails on import go through the same code.
+- JPEGs are read through a 64 KB stdio buffer (libjpeg asks for 4 KB at a
+  time).
+- Decoding at any eighth: libjpeg-turbo can scale by 1/8 to 8/8, not only
+  1/2, 1/4, 1/8; at 3/8 a 6000-pixel photo is decoded at 2250 rather than
+  3000 for the 1600 proxy (44% fewer pixels; QEMU 750 to 440 ms). Its NEON
+  inverse DCT covers only the halvings, so it is off until measured on
+  the Pi: `*Set Lumen$JPEGEighths 1` (`LUMEN_JPEG_EIGHTHS=1`) turns it on.
+- LumenBench splits opening into reading the file (4 KB and 64 KB at a
+  time), libjpeg-turbo's decoding alone (1/2 and 3/8) and the rest, and
+  times opening at 3/8. Its gate now counts a whole frame while dragging
+  (develop + enlarge + 5 ms plot); it used to leave out the enlarge.
+
 ## Layout
 
 ```

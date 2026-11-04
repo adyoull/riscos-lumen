@@ -2091,6 +2091,102 @@ static void test_libxfer_more (void)
   lib_close (a);
 }
 
+/* thumbgen: the box filter (now with its columns worked out once) gives
+   exactly what the per-pixel division gave, and decoding at any eighth. */
+static int open_at (const char *path, int max_side, rgb_image *img)
+{
+  char err[200];
+  thumbgen *t = thumbgen_start (path, NULL, max_side, 1, err, sizeof err);
+  int r;
+  if (!t)
+    return -1;
+  while ((r = thumbgen_step (t, 37)) == 0)
+    ;
+  r = r < 0 || thumbgen_take (t, img) ? -1 : 0;
+  thumbgen_free (t);
+  return r;
+}
+
+static void test_jpeg_scaling (void)
+{
+  char path[1024], err[200];
+  rgb_image src, full, small, e8;
+  int x, y, k, same = 1, close = 1;
+  p (path, "scale.jpg");
+  src.w = 640; src.h = 427;
+  src.rgb = malloc ((size_t) src.w * src.h * 3);
+  for (y = 0; y < src.h; y++)
+    for (x = 0; x < src.w; x++)
+      {
+        unsigned char *q = src.rgb + ((size_t) y * src.w + x) * 3;
+        q[0] = (unsigned char) (x * 255 / src.w);
+        q[1] = (unsigned char) (y * 255 / src.h);
+        q[2] = (unsigned char) (((x / 7) ^ (y / 5)) * 9);
+      }
+  CHECK (img_save_jpeg (&src, path, 92, err, sizeof err) == 0, "scaling: test JPEG written");
+  free (src.rgb);
+
+  /* The scale chosen: halvings only unless eighths are allowed. */
+  thumbgen_eighths (0);
+  CHECK (thumbgen_jpeg_eighths (6000, 1600) == 4, "scaling: 6000 at 1600 decodes at 1/2");
+  CHECK (thumbgen_jpeg_eighths (6000, 256) == 1, "scaling: 6000 at 256 decodes at 1/8");
+  CHECK (thumbgen_jpeg_eighths (6000, 1 << 30) == 8, "scaling: full size at 8/8");
+  CHECK (thumbgen_jpeg_eighths (4000, 1100) == 4, "scaling: 4000 at 1100 decodes at 1/2");
+  thumbgen_eighths (1);
+  CHECK (thumbgen_jpeg_eighths (6000, 1600) == 3, "scaling: eighths: 6000 at 1600 decodes at 3/8");
+  CHECK (thumbgen_jpeg_eighths (6000, 2251) == 4, "scaling: eighths: just over 3/8 takes 4/8");
+  CHECK (thumbgen_jpeg_eighths (4000, 1100) == 3, "scaling: eighths: 4000 at 1100 decodes at 3/8");
+  CHECK (thumbgen_jpeg_eighths (6000, 4600) == 7, "scaling: eighths: 7/8");
+  thumbgen_eighths (0);
+
+  /* At 400 the JPEG is decoded whole (640 is the first halving >= 400),
+     then box-filtered: the result must match the filter worked out here. */
+  CHECK (open_at (path, 1 << 30, &full) == 0 && full.w == 640, "scaling: decoded whole");
+  CHECK (open_at (path, 400, &small) == 0 && small.w == 400 && small.h == 267, "scaling: 400 wide");
+  if (full.rgb && small.rgb && small.w == 400)
+    {
+      unsigned *sum = calloc ((size_t) small.w * small.h * 3, sizeof *sum), *cnt = calloc ((size_t) small.w * small.h, sizeof *cnt);
+      for (y = 0; y < full.h; y++)
+        for (x = 0; x < full.w; x++)
+          {
+            int ty = (int) ((long long) y * small.h / full.h), tx = (int) ((long long) x * small.w / full.w);
+            for (k = 0; k < 3; k++)
+              sum[((size_t) ty * small.w + tx) * 3 + k] += full.rgb[((size_t) y * full.w + x) * 3 + k];
+            cnt[(size_t) ty * small.w + tx]++;
+          }
+      for (k = 0; k < small.w * small.h * 3; k++)
+        {
+          unsigned c = cnt[k / 3] ? cnt[k / 3] : 1;
+          if (small.rgb[k] != (unsigned char) ((sum[k] + c / 2) / c))
+            same = 0;
+        }
+      free (sum);
+      free (cnt);
+    }
+  CHECK (same, "scaling: the box filter gives exactly the reference pixels");
+
+  /* At 240 with eighths: decoded at 3/8 (240 x 161), no box filter needed;
+     the halvings decode at 1/2 (320) and filter down. Close, not equal. */
+  thumbgen_eighths (1);
+  CHECK (open_at (path, 240, &e8) == 0 && e8.w == 240 && e8.h == 161, "scaling: eighths: 240 wide");
+  thumbgen_eighths (0);
+  free (small.rgb);
+  small.rgb = NULL;
+  CHECK (open_at (path, 240, &small) == 0 && small.w == 240 && small.h == 161, "scaling: halvings: 240 wide");
+  if (e8.rgb && small.rgb && e8.w == small.w && e8.h == small.h)
+    {
+      long long diff = 0;
+      for (k = 0; k < small.w * small.h * 3; k++)
+        diff += abs (e8.rgb[k] - small.rgb[k]);
+      close = diff / (small.w * small.h * 3) <= 6;
+    }
+  CHECK (close, "scaling: 3/8 decode looks like the 1/2 decode filtered down");
+  thumbgen_eighths (-1);
+  free (full.rgb);
+  free (small.rgb);
+  free (e8.rgb);
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -2103,6 +2199,7 @@ int main (int argc, char **argv)
   fsys_mkdirs (work);
   test_exif ();
   test_colour ();
+  test_jpeg_scaling ();
   test_raw ();
   test_plugins ();
   test_raw_names ();

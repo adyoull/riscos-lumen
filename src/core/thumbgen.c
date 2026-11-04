@@ -17,6 +17,7 @@ typedef struct
   int sw, sh, tw, th;
   unsigned *sum;               /* tw * 3 sums for the target row being built */
   unsigned *cnt;               /* tw pixel counts */
+  int *col;                    /* sw: the target column of each source column */
   int cur;                     /* target row being built */
   unsigned char *out;          /* tw * th * 3 */
 } scaler;
@@ -41,7 +42,18 @@ static int scaler_init (scaler *s, int sw, int sh, int max_side)
   s->sum = calloc ((size_t) s->tw * 3, sizeof *s->sum);
   s->cnt = calloc ((size_t) s->tw, sizeof *s->cnt);
   s->out = malloc ((size_t) s->tw * s->th * 3);
-  return (s->sum && s->cnt && s->out) ? 0 : -1;
+  /* Which target column each source column goes into, worked out once: a
+     64-bit division for every pixel is a library call on ARM, and was most
+     of the time taken. */
+  s->col = malloc ((size_t) sw * sizeof *s->col);
+  if (!s->sum || !s->cnt || !s->out || !s->col)
+    return -1;
+  {
+    int x;
+    for (x = 0; x < sw; x++)
+      s->col[x] = (int) ((long long) x * s->tw / s->sw);
+  }
+  return 0;
 }
 
 static void scaler_flush (scaler *s)
@@ -67,15 +79,17 @@ static void scaler_flush (scaler *s)
 static void scaler_row (scaler *s, int y, const unsigned char *row)
 {
   int ty = (int) ((long long) y * s->th / s->sh), x;
+  const int *col = s->col;
+  unsigned *sum = s->sum, *cnt = s->cnt;
   while (s->cur < ty)
     scaler_flush (s);
-  for (x = 0; x < s->sw; x++)
+  for (x = 0; x < s->sw; x++, row += 3)
     {
-      int tx = (int) ((long long) x * s->tw / s->sw);
-      s->sum[3 * tx] += row[3 * x];
-      s->sum[3 * tx + 1] += row[3 * x + 1];
-      s->sum[3 * tx + 2] += row[3 * x + 2];
-      s->cnt[tx]++;
+      unsigned *p = sum + 3 * col[x];
+      p[0] += row[0];
+      p[1] += row[1];
+      p[2] += row[2];
+      cnt[col[x]]++;
     }
 }
 
@@ -90,7 +104,8 @@ static void scaler_free (scaler *s)
   free (s->sum);
   free (s->cnt);
   free (s->out);
-  s->sum = NULL; s->cnt = NULL; s->out = NULL;
+  free (s->col);
+  s->sum = NULL; s->cnt = NULL; s->out = NULL; s->col = NULL;
 }
 
 /* --- libjpeg error handling */
@@ -141,6 +156,40 @@ struct thumbgen
   int interlaced;
 };
 
+/* Decoding JPEGs at any eighth of their size (not only 1/2, 1/4, 1/8). */
+static int eighths = -1;
+
+void thumbgen_eighths (int on)
+{
+  eighths = on < 0 ? -1 : on != 0;
+}
+
+int thumbgen_eighths_on (void)
+{
+  if (eighths < 0)
+    {
+#ifdef __riscos
+      const char *v = getenv ("Lumen$JPEGEighths");
+#else
+      const char *v = getenv ("LUMEN_JPEG_EIGHTHS");
+#endif
+      eighths = v && *v == '1';
+    }
+  return eighths;
+}
+
+/* The scale (m/8) to decode a JPEG whose longer side is longer at, so
+   that it is still at least max_side: the smallest that is. */
+int thumbgen_jpeg_eighths (int longer, int max_side)
+{
+  int m;
+  for (m = 1; m < 8; m++)
+    if ((thumbgen_eighths_on () || (m & (m - 1)) == 0)
+        && ((long long) longer * m + 7) / 8 >= max_side)
+      return m;
+  return 8;
+}
+
 static void seterr (thumbgen *t, const char *m)
 {
   snprintf (t->err, sizeof t->err, "%s", m);
@@ -148,7 +197,7 @@ static void seterr (thumbgen *t, const char *m)
 
 static int start_jpeg (thumbgen *t)
 {
-  int denom;
+  int m;
   t->jd.err = jpeg_std_error (&t->je.pub);
   t->je.pub.error_exit = jerr_exit;
   t->je.pub.emit_message = jerr_silent;
@@ -180,14 +229,10 @@ static int start_jpeg (thumbgen *t)
           t->cs = colour_from_exif (m->data + 6, m->data_length - 6);
   }
   /* The largest DCT reduction that still leaves the longer side >= max_side. */
-  for (denom = 8; denom > 1; denom /= 2)
-    {
-      int longer = t->jd.image_width > t->jd.image_height ? (int) t->jd.image_width : (int) t->jd.image_height;
-      if ((longer + denom - 1) / denom >= t->max_side)
-        break;
-    }
-  t->jd.scale_num = 1;
-  t->jd.scale_denom = (unsigned) denom;
+  m = thumbgen_jpeg_eighths (t->jd.image_width > t->jd.image_height ? (int) t->jd.image_width
+                             : (int) t->jd.image_height, t->max_side);
+  t->jd.scale_num = (unsigned) m;
+  t->jd.scale_denom = 8;
   t->jd.dct_method = JDCT_IFAST;
   t->jd.do_fancy_upsampling = FALSE;
   if (t->jd.jpeg_color_space == JCS_CMYK || t->jd.jpeg_color_space == JCS_YCCK)
@@ -325,6 +370,8 @@ static int start_raw_picture (thumbgen *t)
   rawjob_details (t->rj, &t->raw_info);
   t->orientation = t->raw_info.orientation;   /* the plug-in's, as the catalogue will have it */
   t->f = fopen (rawjob_image (t->rj), "rb");
+  if (t->f)
+    setvbuf (t->f, NULL, _IOFBF, 64 * 1024);
   if (!t->f)
     {
       seterr (t, "Can't open the raw plug-in's picture");
@@ -477,6 +524,9 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
       free (t);
       return NULL;
     }
+  /* libjpeg asks for 4 KB at a time; a bigger buffer means far fewer
+     calls to the filing system. */
+  setvbuf (t->f, NULL, _IOFBF, 64 * 1024);
   got = fread (head, 1, sizeof head, t->f);
   rewind (t->f);
   t->format = img_probe_named (head, got, src);
