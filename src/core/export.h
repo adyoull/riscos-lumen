@@ -47,6 +47,11 @@ void export_set_tags (exporter *e, const char *caption, const char *keywords);
 /* Does up to rows rows of work. 0: more to do; 1: written; -1: failed. */
 int export_step (exporter *e, int rows);
 int export_progress (const exporter *e);   /* 0-100 */
+/* What it is doing: EXPORT_PLUGIN (a raw file's plug-in developing it),
+   EXPORT_READING (reading the photo, or the plug-in's picture), or
+   EXPORT_WORKING (adjusting, sharpening and writing). */
+enum { EXPORT_PLUGIN, EXPORT_READING, EXPORT_WORKING };
+int export_phase (const exporter *e);
 const char *export_error (const exporter *e);
 void export_size (const exporter *e, int *w, int *h);  /* once decoding is done */
 /* Frees it; if it hadn't finished, its partial file is removed. */

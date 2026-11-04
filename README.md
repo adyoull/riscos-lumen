@@ -358,6 +358,18 @@ Fixes from a review of 0.0.23:
   35 MB PPM through the scrap directory), and Lumen's adjusting,
   sharpening and writing.
 
+## 0.0.35
+
+- The Activity history says how long an export took (a second or more),
+  split into LumenRaw (export_phase EXPORT_PLUGIN: its job waiting or
+  running), reading the photo or the plug-in's picture, and adjusting,
+  sharpening and writing.
+- LumenBench FILE is for JPEGs only: running LumenRaw from Bench with
+  system() crashed on RISC OS (UnixLib's pthread ticker in the child, an
+  undefined instruction), so raw files are timed by Lumen itself. The
+  help no longer says to drag the photo into the task window (that types
+  its contents): Shift-drag, or type the pathname.
+
 ## Layout
 
 ```

@@ -1,4 +1,4 @@
-Lumen 0.0.34 (04 Nov 2026) - test build
+Lumen 0.0.35 (04 Nov 2026) - test build
 =====================================
 
 A photo library and non-destructive editor for RISC OS 5.
@@ -395,11 +395,14 @@ are made again with the edit.
 
 Speed: !Lumen.Bench measures the editing pipeline on your machine. Run it
 in a task window (Ctrl-F12):  *Run <Lumen$Dir>.Bench
-With a photo after it (type *Run <Lumen$Dir>.Bench and a space, then
-drag the photo into the task window), Bench exports that photo at full
-size and says where the time goes: for a raw file, LumenRaw developing
-it and reading its picture back, then Lumen's adjusting, sharpening and
-writing the JPEG.
+With a JPEG's pathname after it (type *Run <Lumen$Dir>.Bench and a
+space, then Shift-drag the photo into the task window - an ordinary drag
+types the file's contents instead - or type the pathname), Bench exports
+that photo at full size and says where the time goes.
+
+Exports say how long they took in the Activity history (for a raw
+file: LumenRaw developing it, its picture being read, and the adjusting
+and writing), once they take a second or more.
 
 Lumen runs on any ARMv7 processor with VFPv3. When the processor has
 NEON (every Raspberry Pi from the Pi 2 on does), JPEGs are read and

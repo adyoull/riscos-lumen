@@ -2,8 +2,9 @@
    milestone 1's gate (a slider's redraw within 50 ms).
 
    On RISC OS: in a task window (Ctrl-F12),  *Run <Lumen$Dir>.Bench
-   With a photo's pathname after it (drag the file into the task window):
-   that photo exported at full size, and where the time goes.
+   With a JPEG's pathname after it (Shift-drag the file into the task
+   window, or type it): that photo exported at full size, and where the
+   time goes. Raw files are timed by Lumen itself (the Activity history).
    It writes a 6000 x 4000 test JPEG to <Wimp$ScrapDir> (removed after),
    and prints:
      - opening it: decoding the 1600-pixel proxy (what the viewer does),
@@ -172,22 +173,14 @@ static double ms_wall (clock_t t0)
   return (double) (wall () - t0) * 1000.0 / CLOCKS_PER_SEC;
 }
 
-static int blocking_run (const char *cmd, int tag)
-{
-  int r = system (cmd);
-  rawjob_ended (tag);
-  return r < 0 ? -1 : 0;
-}
-
 static int export_file (const char *path)
 {
 #ifdef __riscos
-  const char *helper = "<Lumen$Dir>.Plugins.LibRaw.LumenRaw", *scratch = "<Wimp$ScrapDir>.LumenRaw";
   const char *out = "<Wimp$ScrapDir>.LumenBenchX";
 #else
-  const char *helper = getenv ("LUMENRAW"), *scratch = "/tmp/LumenRawBench", *out = "/tmp/LumenBenchX.jpg";
+  const char *out = "/tmp/LumenBenchX.jpg";
 #endif
-  char err[300], hp[1024];
+  char err[300];
   unsigned char head[64];
   FILE *f = fopen (path, "rb");
   size_t got = f ? fread (head, 1, sizeof head, f) : 0;
@@ -209,40 +202,11 @@ static int export_file (const char *path)
           fsys_leaf (path));
   if (is_raw)
     {
-      rawjob *j;
-      fsys_entry fe;
-      if (!helper || fsys_canonical (helper, hp, sizeof hp) || fsys_stat (hp, &fe))
-        {
-          printf ("LumenRaw isn't in !Lumen.Plugins.LibRaw.\n");
-          return 1;
-        }
-      fsys_mkdirs (scratch);
-      rawjob_setup (hp, scratch, blocking_run);
-      /* The plug-in on its own, and reading its picture back. */
-      t0 = wall ();
-      j = rawjob_start (path, 1, 1 << 30, err, sizeof err);
-      while (j && (rc = rawjob_poll (j)) == 0)
-        ;
-      if (!j || rc < 0)
-        {
-          printf ("%s\n", j ? rawjob_error (j) : err);
-          return 1;
-        }
-      printf ("  LumenRaw developing it:             %6.0f ms\n", ms_wall (t0));
-      {
-        unsigned char *buf = malloc (65536);
-        long n = 0;
-        size_t k;
-        t0 = wall ();
-        f = fopen (rawjob_image (j), "rb");
-        while (f && buf && (k = fread (buf, 1, 65536, f)) > 0)
-          n += (long) k;
-        if (f)
-          fclose (f);
-        free (buf);
-        printf ("  reading its picture back (%ld MB):  %6.0f ms\n", (n + 524288) / 1048576, ms_wall (t0));
-      }
-      rawjob_free (j);
+      /* LumenRaw runs as a program of its own, in a task window of its
+         own: Lumen times a raw export itself, in its Activity history. */
+      printf ("For a raw file, export it from Lumen: the Activity history says how long\n"
+              "LumenRaw, reading its picture, and adjusting and writing each took.\n");
+      return 0;
     }
   recipe_default (&r);
   recipe_set (&r, P_EV, 0.3f); recipe_set (&r, P_CONTRAST, 10); recipe_set (&r, P_SATURATION, 10);
@@ -267,7 +231,7 @@ static int export_file (const char *path)
   export_free (e);
   remove (out);
   printf ("The export (%d x %d):                %6.0f ms\n", w, h, total);
-  printf ("  reading the photo%s:    %6.0f ms\n", is_raw ? " (LumenRaw again)" : "                ", decode);
+  printf ("  reading the photo:                 %6.0f ms\n", decode);
   printf ("  adjusting, sharpening, writing:    %6.0f ms\n", total - decode);
   return rc < 0;
 }

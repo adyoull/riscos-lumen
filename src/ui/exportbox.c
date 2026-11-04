@@ -344,8 +344,47 @@ static int queue (const char *dst)
   return 0;
 }
 
+/* Where the time went (centiseconds): the raw plug-in, reading the
+   photos, and adjusting, sharpening and writing; for the history. */
+static unsigned spent[3], phase_t;
+static int phase = -1;
+
+static void phase_now (int p)
+{
+  unsigned t = app_now ();
+  if (phase >= 0)
+    spent[phase] += t - phase_t;
+  phase = p;
+  phase_t = t;
+}
+
+static void secs (char *out, size_t n, unsigned cs)
+{
+  if (cs < 950)
+    snprintf (out, n, "%u.%u s", (cs + 5) / 100, (cs + 5) / 10 % 10);
+  else
+    snprintf (out, n, "%u s", (cs + 50) / 100);
+}
+
 static void all_done (void)
 {
+  char how[200] = "";
+  unsigned total = spent[0] + spent[1] + spent[2];
+  if (total >= 100)
+    {
+      char a[24], b[24], c[24], t[24];
+      secs (t, sizeof t, total);
+      secs (a, sizeof a, spent[0]);
+      secs (b, sizeof b, spent[1]);
+      secs (c, sizeof c, spent[2]);
+      if (spent[0])
+        snprintf (how, sizeof how, " in %s (LumenRaw %s, its picture read %s, adjusted and written %s)", t, a, b, c);
+      else
+        snprintf (how, sizeof how, " in %s (read %s, adjusted and written %s)", t, b, c);
+    }
+  spent[0] = spent[1] = spent[2] = 0;
+  phase = -1;
+
   /* Into the Activity history. */
   if (njobs > 0)
     {
@@ -356,11 +395,11 @@ static void all_done (void)
       if (failed)
         ;                              /* app_report below puts it in the history */
       else if (reply_pending)
-        activity_log (ACT_EXPORT, "Exported a photo to another program");
+        activity_log (ACT_EXPORT, "Exported a photo to another program%s", how);
       else if (njobs == 1)
-        activity_log (ACT_EXPORT, "Exported %s to %s", fsys_leaf (jobs[0].dst), dir);
+        activity_log (ACT_EXPORT, "Exported %s%s to %s", fsys_leaf (jobs[0].dst), how, dir);
       else
-        activity_log (ACT_EXPORT, "Exported %d photos to %s", njobs, dir);
+        activity_log (ACT_EXPORT, "Exported %d photos%s to %s", njobs, how, dir);
     }
   if (failed)
     {
@@ -442,9 +481,14 @@ void exports_idle (unsigned deadline)
               continue;
             }
         }
+      if (phase != export_phase (cur))
+        phase_now (export_phase (cur));
       r = export_step (cur, 16);
+      if (phase != export_phase (cur))
+        phase_now (export_phase (cur));
       if (r != 0)
         {
+          phase_now (-1);
           if (r < 0)
             job_failed (export_error (cur));
           export_free (cur);

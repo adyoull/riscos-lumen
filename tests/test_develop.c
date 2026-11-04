@@ -935,6 +935,7 @@ static void test_export (const char *work)
   snprintf (dst, sizeof dst, "%s/out-full.jpg", work);
   e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
   CHECK (e != NULL, "export started");
+  CHECK (e && export_phase (e) == EXPORT_READING, "export: reading the photo first");
   steps = e ? run_export (e) : -1;
   CHECK (steps > 10, "in many small steps");
   CHECK (e && export_progress (e) == 100, "progress reaches 100");

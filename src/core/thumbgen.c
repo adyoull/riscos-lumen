@@ -626,6 +626,11 @@ void thumbgen_size (const thumbgen *t, int *w, int *h)
   *h = t->out_h;
 }
 
+int thumbgen_raw_waiting (const thumbgen *t)
+{
+  return t && t->format == IMG_RAW && !t->done;
+}
+
 void thumbgen_hurry (thumbgen *t)
 {
   if (t && t->rj)

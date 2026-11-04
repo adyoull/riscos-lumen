@@ -544,6 +544,13 @@ int export_progress (const exporter *e)
   return e->g.oh > 0 ? 40 + (int) ((long long) e->y * 60 / e->g.oh) : 40;
 }
 
+int export_phase (const exporter *e)
+{
+  if (e->tg)
+    return thumbgen_raw_waiting (e->tg) ? EXPORT_PLUGIN : EXPORT_READING;
+  return EXPORT_WORKING;
+}
+
 const char *export_error (const exporter *e)
 {
   return e->err;
