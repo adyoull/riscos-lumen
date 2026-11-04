@@ -18,14 +18,16 @@
   newer API is listed but not run. Previews (Raw files) cover them too.
 - The library's catalogue (schema 7) keeps where a plug-in says a
   photo's EXIF is.
-- Menus: the Photo menu is grouped into File, Edit, View, Adjust and
-  Organise, and the Selection menu into File, Edit and Organise (every
-  item kept). Keys are shown after one space, so RISC OS lines them up
-  on the right; letter keys are shown with Shift (they work with or
-  without it). New letters for keys that couldn't be shown that way: P
+- Menus: the Photo menu has the things used most on it directly (undo,
+  redo, Auto, crop, presets, before and after, copy and paste, label,
+  caption, export, print), and the rest in View, Adjust and Versions
+  (every item kept). Keys are shown after one space, so RISC OS lines
+  them up on the right; letter keys are shown with Shift (they work with
+  or without it). New letters for keys that couldn't be shown that way: P
   flags (as /), X rejects (9), L the loupe (`), K the stack's pick (\).
 - The Plug-ins menu and messages name plug-ins without the library they
   are built on ("Camera raw 1.1", "HEIF photos 1.0").
+- The Add plug-in window no longer lists plug-ins by name.
 - The guide's menu pictures retaken.
 - LumenHEIF-1.0-sources.zip has LumenHEIF's, libheif's and FFmpeg's
   sources and the patches, as the LGPL asks.

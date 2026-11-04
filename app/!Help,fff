@@ -168,8 +168,7 @@ Under the histogram: the photo's place, its flag, its colour label (the
 row of dots: click one to give the photo that label, its own again to
 take it off) and its stars.
 
-Styles (Photo > Adjust > Presets > Styles, or Selection > Edit > Apply
-preset > Styles for many
+Styles (Presets > Styles, or Selection > Apply preset > Styles for many
 photos at once): Faded Film, Warm Vintage, Golden Hour, Soft Portrait,
 Sunlit Garden, Vivid Landscape; Teal & Orange, Cross Process, Bleach Bypass, Nordic
 Matte; Classic Black & White, High-Contrast Noir, Sepia, Cyanotype and
@@ -264,7 +263,7 @@ or copied adjustments. They are in exports, prints and thumbnails.
 
 Comparing
 ---------
-O with photos selected in the Browser (or Selection > Organise > Compare) pins the
+O with photos selected in the Browser (or Selection > Compare) pins the
 first on the left and shows the next beside it; in the Viewer, O pins
 the photo shown. Left and Right change the photo on the right (the keys
 rate and label it); Return pins it instead and shows the next. O or
@@ -272,8 +271,7 @@ Escape stops comparing.
 
 Colour labels
 -------------
-Selection > Organise > Colour label (or Photo > Organise > Colour
-label) gives the selected
+Selection > Colour label (or Photo > Colour label) gives the selected
 photos a coloured dot: Red, Orange, Yellow, Green, Blue, Purple, Grey,
 or None. The dot shows beside the name in the Browser; searching for
 the colour's name finds them.
@@ -310,7 +308,7 @@ Keys in the Viewer and Split View
 
 Exporting
 ---------
-Ctrl-E (or File > Export... in the Selection or Photo menu) opens the Export
+Ctrl-E (or Export... in the Selection or Photo menu) opens the Export
 box. Drag its icon to a directory display, or into another program, or
 type a full pathname and click Save. In the box:
   Format      JPEG (with its quality) or PNG
@@ -334,7 +332,7 @@ background; the bottom bar shows the progress.
 
 Printing
 --------
-Ctrl-P (or File > Print... in the Selection or Photo menu) prints the selected
+Ctrl-P (or Print... in the Selection or Photo menu) prints the selected
 photos on the printer chosen in !Printers. Choose the copies, and the
 size: Fit the page (all of the photo, as big as it goes), Fill the page
 (to the edges; some is cut off) or a given size in centimetres (at most;
@@ -353,7 +351,7 @@ PostScript printers print in grey unless their Configure window in
 
 Captions, keywords and smart albums
 -----------------------------------
-Ctrl-K (or Selection > Organise > Caption and keywords..., or a click on Caption or
+Ctrl-K (or Selection > Caption and keywords..., or a click on Caption or
 Keywords in the Info tab) opens a window for the selected photos' caption
 and keywords. Keywords are words or short phrases with commas between:
 places, people, subjects. The menu button beside them lists the keywords
@@ -437,10 +435,10 @@ The Lumen menu
 --------------
   Show            All photos, Flagged, Rejected, Last import, a project
                   (one per imported folder), an album, or a rating filter
-  Selection       File: export, export as library, print, remove;
-                  Edit: select all, clear, copy and paste adjustments,
-                  apply a preset; Organise: rating, colour label,
-                  flag, reject, caption and keywords, compare
+  Selection       rating, colour label, flag, reject, caption and
+                  keywords, select all, clear, copy and paste
+                  adjustments, apply a preset, compare, export, export
+                  as library, print, remove
   Album           make a new album from the selection, add to one,
                   or remove from the album shown; a new smart album
   Versions and stacks
@@ -450,14 +448,14 @@ The Lumen menu
 
 The Photo menu (Menu over the photo in the Viewer)
 --------------
-  File            Export..., Print..., Remove from library...
-  Edit            undo, redo, copy and paste adjustments, reset all
-  View            before and after, 100%, the loupe, compare with the
-                  next, back to the Browser
-  Adjust          Auto, pick white balance, crop, crop shape, the grid,
-                  presets and styles
-  Organise        colour label, caption and keywords, duplicate
-                  version, new version from the original
+  Undo, Redo, Auto adjust, Crop, Presets, Before and after
+  Copy and Paste adjustments, Colour label, Caption and keywords...
+  Export..., Print...
+  View            100%, the loupe, compare with the next, back to the
+                  Browser
+  Adjust          pick white balance, crop shape, the grid, reset all
+  Versions        duplicate version, new version from the original
+  Remove from library...
 
 Menus show keys beside their items. Letter keys are shown with Shift
 (the arrow), as RISC OS lines them up, but work with or without it:
@@ -565,8 +563,7 @@ is written instead.
 
 Removing photos
 ---------------
-Delete (or Selection > File > Remove from library, or Photo > File)
-takes the
+Delete (or Selection > Remove from library, or the Photo menu) takes the
 selected photos out of the library, after asking. Their files are never
 touched: their ratings, adjustments and album places go, and they can be
 imported again. Menu over a project or album in the Library tab renames
@@ -586,7 +583,7 @@ opens the window):
                   library's Originals directory, a directory for each
                   project, so it can go to any disc or computer; it
                   finds them there wherever it is moved to.
-                  Selection > File > Export as library, and Export as library
+                  Selection > Export as library, and Export as library
                   on a project's or album's menu, export just those.
   Import library  brings another library's photos into this one: drag
                   its directory into the window (or onto Lumen

@@ -15,10 +15,10 @@
 #include <swis.h>
 #include "ui.h"
 
-enum { I_DIR, I_LINE1, I_LINE2, I_LINE3, I_PACKMAN, I_COUNT };
+enum { I_DIR, I_LINE1, I_LINE2, I_PACKMAN, I_COUNT };
 
 #define W 900
-#define H 300
+#define H 252
 #define T_TEXT    0x17000111u          /* text, vcentred, indirected; black on grey */
 #define T_BUTTON  0x1700313Du          /* text, border, centred, vcentred, filled, indirected, click */
 
@@ -59,9 +59,8 @@ int plugwin_create (void)
     memcpy (&d[5], "directory", 10);   /* the name in the icon's own 12 bytes */
   }
   icon_at (ic + 8 * I_LINE1, 140, -64, W - 24, -20, T_TEXT, "Drag a plug-in's directory into this window", NULL);
-  icon_at (ic + 8 * I_LINE2, 140, -112, W - 24, -68, T_TEXT, "to add it to Lumen. Plug-ins come from PackMan:", NULL);
-  icon_at (ic + 8 * I_LINE3, 140, -160, W - 24, -116, T_TEXT, "LumenRaw (camera raws) and LumenHEIF (phones).", NULL);
-  icon_at (ic + 8 * I_PACKMAN, W - 300, -272, W - 24, -208, T_BUTTON, "Open PackMan", v_button);
+  icon_at (ic + 8 * I_LINE2, 140, -112, W - 24, -68, T_TEXT, "to add it to Lumen. Plug-ins come from PackMan.", NULL);
+  icon_at (ic + 8 * I_PACKMAN, W - 300, -224, W - 24, -160, T_BUTTON, "Open PackMan", v_button);
   return _swix (Wimp_CreateWindow, _IN (1) | _OUT (0), b, &win) ? -1 : 0;
 }
 
