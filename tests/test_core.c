@@ -2530,7 +2530,7 @@ static void test_heif (void)
   CHECK (!t && strstr (err, "HEIF photo") && strstr (err, "LumenHEIF"), "format plug-ins: can't be run: install LumenHEIF again");
   rawjob_set_switched_off_kind (kind, 1);
   CHECK (strstr (rawjob_missing_message_kind (kind), "switched off")
-         && strstr (rawjob_missing_message_kind (kind), "the HEIF photos plug-in"), "format plug-ins: switched off: says so (its name without the library)");
+         && strstr (rawjob_missing_message_kind (kind), "the LumenHEIF plug-in"), "format plug-ins: switched off: says so (by its package's name)");
   rawjob_set_switched_off_kind (kind, 0);
   CHECK (strstr (rawjob_missing_message_kind (-1), "no plug-in"), "format plug-ins: a photo none claims now");
   if (!helper)

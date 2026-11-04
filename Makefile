@@ -164,6 +164,7 @@ LIBRAW_VERSION := 0.22.3
 # LumenRaw package maps it into Apps.Graphics.!Lumen.Plugins.LibRaw), and
 # the LibRaw source it was built from (the LGPL asks for it with the binary).
 RAW_GUIDE := docs/lumenraw-guide/index.html $(wildcard docs/lumenraw-guide/images/*.png)
+HEIF_GUIDE := docs/lumenheif-guide/index.html $(wildcard docs/lumenheif-guide/images/*.png)
 $(OUT)/LumenRaw-$(RAW_VERSION).zip: $(OUT)/LumenRaw,ff8 plugins/libraw/ReadMe plugins/libraw/Licence plugins/libraw/Plugin $(RAW_GUIDE)
 	rm -rf $(OUT)/rawpkg && mkdir -p $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/Guide/images
 	cp $(OUT)/LumenRaw,ff8 $(OUT)/rawpkg/!Lumen/Plugins/LibRaw/
@@ -224,7 +225,6 @@ FFMPEG_VERSION := 5.1.10
 # the sources it was built from (the LGPL asks for them with the binary):
 # libheif at its tag, FFmpeg's release tarball with the patches applied for
 # RISC OS, and the script that builds them.
-HEIF_GUIDE := docs/lumenheif-guide/index.html $(wildcard docs/lumenheif-guide/images/*.png)
 $(OUT)/LumenHEIF-$(HEIF_VERSION).zip: $(OUT)/LumenHEIF,ff8 plugins/heif/ReadMe plugins/heif/Licence plugins/heif/Plugin $(HEIF_GUIDE)
 	rm -rf $(OUT)/heifpkg && mkdir -p $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Guide/images
 	cp $(OUT)/LumenHEIF,ff8 $(OUT)/heifpkg/!Lumen/Plugins/HEIF/

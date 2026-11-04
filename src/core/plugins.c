@@ -194,9 +194,11 @@ int plugins_read (const char *path, plugin_info *p)
     }
   else
     return -1;
-  /* What Lumen calls it: the name without the library it is built on
-     ("Camera raw (LibRaw)" is "Camera raw"). */
-  set (p->title, sizeof p->title, p->name);
+  /* What Lumen calls it in its menus and messages: its package's name
+     (LumenRaw, LumenHEIF); without one, the name without the library it
+     is built on ("Camera raw (LibRaw)" is "Camera raw"). */
+  set (p->title, sizeof p->title, p->package[0] ? p->package : p->name);
+  if (!p->package[0])
   {
     size_t l = strlen (p->title);
     char *open = strrchr (p->title, '(');

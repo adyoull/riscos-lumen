@@ -852,7 +852,7 @@ int main (int argc, char **argv)
          && strcmp (item_text (menu_open, 5), "Plug-ins") == 0 && strcmp (item_text (menu_open, 6), "Quit") == 0,
          "Show ... Versions and stacks, Plug-ins, Quit");
   CHECK ((item (menu_open, 6)[0] & 0x80) != 0, "Quit is the last item");
-  CHECK (strcmp (item_text (submenu (menu_open, 5), 0), "Camera raw 1.0") == 0, "Plug-ins > the LibRaw plug-in (without the library's name)");
+  CHECK (strcmp (item_text (submenu (menu_open, 5), 0), "LumenRaw 1.0") == 0, "Plug-ins > the LibRaw plug-in, by its package's name");
   {
     const int *show = submenu (menu_open, 0), *proj = submenu (show, 4);
     CHECK (strcmp (item_text (show, 1), "Flagged") == 0, "Show > Flagged");
@@ -2479,7 +2479,7 @@ int main (int argc, char **argv)
            && strcmp (item_text (menu_open, 6), "Plug-ins") == 0 && strcmp (item_text (menu_open, 7), "Quit") == 0,
            "icon bar menu: Info, Help..., User guide, Open library, Activity..., Choices..., Plug-ins, Quit");
     pm = submenu (menu_open, 6);
-    CHECK (strcmp (item_text (pm, 0), "Camera raw 1.0") == 0 && (item (pm, 0)[0] & 1),
+    CHECK (strcmp (item_text (pm, 0), "LumenRaw 1.0") == 0 && (item (pm, 0)[0] & 1),
            "Plug-ins: LibRaw, ticked (on)");
     CHECK (strcmp (item_text (pm, 1), "Add plug-in...") == 0 && strcmp (item_text (pm, 2), "Remove") == 0
            && (item (pm, 2)[0] & 0x80), "Plug-ins: Add plug-in..., Remove");
@@ -2532,7 +2532,7 @@ int main (int argc, char **argv)
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
     pm = submenu (menu_open, 6);
-    CHECK (strcmp (item_text (pm, 0), "Camera raw 1.0") == 0 && strcmp (item_text (pm, 1), "Extra 2") == 0
+    CHECK (strcmp (item_text (pm, 0), "LumenRaw 1.0") == 0 && strcmp (item_text (pm, 1), "Extra 2") == 0
            && strcmp (item_text (pm, 2), "Add plug-in...") == 0, "Plug-ins: both, by name");
     CHECK (strcmp (item_text (submenu (pm, 3), 1), "Extra...") == 0, "Remove > Extra...");
     /* Remove > LibRaw: Cancel keeps it; it mentions PackMan. */
@@ -2573,8 +2573,8 @@ int main (int argc, char **argv)
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
     app_event (Mouse_Click, b, 0);
     pm = submenu (menu_open, 6);
-    CHECK (strcmp (item_text (pm, 0), "Camera raw 1.0") == 0
-           && strcmp (item_text (pm, 1), "HEIF photos 1.0") == 0
+    CHECK (strcmp (item_text (pm, 0), "LumenRaw 1.0") == 0
+           && strcmp (item_text (pm, 1), "LumenHEIF 1.0") == 0
            && strcmp (item_text (pm, 2), "Add plug-in...") == 0, "Plug-ins: LibRaw and HEIF");
     choose (6, 1, -1);
     CHECK (!rawjob_available_kind (heif) && rawjob_switched_off_kind (heif) && rawjob_available ()

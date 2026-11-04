@@ -25,8 +25,8 @@
   them up on the right; letter keys are shown with Shift (they work with
   or without it). New letters for keys that couldn't be shown that way: P
   flags (as /), X rejects (9), L the loupe (`), K the stack's pick (\).
-- The Plug-ins menu and messages name plug-ins without the library they
-  are built on ("Camera raw 1.1", "HEIF photos 1.0").
+- The Plug-ins menu and messages name plug-ins by their package:
+  "LumenRaw 1.1", "LumenHEIF 1.0".
 - The Add plug-in window no longer lists plug-ins by name.
 - Loupe is on the Photo menu itself as well as under View, and the
   toolbar's Loupe button lights up however the loupe is switched on or

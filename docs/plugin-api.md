@@ -44,14 +44,14 @@ Description: Reads HEIF/HEIC photos with libheif and FFmpeg's HEVC decoder
 
 | Key | Meaning |
 | --- | --- |
-| `Name` | The plug-in's name. Lumen shows it in its Plug-ins menu and messages, followed by `Version`, without a closing part in brackets: "HEIF photos (libheif)" is shown as "HEIF photos". |
+| `Name` | A longer name, such as "HEIF photos (libheif)". Lumen uses it only when there is no `Package`. |
 | `Kind` | `format` for these plug-ins. (`raw` is LumenRaw's.) |
 | `API` | The version of this API that the plug-in follows: `1`. Lumen lists a plug-in that asks for a newer API but doesn't run it, and says a newer Lumen is needed. |
 | `Format` | The name for one of its files, used in Lumen's messages and on the Info tab, such as "This is a HEIF photo...". |
 | `Extensions` | The file extensions it claims, separated by spaces, in any case: `heic` matches `IMG_0001/HEIC` on RISC OS and `IMG_0001.heic` elsewhere. |
 | `Signature` | Bytes it claims at an offset in the file: the offset in decimal, a space, then the bytes. `\xNN` gives any byte, `\\` a backslash, and `\x20` a space at the end. A file matches if any one signature matches. At most 8 signatures, each up to 24 bytes, within the first 4 KB of the file. |
 | `Program` | The program in the directory that Lumen runs (`LumenHEIF,ff8`, an absolute file). |
-| `Package` | The PackMan package it comes in. Lumen names it in its messages. |
+| `Package` | The PackMan package it comes in, such as LumenHEIF. Lumen calls the plug-in by this name in its Plug-ins menu (followed by `Version`) and in its messages. |
 | `Description` | One line about it. |
 
 A file is the plug-in's if its extension is one of `Extensions`, or if

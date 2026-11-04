@@ -155,7 +155,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>You can also drag the <code>HEIF</code> directory straight onto Lumen's main window.</p>
 
 <h4>Checking it's working</h4>
-<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenHEIF is listed as <b>HEIF photos 1.0</b>, with a tick when it's on.</p>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenHEIF is listed as <b>LumenHEIF 1.0</b>, with a tick when it's on.</p>
 <figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw and LumenHEIF installed and on.</figcaption></figure>
 
 <div class="box try"><b class="label">TRY IT</b>Copy a photo from an iPhone (its name ends in <code>/HEIC</code> on RISC OS) and drag it into Lumen's window. A thumbnail appears within a second or two. Double-click it to open it in the Viewer.</div>
@@ -195,8 +195,8 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>Select a HEIF photo and click the <b>Info</b> tab. The <b>Format</b> line says how Lumen read it:</p>
 <table>
 <tr><th>Format says</th><th>Meaning</th></tr>
-<tr><td>HEIF photo, read by the HEIF photos plug-in</td><td>All's well: LumenHEIF is installed and on.</td></tr>
-<tr><td>HEIF photo: the HEIF photos plug-in is switched off (Plug-ins, on the icon bar menu)</td><td>LumenHEIF is installed but switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
+<tr><td>HEIF photo, read by the LumenHEIF plug-in</td><td>All's well: LumenHEIF is installed and on.</td></tr>
+<tr><td>HEIF photo: the LumenHEIF plug-in is switched off (Plug-ins, on the icon bar menu)</td><td>LumenHEIF is installed but switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
 <tr><td>Not known: no plug-in reads it now</td><td>LumenHEIF has been removed since the photo was imported. Install it again (<a href="#ch2">Chapter 2</a>).</td></tr>
 </table>
 <figure><img src="images/info-heif.png" alt="The Info tab for a HEIF photo"><figcaption>A Samsung HEIF photo in the Info tab. The camera and EXIF come from LumenHEIF.</figcaption></figure>
@@ -210,12 +210,12 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon (or from the main menu over the Browser).</p>
 
 <h4>Switching it off and on</h4>
-<p>Choose <b>HEIF photos 1.0</b> to switch it off: the tick goes. LumenHEIF stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
+<p>Choose <b>LumenHEIF 1.0</b> to switch it off: the tick goes. LumenHEIF stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
 <p>While it's off, HEIF photos keep their thumbnails, stars, albums and adjustments, but opening one shows a message instead of the photo:</p>
-<figure><img src="images/switched-off.png" alt="A HEIF photo with the plug-in switched off"><figcaption>With LumenHEIF switched off.</figcaption></figure>
+<figure><img src="images/switched-off.png" alt="A HEIF photo with the plug-in switched off"><figcaption>With LumenHEIF switched off. The Info tab says so too.</figcaption></figure>
 
 <h4>Removing it</h4>
-<p><b>Remove &rarr; HEIF photos</b> deletes LumenHEIF from Lumen, after asking. Your HEIF photos stay in the library, with their stars and adjustments; they just can't be opened until you install it again.</p>
+<p><b>Remove &rarr; LumenHEIF</b> deletes LumenHEIF from Lumen, after asking. Your HEIF photos stay in the library, with their stars and adjustments; they just can't be opened until you install it again.</p>
 <div class="box warn"><b class="label">WARNING</b>If PackMan installed LumenHEIF, remove it with PackMan, not with Lumen's Remove. Otherwise PackMan still thinks it's there.</div>
 
 <!-- ======================================================================= -->
@@ -246,10 +246,10 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <table>
 <tr><th>Problem</th><th>What to do</th></tr>
 <tr><td>HEIF photos aren't imported</td><td>LumenHEIF isn't installed, or Lumen is older than 0.0.37. Install it (<a href="#ch2">Chapter 2</a>), then import the directory again.</td></tr>
-<tr><td>"...the HEIF photos plug-in that reads them is switched off"</td><td>Tick <b>HEIF photos</b> in <b>Plug-ins</b> on Lumen's icon bar menu, then open the photo again.</td></tr>
-<tr><td>"...The HEIF photos plug-in that reads them needs a newer Lumen"</td><td>This LumenHEIF was made for a newer Lumen than yours. Update Lumen.</td></tr>
-<tr><td>"The HEIF photos plug-in couldn't read this photo (...)"</td><td>The file isn't a HEVC HEIF photo (perhaps AVIF), or it's damaged. Try another copy.</td></tr>
-<tr><td>"The HEIF photos plug-in stopped without finishing (perhaps out of memory)"</td><td>Decoding needs memory for a moment. Quit other big programs and try again.</td></tr>
+<tr><td>"...the LumenHEIF plug-in that reads them is switched off"</td><td>Tick <b>LumenHEIF</b> in <b>Plug-ins</b> on Lumen's icon bar menu, then open the photo again.</td></tr>
+<tr><td>"...The LumenHEIF plug-in that reads them needs a newer Lumen"</td><td>This LumenHEIF was made for a newer Lumen than yours. Update Lumen.</td></tr>
+<tr><td>"The LumenHEIF plug-in couldn't read this photo (...)"</td><td>The file isn't a HEVC HEIF photo (perhaps AVIF), or it's damaged. Try another copy.</td></tr>
+<tr><td>"The LumenHEIF plug-in stopped without finishing (perhaps out of memory)"</td><td>Decoding needs memory for a moment. Quit other big programs and try again.</td></tr>
 <tr><td>"Lumen has no plug-in for this photo's format now"</td><td>LumenHEIF was removed. Install it again.</td></tr>
 <tr><td>The colours look a little less vivid than on the phone</td><td>Normal: the phone's screen shows Display P3, and Lumen works in sRGB. Vibrance or Saturation bring some back.</td></tr>
 <tr><td>A photo is on its side</td><td>Turn it with <kbd>[</kbd> or <kbd>]</kbd> in the Viewer.</td></tr>

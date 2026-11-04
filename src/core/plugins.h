@@ -51,7 +51,7 @@ typedef struct
 {
   char dir[64];                        /* its directory's leaf name, which identifies it */
   char name[64];
-  char title[64];                      /* name without a last "(...)": "HEIF photos", for menus and messages */
+  char title[64];                      /* for menus and messages: the package (LumenHEIF), else the name without a last "(...)" */
   char version[24];
   char kind[16];
   char program[1024];                  /* full path of the program, "" if it has none or it isn't there */
