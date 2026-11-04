@@ -2,9 +2,10 @@
    Released under the MIT licence: see the LICENSE file.
    SPDX-License-Identifier: MIT */
 /* LumenHEIF: Lumen's HEIF plug-in. A small program built on libheif (with
-   FFmpeg's HEVC decoder) that Lumen runs in the background (in a task
-   window) for each HEIF photo (.heic, .heif: what phones save), just as it
-   runs LumenRaw for camera raw files:
+   FFmpeg's HEVC decoder for HEIC, and dav1d's AV1 decoder for AVIF) that
+   Lumen runs in the background (in a task window) for each HEIF or AVIF
+   photo (.heic, .heif, .avif: what phones save), just as it runs LumenRaw
+   for camera raw files:
 
      LumenHEIF thumb  SRC IMAGE INFO          the photo's own thumbnail
      LumenHEIF decode SRC IMAGE INFO MAXSIDE  the photo, MAXSIDE at most
@@ -19,19 +20,20 @@
    Colour: a Display P3 photo (an iPhone's) is converted to sRGB here, in
    linear light, so Lumen gets sRGB as it does from LumenRaw.
 
-   NEON: libavcodec's HEVC code uses NEON only when the processor has it
-   (VFPSupport_Features on RISC OS); Lumen$NEON (LUMEN_NEON elsewhere) 0
-   forces the plain code, 1 NEON.
+   NEON: libavcodec's HEVC code and dav1d's AV1 code use NEON only when
+   the processor has it (VFPSupport_Features on RISC OS); Lumen$NEON
+   (LUMEN_NEON elsewhere) 0 forces the plain code, 1 NEON.
 
-   libheif and FFmpeg are used under the GNU LGPL (see Licence); their
-   sources, with the changes made for RISC OS, are published with each
-   release. */
+   libheif and FFmpeg are used under the GNU LGPL, dav1d under its BSD
+   licence (see Licence); their sources, with the changes made for RISC
+   OS, are published with each release. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <libheif/heif.h>
 #include <libavutil/cpu.h>
+#include <dav1d/dav1d.h>
 #include "exif.h"
 #ifdef __riscos
 #include <kernel.h>
@@ -41,7 +43,7 @@ int __riscosify_control = __RISCOSIFY_NO_PROCESS;   /* paths are RISC OS paths, 
 #include <sys/auxv.h>
 #endif
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 #define THUMB_MAX 512                  /* a thumbnail made from the photo itself: this at most */
 
 /* --- writing results --- */
@@ -120,6 +122,27 @@ static int has_neon (void)
 #else
   return 0;
 #endif
+#endif
+}
+
+/* dav1d's own CPU switches (not in its public header): the mask clears
+   flags; on RISC OS, where dav1d can't ask the system, the flags are ours
+   to give (deps/dav1d/0101). */
+void dav1d_set_cpu_flags_mask (unsigned mask);
+#ifdef __riscos
+extern unsigned dav1d_riscos_arm_cpu_flags;
+#endif
+
+static void choose_simd (void)
+{
+  int neon = has_neon ();
+  if (!neon)
+    av_force_cpu_flags (av_get_cpu_flags () & ~AV_CPU_FLAG_NEON);
+#ifdef __riscos
+  dav1d_riscos_arm_cpu_flags = neon ? 1u : 0u;    /* DAV1D_ARM_CPU_FLAG_NEON */
+#else
+  if (!neon)
+    dav1d_set_cpu_flags_mask (0);
 #endif
 }
 
@@ -288,7 +311,9 @@ static int exif_item_at (const unsigned char *buf, size_t len, long *offset, lon
         for (k = 0; k < count && q < e; k++)
           {
             unsigned long id, base, ext, method = 0, j;
-            if (q + 16 > e)
+            /* item_ID, construction_method (v1+), data_reference_index,
+               base_offset, extent_count */
+            if (q + (size_t) ((v < 2 ? 2 : 4) + (v >= 1 ? 2 : 0) + 2 + bsz + 2) > e)
               return 0;
             id = v < 2 ? be (buf + q, 2) : be (buf + q, 4);
             q += v < 2 ? 2 : 4;
@@ -423,7 +448,15 @@ static unsigned char *picture (struct heif_image_handle *h, int max_side, int *o
   const uint8_t *src;
   int stride, w, hh, tw, th, x, y;
   unsigned char *out;
-  e = heif_decode_image (h, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGB, NULL);
+  {
+    /* One thread: RISC OS has one core for the program (and dav1d would
+       otherwise ask how many there are). */
+    struct heif_decoding_options *o = heif_decoding_options_alloc ();
+    if (o)
+      o->num_codec_threads = 1;
+    e = heif_decode_image (h, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGB, o);
+    heif_decoding_options_free (o);
+  }
   if (e.code != heif_error_Ok)
     {
       *why = e.message;
@@ -531,8 +564,7 @@ int main (int argc, char **argv)
   src = argv[2];
   image = argv[3];
   info = argv[4];
-  if (!has_neon ())
-    av_force_cpu_flags (av_get_cpu_flags () & ~AV_CPU_FLAG_NEON);
+  choose_simd ();
   heif_init (NULL);
   ctx = heif_context_alloc ();
   if (!ctx)

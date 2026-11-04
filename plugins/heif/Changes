@@ -1,0 +1,22 @@
+LumenHEIF changes
+=================
+
+1.1 (4 November 2026): the first release
+
+- HEIF photos (.heic, .heif, .hif), as iPhones and many other phones take
+  them, with libheif 1.23.7 and FFmpeg 5.1.10 cut down to its HEVC
+  decoder.
+- AVIF photos (.avif), with dav1d 1.5.4 for AV1, with riscos-ffmpeg's
+  RISC OS changes. (1.1: AVIF was added after 1.0 was first built.)
+- Built for ARMv7 with VFPv3; FFmpeg's and dav1d's NEON code is used
+  where the processor has it, with exactly the same pictures either way.
+- The photo's own thumbnail is used when it has one; Display P3 photos
+  are converted to sRGB; sideways photos are turned the right way up.
+- The EXIF is found wherever the file keeps it (Samsung phones write it
+  after the picture data), so Lumen's Info tab lists it.
+- A format plug-in (Lumen's plug-in API 1): it needs Lumen 0.0.37 or
+  later.
+- The LumenHEIF User Guide, in Guide. Its photos are samples from
+  heic.digital and aviftools.net, not the author's.
+- LumenHEIF-1.1-sources.zip has LumenHEIF's, libheif's, FFmpeg's and
+  dav1d's sources and the patches, as the LGPL asks.

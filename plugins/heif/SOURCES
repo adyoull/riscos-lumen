@@ -1,7 +1,7 @@
-The sources of LumenHEIF 1.0
+The sources of LumenHEIF 1.1
 ============================
 
-LumenHEIF is Lumen's HEIF plug-in. It is built from:
+LumenHEIF is Lumen's HEIF and AVIF plug-in. It is built from:
 
 - lumenheif.c (in ffmpeg-patches): LumenHEIF itself, copyright (c) 2026
   Andrew Youll, MIT licence. Lumen's full source, including the EXIF code
@@ -10,11 +10,17 @@ LumenHEIF is Lumen's HEIF plug-in. It is built from:
   LGPL 3.
 - ffmpeg-5.1.10.tar.xz: FFmpeg 5.1.10 as released, GNU LGPL 2.1 or later
   as built here (only the HEVC decoder and its parser; no GPL parts).
+- dav1d_1.5.4.orig.tar.xz: dav1d 1.5.4 as released, the AV1 decoder
+  for AVIF, BSD 2-clause licence.
 - ffmpeg-patches: the changes made to FFmpeg for RISC OS (from
   riscos-ffmpeg, plus 0101), the NEON alignment rewrite applied to its
   ARM assembly (neon-align.py: RISC OS stops unaligned loads), and
-  build-heif.sh, the script that applies them and builds both libraries
+  build-heif.sh, the script that applies them and builds the libraries
   as LumenHEIF uses them.
+- dav1d-patches: the changes made to dav1d for RISC OS (from
+  riscos-ffmpeg: dav1d-1.5.4-riscos.patch; and 0101, NEON chosen at run
+  time) and the list of instructions the NEON alignment rewrite leaves
+  as they are (neon-align-dav1d.allow).
 
 To rebuild LumenHEIF with changed versions of the libraries, build them
 with build-heif.sh (or your own way, with the same options), then link

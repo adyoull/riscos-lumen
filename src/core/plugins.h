@@ -38,7 +38,7 @@
 #include <stddef.h>
 
 #define PLUGINS_MAX 32
-#define PLUGIN_SIGS 8
+#define PLUGIN_SIGS 16
 #define PLUGIN_API 1                   /* the format plug-in API this Lumen follows */
 
 typedef struct

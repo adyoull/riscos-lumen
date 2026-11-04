@@ -1,0 +1,36 @@
+From: Andrew Youll <adyoull@users.noreply.github.com>
+Subject: [PATCH] arm: RISC OS cpu flags from the program (NEON found at run time)
+
+LumenHEIF builds dav1d for VFPv3 so it runs on ARMv7 machines without
+NEON; the program asks VFPSupport_Features and sets
+dav1d_riscos_arm_cpu_flags before dav1d_open.
+---
+diff -ru a/src/arm/cpu.c b/src/arm/cpu.c
+--- a/src/arm/cpu.c	2026-11-04 20:39:15.560317438 +0000
++++ b/src/arm/cpu.c	2026-11-04 20:39:22.824638564 +0000
+@@ -32,7 +32,7 @@
+ #include "src/cpu.h"
+ #include "src/arm/cpu.h"
+ 
+-#if HAVE_GETAUXVAL || HAVE_ELF_AUX_INFO
++#if (HAVE_GETAUXVAL || HAVE_ELF_AUX_INFO) && !defined(__riscos__)
+ #include <sys/auxv.h>
+ 
+ #if ARCH_AARCH64
+@@ -72,6 +72,16 @@
+ }
+ #endif /* ARCH_AARCH64 */
+ 
++#elif defined(__riscos__)
++/* RISC OS: the program says whether the processor has NEON (it asks
++   VFPSupport_Features), as dav1d is built for VFPv3 and must run on ARMv7
++   machines without NEON too. Set before the first dav1d_open. */
++unsigned dav1d_riscos_arm_cpu_flags;
++
++COLD unsigned dav1d_get_cpu_flags_arm(void) {
++    return dav1d_get_default_cpu_flags() | dav1d_riscos_arm_cpu_flags;
++}
++
+ #elif defined(__APPLE__)
+ #include <sys/sysctl.h>
+ 

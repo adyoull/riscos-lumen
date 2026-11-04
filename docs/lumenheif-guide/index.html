@@ -58,9 +58,9 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <header class="cover">
 <div>
 <h1>LumenHEIF User Guide</h1>
-<p>HEIF photos in Lumen, on RISC OS</p>
-<p>The plug-in that lets Lumen open, show, adjust and export the HEIF photos (.heic) that iPhones and many other phones and cameras take.</p>
-<span class="badge">LumenHEIF 1.0 &middot; libheif 1.23.7 &middot; FFmpeg 5.1.10</span>
+<p>HEIF and AVIF photos in Lumen, on RISC OS</p>
+<p>The plug-in that lets Lumen open, show, adjust and export the HEIF photos (.heic) that iPhones and many other phones and cameras take, and AVIF photos (.avif).</p>
+<span class="badge">LumenHEIF 1.1 &middot; libheif 1.23.7 &middot; FFmpeg 5.1.10 &middot; dav1d 1.5.4</span>
 </div>
 </header>
 <main>
@@ -78,7 +78,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <li><a href="#part3">Part III: Looking After the Plug-in</a>
 <ul><li><a href="#ch7">7. Switching it off, adding and removing</a></li></ul></li>
 <li><a href="#part4">Part IV: Which Photos Work</a>
-<ul><li><a href="#ch8">8. Which HEIF files work</a></li></ul></li>
+<ul><li><a href="#ch8">8. Which HEIF and AVIF files work</a></li></ul></li>
 <li><a href="#part5">Part V: The Part of Tens</a>
 <ul><li><a href="#ch9">9. Ten problems and what to do about them</a></li><li><a href="#ch10">10. Ten things for experienced users</a></li></ul></li>
 <li><a href="#credits">Credits and licences</a></li>
@@ -89,12 +89,13 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <h2 class="part" id="intro">Introduction</h2>
 
 <p>Since 2017, iPhones have saved their photos as <b>HEIF</b> (High Efficiency Image File format), in files ending <code>.heic</code>, and many Android phones and some cameras can too. A HEIF photo is compressed the way HEVC (H.265) video is, so it holds the same picture as a JPEG in about half the space, often with more colour (Display P3) and sometimes more than 8 bits a channel.</p>
-<p>Lumen doesn't read HEIF itself. It hands HEIF photos to a small separate program, <b>LumenHEIF</b>, built on <b>libheif</b> and on the HEVC decoder from <b>FFmpeg</b>, cut down to just that. LumenHEIF is a <b>format plug-in</b>: its description tells Lumen which files are HEIF photos, and Lumen asks it for their pictures and details.</p>
-<p>Once it's installed, HEIF photos sit in Lumen's library beside your JPEGs and raw files, and you rate, adjust, export and print them in the same way.</p>
+<p><b>AVIF</b> (<code>.avif</code>) is the same kind of file with the picture compressed as <b>AV1</b> instead, the newer video codec: some Android phones and cameras save it, and it's common on the web.</p>
+<p>Lumen doesn't read HEIF itself. It hands HEIF photos to a small separate program, <b>LumenHEIF</b>, built on <b>libheif</b>, the HEVC decoder from <b>FFmpeg</b> (cut down to just that) for HEIF, and <b>dav1d</b> for AVIF. LumenHEIF is a <b>format plug-in</b>: its description tells Lumen which files are HEIF and AVIF photos, and Lumen asks it for their pictures and details.</p>
+<p>Once it's installed, HEIF and AVIF photos sit in Lumen's library beside your JPEGs and raw files, and you rate, adjust, export and print them in the same way.</p>
 
 <h4>About this guide</h4>
 <p>This guide is about the plug-in. Everything else about Lumen is in the <b>Lumen User Guide</b>: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
-<p>The pictures are screenshots of Lumen 0.0.37 with LumenHEIF 1.0 on RISC OS 5. The two HEIF photos in them, from an iPhone 12 Pro and a Samsung Galaxy A32 5G, are <b>not the author's</b>: they are sample files from <a href="https://heic.digital/samples/">heic.digital/samples</a> (see <a href="#credits">Credits</a>).</p>
+<p>The pictures are screenshots of Lumen 0.0.37 with LumenHEIF 1.1 on RISC OS 5. The photos in them are <b>not the author's</b>: the two HEIF photos, from an iPhone 12 Pro and a Samsung Galaxy A32 5G, are sample files from <a href="https://heic.digital/samples/">heic.digital/samples</a>, and the two AVIF photos are sample files from <a href="https://www.aviftools.net/samples/">aviftools.net/samples</a> (see <a href="#credits">Credits</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>That you have Lumen and know your way round it a little: how to import photos and open one in the Viewer, the three mouse buttons (<b>Select</b>, <b>Menu</b> and <b>Adjust</b>), and how to drag a directory from a Filer window.</p>
@@ -122,7 +123,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <ul>
 <li>It never changes or writes to your HEIF files. Like all of Lumen, it only reads them.</li>
 <li>It doesn't save HEIF files. Export makes JPEGs or PNGs, as for any photo.</li>
-<li>It reads HEIF photos coded with HEVC only: not AVIF (HEIF with AV1 inside), and not image sequences (<a href="#ch8">Chapter 8</a>).</li>
+<li>It reads still photos only, not image sequences such as animated AVIF (<a href="#ch8">Chapter 8</a>).</li>
 </ul>
 
 <div class="box tech"><b class="label">TECHNICAL STUFF</b>LumenHEIF is an ordinary RISC OS program that Lumen starts in the background, in a task window, once for each job, and which quits when the job is done, exactly as it runs LumenRaw. A damaged file can't take Lumen down with it. The details are in <a href="#ch10">Chapter 10</a>.</div>
@@ -133,7 +134,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <ul>
 <li><b>Lumen</b> 0.0.37 or later. Earlier versions don't know format plug-ins. LumenHEIF lives inside Lumen, in <code>!Lumen.Plugins.HEIF</code>.</li>
 <li>The same computer Lumen needs: RISC OS 5.30 or later on an ARMv7 machine with VFPv3, such as a Raspberry Pi 4, 400 or CM4, with the SharedUnixLibrary and ARMEABISupport modules from PackMan. LumenHEIF uses NEON where the processor has it, and gives exactly the same pictures without.</li>
-<li><b>Memory</b>: LumenHEIF needs memory only while it works: about 10 MB for a thumbnail, and about 100 MB to decode a 12 megapixel photo at full size (roughly 200 MB at 24 megapixels, 400 MB at 48). Allow at least 256 MB free, and 512 MB or more for photos from newer phones. A Raspberry Pi 4 with 2 GB or more is comfortable.</li>
+<li><b>Memory</b>: LumenHEIF needs memory only while it works: about 10 MB for a thumbnail, and about 100 MB to decode a 12 megapixel photo at full size (roughly 200 MB at 24 megapixels, 400 MB at 48). AVIF photos need about the same for their size. Allow at least 256 MB free, and 512 MB or more for photos from newer phones. A Raspberry Pi 4 with 2 GB or more is comfortable.</li>
 </ul>
 
 <h4>With PackMan</h4>
@@ -144,7 +145,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 </ol>
 
 <h4>By hand, from the zip file</h4>
-<p>LumenHEIF also comes as a zip file, <code>LumenHEIF-1.0.zip</code>, laid out as it goes into Lumen: <code>!Lumen.Plugins.HEIF</code>.</p>
+<p>LumenHEIF also comes as a zip file, <code>LumenHEIF-1.1.zip</code>, laid out as it goes into Lumen: <code>!Lumen.Plugins.HEIF</code>.</p>
 <ol class="steps">
 <li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
 <li>Open the <code>!Lumen</code> directory inside it (hold <kbd>Shift</kbd> and double-click it), then <code>Plugins</code>. You'll see a directory called <code>HEIF</code>.</li>
@@ -155,7 +156,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>You can also drag the <code>HEIF</code> directory straight onto Lumen's main window.</p>
 
 <h4>Checking it's working</h4>
-<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenHEIF is listed as <b>LumenHEIF 1.0</b>, with a tick when it's on.</p>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenHEIF is listed as <b>LumenHEIF 1.1</b>, with a tick when it's on.</p>
 <figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw and LumenHEIF installed and on.</figcaption></figure>
 
 <div class="box try"><b class="label">TRY IT</b>Copy a photo from an iPhone (its name ends in <code>/HEIC</code> on RISC OS) and drag it into Lumen's window. A thumbnail appears within a second or two. Double-click it to open it in the Viewer.</div>
@@ -165,10 +166,11 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <h3 class="chapter" id="ch3"><span>3</span> Bringing HEIF photos in</h3>
 
-<p>Import HEIF photos as you would any others: drag a directory or the files into Lumen's window, or use <b>Import</b> on the toolbar. Lumen knows them by their endings, <code>heic</code>, <code>heif</code> and <code>hif</code>, in capitals or not, and by the first bytes of the file, so one with another name is found too.</p>
+<p>Import HEIF photos as you would any others: drag a directory or the files into Lumen's window, or use <b>Import</b> on the toolbar. AVIF photos come in the same way. Lumen knows them by their endings, <code>heic</code>, <code>heif</code>, <code>hif</code> and <code>avif</code>, in capitals or not, and by the first bytes of the file, so one with another name is found too.</p>
 <figure><img src="images/browser.png" alt="HEIF photos in the Browser"><figcaption>Two HEIF photos just imported: one from an iPhone (upright), one from a Samsung phone. Both are samples from heic.digital.</figcaption></figure>
 
-<div class="box warn"><b class="label">WARNING</b>Without LumenHEIF, Lumen doesn't know HEIF photos at all, so it leaves them out when it imports a directory. Once LumenHEIF is installed, import the directory again: Lumen adds the HEIF photos, and the photos already there aren't added twice.</div>
+<figure><img src="images/browser-avif.png" alt="AVIF photos in the Browser"><figcaption>Two AVIF photos just imported (samples from aviftools.net).</figcaption></figure>
+<div class="box warn"><b class="label">WARNING</b>Without LumenHEIF, Lumen doesn't know HEIF or AVIF photos at all, so it leaves them out when it imports a directory. Once LumenHEIF is installed, import the directory again: Lumen adds the HEIF photos, and the photos already there aren't added twice.</div>
 
 <div class="box tip"><b class="label">TIP</b>An iPhone's Live Photos and Portrait photos are HEIF photos too. Lumen shows the still photo; the moving part of a Live Photo is a separate <code>.mov</code> file, which Lumen leaves alone.</div>
 
@@ -210,7 +212,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon (or from the main menu over the Browser).</p>
 
 <h4>Switching it off and on</h4>
-<p>Choose <b>LumenHEIF 1.0</b> to switch it off: the tick goes. LumenHEIF stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
+<p>Choose <b>LumenHEIF 1.1</b> to switch it off: the tick goes. LumenHEIF stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
 <p>While it's off, HEIF photos keep their thumbnails, stars, albums and adjustments, but opening one shows a message instead of the photo:</p>
 <figure><img src="images/switched-off.png" alt="A HEIF photo with the plug-in switched off"><figcaption>With LumenHEIF switched off. The Info tab says so too.</figcaption></figure>
 
@@ -221,7 +223,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <!-- ======================================================================= -->
 <h2 class="part" id="part4">Part IV: Which Photos Work<small>What LumenHEIF reads</small></h2>
 
-<h3 class="chapter" id="ch8"><span>8</span> Which HEIF files work</h3>
+<h3 class="chapter" id="ch8"><span>8</span> Which HEIF and AVIF files work</h3>
 
 <p>LumenHEIF reads HEIF still photos whose picture is coded with <b>HEVC</b>, which is what phones and cameras save as <code>.heic</code>, <code>.heif</code> or <code>.hif</code>:</p>
 <ul>
@@ -231,11 +233,14 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 </ul>
 <p>That includes photos stored in tiles (as iPhones save them), photos with their own thumbnail, turned and mirrored photos, Display P3 photos, and 8 and 10 bits a channel.</p>
 
-<h4>Not read by LumenHEIF 1.0</h4>
+<h4>AVIF</h4>
+<p>LumenHEIF reads AVIF still photos (<code>.avif</code>), whose picture is coded with <b>AV1</b>, with 8, 10 or 12 bits a channel, as Android phones, cameras, image editors and web sites save them.</p>
+<figure><img src="images/avif.png" alt="An AVIF photo in Lumen"><figcaption>An AVIF photo in the Viewer (a sample from aviftools.net, not the author's). It has no EXIF, so the Info tab says so.</figcaption></figure>
+
+<h4>Not read by LumenHEIF 1.1</h4>
 <ul>
-<li><b>AVIF</b> files: HEIF with AV1 inside instead of HEVC.</li>
-<li><b>HEIF sequences</b> (bursts and animations stored as one file): not read.</li>
-<li>The extra pictures some files carry, such as a depth map or an alpha (transparency) layer: Lumen shows the main photo only.</li>
+<li><b>Image sequences</b>: animated AVIF, and HEIF bursts and animations stored as one file.</li>
+<li>The extra pictures some files carry, such as a depth map or an alpha (transparency) layer: Lumen shows the main photo only, without its transparency.</li>
 </ul>
 <div class="box tip"><b class="label">TIP</b>An iPhone can be set to save JPEGs instead: <b>Settings &rarr; Camera &rarr; Formats &rarr; Most Compatible</b>. Photos sent from an iPhone by email or some apps arrive as JPEGs anyway.</div>
 
@@ -245,10 +250,10 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <h3 class="chapter" id="ch9"><span>9</span> Ten problems and what to do about them</h3>
 <table>
 <tr><th>Problem</th><th>What to do</th></tr>
-<tr><td>HEIF photos aren't imported</td><td>LumenHEIF isn't installed, or Lumen is older than 0.0.37. Install it (<a href="#ch2">Chapter 2</a>), then import the directory again.</td></tr>
+<tr><td>HEIF or AVIF photos aren't imported</td><td>LumenHEIF isn't installed, or Lumen is older than 0.0.37. Install it (<a href="#ch2">Chapter 2</a>), then import the directory again.</td></tr>
 <tr><td>"...the LumenHEIF plug-in that reads them is switched off"</td><td>Tick <b>LumenHEIF</b> in <b>Plug-ins</b> on Lumen's icon bar menu, then open the photo again.</td></tr>
 <tr><td>"...The LumenHEIF plug-in that reads them needs a newer Lumen"</td><td>This LumenHEIF was made for a newer Lumen than yours. Update Lumen.</td></tr>
-<tr><td>"The LumenHEIF plug-in couldn't read this photo (...)"</td><td>The file isn't a HEVC HEIF photo (perhaps AVIF), or it's damaged. Try another copy.</td></tr>
+<tr><td>"The LumenHEIF plug-in couldn't read this photo (...)"</td><td>The file isn't a still HEIF or AVIF photo (perhaps an animated one), or it's damaged. Try another copy.</td></tr>
 <tr><td>"The LumenHEIF plug-in stopped without finishing (perhaps out of memory)"</td><td>Decoding needs memory for a moment: about 100 MB for a 12 megapixel photo, more for bigger ones (<a href="#ch2">Chapter 2</a>). Quit other big programs and try again.</td></tr>
 <tr><td>"Lumen has no plug-in for this photo's format now"</td><td>LumenHEIF was removed. Install it again.</td></tr>
 <tr><td>The colours look a little less vivid than on the phone</td><td>Normal: the phone's screen shows Display P3, and Lumen works in sRGB. Vibrance or Saturation bring some back.</td></tr>
@@ -262,19 +267,19 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <li><b>It's a command-line program.</b> <code>LumenHEIF thumb SRC IMAGE INFO</code> writes the photo's own thumbnail (or the photo, 512 pixels at most) as a binary PPM; <code>LumenHEIF decode SRC IMAGE INFO MAXSIDE</code> decodes the photo to a PPM no bigger than MAXSIDE (0: full size). Run with no arguments, it prints its version and libheif's.</li>
 <li><b>INFO</b> is a text file of <code>key=value</code> lines: <code>width</code>, <code>height</code> (as turned), <code>orientation</code> (always 1: the picture comes upright), <code>make</code>, <code>model</code>, <code>iso</code>, <code>exposure</code>, <code>fnumber</code>, <code>focal</code>, <code>taken</code>, and <code>exif=OFFSET LENGTH</code>, where the EXIF's TIFF data is in the file; or <code>error=...</code>.</li>
 <li><b>Files appear whole or not at all:</b> written under a temporary name and renamed when complete.</li>
-<li><b>The plug-in description</b>, <code>!Lumen.Plugins.HEIF.Plugin</code>, follows Lumen's format plug-in API 1: <code>Kind: format</code>, <code>API: 1</code>, <code>Format: HEIF photo</code>, <code>Extensions: heic heif hif</code> and <code>Signature</code> lines for the HEIF brands (<code>ftypheic</code>, <code>ftypmif1</code> and others at offset 4). The API is <code>docs/plugin-api.md</code> in Lumen's source.</li>
+<li><b>The plug-in description</b>, <code>!Lumen.Plugins.HEIF.Plugin</code>, follows Lumen's format plug-in API 1: <code>Kind: format</code>, <code>API: 1</code>, <code>Format: HEIF or AVIF photo</code>, <code>Extensions: heic heif hif avif</code> and <code>Signature</code> lines for the HEIF and AVIF brands (<code>ftypheic</code>, <code>ftypmif1</code>, <code>ftypavif</code> and others at offset 4). The API is <code>docs/plugin-api.md</code> in Lumen's source.</li>
 <li><b>Finding the EXIF:</b> LumenHEIF walks the file's top-level boxes to the <code>meta</code> box, wherever it is (iPhones put it first; Samsung phones after the picture data), finds the <code>Exif</code> item in <code>iinf</code> and its place in <code>iloc</code>.</li>
 <li><b>Colour:</b> a photo whose colour (nclx) or ICC profile says Display P3 is converted to sRGB by a 3&times;3 matrix in linear light. Other photos are taken to be sRGB.</li>
-<li><b>NEON:</b> FFmpeg's HEVC NEON code (motion compensation, inverse transforms, loop filters) is used when VFPSupport_Features says the processor has NEON, and switched off otherwise. <code>*Set Lumen$NEON 0</code> forces the plain code. Both give identical pictures, checked against the PC by the tests.</li>
-<li><b>The FFmpeg in it</b> is FFmpeg 5.1.10 configured with only the HEVC decoder and parser, built for ARMv7 with VFPv3 (no ARMv5 or ARMv6 code), with the RISC OS patches that make its NEON code safe on a CPU that faults unaligned accesses.</li>
+<li><b>NEON:</b> FFmpeg's HEVC NEON code and dav1d's AV1 NEON code (motion compensation, inverse transforms, loop filters) are used when VFPSupport_Features says the processor has NEON, and switched off otherwise. <code>*Set Lumen$NEON 0</code> forces the plain code. Both give identical pictures, checked against the PC by the tests.</li>
+<li><b>The FFmpeg and dav1d in it:</b> FFmpeg 5.1.10 configured with only the HEVC decoder and parser, and dav1d 1.5.4 for AV1, both from the riscos-ffmpeg port: built for ARMv7 with VFPv3 (no ARMv5 or ARMv6 code), with the RISC OS patches that make their NEON code safe on a CPU that faults unaligned accesses, and one thread.</li>
 <li><b>How Lumen runs it:</b> in a task window, one job at a time, sharing the queue with LumenRaw; job files are in <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>.</li>
-<li><b>Source and licences:</b> LumenHEIF is &copy; Andrew Youll, 2026, under the MIT licence; its source is part of Lumen's source (<code>plugins.heif</code>). libheif is &copy; Dirk Farin and the libheif contributors, under the GNU LGPL 3; FFmpeg is &copy; the FFmpeg developers, under the GNU LGPL 2.1 or later. Their exact sources and the patches are published beside each release as <code>LumenHEIF-1.0-sources.zip</code>, so LumenHEIF can be rebuilt with changed libraries.</li>
+<li><b>Source and licences:</b> LumenHEIF is &copy; Andrew Youll, 2026, under the MIT licence; its source is part of Lumen's source (<code>plugins.heif</code>). libheif is &copy; Dirk Farin and the libheif contributors, under the GNU LGPL 3; FFmpeg is &copy; the FFmpeg developers, under the GNU LGPL 2.1 or later; dav1d is &copy; VideoLAN and the dav1d authors, under its BSD licence. Their exact sources and the patches are published beside each release as <code>LumenHEIF-1.1-sources.zip</code>, so LumenHEIF can be rebuilt with changed libraries.</li>
 </ol>
 
 <!-- ======================================================================= -->
 <h2 class="part" id="credits">Credits and licences</h2>
-<p>The two HEIF photos in this guide (an old safe in a wall, from an iPhone 12 Pro; sewing threads, from a Samsung Galaxy A32 5G) are <b>not the author's photos</b>. They are sample HEIC files published by heic.digital at <a href="https://heic.digital/samples/">https://heic.digital/samples/</a>, and are used here only to show LumenHEIF at work. Their copyright stays with their owners.</p>
-<p class="small">LumenHEIF is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on libheif (GNU Lesser General Public License 3) and FFmpeg's libavcodec and libavutil (GNU Lesser General Public License 2.1 or later); the licences are in <code>!Lumen.Plugins.HEIF.Licence</code>. Product names are the trademarks of their owners and are used here only to say which photos work.</p>
+<p>The two HEIF photos in this guide (an old safe in a wall, from an iPhone 12 Pro; sewing threads, from a Samsung Galaxy A32 5G) are <b>not the author's photos</b>. They are sample HEIC files published by heic.digital at <a href="https://heic.digital/samples/">https://heic.digital/samples/</a>, and are used here only to show LumenHEIF at work. The two AVIF photos (a forest path; mountains) are <b>not the author's photos</b> either: they are sample AVIF files published by aviftools.net at <a href="https://www.aviftools.net/samples/">https://www.aviftools.net/samples/</a>. Their copyright stays with their owners.</p>
+<p class="small">LumenHEIF is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on libheif (GNU Lesser General Public License 3), FFmpeg's libavcodec and libavutil (GNU Lesser General Public License 2.1 or later) and dav1d (BSD 2-clause); the licences are in <code>!Lumen.Plugins.HEIF.Licence</code>. Product names are the trademarks of their owners and are used here only to say which photos work.</p>
 
 </main>
 

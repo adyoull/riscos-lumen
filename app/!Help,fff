@@ -491,7 +491,8 @@ Other formats
 -------------
 Lumen reads JPEG, PNG and camera raw files itself. Other formats come
 as plug-ins, which add them without a new Lumen: the first is LumenHEIF,
-for the HEIF photos (.heic) iPhones and many other phones take. Install
+for the HEIF photos (.heic) iPhones and many other phones take, and
+AVIF photos (.avif). Install
 one from PackMan, or drag it into Plug-ins > Add plug-in. Each has its
 own guide, in !Lumen.Plugins.<name>.Guide. Photos in a plug-in's format
 are imported once it is installed: import the folder again.

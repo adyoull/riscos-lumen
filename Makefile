@@ -196,7 +196,7 @@ test-plugin: $(OUT)/lumenraw-host $(OUT)/lumenraw-arm
 # and libheif into $(DEPS)/<target>/lib.
 HEIF_SRC := plugins/heif/lumenheif.c
 HEIF_FLAGS := -O2 -Wall -Wextra
-HEIF_LIBS = $(1)/lib/libheif.a $(1)/lib/libavcodec.a $(1)/lib/libavutil.a
+HEIF_LIBS = $(1)/lib/libheif.a $(1)/lib/libavcodec.a $(1)/lib/libavutil.a $(1)/lib/libdav1d.a
 $(OUT)/LumenHEIF,ff8: $(HEIF_SRC) src/core/exif.c src/core/exif.h
 	@mkdir -p $(OUT)
 	$(RO_CC) $(RISCOS_CFLAGS) $(HEIF_FLAGS) -Isrc/core -I$(DEPS)/riscos/include -c $(HEIF_SRC) -o $(OUT)/lumenheif.o
@@ -217,7 +217,7 @@ $(OUT)/lumenheif-arm: $(HEIF_SRC) src/core/exif.c src/core/exif.h
 	  -Isrc/core -c src/core/exif.c -o $(OUT)/lumenheif-arm-exif.o
 	arm-linux-gnueabihf-g++ -no-pie -o $@ $(OUT)/lumenheif-arm.o $(OUT)/lumenheif-arm-exif.o \
 	  $(call HEIF_LIBS,$(DEPS)/linuxarm) -lm
-HEIF_VERSION := 1.0
+HEIF_VERSION := 1.1
 LIBHEIF_VERSION := 1.23.7
 FFMPEG_VERSION := 5.1.10
 # The plug-in's release zip, laid out as it goes into Lumen (PackMan's
@@ -225,23 +225,26 @@ FFMPEG_VERSION := 5.1.10
 # the sources it was built from (the LGPL asks for them with the binary):
 # libheif at its tag, FFmpeg's release tarball with the patches applied for
 # RISC OS, and the script that builds them.
-$(OUT)/LumenHEIF-$(HEIF_VERSION).zip: $(OUT)/LumenHEIF,ff8 plugins/heif/ReadMe plugins/heif/Licence plugins/heif/Plugin $(HEIF_GUIDE)
+$(OUT)/LumenHEIF-$(HEIF_VERSION).zip: $(OUT)/LumenHEIF,ff8 plugins/heif/ReadMe plugins/heif/Licence plugins/heif/Plugin plugins/heif/Changes $(HEIF_GUIDE)
 	rm -rf $(OUT)/heifpkg && mkdir -p $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Guide/images
 	cp $(OUT)/LumenHEIF,ff8 $(OUT)/heifpkg/!Lumen/Plugins/HEIF/
 	cp plugins/heif/ReadMe $(OUT)/heifpkg/!Lumen/Plugins/HEIF/ReadMe,fff
 	cp plugins/heif/Licence $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Licence,fff
 	cp plugins/heif/Plugin $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Plugin,fff
+	cp plugins/heif/Changes $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Changes,fff
 	cp docs/lumenheif-guide/index.html $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Guide/index.html,faf
 	for f in docs/lumenheif-guide/images/*.png; do cp $$f $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Guide/images/$$(basename $$f),b60; done
 	$(ROZIP) $@ -C $(OUT)/heifpkg !Lumen
-$(OUT)/LumenHEIF-$(HEIF_VERSION)-sources.zip: deps/build-heif.sh $(wildcard deps/ffmpeg/*) $(HEIF_SRC) plugins/heif/SOURCES
-	rm -rf $(OUT)/heifsrc && mkdir -p $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/ffmpeg-patches
+$(OUT)/LumenHEIF-$(HEIF_VERSION)-sources.zip: deps/build-heif.sh $(wildcard deps/ffmpeg/*) $(wildcard deps/dav1d/*) $(HEIF_SRC) plugins/heif/SOURCES
+	rm -rf $(OUT)/heifsrc && mkdir -p $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/ffmpeg-patches $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/dav1d-patches
 	cd /build/src/libheif-$(LIBHEIF_VERSION) && git archive --format=tar --prefix=libheif-$(LIBHEIF_VERSION)/ v$(LIBHEIF_VERSION) | gzip -9 > $(CURDIR)/$(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/libheif-$(LIBHEIF_VERSION).tar.gz
-	cp $(FFMPEG_TARBALL) $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/
+	cp $(FFMPEG_TARBALL) $(DAV1D_TARBALL) $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/
+	cp deps/dav1d/* $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/dav1d-patches/
 	cp deps/ffmpeg/* deps/build-heif.sh $(HEIF_SRC) $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/ffmpeg-patches/
 	cp plugins/heif/SOURCES $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/ReadMe
 	rm -f $@ && cd $(OUT)/heifsrc && zip -qr $(CURDIR)/$@ LumenHEIF-$(HEIF_VERSION)-sources
 FFMPEG_TARBALL ?= /build/src/ffmpeg-$(FFMPEG_VERSION).tar.xz
+DAV1D_TARBALL ?= /build/src/dav1d_1.5.4.orig.tar.xz
 heif-plugin: $(OUT)/LumenHEIF-$(HEIF_VERSION).zip $(OUT)/LumenHEIF-$(HEIF_VERSION)-sources.zip
 # The helper on HEIF photos made for the tests (tests/heif), on Linux, and on
 # ARM with RISC OS's alignment rules with and without NEON: the pictures

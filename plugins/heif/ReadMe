@@ -1,38 +1,41 @@
-HEIF plug-in for Lumen 1.0
-==========================
+HEIF and AVIF plug-in for Lumen 1.1
+===================================
 
 Lets Lumen import, show, adjust and export HEIF photos (.heic, .heif):
-what iPhones and many other phones and cameras save. 8 and 10-bit
-photos, photos stored in tiles, turned and mirrored photos, and Display
-P3 colour (converted to sRGB) all work. HEIF files with AV1 inside
-(AVIF) and HEIF image sequences aren't read.
+what iPhones and many other phones and cameras save; and AVIF photos
+(.avif): the same container with AV1 inside. 8, 10 and 12-bit photos,
+photos stored in tiles, turned and mirrored photos, and Display P3
+colour (converted to sRGB) all work. Image sequences (animated AVIF,
+HEIF bursts) aren't read.
 
 It is a small program, LumenHEIF, which Lumen runs in the background for
-each HEIF photo it needs: for a thumbnail it takes the photo's own small
-thumbnail (quick); for the viewer and exports it decodes the photo.
-Decoding uses NEON when the processor has it.
+each HEIF or AVIF photo it needs: for a thumbnail it takes the photo's
+own small thumbnail (quick); for the viewer and exports it decodes the
+photo. Decoding uses NEON when the processor has it.
 
 It lives in Lumen's Plugins directory (!Lumen.Plugins.HEIF); PackMan
 puts it there, or drag the HEIF directory from the zip into Lumen's
 Plug-ins > Add plug-in window (it works at once), or it is found the
 next time Lumen starts. It is a format plug-in: its Plugin file tells
-Lumen which files are HEIF photos, so it needs Lumen 0.0.37 or later.
-HEIF photos are imported once it is there.
+Lumen which files are HEIF and AVIF photos, so it needs Lumen 0.0.37
+or later. They are imported once it is there.
 
 Memory: LumenHEIF needs memory only while it works: about 10 MB for a
 thumbnail, and about 100 MB to decode a 12 megapixel photo at full size
 (roughly 200 MB at 24 megapixels, 400 MB at 48). Allow at least 256 MB
 free, and 512 MB or more for photos from newer phones.
 
-The LumenHEIF User Guide is in Guide (Guide.index/html): open it in
-your web browser.
+The LumenHEIF User Guide is in Guide (Guide.index/html): open it in your
+web browser.
 
 libheif is copyright (C) Dirk Farin and the libheif contributors and
 used under the GNU Lesser General Public License 3; FFmpeg is copyright
 the FFmpeg developers and used under the GNU Lesser General Public
-License 2.1 or later (only its HEVC decoder is built in). Both licences
-are in Licence. LumenHEIF itself is copyright (C) 2026 Andrew Youll and
-released under the MIT licence. Its source (in Lumen's source,
-plugins.heif), the libheif and FFmpeg sources it was built from, and the
-changes made to FFmpeg for RISC OS are published with each release, so
-LumenHEIF can be rebuilt with changed versions of the libraries.
+License 2.1 or later (only its HEVC decoder is built in); dav1d, the AV1
+decoder, is copyright VideoLAN and the dav1d authors and used under its
+BSD licence. The licences are in Licence. LumenHEIF itself is copyright
+(C) 2026 Andrew Youll and released under the MIT licence. Its source (in
+Lumen's source, plugins.heif), the libheif, FFmpeg and dav1d sources it
+was built from, and the changes made to them for RISC OS are published
+with each release, so LumenHEIF can be rebuilt with changed versions of
+the libraries.

@@ -2499,17 +2499,20 @@ static void test_heif (void)
 
   /* LumenHEIF's own Plugin file says what it reads. */
   CHECK (plugins_read ("plugins/heif", &pi) == 0 && !strcmp (pi.kind, "format") && pi.api == 1
-         && !strcmp (pi.format, "HEIF photo") && pi.nsigs == 8 && !strcmp (pi.package, "LumenHEIF"),
+         && !strcmp (pi.format, "HEIF or AVIF photo") && pi.nsigs == 10 && !strcmp (pi.package, "LumenHEIF"),
          "format plug-ins: LumenHEIF's Plugin file (Kind, API, Format, Signatures)");
   CHECK (plugins_claims_name (&pi, "SDFS::Pi.$.IMG_0001/HEIC") && plugins_claims_name (&pi, "x.heif")
-         && plugins_claims_name (&pi, "a/b.hif") && !plugins_claims_name (&pi, "x.heics")
+         && plugins_claims_name (&pi, "a/b.hif") && plugins_claims_name (&pi, "Photos.Lake/AVIF") && !plugins_claims_name (&pi, "x.heics")
          && !plugins_claims_name (&pi, "x.jpg"),
          "format plug-ins: its extensions, RISC OS and POSIX, any case");
   {
     unsigned char avif[32] = { 0, 0, 0, 0x1C, 'f', 't', 'y', 'p', 'a', 'v', 'i', 'f', 0, 0, 0, 0,
                                'm', 'i', 'f', '1', 'a', 'v', 'i', 'f', 'm', 'i', 'a', 'f', 0, 0, 0, 0 };
-    CHECK (plugins_claims (&pi, "photo", head, got) && !plugins_claims (&pi, "photo", avif, sizeof avif)
-           && !plugins_claims (&pi, "photo", head, 8), "format plug-ins: its signatures, whatever the name");
+    unsigned char mp4[32] = { 0, 0, 0, 0x1C, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 0, 0,
+                              'i', 's', 'o', 'm', 'a', 'v', 'c', '1', 'm', 'p', '4', '1', 0, 0, 0, 0 };
+    CHECK (plugins_claims (&pi, "photo", head, got) && plugins_claims (&pi, "photo", avif, sizeof avif)
+           && !plugins_claims (&pi, "photo", mp4, sizeof mp4) && !plugins_claims (&pi, "photo", head, 8),
+           "format plug-ins: its signatures (HEIC and AVIF, not an MP4 film), whatever the name");
   }
   {
     plugin_info q;
@@ -2527,7 +2530,7 @@ static void test_heif (void)
   /* Installed, but no program to run: says so, in its own words. */
   rawjob_setup_kind (kind, NULL, NULL, NULL);
   t = thumbgen_start (path, NULL, 256, 1, err, sizeof err);
-  CHECK (!t && strstr (err, "HEIF photo") && strstr (err, "LumenHEIF"), "format plug-ins: can't be run: install LumenHEIF again");
+  CHECK (!t && strstr (err, "HEIF or AVIF photo") && strstr (err, "LumenHEIF"), "format plug-ins: can't be run: install LumenHEIF again");
   rawjob_set_switched_off_kind (kind, 1);
   CHECK (strstr (rawjob_missing_message_kind (kind), "switched off")
          && strstr (rawjob_missing_message_kind (kind), "the LumenHEIF plug-in"), "format plug-ins: switched off: says so (by its package's name)");
@@ -2596,7 +2599,7 @@ static void test_heif (void)
               }
           }
       }
-    CHECK (n == 6 && ready == 6, "heif: the six imported, thumbnails made");
+    CHECK (n == 9 && ready == 9, "heif: the nine (six HEIC, three AVIF) imported, thumbnails made");
     CHECK (turned, "heif: a turned photo upright in the catalogue (800 x 1200, orientation 1)");
     CHECK (cam, "heif: camera, date and size in the catalogue, from the plug-in");
     CHECK (tags > 5, "heif: the Info tab's EXIF list, where the plug-in said it is");
@@ -2613,7 +2616,7 @@ static void test_heif (void)
     cat_id id;
     for (id = 0; cat_origin_below (lib_cat (l), id, &o) == 1; id = o.id)
       found += lib_preview_find (l, o.id, pv, sizeof pv);
-    CHECK (found == 6, "heif: a preview of each");
+    CHECK (found == 9, "heif: a preview of each");
   }
   lib_close (l);
   rawjob_clear_format (kind);

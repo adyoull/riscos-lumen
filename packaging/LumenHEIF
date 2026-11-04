@@ -10,12 +10,12 @@ Maintainer: Andrew Youll <adyoull@users.noreply.github.com>
 Standards-Version: 0.4.0
 Environment: arm32, vfpv3
 Depends: Lumen (>= 0.0.37), SharedUnixLibrary (>= 1.16), ARMEABISupport
-Description: HEIF photos for Lumen (libheif)
+Description: HEIF and AVIF photos for Lumen (libheif)
  Lets Lumen import, show, adjust and export HEIF/HEIC photos, as phones
- take them, with libheif 1.23.7 and FFmpeg 5.1.10's HEVC decoder (cut
- down to that alone): the photo's own thumbnail when it has one, Display
- P3 photos converted to sRGB, and their EXIF. It uses NEON where the
- computer has it (Pi 2 onwards). It needs about 100 MB of memory to
+ take them, and AVIF photos, with libheif 1.23.7, FFmpeg 5.1.10's HEVC
+ decoder (cut down to that alone) and dav1d 1.5.4 for AV1: the photo's
+ own thumbnail when it has one, Display P3 photos converted to sRGB, and
+ their EXIF. It uses NEON where the computer has it (Pi 2 onwards). It needs about 100 MB of memory to
  decode a 12 megapixel photo (more for bigger ones). It goes into Lumen's
  Plugins directory; Lumen finds it the next time it starts.
 Build-Map: !Lumen/Plugins/HEIF -> Apps/Graphics/!Lumen/Plugins/HEIF
@@ -25,5 +25,6 @@ Build-Notice: The HEIF plug-in for Lumen, packaged for PackMan from its
  LumenHEIF is copyright (C) 2026 Andrew Youll. libheif is copyright
  Dirk Farin and others, used under the GNU LGPL 3; FFmpeg's libavcodec
  and libavutil are copyright the FFmpeg developers, used under the GNU
- LGPL 2.1 or later. Their licences follow.
+ LGPL 2.1 or later; dav1d is copyright VideoLAN and the dav1d authors,
+ used under its BSD 2-clause licence. Their licences follow.
 Build-Copyright: !Lumen/Plugins/HEIF/Licence

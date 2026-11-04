@@ -1,44 +1,41 @@
 # Lumen changelog
 
-## 0.0.37 (4 November 2026): HEIF photos
+## 0.0.37 (4 November 2026): format plug-ins, menus and the loupe
 
-- HEIF photos (.heic, .heif, .hif), as iPhones and many other phones
-  take them, with a new plug-in, LumenHEIF 1.0: libheif 1.23.7 with
-  FFmpeg 5.1.10 cut down to its HEVC decoder. Built for ARMv7 with
-  VFPv3, using FFmpeg's NEON code where the processor has it (the same
-  pictures either way). The photo's own thumbnail is used when it has
-  one; Display P3 photos are converted to sRGB; sideways photos are
-  turned the right way up.
+### The plug-in API
 - Format plug-ins (API 1, docs/plugin-api.md): a plug-in's Plugin file
-  says which files are its own (Kind: format, Format, Extensions,
-  Signature), Lumen imports what installed plug-ins claim and runs them
-  to read them, and the plug-in says where the photo's EXIF is for the
-  Info tab. Lumen has no knowledge of HEIF itself; a new format needs
-  only a new plug-in. Each is switched on and off on its own; one for a
-  newer API is listed but not run. Previews (Raw files) cover them too.
+  says which files are its own (Kind: format, API, Format, Extensions,
+  Signature lines), and Lumen imports what the installed plug-ins claim
+  and runs them to read them, as it runs LumenRaw. The plug-in says
+  where a photo's EXIF is, so the Info tab lists it. Lumen holds no
+  knowledge of those formats itself: a new format needs only a new
+  plug-in, not a new Lumen. Camera raw stays built in (LumenRaw).
+- Each plug-in is switched on and off on its own; one written for a
+  newer API is listed but not run, and Lumen says it needs a newer Lumen.
+  Previews (Raw files) cover format plug-ins' photos too.
 - The library's catalogue (schema 7) keeps where a plug-in says a
   photo's EXIF is.
-- Menus: the Photo menu has the things used most on it directly (undo,
-  redo, Auto, crop, presets, before and after, copy and paste, label,
-  caption, export, print), and the rest in View, Adjust and Versions
-  (every item kept). Keys are shown after one space, so RISC OS lines
-  them up on the right; letter keys are shown with Shift (they work with
-  or without it). New letters for keys that couldn't be shown that way: P
-  flags (as /), X rejects (9), L the loupe (`), K the stack's pick (\).
-- The Plug-ins menu and messages name plug-ins by their package:
-  "LumenRaw 1.1", "LumenHEIF 1.0".
-- The Add plug-in window no longer lists plug-ins by name.
-- Loupe is on the Photo menu itself as well as under View, and the
-  toolbar's Loupe button lights up however the loupe is switched on or
-  off (a key, the menu).
-- LumenHEIF finds the EXIF wherever the phone put the meta box (Samsung
-  phones write it after the picture data); a test sample, late.heic,
-  has it that way. The LumenHEIF User Guide, in !Lumen.Plugins.HEIF.Guide
-  (its HEIF photos are samples from https://heic.digital/samples/, not
-  the author's).
-- The guide's menu pictures retaken.
-- LumenHEIF-1.0-sources.zip has LumenHEIF's, libheif's and FFmpeg's
-  sources and the patches, as the LGPL asks.
+- The Plug-ins menu and messages name plug-ins by their package
+  ("LumenRaw 1.1"). The Add plug-in window no longer lists plug-ins.
+
+### Menus
+- The Photo menu has the things used most on it directly (undo, redo,
+  Auto, crop, presets, before and after, the loupe, copy and paste,
+  label, caption, export, print), and the rest in View, Adjust and
+  Versions. Every item is kept.
+- Keys are shown after one space, so RISC OS lines them up on the right;
+  letter keys are shown with Shift (they work with or without it). New
+  letters for keys that couldn't be shown that way: P flags (as /),
+  X rejects (9), L the loupe (`), K the stack's pick (\).
+
+### The loupe
+- Loupe is on the Photo menu itself, as well as under View.
+- The toolbar's Loupe button lights up however the loupe is switched on
+  or off (a key, the menu, Escape), not only from the button.
+
+### The guide and help
+- Other formats are described as plug-ins, each with its own guide.
+- The menu pictures retaken; the keys and menus appendix updated.
 
 ## 0.0.36 (4 November 2026): the first public release
 

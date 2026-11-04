@@ -14,8 +14,9 @@ checks=0; fails=0
 check () { checks=$((checks + 1)); if ! eval "$1"; then fails=$((fails + 1)); echo "FAIL: $2"; fi; }
 mkdir -p "$work"
 dims () { head -c 20 "$1" | tr '\n' ' ' | awk '{print $2"x"$3}'; }
-for n in plain thumb p3 turned deep late; do
-  f=$here/heif/$n.heic; b=$work/$n
+for f in plain.heic thumb.heic p3.heic turned.heic deep.heic late.heic plain.avif turned.avif deep.avif; do
+  n=${f%.*}; [ "${f##*.}" = avif ] && n=avif-$n
+  f=$here/heif/$f; b=$work/$n
   rm -f "$b".*
   out=$(eval $wrap "$helper" decode "\"$f\"" "\"$b.ppm\"" "\"$b.info\"" 0 2>&1); rc=$?
   check "[ $rc -eq 0 ] && [ -z \"\$out\" ]" "$n: decode exits 0 and quietly ($rc: $out)"
@@ -41,6 +42,12 @@ for n in plain late; do
   check "[ -n \"$e\" ] && tiff_at \"$here/heif/$n.heic\" ${e%% *}" "$n: exif= says where its EXIF (a TIFF header) is ($e)"
 done
 check "cmp -s $work/late.ppm $work/plain.ppm" "late: meta after the picture data (as phones write it): the same picture"
+# AVIF (AV1 inside, dav1d)
+check "[ \$(dims $work/avif-plain.ppm) = 1200x800 ] && grep -q '^make=TestCam' $work/avif-plain.info && grep -q '^taken=2026:11:04 12:34:56' $work/avif-plain.info" "avif plain: 1200 x 800, its EXIF"
+e=$(sed -n 's/^exif=//p' "$work/avif-plain.info")
+check "[ -n \"$e\" ] && tiff_at \"$here/heif/plain.avif\" ${e%% *}" "avif plain: exif= says where its EXIF is ($e)"
+check "[ \$(dims $work/avif-turned.ppm) = 800x1200 ] && grep -q '^orientation=1' $work/avif-turned.info" "avif turned: upright (800 x 1200)"
+check "[ \$(dims $work/avif-deep.ppm) = 800x600 ]" "avif deep: 10 bits a channel, decoded to 8"
 check "python3 '$here/heif/compare.py' --p3 '$work/p3.ppm'" "p3: Display P3 red, green and blue converted to sRGB (outside sRGB: clipped)"
 out=$(eval $wrap "$helper" decode "\"$here/heif/plain.heic\"" "\"$work/small.ppm\"" "\"$work/small.info\"" 600 2>&1)
 check "[ \$(dims $work/small.ppm) = 600x400 ] && grep -q '^width=1200' $work/small.info" "decode 600: made 600 x 400, the details the photo's own"
