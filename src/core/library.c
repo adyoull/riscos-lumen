@@ -4,7 +4,9 @@
 /* library.c: see library.h. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 #include "exif.h"
 #include "fsys.h"
@@ -385,12 +387,41 @@ static unsigned long long fnv (unsigned long long h, const unsigned char *p, siz
   return h;
 }
 
-/* Raw files come typed every way (DOS from a card, Text, Data, TIFF or
-   nothing), so their extension lets any type through to the probe. */
+/* Whether the name ends /jpg, /jpeg, /jpe or /png (.png elsewhere), in
+   any case; a ",xxx" filetype suffix (files from other systems) is
+   ignored. */
+static int has_photo_extension (const char *path)
+{
+  static const char *const ext[] = { "jpg", "jpeg", "jpe", "png" };
+  const char *dot = NULL, *end, *q;
+  size_t n, k;
+  if (!path)
+    return 0;
+  end = path + strlen (path);
+  if (end - path > 4 && end[-4] == ',' && isxdigit ((unsigned char) end[-3]) && isxdigit ((unsigned char) end[-2])
+      && isxdigit ((unsigned char) end[-1]))
+    end -= 4;
+  for (q = path; q < end; q++)
+    if (*q == '/' || *q == '.')
+      dot = q;
+  if (!dot)
+    return 0;
+  n = (size_t) (end - dot - 1);
+  for (k = 0; k < sizeof ext / sizeof ext[0]; k++)
+    if (n == strlen (ext[k]) && strncasecmp (dot + 1, ext[k], n) == 0)
+      return 1;
+  return 0;
+}
+
+/* Which files are worth opening to look at. JPEG and PNG files are known
+   by their type, or by their name when they're typed otherwise (DOS or
+   Text from a card or a network share without MimeMap); raw files come
+   typed every way (DOS, Text, Data, TIFF or nothing), so their extension
+   lets any type through. The contents decide in the end. */
 static int likely_image_type (int ft, const char *path)
 {
   return ft == FT_JPEG || ft == FT_PNG || ft == FT_NONE || ft == FT_DATA || ft == FT_TIFF
-         || img_has_raw_extension (path) || rawjob_claims_name (path);
+         || has_photo_extension (path) || img_has_raw_extension (path) || rawjob_claims_name (path);
 }
 
 /* Imports one file. Unreadable or non-image files are skipped quietly
@@ -436,7 +467,7 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
     fmt = IMG_PLUGIN;                  /* a format plug-in claims it */
   if (fmt == IMG_UNKNOWN)
     {
-      if (e->filetype == FT_JPEG || e->filetype == FT_PNG)
+      if (e->filetype == FT_JPEG || e->filetype == FT_PNG || has_photo_extension (path))
         {
           snprintf (l->err, sizeof l->err, "%s isn't a readable image", fsys_leaf (path));
           l->skipped++;
@@ -481,8 +512,9 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   o.size = e->size;
   o.mtime = e->mtime;
   o.hash = h;
-  o.filetype = e->filetype != FT_NONE ? e->filetype
-             : info.format == IMG_JPEG ? FT_JPEG : info.format == IMG_PNG ? FT_PNG : FT_DATA;
+  /* JPEG and PNG files as what they are, however they were typed. */
+  o.filetype = info.format == IMG_JPEG ? FT_JPEG : info.format == IMG_PNG ? FT_PNG
+             : e->filetype != FT_NONE ? e->filetype : FT_DATA;
   o.batch = l->batch;
   o.info = &info;
   if (!l->project)

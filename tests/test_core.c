@@ -1630,6 +1630,52 @@ static void note_made (void *ctx, cat_id v)
     first_made = v;
 }
 
+/* --- JPEG and PNG files typed otherwise (DOS, Text: from a card or a
+   share without MimeMap) are found by their names; their contents decide. */
+static void test_mistyped (void)
+{
+  library *l;
+  char err[256], path[1024], libdir[1024];
+  cat_item *items;
+  int n, k, jpg = 0, png = 0;
+  FILE *f;
+  lib_progress pr;
+  cat_source all = { SRC_ALL, 0, 0, "" };
+  p (path, "Mistyped"); mkdir (path, 0777);
+  p (path, "Mistyped/text.png,fff"); make_png (path, 120, 80, 0, 0);
+  p (path, "Mistyped/dos.JPG,fe4"); make_jpeg (path, 160, 120, 1, NULL);
+  p (path, "Mistyped/jpeg.jpeg,fe4"); make_jpeg (path, 200, 150, 1, NULL);
+  p (path, "Mistyped/notes,fff"); make_png (path, 120, 80, 0, 0);   /* no name to go by: left */
+  p (path, "Mistyped/fake.png,fff");
+  f = fopen (path, "wb");
+  if (f)
+    {
+      fputs ("not a picture at all\n", f);
+      fclose (f);
+    }
+  p (libdir, "MistypedLibrary");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "mistyped: library");
+  p (path, "Mistyped");
+  lib_import (l, path);
+  drain (l);
+  lib_get_progress (l, &pr);
+  cat_list (lib_cat (l), &all, &items, &n);
+  for (k = 0; k < n; k++)
+    {
+      jpg += items[k].filetype == FT_JPEG;
+      png += items[k].filetype == FT_PNG;
+    }
+  CHECK (n == 3, "mistyped: a PNG typed Text and two JPEGs typed DOS are imported, by their names");
+  if (n != 3)
+    for (k = 0; k < n; k++)
+      fprintf (stderr, "  imported %s (type %x)\n", items[k].name, items[k].filetype);
+  CHECK (jpg == 2 && png == 1, "mistyped: kept as JPEG and PNG, whatever they were typed");
+  CHECK (pr.skipped == 1 && strstr (lib_last_error (l) ? lib_last_error (l) : "", "fake") != NULL,
+         "mistyped: a .png that isn't one is reported");
+  free (items);
+  lib_close (l);
+}
+
 static void test_lazy_thumbs (void)
 {
   library *l;
@@ -2666,6 +2712,7 @@ int main (int argc, char **argv)
   test_raw ();
   test_plugins ();
   test_raw_names ();
+  test_mistyped ();
   test_prefs ();
   rawjob_set_switched_off (1);
   checks++; if (!strstr (rawjob_missing_message (), "switched off")) { fails++; fprintf (stderr, "FAIL: raw plug-in off: says so\n"); }

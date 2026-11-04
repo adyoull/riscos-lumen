@@ -1,5 +1,14 @@
 # Lumen changelog
 
+## 0.0.38 (4 November 2026): JPEG and PNG files with another type
+
+- JPEG and PNG files typed something else (DOS or Text, after being
+  copied from a card or a network share without MimeMap) are imported:
+  a name ending /jpg, /jpeg, /jpe or /png lets them be looked at, and
+  their contents decide, as before. One named /png that isn't a PNG is
+  reported. They are kept in the library as JPEG and PNG.
+- The guide says how Lumen knows JPEG and PNG files.
+
 ## 0.0.37 (4 November 2026): the plug-in API, menus and the loupe
 
 ### The plug-in API

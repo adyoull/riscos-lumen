@@ -1,4 +1,4 @@
-Lumen 0.0.37 (04 Nov 2026)
+Lumen 0.0.38 (04 Nov 2026)
 ==========================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -21,7 +21,8 @@ Double-click !Lumen. Its window opens. Drag a folder of photos (JPEG or
 PNG) from the Filer onto the window or the icon bar icon. Lumen
 reads them in the background and makes thumbnails; the desktop stays
 usable while it works. Your photos are never changed or moved: the
-library only refers to them.
+library only refers to them. JPEG and PNG files typed something else
+(DOS or Text, say) are found by a name ending /jpg, /jpeg or /png.
 
 The library lives in <Choices$Write>.Lumen.Library (normally inside
 !Boot.Choices). To keep it elsewhere, set Lumen$Library before running
