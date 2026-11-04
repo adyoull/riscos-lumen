@@ -469,7 +469,7 @@ static menu *build_window_menu (void)
    which is what the rest of this file goes by. */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
        VM_PRESETS, VM_COPY, VM_PASTE, VM_LABEL, VM_TAGS, VM_COMPARE, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
-enum { PM_UNDO, PM_REDO, PM_AUTO, PM_CROP, PM_PRESETS, PM_BEFORE, PM_COPY, PM_PASTE, PM_LABEL, PM_TAGS,
+enum { PM_UNDO, PM_REDO, PM_AUTO, PM_CROP, PM_PRESETS, PM_BEFORE, PM_LOUPE, PM_COPY, PM_PASTE, PM_LABEL, PM_TAGS,
        PM_EXPORT, PM_PRINT, PM_VIEW, PM_ADJUST, PM_VERSIONS, PM_REMOVE, PM_COUNT };
 /* A group itself (the pointer on View, say): -100 - PM_*. */
 #define VM_GROUP(pm) (-100 - (pm))
@@ -480,7 +480,7 @@ static const signed char vm_versions[] = { VM_DUP, VM_NEW_ORIG, -1 };
 static const signed char *const pm_groups[PM_COUNT] = { [PM_VIEW] = vm_view, [PM_ADJUST] = vm_adjust,
                                                          [PM_VERSIONS] = vm_versions };
 /* The ones on the menu itself. */
-static const signed char pm_single[PM_COUNT] = { VM_UNDO, VM_REDO, VM_AUTO, VM_CROP, VM_PRESETS, VM_BEFORE, VM_COPY,
+static const signed char pm_single[PM_COUNT] = { VM_UNDO, VM_REDO, VM_AUTO, VM_CROP, VM_PRESETS, VM_BEFORE, VM_LOUPE, VM_COPY,
                                                  VM_PASTE, VM_LABEL, VM_TAGS, VM_EXPORT, VM_PRINT, -1, -1, -1, VM_REMOVE };
 
 /* c: a path in a menu of actions and groups of them (-1 terminated).
@@ -653,7 +653,8 @@ static menu *build_viewer_menu (void)
       set_item (m, PM_AUTO, 0, "Auto adjust " SH "A", 0, -1, crop);
       set_item (m, PM_CROP, 0, "Crop " SH "C", crop ? MF_TICK : 0, -1, 0);
       set_item (m, PM_PRESETS, 0, "Presets", 0, (int) pre, 0);
-      set_item (m, PM_BEFORE, 0, "Before and after " SH "M", (viewer_before () ? MF_TICK : 0) | MF_DOTTED, -1, crop);
+      set_item (m, PM_BEFORE, 0, "Before and after " SH "M", viewer_before () ? MF_TICK : 0, -1, crop);
+      set_item (m, PM_LOUPE, 0, "Loupe " SH "L", (viewer_loupe () ? MF_TICK : 0) | MF_DOTTED, (int) loupe_m, crop);
       set_item (m, PM_COPY, 0, "Copy adjustments ^C", 0, -1, 0);
       set_item (m, PM_PASTE, 0, "Paste adjustments ^V", 0, -1, looks_clip () == NULL);
       set_item (m, PM_LABEL, 0, "Colour label", 0, (int) label_menu ("Colour label", now), 0);

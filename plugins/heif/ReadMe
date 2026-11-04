@@ -21,6 +21,9 @@ HEIF photos are imported once it is there.
 
 A 12 megapixel photo needs about 100 MB of memory while it is decoded.
 
+The LumenHEIF User Guide is in Guide (Guide.index/html): open it in
+your web browser.
+
 libheif is copyright (C) Dirk Farin and the libheif contributors and
 used under the GNU Lesser General Public License 3; FFmpeg is copyright
 the FFmpeg developers and used under the GNU Lesser General Public

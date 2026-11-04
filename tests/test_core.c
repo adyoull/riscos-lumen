@@ -2596,7 +2596,7 @@ static void test_heif (void)
               }
           }
       }
-    CHECK (n == 5 && ready == 5, "heif: the five imported, thumbnails made");
+    CHECK (n == 6 && ready == 6, "heif: the six imported, thumbnails made");
     CHECK (turned, "heif: a turned photo upright in the catalogue (800 x 1200, orientation 1)");
     CHECK (cam, "heif: camera, date and size in the catalogue, from the plug-in");
     CHECK (tags > 5, "heif: the Info tab's EXIF list, where the plug-in said it is");
@@ -2613,7 +2613,7 @@ static void test_heif (void)
     cat_id id;
     for (id = 0; cat_origin_below (lib_cat (l), id, &o) == 1; id = o.id)
       found += lib_preview_find (l, o.id, pv, sizeof pv);
-    CHECK (found == 5, "heif: a preview of each");
+    CHECK (found == 6, "heif: a preview of each");
   }
   lib_close (l);
   rawjob_clear_format (kind);

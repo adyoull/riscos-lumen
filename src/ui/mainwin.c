@@ -1143,11 +1143,15 @@ static int tool_enabled (int k)
   return 1;
 }
 
-/* After every event: redraws Undo and Redo when they change. */
+/* After every event: redraws Undo and Redo when they change, and any
+   button whose highlight changed some other way (the loupe from a key
+   or the Photo menu, say). */
 void mainwin_tick (void)
 {
-  static int was = -1;
-  int now = tool_enabled (TB_UNDO) | tool_enabled (TB_REDO) << 1;
+  static int was = -1, was_on = -1;
+  int now = tool_enabled (TB_UNDO) | tool_enabled (TB_REDO) << 1, on = 0, k;
+  for (k = 0; k < TB_COUNT; k++)
+    on |= tool_on (k) << k;
   if (now != was && win != -1 && is_open)
     {
       int r0[4], r1[4];
@@ -1155,7 +1159,16 @@ void mainwin_tick (void)
       toolbar_button (TB_REDO, r1);
       _swix (Wimp_ForceRedraw, _INR (0, 4), win, r0[0], -TB_H, r1[2], 0);
     }
+  if (was_on != -1 && on != was_on && win != -1 && is_open)
+    for (k = 0; k < TB_COUNT; k++)
+      if (((on ^ was_on) >> k) & 1)
+        {
+          int r[4];
+          toolbar_button (k, r);
+          _swix (Wimp_ForceRedraw, _INR (0, 4), win, r[0], -TB_H, r[2], 0);
+        }
   was = now;
+  was_on = on;
 }
 
 void mainwin_toolbar_button (int k, int r[4])

@@ -28,6 +28,12 @@
 - The Plug-ins menu and messages name plug-ins without the library they
   are built on ("Camera raw 1.1", "HEIF photos 1.0").
 - The Add plug-in window no longer lists plug-ins by name.
+- Loupe is on the Photo menu itself as well as under View, and the
+  toolbar's Loupe button lights up however the loupe is switched on or
+  off (a key, the menu).
+- LumenHEIF finds the EXIF wherever the phone put the meta box (Samsung
+  phones write it after the picture data); a test sample, late.heic,
+  has it that way. The LumenHEIF User Guide, in !Lumen.Plugins.HEIF.Guide.
 - The guide's menu pictures retaken.
 - LumenHEIF-1.0-sources.zip has LumenHEIF's, libheif's and FFmpeg's
   sources and the patches, as the LGPL asks.

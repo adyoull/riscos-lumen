@@ -9,6 +9,7 @@
 #   p3.heic       Display P3 (nclx primaries 12), saturated colours
 #   turned.heic   stored 1200 x 800, EXIF orientation 6 (libheif's irot: shown 800 x 1200)
 #   deep.heic     10 bits a channel
+#   late.heic     plain.heic with its meta box after the picture data (make-late.py)
 import io, math, os
 import numpy as np
 from PIL import Image
@@ -67,3 +68,7 @@ hd.save(os.path.join(here, 'deep.heic'), quality=80)
 for n in sorted(os.listdir(here)):
     if n.endswith('.heic'):
         print(n, os.path.getsize(os.path.join(here, n)))
+
+# Then late.heic, from plain.heic.
+import runpy
+runpy.run_path(os.path.join(here, 'make-late.py'))

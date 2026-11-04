@@ -1192,9 +1192,9 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      CHECK (strcmp (item_text (menu_open, 13), "Adjust") == 0 && strstr (item_text (submenu (menu_open, 13), 1), "Crop shape") != NULL,
+      CHECK (strcmp (item_text (menu_open, 14), "Adjust") == 0 && strstr (item_text (submenu (menu_open, 14), 1), "Crop shape") != NULL,
              "Photo > Adjust > Crop shape");
-      choose4 (13, 1, 2, -1);
+      choose4 (14, 1, 2, -1);
       CHECK (viewer_crop_mode () && fabsf ((viewer_recipe ()->v[P_CROP_X1] - viewer_recipe ()->v[P_CROP_X0]) * 640
                                            - (viewer_recipe ()->v[P_CROP_Y1] - viewer_recipe ()->v[P_CROP_Y0]) * 480) < 2,
              "Square: the crop becomes square");
@@ -1303,7 +1303,7 @@ int main (int argc, char **argv)
           app_event (User_Message, w, 0);
           CHECK (submenu_opened == 0x5151 && menus_watching () && app_next_wake (&wake_at),
                  "Styles opened by Lumen (Wimp_CreateSubMenu); now it looks at the pointer every 5 cs");
-          w[8] = 13; w[9] = 2; w[10] = -1;     /* another submenu (Adjust > Grid): opened, not watched */
+          w[8] = 14; w[9] = 2; w[10] = -1;     /* another submenu (Adjust > Grid): opened, not watched */
           submenu_opened = 0;
           menus_closed ();
           app_event (User_Message, w, 0);
@@ -2025,17 +2025,35 @@ int main (int argc, char **argv)
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
     CHECK (!strcmp (item_text (menu_open, 0), "Undo ^Z") && !strcmp (item_text (menu_open, 2), "Auto adjust \x8B" "A")
-           && !strcmp (item_text (menu_open, 4), "Presets") && !strcmp (item_text (menu_open, 10), "Export... ^E")
-           && !strcmp (item_text (menu_open, 12), "View") && !strcmp (item_text (menu_open, 14), "Versions")
-           && (item (menu_open, 15)[0] & 0x80), "Photo menu: the common ones first, then View, Adjust, Versions, Remove");
-    CHECK (strstr (item_text (menu_open, 8), "Colour label") != NULL, "Photo menu: Colour label");
-    CHECK (!strcmp (item_text (menu_open, 9), "Caption and keywords... ^K"), "Caption and keywords..., its key after one space");
+           && !strcmp (item_text (menu_open, 4), "Presets") && !strcmp (item_text (menu_open, 11), "Export... ^E")
+           && !strcmp (item_text (menu_open, 13), "View") && !strcmp (item_text (menu_open, 15), "Versions")
+           && (item (menu_open, 16)[0] & 0x80), "Photo menu: the common ones first, then View, Adjust, Versions, Remove");
+    CHECK (!strcmp (item_text (menu_open, 6), "Loupe \x8BL") && submenu (menu_open, 6) == submenu (submenu (menu_open, 13), 1),
+           "Photo menu: Loupe on it, as well as under View (the same magnifications)");
+    CHECK (strstr (item_text (menu_open, 9), "Colour label") != NULL, "Photo menu: Colour label");
+    CHECK (!strcmp (item_text (menu_open, 10), "Caption and keywords... ^K"), "Caption and keywords..., its key after one space");
     CHECK (!strcmp (item_text (menu_open, 5), "Before and after \x8BM"), "Before and after: Shift-M shown");
-    CHECK (strstr (item_text (submenu (menu_open, 12), 2), "Compare") != NULL, "Photo > View > Compare");
-    CHECK (strstr (item_text (submenu (menu_open, 14), 0), "Duplicate version") != NULL, "Photo > Versions > Duplicate version");
-    CHECK (strstr (item_text (submenu (menu_open, 13), 3), "Reset all") != NULL, "Photo > Adjust > Reset all adjustments");
-    CHECK (strstr (item_text (submenu (menu_open, 12), 3), "Back to the Browser") != NULL, "Back to the Browser");
-    choose (12, 3, -1);
+    CHECK (strstr (item_text (submenu (menu_open, 13), 2), "Compare") != NULL, "Photo > View > Compare");
+    CHECK (strstr (item_text (submenu (menu_open, 15), 0), "Duplicate version") != NULL, "Photo > Versions > Duplicate version");
+    CHECK (strstr (item_text (submenu (menu_open, 14), 3), "Reset all") != NULL, "Photo > Adjust > Reset all adjustments");
+    CHECK (strstr (item_text (submenu (menu_open, 13), 3), "Back to the Browser") != NULL, "Back to the Browser");
+    {
+      /* Loupe from the menu: the toolbar's Loupe button lights up. */
+      int r[4];
+      mainwin_toolbar_button (8, r);
+      nulls_until_idle ();             /* the photo read */
+      mainwin_tick ();
+      force_redraws = 0;
+      choose (6, -1, -1);
+      mainwin_tick ();
+      CHECK (viewer_loupe () && force_redraws >= 1, "Loupe from the Photo menu: on, and the toolbar's button redrawn");
+      viewer_toggle_loupe ();          /* as L or ` does */
+      force_redraws = 0;
+      mainwin_tick ();
+      CHECK (!viewer_loupe () && force_redraws >= 1, "put away by a key: the button redrawn again");
+      app_event (Mouse_Click, b, 0);
+    }
+    choose (13, 3, -1);
     CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
     {
       /* Undo and Redo shaded in the Browser: the toolbar draws them grey and a click does nothing. */

@@ -14,7 +14,7 @@ checks=0; fails=0
 check () { checks=$((checks + 1)); if ! eval "$1"; then fails=$((fails + 1)); echo "FAIL: $2"; fi; }
 mkdir -p "$work"
 dims () { head -c 20 "$1" | tr '\n' ' ' | awk '{print $2"x"$3}'; }
-for n in plain thumb p3 turned deep; do
+for n in plain thumb p3 turned deep late; do
   f=$here/heif/$n.heic; b=$work/$n
   rm -f "$b".*
   out=$(eval $wrap "$helper" decode "\"$f\"" "\"$b.ppm\"" "\"$b.info\"" 0 2>&1); rc=$?
@@ -35,6 +35,12 @@ check "[ \$(dims $work/thumb.ppm) = 2400x1600 ]" "thumb: the whole picture from 
 check "[ \$(dims $work/thumb.thumb) = 320x212 ]" "thumb: its own 320-pixel thumbnail ($(dims $work/thumb.thumb))"
 check "[ \$(dims $work/turned.ppm) = 800x1200 ] && grep -q '^orientation=1' $work/turned.info && grep -q '^width=800' $work/turned.info" "turned: upright (800 x 1200), orientation 1"
 check "[ \$(dims $work/deep.ppm) = 800x600 ]" "deep: 10 bits a channel, decoded to 8"
+tiff_at () { python3 -c "import sys; f=open(sys.argv[1],'rb'); f.seek(int(sys.argv[2])); sys.exit(f.read(4) not in (b'II*\\0', b'MM\\0*'))" "$1" "$2"; }
+for n in plain late; do
+  e=$(sed -n 's/^exif=//p' "$work/$n.info")
+  check "[ -n \"$e\" ] && tiff_at \"$here/heif/$n.heic\" ${e%% *}" "$n: exif= says where its EXIF (a TIFF header) is ($e)"
+done
+check "cmp -s $work/late.ppm $work/plain.ppm" "late: meta after the picture data (as phones write it): the same picture"
 check "python3 '$here/heif/compare.py' --p3 '$work/p3.ppm'" "p3: Display P3 red, green and blue converted to sRGB (outside sRGB: clipped)"
 out=$(eval $wrap "$helper" decode "\"$here/heif/plain.heic\"" "\"$work/small.ppm\"" "\"$work/small.info\"" 600 2>&1)
 check "[ \$(dims $work/small.ppm) = 600x400 ] && grep -q '^width=1200' $work/small.info" "decode 600: made 600 x 400, the details the photo's own"

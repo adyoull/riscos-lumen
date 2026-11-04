@@ -340,22 +340,48 @@ static int exif_tiff (const unsigned char *item, size_t len, size_t *tiff)
   return 1;
 }
 
-/* "exif=OFFSET LENGTH": the TIFF data's place in the file, or "". */
+/* "exif=OFFSET LENGTH": the TIFF data's place in the file, or "". The
+   meta box can be anywhere at the top level (phones often write it after
+   the picture data), so the top-level boxes are walked through the file. */
 static void exif_place (const char *path, char *out, size_t n)
 {
   FILE *f = fopen (path, "rb");
-  unsigned char *buf = malloc (1024 * 1024), hdr[64];
-  size_t got = 0, tiff;
-  long at, len;
+  unsigned char h[16], hdr[64], *buf = NULL;
+  long pos = 0, at, len;
+  size_t tiff;
   out[0] = '\0';
-  if (f && buf)
-    got = fread (buf, 1, 1024 * 1024, f);
-  if (got && exif_item_at (buf, got, &at, &len) && len > (long) sizeof hdr && fseek (f, at, SEEK_SET) == 0
-      && fread (hdr, 1, sizeof hdr, f) == sizeof hdr && exif_tiff (hdr, sizeof hdr, &tiff))
-    snprintf (out, n, "exif=%ld %ld\n", at + (long) tiff, len - (long) tiff);
-  if (f)
-    fclose (f);
+  if (!f)
+    return;
+  for (;;)
+    {
+      unsigned long long size;
+      if (fseek (f, pos, SEEK_SET) != 0 || fread (h, 1, 8, f) != 8)
+        break;
+      size = be (h, 4);
+      if (size == 1)
+        {
+          if (fread (h + 8, 1, 8, f) != 8)
+            break;
+          size = (unsigned long long) be (h + 8, 4) << 32 | be (h + 12, 4);
+        }
+      if (memcmp (h + 4, "meta", 4) == 0)
+        {
+          if (size < 12 || size > 8u * 1024 * 1024 || !(buf = malloc ((size_t) size))
+              || fseek (f, pos, SEEK_SET) != 0 || fread (buf, 1, (size_t) size, f) != (size_t) size)
+            break;
+          /* iloc's offsets are from the start of the file, wherever meta is. */
+          if (exif_item_at (buf, (size_t) size, &at, &len) && len > (long) sizeof hdr
+              && fseek (f, at, SEEK_SET) == 0 && fread (hdr, 1, sizeof hdr, f) == sizeof hdr
+              && exif_tiff (hdr, sizeof hdr, &tiff))
+            snprintf (out, n, "exif=%ld %ld\n", at + (long) tiff, len - (long) tiff);
+          break;
+        }
+      if (size == 0 || size < 8 || size > 0x7FFFFFFFull - (unsigned long long) pos)
+        break;
+      pos += (long) size;
+    }
   free (buf);
+  fclose (f);
 }
 
 /* --- the photo's details --- */

@@ -180,7 +180,9 @@ $(OUT)/Lumen-User-Guide.zip: $(GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ guide
 $(OUT)/LumenRaw-User-Guide.zip: $(RAW_GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenraw-guide
-guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip
+$(OUT)/LumenHEIF-User-Guide.zip: $(HEIF_GUIDE)
+	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenheif-guide
+guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip $(OUT)/LumenHEIF-User-Guide.zip
 plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-$(LIBRAW_VERSION)-source.zip
 # The helper on real raw files (not in the repository: their licences
 # vary), on Linux and on ARM with RISC OS's alignment rules.
@@ -222,14 +224,17 @@ FFMPEG_VERSION := 5.1.10
 # the sources it was built from (the LGPL asks for them with the binary):
 # libheif at its tag, FFmpeg's release tarball with the patches applied for
 # RISC OS, and the script that builds them.
-$(OUT)/LumenHEIF-$(HEIF_VERSION).zip: $(OUT)/LumenHEIF,ff8 plugins/heif/ReadMe plugins/heif/Licence plugins/heif/Plugin
-	rm -rf $(OUT)/heifpkg && mkdir -p $(OUT)/heifpkg/!Lumen/Plugins/HEIF
+HEIF_GUIDE := docs/lumenheif-guide/index.html $(wildcard docs/lumenheif-guide/images/*.png)
+$(OUT)/LumenHEIF-$(HEIF_VERSION).zip: $(OUT)/LumenHEIF,ff8 plugins/heif/ReadMe plugins/heif/Licence plugins/heif/Plugin $(HEIF_GUIDE)
+	rm -rf $(OUT)/heifpkg && mkdir -p $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Guide/images
 	cp $(OUT)/LumenHEIF,ff8 $(OUT)/heifpkg/!Lumen/Plugins/HEIF/
 	cp plugins/heif/ReadMe $(OUT)/heifpkg/!Lumen/Plugins/HEIF/ReadMe,fff
 	cp plugins/heif/Licence $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Licence,fff
 	cp plugins/heif/Plugin $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Plugin,fff
+	cp docs/lumenheif-guide/index.html $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Guide/index.html,faf
+	for f in docs/lumenheif-guide/images/*.png; do cp $$f $(OUT)/heifpkg/!Lumen/Plugins/HEIF/Guide/images/$$(basename $$f),b60; done
 	$(ROZIP) $@ -C $(OUT)/heifpkg !Lumen
-$(OUT)/LumenHEIF-$(HEIF_VERSION)-sources.zip: deps/build-heif.sh $(wildcard deps/ffmpeg/*)
+$(OUT)/LumenHEIF-$(HEIF_VERSION)-sources.zip: deps/build-heif.sh $(wildcard deps/ffmpeg/*) $(HEIF_SRC) plugins/heif/SOURCES
 	rm -rf $(OUT)/heifsrc && mkdir -p $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/ffmpeg-patches
 	cd /build/src/libheif-$(LIBHEIF_VERSION) && git archive --format=tar --prefix=libheif-$(LIBHEIF_VERSION)/ v$(LIBHEIF_VERSION) | gzip -9 > $(CURDIR)/$(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/libheif-$(LIBHEIF_VERSION).tar.gz
 	cp $(FFMPEG_TARBALL) $(OUT)/heifsrc/LumenHEIF-$(HEIF_VERSION)-sources/
