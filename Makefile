@@ -13,7 +13,7 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.35
+VERSION := 0.0.36
 DATE := 01 Nov 2026
 OUT := out
 
@@ -141,7 +141,7 @@ clean:
 # deps/build-libraw.sh builds LibRaw into $(DEPS)/<target>/lib/libraw.a.
 RAW_SRC := plugins/libraw/lumenraw.cpp
 RAW_FLAGS := -O2 -Wall -Wextra
-RAW_SAMPLES ?= /home/claude/rawsamples
+RAW_SAMPLES ?= $(HOME)/rawsamples
 $(OUT)/LumenRaw,ff8: $(RAW_SRC)
 	@mkdir -p $(OUT)
 	$(RO_CXX) $(RISCOS_CFLAGS) $(RAW_FLAGS) -I$(DEPS)/riscos/include -o $(OUT)/lumenraw.elf $(RAW_SRC) \

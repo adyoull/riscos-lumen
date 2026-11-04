@@ -82,7 +82,7 @@ const char *rawjob_missing_message (void)
     return "This is a camera raw file, and the LibRaw plug-in that reads them is switched off. "
            "Tick it in Plug-ins on Lumen's icon bar menu.";
   return "This is a camera raw file. Lumen reads raw files with its LibRaw plug-in: "
-         "install LumenRaw from PackMan, then open Lumen again.";
+         "install LumenRaw (from PackMan, or the LumenRaw zip from Lumen's release page), then open Lumen again.";
 }
 
 int rawjob_busy (void) { return queue || running; }

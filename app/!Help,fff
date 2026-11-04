@@ -1,8 +1,8 @@
-Lumen 0.0.35 (04 Nov 2026) - test build
-=====================================
+Lumen 0.0.36 (04 Nov 2026)
+==========================
 
 A photo library and non-destructive editor for RISC OS 5.
-This test build has importing, browsing, rating, flagging and albums;
+Lumen has importing, browsing, rating, flagging and albums;
 captions, keywords and smart albums; versions and stacks; adjustments
 (white balance with an eyedropper, exposure, highlights & shadows,
 levels, curves, contrast, saturation, vibrancy, colour by hue, split
@@ -447,7 +447,9 @@ Camera raw files
 ----------------
 Lumen reads camera raw files (Canon, Nikon, Sony, Fujifilm, Olympus,
 Panasonic, Pentax, DNG and many more) with its LibRaw plug-in, which is
-a separate package in PackMan: LumenRaw. It goes into !Lumen.Plugins,
+a separate package: LumenRaw, in PackMan or as LumenRaw-1.1.zip on
+Lumen's release page (drag the LibRaw directory in its !Lumen.Plugins
+into Plug-ins > Add plug-in). It goes into !Lumen.Plugins,
 and Lumen finds it when it next starts (or at once, if it is added from
 the Plug-ins menu). Without it, raw files are still
 imported (and listed), and Lumen says what to install when you open one;

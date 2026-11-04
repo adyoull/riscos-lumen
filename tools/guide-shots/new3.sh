@@ -1,7 +1,7 @@
 #!/bin/bash
 # Part 3: adjustments, adjusted, panel-top/bottom, before, loupe, crop, photo menu, presets (on Gallop, after new2.sh).
-cd /home/claude/rol
-C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=/home/claude/guide/shots; K=/home/claude/guide/crop.py; SH="timeout 20 /home/claude/guide/shot.sh"
+cd $HOME/rol
+C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K=$HOME/guide/crop.py; SH="timeout 20 $HOME/guide/shot.sh"
 $C click 812 96; $W 4 >/dev/null; $C click 348 146; $W 6 >/dev/null; $C move 1500 1000
 $SH g12; $K $S/g12.png adjustments 58 44 1432 892 1100
 $C drag 180 547 250 547; $W 4 >/dev/null; $C drag 180 575 230 575; $W 4 >/dev/null; $C drag 248 489 254 489; $W 8 >/dev/null; $C move 1500 1000

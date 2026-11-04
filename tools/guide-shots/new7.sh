@@ -1,7 +1,7 @@
 #!/bin/bash
 # Part 7: black & white (Dry_stone_wall). Browser grid after the raw import: columns 488..1328 step 140, rows 220 382 544 706.
-cd /home/claude/rol
-C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=/home/claude/guide/shots; K=/home/claude/guide/crop.py; SH="timeout 20 /home/claude/guide/shot.sh"
+cd $HOME/rol
+C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K=$HOME/guide/crop.py; SH="timeout 20 $HOME/guide/shot.sh"
 $C click 120 146; $W 2 >/dev/null; $C click 126 212; $W 6 >/dev/null; $C click 672 96; $W 4 >/dev/null
 $C dclick 768 382; $W 20 >/dev/null; $C click 348 146; $W 6 >/dev/null; $C click 394 700; $W 3 >/dev/null
 $C drag 180 574 330 574; $W 6 >/dev/null; $C drag 230 656 212 656; $W 6 >/dev/null; $C drag 238 600 254 600; $W 10 >/dev/null; $C move 1500 1000

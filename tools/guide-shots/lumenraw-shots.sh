@@ -1,7 +1,7 @@
 #!/bin/bash
 # LumenRaw guide pictures (after guide/start.sh): Andrew's D700 NEFs.
-cd /home/claude/rol
-C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=/home/claude/guide/shots; K="python3 /home/claude/lrguide/crop.py"; SH="timeout 20 /home/claude/guide/shot.sh"
+cd $HOME/rol
+C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K="python3 $HOME/lrguide/crop.py"; SH="timeout 20 $HOME/guide/shot.sh"
 $C drag 1852 986 1420 880; $W 3 >/dev/null
 $C drag 356 1016 900 500; $W 30 >/dev/null; $C click 1360 880; $W 4 >/dev/null; $C click 500 240; $W 2 >/dev/null; $C click 232 146; $W 4 >/dev/null; $C move 1500 1000
 $SH lrA; $K $S/lrA.png browser 58 44 1432 892 1100; $K $S/lrA.png info-raw 62 130 402 870

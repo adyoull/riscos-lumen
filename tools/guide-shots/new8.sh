@@ -1,7 +1,7 @@
 #!/bin/bash
 # Second session (after start-new2.sh): Photos imported whole as one project, status bar, project menu, watching + folder albums, activity, folder-albums.
-cd /home/claude/rol
-C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=/home/claude/guide/shots; K=/home/claude/guide/crop.py; SH="timeout 20 /home/claude/guide/shot.sh"
+cd $HOME/rol
+C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K=$HOME/guide/crop.py; SH="timeout 20 $HOME/guide/shot.sh"
 $C drag 1852 986 1420 880; $W 3 >/dev/null; $C click 1360 880; $W 1 >/dev/null
 $C drag 358 1038 900 500; for i in 1 2 3 4 5 6 7 8; do sleep 0.4; $SH f5_$i; done   # pick the frame with "Making thumbnails: N to go"
 $K $S/f5_2.png status-bar 58 866 898 892

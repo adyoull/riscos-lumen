@@ -8,7 +8,7 @@ IXFS:$.RISCOS), start-lib.sh again then new11.sh. The icon bar menu
 (iconbar-menu) was taken by hand: Menu on the icon, cropped 1750,825 to
 1920,1080. Glow (0.0.29): glow-panel from the Viewer on Labradors (Dogs_and_garden,
 Adjustments tab scrolled to the end, Amount 40, Warmth 25); glow.png and
-the styles sheet are host renders (/home/claude/look, /home/claude/styles,
+the styles sheet are host renders (~/look, ~/styles,
 4 columns); styles-preview retaken on Leading_out with the pointer on
 Sunlit Garden. The LumenRaw guide: guide's start.sh, then lumenraw-shots.sh.
 
@@ -18,4 +18,4 @@ Dogs_and_garden, Polo and Jousting (JPEGs) and Raw (three Nikon D700
 NEFs). They are not kept in the repository.
 
 The styles sheet is made on the host: render.c and sheet.py in
-/home/claude/styles (Lumen's develop on a small copy of Upright).
+~/styles (Lumen's develop on a small copy of Upright).

@@ -57,7 +57,7 @@ a { color:#1f5fa8; }
 <h1>Lumen User Guide</h1>
 <p>Keeping, sorting and improving your photos on RISC OS</p>
 <p>Start here if you've never used a photo library program before. If you have, the Technical Stuff boxes and Chapter 21 are for you.</p>
-<span class="badge">Lumen 0.0.35</span>
+<span class="badge">Lumen 0.0.36</span>
 </div>
 </header>
 <main>
@@ -99,7 +99,7 @@ a { color:#1f5fa8; }
 <p>The pictures are screenshots of Lumen running on RISC OS 5, with photos by the author, Andrew Youll: horses, eventing, jousting and dogs (see <a href="#credits">Photo credits</a>).</p>
 
 <h4>This is an early version</h4>
-<p>Lumen 0.0.35 is a test version. It's still being tested, so you may come across bugs. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
+<p>Lumen 0.0.36 is the first public release. It's early days, so you may come across bugs: please report them on the ROOL forum or Lumen's GitHub page. Lumen never writes to your photos, so they're safe; and if you change a photo's look by mistake, <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it back (<a href="#ch10">Chapter 10</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>Not much. You should know the three mouse buttons (<b>Select</b> on the left, <b>Menu</b> in the middle, <b>Adjust</b> on the right), and how to drag a file or directory from a Filer window into a program. You don't need to know anything about photography.</p>
@@ -149,7 +149,7 @@ a { color:#1f5fa8; }
 <tr><th>You need</th><th>Because</th></tr>
 <tr><td>RISC OS 5.30 or later on a Raspberry Pi 4, 400 or CM4</td><td>Lumen is built for these. Other ARMv7 machines should work too.</td></tr>
 <tr><td>SharedUnixLibrary 1.16 or later, and ARMEABISupport</td><td>Lumen uses them. You can get both through PackMan. Lumen checks for them when it starts.</td></tr>
-<tr><td>LumenRaw (optional)</td><td>Only for camera raw files (<a href="#ch16">Chapter 16</a>). It's in PackMan.</td></tr>
+<tr><td>LumenRaw (optional)</td><td>Only for camera raw files (<a href="#ch16">Chapter 16</a>). It's in PackMan, and its zip is on Lumen's release page.</td></tr>
 <tr><td>A web browser such as NetSurf (optional)</td><td>Only for reading this guide from Lumen's menu.</td></tr>
 </table>
 
@@ -161,7 +161,7 @@ a { color:#1f5fa8; }
 <ol class="steps">
 <li>Install SharedUnixLibrary and ARMEABISupport with PackMan, if you haven't already. Most RISC OS 5 programs ported from other systems need them, so you may have them.</li>
 <li>Unzip <code>Lumen.zip</code> and copy <b>!Lumen</b> to where you keep your applications, for example <code>$.Apps.Graphics</code>. Or install the <b>Lumen</b> package with PackMan, which puts it there for you.</li>
-<li>If you take photos in camera raw, install the <b>LumenRaw</b> package from PackMan too (<a href="#ch16">Chapter 16</a>).</li>
+<li>If you take photos in camera raw, install <b>LumenRaw</b> too: the package from PackMan, or <code>LumenRaw-1.1.zip</code> from Lumen's release page (<a href="#ch16">Chapter 16</a>).</li>
 </ol>
 
 <h4>Starting</h4>
@@ -787,7 +787,7 @@ a { color:#1f5fa8; }
 <p>Many cameras can save <b>raw</b> files: everything the sensor saw, before the camera made a JPEG of it. They hold more detail in bright and dark parts, but every camera maker has its own format. Lumen reads them with a <b>plug-in</b> called <b>LumenRaw</b>, which uses the free LibRaw library and knows over a thousand cameras.</p>
 
 <h4>Installing LumenRaw</h4>
-<p>Install the <b>LumenRaw</b> package with PackMan. It goes inside Lumen (in <code>!Lumen.Plugins.LibRaw</code>), and Lumen finds it the next time it starts. (A plug-in added from the Plug-ins menu, below, works at once, without restarting.) Raw files you imported before then get their thumbnails as soon as it's there.</p>
+<p>Install the <b>LumenRaw</b> package with PackMan, or unzip <code>LumenRaw-1.1.zip</code> from Lumen's release page and drag the <b>LibRaw</b> directory in it (in <code>!Lumen.Plugins</code>; Shift-double-click the zip's !Lumen to open it) into the Add plug-in window (below). It goes inside Lumen (in <code>!Lumen.Plugins.LibRaw</code>), and Lumen finds it the next time it starts. (A plug-in added from the Plug-ins menu, below, works at once, without restarting.) Raw files you imported before then get their thumbnails as soon as it's there.</p>
 
 <h4>Working with raw files</h4>
 <p>Import them as you would JPEGs. Thumbnails come from the preview the camera saved in the file, so they're quick. To show a raw photo in the Viewer, Lumen develops it (with the camera's own white balance and colour); a big file takes a few seconds. Everything else (stars, adjustments, export) is the same as for any photo.</p>
@@ -858,7 +858,7 @@ a { color:#1f5fa8; }
 <tr><th>Problem</th><th>What to do</th></tr>
 <tr><td>Lumen says it needs SharedUnixLibrary or ARMEABISupport.</td><td>Install them with PackMan, then start Lumen again.</td></tr>
 <tr><td>New photos I put in an imported directory haven't appeared.</td><td>Lumen only brings them in by itself if the project is watched: tick <b>Watch for new photos</b> on the project's menu (<a href="#ch6">Chapter 6</a>). To have it look now, close and reopen Lumen's window. Or drag the directory in again: only the new photos are added.</td></tr>
-<tr><td>A raw file has a grey thumbnail, or says to install something.</td><td>Install LumenRaw with PackMan (<a href="#ch16">Chapter 16</a>), then start Lumen again. If it's installed, check it's ticked in the Plug-ins menu: Lumen says when it's switched off.</td></tr>
+<tr><td>A raw file has a grey thumbnail, or says to install something.</td><td>Install LumenRaw (<a href="#ch16">Chapter 16</a>), then start Lumen again. If it's installed, check it's ticked in the Plug-ins menu: Lumen says when it's switched off.</td></tr>
 <tr><td>Photos show "Missing".</td><td>Their files have moved or their disc isn't there. Put the disc back and reopen the window, or drag the files' new directory into Lumen (<a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Keys don't do anything.</td><td>Click in Lumen's window first, so it has the input focus. If you're typing in the Search box, the keys go there: click on a photo.</td></tr>
 <tr><td>A photo I rejected has disappeared.</td><td>Click <b>Rejected</b> in the Library tab, select it and give it stars again (or press <kbd>0</kbd>): rejecting took its stars away.</td></tr>

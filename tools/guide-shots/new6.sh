@@ -1,7 +1,7 @@
 #!/bin/bash
 # Part 6: full screen, remove, missing, raw import + raw in the viewer.
-cd /home/claude/rol
-C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=/home/claude/guide/shots; K=/home/claude/guide/crop.py; SH="timeout 20 /home/claude/guide/shot.sh"
+cd $HOME/rol
+C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K=$HOME/guide/crop.py; SH="timeout 20 $HOME/guide/shot.sh"
 $C dclick 486 372; $W 10 >/dev/null; $C key F; $W 10 >/dev/null; $C move 1919 540; $W 1 >/dev/null; $SH h31; $K $S/h31.png full-screen 0 0 1920 1080 900
 $C key F; $W 4 >/dev/null; $C click 672 96; $W 3 >/dev/null
 $C click 486 534; $C key DELETE; $W 3 >/dev/null; $SH h32; $K $S/h32.png remove 772 410 1144 652; $C click 1082 622; $W 1 >/dev/null

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Part 4: loupe, crop, photo menu, save preset, presets menu (Gallop, after new3.sh).
-cd /home/claude/rol
-C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=/home/claude/guide/shots; K=/home/claude/guide/crop.py; SH="timeout 20 /home/claude/guide/shot.sh"
+cd $HOME/rol
+C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K=$HOME/guide/crop.py; SH="timeout 20 $HOME/guide/shot.sh"
 $C move 830 300; $C key GRAVE; $W 3 >/dev/null; $C move 832 302; $W 15 >/dev/null
 $SH g17; $K $S/g17.png loupe 420 180 1420 820 900; $C key GRAVE; $W 2 >/dev/null
 $C key C; $W 6 >/dev/null; $C drag 424 190 540 250; $W 5 >/dev/null; $C move 1500 500

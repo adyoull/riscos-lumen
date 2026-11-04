@@ -10,7 +10,7 @@ Depends: Lumen, SharedUnixLibrary (>= 1.16), ARMEABISupport
 Description: Camera raw files for Lumen (LibRaw)
  Lets Lumen import, show, adjust and export camera raw files (Canon,
  Nikon, Sony, Fujifilm, Olympus, Panasonic, Pentax, DNG and many more)
- with LibRaw 0.21.4: the camera's own preview for thumbnails, developed
+ with LibRaw 0.22.3: the camera's own preview for thumbnails, developed
  with its white balance and colour for the viewer and exports. It goes
  into Lumen's Plugins directory; Lumen finds it the next time it starts.
 Build-Map: !Lumen/Plugins/LibRaw -> Apps/Graphics/!Lumen/Plugins/LibRaw

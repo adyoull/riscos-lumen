@@ -1,7 +1,7 @@
 #!/bin/bash
 # Part 5: info pictures (Polo, taken before), window/selection menus, search, rating filter, export box.
-cd /home/claude/rol
-C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=/home/claude/guide/shots; K=/home/claude/guide/crop.py; SH="timeout 20 /home/claude/guide/shot.sh"
+cd $HOME/rol
+C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K=$HOME/guide/crop.py; SH="timeout 20 $HOME/guide/shot.sh"
 
 $C click 672 96; $W 4 >/dev/null; $C click 120 146; $W 2 >/dev/null
 $C click 900 700 menu; $W 2 >/dev/null; $SH h25; $K $S/h25.png window-menu 864 676 1038 882

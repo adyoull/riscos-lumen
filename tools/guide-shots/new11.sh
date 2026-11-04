@@ -2,8 +2,8 @@
 # Import library and Check library (after start-lib.sh and new10.sh's DogsLib): import Eventing, drop
 # DogsLib on Lumen (library-import), Import; a thumbnail deleted and a stray one added on the host,
 # Check library... (library-check), Repair (library-repaired).
-cd /home/claude/rol
-C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=/home/claude/guide/shots; K=/home/claude/guide/crop.py; SH="timeout 20 /home/claude/guide/shot.sh"
+cd $HOME/rol
+C="timeout 30 python3 drv/ctl.py"; W=drv/wait.sh; S=$HOME/guide/shots; K=$HOME/guide/crop.py; SH="timeout 20 $HOME/guide/shot.sh"
 $C drag 222 976 900 500; $W 40; $C click 68 58; $W 2
 $C drag 1112 955 900 600; $W 4; $C move 1400 300; $SH l3; $K $S/l3.png library-import 690 412 1230 648
 $C click 1152 600; $W 15
