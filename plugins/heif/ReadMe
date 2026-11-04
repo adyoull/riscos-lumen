@@ -19,7 +19,10 @@ next time Lumen starts. It is a format plug-in: its Plugin file tells
 Lumen which files are HEIF photos, so it needs Lumen 0.0.37 or later.
 HEIF photos are imported once it is there.
 
-A 12 megapixel photo needs about 100 MB of memory while it is decoded.
+Memory: LumenHEIF needs memory only while it works: about 10 MB for a
+thumbnail, and about 100 MB to decode a 12 megapixel photo at full size
+(roughly 200 MB at 24 megapixels, 400 MB at 48). Allow at least 256 MB
+free, and 512 MB or more for photos from newer phones.
 
 The LumenHEIF User Guide is in Guide (Guide.index/html): open it in
 your web browser.

@@ -15,8 +15,9 @@ Description: HEIF photos for Lumen (libheif)
  take them, with libheif 1.23.7 and FFmpeg 5.1.10's HEVC decoder (cut
  down to that alone): the photo's own thumbnail when it has one, Display
  P3 photos converted to sRGB, and their EXIF. It uses NEON where the
- computer has it (Pi 2 onwards). It goes into Lumen's Plugins directory;
- Lumen finds it the next time it starts.
+ computer has it (Pi 2 onwards). It needs about 100 MB of memory to
+ decode a 12 megapixel photo (more for bigger ones). It goes into Lumen's
+ Plugins directory; Lumen finds it the next time it starts.
 Build-Map: !Lumen/Plugins/HEIF -> Apps/Graphics/!Lumen/Plugins/HEIF
 Build-Notice: The HEIF plug-in for Lumen, packaged for PackMan from its
  release zip.

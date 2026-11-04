@@ -133,7 +133,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <ul>
 <li><b>Lumen</b> 0.0.37 or later. Earlier versions don't know format plug-ins. LumenHEIF lives inside Lumen, in <code>!Lumen.Plugins.HEIF</code>.</li>
 <li>The same computer Lumen needs: RISC OS 5.30 or later on an ARMv7 machine with VFPv3, such as a Raspberry Pi 4, 400 or CM4, with the SharedUnixLibrary and ARMEABISupport modules from PackMan. LumenHEIF uses NEON where the processor has it, and gives exactly the same pictures without.</li>
-<li><b>Memory</b>: decoding a 12 megapixel photo takes about 100 MB for a moment.</li>
+<li><b>Memory</b>: LumenHEIF needs memory only while it works: about 10 MB for a thumbnail, and about 100 MB to decode a 12 megapixel photo at full size (roughly 200 MB at 24 megapixels, 400 MB at 48). Allow at least 256 MB free, and 512 MB or more for photos from newer phones. A Raspberry Pi 4 with 2 GB or more is comfortable.</li>
 </ul>
 
 <h4>With PackMan</h4>
@@ -249,7 +249,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <tr><td>"...the LumenHEIF plug-in that reads them is switched off"</td><td>Tick <b>LumenHEIF</b> in <b>Plug-ins</b> on Lumen's icon bar menu, then open the photo again.</td></tr>
 <tr><td>"...The LumenHEIF plug-in that reads them needs a newer Lumen"</td><td>This LumenHEIF was made for a newer Lumen than yours. Update Lumen.</td></tr>
 <tr><td>"The LumenHEIF plug-in couldn't read this photo (...)"</td><td>The file isn't a HEVC HEIF photo (perhaps AVIF), or it's damaged. Try another copy.</td></tr>
-<tr><td>"The LumenHEIF plug-in stopped without finishing (perhaps out of memory)"</td><td>Decoding needs memory for a moment. Quit other big programs and try again.</td></tr>
+<tr><td>"The LumenHEIF plug-in stopped without finishing (perhaps out of memory)"</td><td>Decoding needs memory for a moment: about 100 MB for a 12 megapixel photo, more for bigger ones (<a href="#ch2">Chapter 2</a>). Quit other big programs and try again.</td></tr>
 <tr><td>"Lumen has no plug-in for this photo's format now"</td><td>LumenHEIF was removed. Install it again.</td></tr>
 <tr><td>The colours look a little less vivid than on the phone</td><td>Normal: the phone's screen shows Display P3, and Lumen works in sRGB. Vibrance or Saturation bring some back.</td></tr>
 <tr><td>A photo is on its side</td><td>Turn it with <kbd>[</kbd> or <kbd>]</kbd> in the Viewer.</td></tr>
