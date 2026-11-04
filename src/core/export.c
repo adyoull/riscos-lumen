@@ -425,6 +425,13 @@ int export_step (exporter *e, int rows)
           return e->done = -1;
         }
       retouch_rgb8 (e->img.rgb, e->img.w, e->img.h, &e->r);   /* spots, on the photo upright */
+      if (e->full_w <= 0 || e->full_h <= 0)
+        {
+          /* The original's size wasn't known: decoded whole, so this is it
+             (sharpening's and noise reduction's radii are scaled by it). */
+          e->full_w = e->img.w;
+          e->full_h = e->img.h;
+        }
       thumbgen_free (e->tg);
       e->tg = NULL;
       {

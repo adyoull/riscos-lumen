@@ -953,6 +953,42 @@ static void test_export (const char *work)
   CHECK (worst <= 12, "pixels as the original (within JPEG's error)");
   free (back.rgb);
 
+  /* Sharpened at full size, the original's size not known (0 x 0): the
+     same file as when it is, not a blur thousands of pixels wide. */
+  {
+    char d2[700];
+    FILE *fa, *fb;
+    int same = 1, ca, cb;
+    recipe_set (&r, P_SHARPEN, 60);
+    snprintf (dst, sizeof dst, "%s/out-sharp-a.jpg", work);
+    snprintf (d2, sizeof d2, "%s/out-sharp-b.jpg", work);
+    e = export_start (src, 400, 300, 1, &r, dst, &o, err, sizeof err);
+    if (e)
+      run_export (e);
+    export_free (e);
+    e = export_start (src, 0, 0, 1, &r, d2, &o, err, sizeof err);
+    if (e)
+      run_export (e);
+    export_free (e);
+    fa = fopen (dst, "rb");
+    fb = fopen (d2, "rb");
+    if (!fa || !fb)
+      same = 0;
+    while (same && fa && fb)
+      {
+        ca = getc (fa);
+        cb = getc (fb);
+        if (ca != cb)
+          same = 0;
+        if (ca == EOF || cb == EOF)
+          break;
+      }
+    if (fa) fclose (fa);
+    if (fb) fclose (fb);
+    CHECK (same, "sharpened export: the size unknown gives the same file");
+    recipe_set (&r, P_SHARPEN, 0);
+  }
+
   /* Smaller, brighter. */
   o.max_side = 100;
   recipe_set (&r, P_EV, 1);

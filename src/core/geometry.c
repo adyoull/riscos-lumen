@@ -1,5 +1,6 @@
 /* geometry.c: see geometry.h. */
 #include <math.h>
+#include <stdlib.h>
 #include "geometry.h"
 
 #define PERSP_SCALE 0.6                /* +100 = edges 30% wider or narrower than the middle */
@@ -214,6 +215,65 @@ void geom_region_rgb8 (const geom_plan *g, const unsigned char *src, const uint1
 {
   int x, y, c;
   int simple = g->quarter == 0 && g->sn == 0 && g->kv == 0 && g->kh == 0;
+  /* Not turned, straightened or put in perspective: where each column
+     comes from is the same on every row, so it is worked out once (the
+     same sums as below, so the same pixels; no divisions per pixel). */
+  if (simple)
+    {
+      int *cix = malloc ((size_t) rw * 2 * sizeof *cix);
+      double *cfx = malloc ((size_t) rw * sizeof *cfx);
+      if (cix && cfx)
+        {
+          for (x = 0; x < rw; x++)
+            {
+              double sx = (g->x0 + (rx + x + 0.5) / g->ow * (g->x1 - g->x0)) * g->sw;
+              int ix;
+              sx = clampd (sx - 0.5, 0, g->sw - 1);
+              ix = (int) sx;
+              cfx[x] = sx - ix;
+              cix[2 * x] = ix * 3;
+              cix[2 * x + 1] = (ix + 1 < g->sw ? ix + 1 : ix) * 3;
+            }
+          for (y = ry; y < ry + rh; y++)
+            {
+              uint16_t *o = dst + (size_t) (y - ry) * rw * 3;
+              double sy = (g->y0 + (y + 0.5) / g->oh * (g->y1 - g->y0)) * g->sh, fy;
+              int iy, iy1;
+              const unsigned char *r0, *r1;
+              sy = clampd (sy - 0.5, 0, g->sh - 1);
+              iy = (int) sy;
+              fy = sy - iy;
+              iy1 = iy + 1 < g->sh ? iy + 1 : iy;
+              r0 = src + (size_t) iy * g->sw * 3;
+              r1 = src + (size_t) iy1 * g->sw * 3;
+              for (x = 0; x < rw; x++, o += 3)
+                {
+                  const unsigned char *p00 = r0 + cix[2 * x], *p10 = r0 + cix[2 * x + 1];
+                  const unsigned char *p01 = r1 + cix[2 * x], *p11 = r1 + cix[2 * x + 1];
+                  double fx = cfx[x];
+                  if (fx == 0 && fy == 0)
+                    {
+                      /* On a source pixel (exporting at full size, uncropped). */
+                      o[0] = s2l[p00[0]];
+                      o[1] = s2l[p00[1]];
+                      o[2] = s2l[p00[2]];
+                      continue;
+                    }
+                  for (c = 0; c < 3; c++)
+                    {
+                      double top = s2l[p00[c]] + (s2l[p10[c]] - s2l[p00[c]]) * fx;
+                      double bot = s2l[p01[c]] + (s2l[p11[c]] - s2l[p01[c]]) * fx;
+                      o[c] = (uint16_t) (top + (bot - top) * fy + 0.5);
+                    }
+                }
+            }
+          free (cix);
+          free (cfx);
+          return;
+        }
+      free (cix);
+      free (cfx);
+    }
   for (y = ry; y < ry + rh; y++)
     {
       uint16_t *o = dst + (size_t) (y - ry) * rw * 3;

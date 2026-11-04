@@ -343,6 +343,21 @@ Fixes from a review of 0.0.23:
   Exported libraries don't carry previews (the new library makes its own).
 - Status bar: "Making previews: <leaf>", then "Made N previews in T".
 
+## 0.0.34
+
+- Export at full size: geometry with no turn, straightening or
+  perspective works out each column's source once per band (no divisions
+  per pixel; the same sums, so the same pixels), and a pixel that falls
+  exactly on a source pixel is a table lookup. thumbgen's box filter at
+  1:1 copies the row. Identical files (checked on a 12 MP NEF export).
+- Export: an original of unknown size (0 x 0) took the decoded picture's
+  scale as thousands, so sharpening used its widest kernel (65 taps); now
+  the decoded size stands in (test: same file as with the size given).
+- LumenBench FILE: exports that photo at full size and splits the time:
+  LumenRaw developing it, reading its picture back (a 12 MP raw is a
+  35 MB PPM through the scrap directory), and Lumen's adjusting,
+  sharpening and writing.
+
 ## Layout
 
 ```

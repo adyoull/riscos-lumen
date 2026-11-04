@@ -2,6 +2,8 @@
    milestone 1's gate (a slider's redraw within 50 ms).
 
    On RISC OS: in a task window (Ctrl-F12),  *Run <Lumen$Dir>.Bench
+   With a photo's pathname after it (drag the file into the task window):
+   that photo exported at full size, and where the time goes.
    It writes a 6000 x 4000 test JPEG to <Wimp$ScrapDir> (removed after),
    and prints:
      - opening it: decoding the 1600-pixel proxy (what the viewer does),
@@ -22,6 +24,9 @@
 #include "recipe.h"
 #include "thumbgen.h"
 #include <jpeglib.h>
+#include "export.h"
+#include "rawjob.h"
+#include "fsys.h"
 #ifdef __riscos
 #include <unixlib/local.h>
 int __riscosify_control = __RISCOSIFY_NO_PROCESS;
@@ -148,7 +153,126 @@ static double decode_only (const unsigned char *buf, long len, int m, int *w, in
 /* libjpeg-turbo's own (jsimd.h): 1 if its NEON inverse DCT is in use. */
 extern int jsimd_can_idct_islow (void);
 
-int main (void)
+/* Bench FILE: exporting that photo at full size, and where the time goes. */
+/* Real time (the plug-in runs as another program, which clock() leaves
+   out on Linux; on RISC OS it is the time since the start). */
+#ifndef __riscos
+static clock_t wall (void)
+{
+  struct timespec t;
+  clock_gettime (CLOCK_MONOTONIC, &t);
+  return (clock_t) ((double) t.tv_sec * CLOCKS_PER_SEC + (double) t.tv_nsec * CLOCKS_PER_SEC / 1e9);
+}
+#else
+#define wall clock
+#endif
+
+static double ms_wall (clock_t t0)
+{
+  return (double) (wall () - t0) * 1000.0 / CLOCKS_PER_SEC;
+}
+
+static int blocking_run (const char *cmd, int tag)
+{
+  int r = system (cmd);
+  rawjob_ended (tag);
+  return r < 0 ? -1 : 0;
+}
+
+static int export_file (const char *path)
+{
+#ifdef __riscos
+  const char *helper = "<Lumen$Dir>.Plugins.LibRaw.LumenRaw", *scratch = "<Wimp$ScrapDir>.LumenRaw";
+  const char *out = "<Wimp$ScrapDir>.LumenBenchX";
+#else
+  const char *helper = getenv ("LUMENRAW"), *scratch = "/tmp/LumenRawBench", *out = "/tmp/LumenBenchX.jpg";
+#endif
+  char err[300], hp[1024];
+  unsigned char head[64];
+  FILE *f = fopen (path, "rb");
+  size_t got = f ? fread (head, 1, sizeof head, f) : 0;
+  int is_raw, rc, w = 0, h = 0;
+  recipe r;
+  export_opts o;
+  exporter *e;
+  clock_t t0;
+  double decode = -1, total;
+  if (f)
+    fclose (f);
+  if (!got)
+    {
+      printf ("Can't read %s\n", path);
+      return 1;
+    }
+  is_raw = img_probe_named (head, got, path) == IMG_RAW;
+  printf ("Exporting %s at full size (exposure +0.3, contrast, saturation, sharpening 40, JPEG 90)\n",
+          fsys_leaf (path));
+  if (is_raw)
+    {
+      rawjob *j;
+      fsys_entry fe;
+      if (!helper || fsys_canonical (helper, hp, sizeof hp) || fsys_stat (hp, &fe))
+        {
+          printf ("LumenRaw isn't in !Lumen.Plugins.LibRaw.\n");
+          return 1;
+        }
+      fsys_mkdirs (scratch);
+      rawjob_setup (hp, scratch, blocking_run);
+      /* The plug-in on its own, and reading its picture back. */
+      t0 = wall ();
+      j = rawjob_start (path, 1, 1 << 30, err, sizeof err);
+      while (j && (rc = rawjob_poll (j)) == 0)
+        ;
+      if (!j || rc < 0)
+        {
+          printf ("%s\n", j ? rawjob_error (j) : err);
+          return 1;
+        }
+      printf ("  LumenRaw developing it:             %6.0f ms\n", ms_wall (t0));
+      {
+        unsigned char *buf = malloc (65536);
+        long n = 0;
+        size_t k;
+        t0 = wall ();
+        f = fopen (rawjob_image (j), "rb");
+        while (f && buf && (k = fread (buf, 1, 65536, f)) > 0)
+          n += (long) k;
+        if (f)
+          fclose (f);
+        free (buf);
+        printf ("  reading its picture back (%ld MB):  %6.0f ms\n", (n + 524288) / 1048576, ms_wall (t0));
+      }
+      rawjob_free (j);
+    }
+  recipe_default (&r);
+  recipe_set (&r, P_EV, 0.3f); recipe_set (&r, P_CONTRAST, 10); recipe_set (&r, P_SATURATION, 10);
+  recipe_set (&r, P_SHARPEN, getenv ("BSHARP") ? atof (getenv ("BSHARP")) : 40);
+  memset (&o, 0, sizeof o);
+  o.format = EXPORT_JPEG;
+  o.quality = 90;
+  t0 = wall ();
+  e = export_start (path, 0, 0, 1, &r, out, &o, err, sizeof err);
+  if (!e)
+    {
+      printf ("%s\n", err);
+      return 1;
+    }
+  while ((rc = export_step (e, 64)) == 0)
+    if (decode < 0 && (export_size (e, &w, &h), w > 0))
+      decode = ms_wall (t0);
+  total = ms_wall (t0);
+  export_size (e, &w, &h);
+  if (rc < 0)
+    printf ("%s\n", export_error (e));
+  export_free (e);
+  remove (out);
+  printf ("The export (%d x %d):                %6.0f ms\n", w, h, total);
+  printf ("  reading the photo%s:    %6.0f ms\n", is_raw ? " (LumenRaw again)" : "                ", decode);
+  printf ("  adjusting, sharpening, writing:    %6.0f ms\n", total - decode);
+  return rc < 0;
+}
+
+int main (int argc, char **argv)
 {
   char err[200];
   rgb_image big, proxy;
@@ -161,6 +285,8 @@ int main (void)
   double tone, full, half_tone, half_full, open_ms;
 
   printf ("LumenBench %s\n", LUMEN_VERSION);
+  if (argc > 1)
+    return export_file (argv[1]);
   /* libjpeg-turbo picks NEON or plain C when it starts (VFPSupport says
      whether there's NEON; *Set JSIMD_FORCENONE 1 forces plain C). */
   printf ("JPEG code: %s\n", jsimd_can_idct_islow () ? "NEON" : "plain C");

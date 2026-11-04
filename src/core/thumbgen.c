@@ -83,6 +83,13 @@ static void scaler_row (scaler *s, int y, const unsigned char *row)
   unsigned *sum = s->sum, *cnt = s->cnt;
   while (s->cur < ty)
     scaler_flush (s);
+  if (s->tw == s->sw && s->th == s->sh)
+    {
+      /* Full size: the row as it is (what the sums would give). */
+      memcpy (s->out + (size_t) y * s->tw * 3, row, (size_t) s->tw * 3);
+      s->cur = y + 1;
+      return;
+    }
   for (x = 0; x < s->sw; x++, row += 3)
     {
       unsigned *p = sum + 3 * col[x];
