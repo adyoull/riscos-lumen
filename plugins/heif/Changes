@@ -1,7 +1,7 @@
 LumenHEIF changes
 =================
 
-Next (not released yet)
+1.2 (5 November 2026): MIME types
 
 - Its Plugin file gives the MIME types it reads (image/heic, image/heif,
   image/avif), so Lumen 0.0.38 and later know HEIF and AVIF files by the
@@ -26,5 +26,5 @@ Next (not released yet)
   later.
 - The LumenHEIF User Guide, in Guide. Its photos are samples from
   heic.digital and aviftools.net, not the author's.
-- LumenHEIF-1.1-sources.zip has LumenHEIF's, libheif's, FFmpeg's and
+- LumenHEIF-1.2-sources.zip has LumenHEIF's, libheif's, FFmpeg's and
   dav1d's sources and the patches, as the LGPL asks.

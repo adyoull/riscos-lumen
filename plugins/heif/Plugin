@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 # Lumen plug-in description (Lumen's format plug-in API: docs/plugin-api.md)
 Name: HEIF and AVIF photos (libheif)
-Version: 1.1
+Version: 1.2
 Kind: format
 API: 1
 Format: HEIF photo

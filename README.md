@@ -44,7 +44,7 @@ were written with Anthropic's Claude as a coding assistant.
    `!Lumen.Plugins.LibRaw`. Drag that `LibRaw` directory into Lumen's
    Plug-ins > Add plug-in window, or copy it into your
    `!Lumen.Plugins`.
-4. For HEIF and AVIF photos, likewise unzip `LumenHEIF-1.1.zip` and add its
+4. For HEIF and AVIF photos, likewise unzip `LumenHEIF-1.2.zip` and add its
    `!Lumen.Plugins.HEIF` directory.
 5. Double-click `!Lumen`, and drag a folder of photos into its window.
 
@@ -143,7 +143,7 @@ LibRaw library it is built with is under the LGPL 2.1 (or CDDL), and its
 source ships with each release (`LibRaw-0.22.3-source.zip`). The
 LumenHEIF plug-in's own code is MIT; libheif is under the LGPL 3 and
 FFmpeg's libavcodec and libavutil under the LGPL 2.1 or later, dav1d
-under its BSD licence, and their sources and the patches ship as `LumenHEIF-1.1-sources.zip`. The
+under its BSD licence, and their sources and the patches ship as `LumenHEIF-1.2-sources.zip`. The
 libraries built into Lumen keep their own licences, collected in
 `app/Licences` (installed as `!Lumen.Licences`): SQLite (public domain),
 libjpeg-turbo, libpng, libtiff, zlib and UnixLib (BSD-style, with LGPL parts:

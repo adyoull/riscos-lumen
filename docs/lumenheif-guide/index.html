@@ -95,7 +95,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <h4>About this guide</h4>
 <p>This guide is about the plug-in. Everything else about Lumen is in the <b>Lumen User Guide</b>: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
-<p>The pictures are screenshots of Lumen 0.0.37 with LumenHEIF 1.1 on RISC OS 5. The photos in them are <b>not the author's</b>: the two HEIF photos, from an iPhone 12 Pro and a Samsung Galaxy A32 5G, are sample files from <a href="https://heic.digital/samples/">heic.digital/samples</a>, and the two AVIF photos are sample files from <a href="https://www.aviftools.net/samples/">aviftools.net/samples</a> (see <a href="#credits">Credits</a>).</p>
+<p>The pictures are screenshots of Lumen 0.0.37 with LumenHEIF 1.1 on RISC OS 5 (1.2 looks the same). The photos in them are <b>not the author's</b>: the two HEIF photos, from an iPhone 12 Pro and a Samsung Galaxy A32 5G, are sample files from <a href="https://heic.digital/samples/">heic.digital/samples</a>, and the two AVIF photos are sample files from <a href="https://www.aviftools.net/samples/">aviftools.net/samples</a> (see <a href="#credits">Credits</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>That you have Lumen and know your way round it a little: how to import photos and open one in the Viewer, the three mouse buttons (<b>Select</b>, <b>Menu</b> and <b>Adjust</b>), and how to drag a directory from a Filer window.</p>
@@ -145,7 +145,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 </ol>
 
 <h4>By hand, from the zip file</h4>
-<p>LumenHEIF also comes as a zip file, <code>LumenHEIF-1.1.zip</code>, laid out as it goes into Lumen: <code>!Lumen.Plugins.HEIF</code>.</p>
+<p>LumenHEIF also comes as a zip file, <code>LumenHEIF-1.2.zip</code>, laid out as it goes into Lumen: <code>!Lumen.Plugins.HEIF</code>.</p>
 <ol class="steps">
 <li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
 <li>Open the <code>!Lumen</code> directory inside it (hold <kbd>Shift</kbd> and double-click it), then <code>Plugins</code>. You'll see a directory called <code>HEIF</code>.</li>
@@ -156,7 +156,8 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>You can also drag the <code>HEIF</code> directory straight onto Lumen's main window.</p>
 
 <h4>Checking it's working</h4>
-<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenHEIF is listed as <b>LumenHEIF 1.1</b>, with a tick when it's on.</p>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenHEIF is listed as <b>LumenHEIF 1.2</b>, with a tick when it's on.</p>
+<p>LumenHEIF tells Lumen the MIME types it reads, <code>image/heic</code>, <code>image/heif</code> and <code>image/avif</code>. If your MimeMap (<code>InetDBase:MimeMap</code>) gives them RISC OS filetypes, Lumen 0.0.38 or later imports files of those types whatever they're called, lists them on its <b>File types</b> menu so a double-click can open them in Lumen, and gives them its file icon if the desktop has none. RISC OS 5.31's MimeMap has no filetypes for them yet.</p>
 <figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw and LumenHEIF installed and on.</figcaption></figure>
 
 <div class="box try"><b class="label">TRY IT</b>Copy a photo from an iPhone (its name ends in <code>/HEIC</code> on RISC OS) and drag it into Lumen's window. A thumbnail appears within a second or two. Double-click it to open it in the Viewer.</div>
@@ -213,7 +214,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon (or from the main menu over the Browser).</p>
 
 <h4>Switching it off and on</h4>
-<p>Choose <b>LumenHEIF 1.1</b> to switch it off: the tick goes. LumenHEIF stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
+<p>Choose <b>LumenHEIF 1.2</b> to switch it off: the tick goes. LumenHEIF stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
 <p>While it's off, HEIF photos keep their thumbnails, stars, albums and adjustments, but opening one shows a message instead of the photo:</p>
 <figure><img src="images/switched-off.png" alt="A HEIF photo with the plug-in switched off"><figcaption>With LumenHEIF switched off. The Info tab says so too.</figcaption></figure>
 
@@ -238,7 +239,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>LumenHEIF reads AVIF still photos (<code>.avif</code>), whose picture is coded with <b>AV1</b>, with 8, 10 or 12 bits a channel, as Android phones, cameras, image editors and web sites save them.</p>
 <figure><img src="images/avif.png" alt="An AVIF photo in Lumen"><figcaption>An AVIF photo in the Viewer (a sample from aviftools.net, not the author's). The Info tab names it an AVIF photo, encoded with AV1; it has no EXIF.</figcaption></figure>
 
-<h4>Not read by LumenHEIF 1.1</h4>
+<h4>Not read by LumenHEIF 1.2</h4>
 <ul>
 <li><b>Image sequences</b>: animated AVIF, and HEIF bursts and animations stored as one file.</li>
 <li>The extra pictures some files carry, such as a depth map or an alpha (transparency) layer: Lumen shows the main photo only, without its transparency.</li>
@@ -274,7 +275,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <li><b>NEON:</b> FFmpeg's HEVC NEON code and dav1d's AV1 NEON code (motion compensation, inverse transforms, loop filters) are used when VFPSupport_Features says the processor has NEON, and switched off otherwise. <code>*Set Lumen$NEON 0</code> forces the plain code. Both give identical pictures, checked against the PC by the tests.</li>
 <li><b>The FFmpeg and dav1d in it:</b> FFmpeg 5.1.10 configured with only the HEVC decoder and parser, and dav1d 1.5.4 for AV1, both from the riscos-ffmpeg port: built for ARMv7 with VFPv3 (no ARMv5 or ARMv6 code), with the RISC OS patches that make their NEON code safe on a CPU that faults unaligned accesses, and one thread.</li>
 <li><b>How Lumen runs it:</b> in a task window, one job at a time, sharing the queue with LumenRaw; job files are in <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>.</li>
-<li><b>Source and licences:</b> LumenHEIF is &copy; Andrew Youll, 2026, under the MIT licence; its source is part of Lumen's source (<code>plugins.heif</code>). libheif is &copy; Dirk Farin and the libheif contributors, under the GNU LGPL 3; FFmpeg is &copy; the FFmpeg developers, under the GNU LGPL 2.1 or later; dav1d is &copy; VideoLAN and the dav1d authors, under its BSD licence. Their exact sources and the patches are published beside each release as <code>LumenHEIF-1.1-sources.zip</code>, so LumenHEIF can be rebuilt with changed libraries.</li>
+<li><b>Source and licences:</b> LumenHEIF is &copy; Andrew Youll, 2026, under the MIT licence; its source is part of Lumen's source (<code>plugins.heif</code>). libheif is &copy; Dirk Farin and the libheif contributors, under the GNU LGPL 3; FFmpeg is &copy; the FFmpeg developers, under the GNU LGPL 2.1 or later; dav1d is &copy; VideoLAN and the dav1d authors, under its BSD licence. Their exact sources and the patches are published beside each release as <code>LumenHEIF-1.2-sources.zip</code>, so LumenHEIF can be rebuilt with changed libraries.</li>
 </ol>
 
 <!-- ======================================================================= -->

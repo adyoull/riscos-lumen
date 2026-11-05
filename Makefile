@@ -224,7 +224,7 @@ $(OUT)/lumenheif-arm: $(HEIF_SRC) src/core/exif.c src/core/exif.h
 	  -Isrc/core -c src/core/exif.c -o $(OUT)/lumenheif-arm-exif.o
 	arm-linux-gnueabihf-g++ -no-pie -o $@ $(OUT)/lumenheif-arm.o $(OUT)/lumenheif-arm-exif.o \
 	  $(call HEIF_LIBS,$(DEPS)/linuxarm) -lm
-HEIF_VERSION := 1.1
+HEIF_VERSION := 1.2
 LIBHEIF_VERSION := 1.23.7
 FFMPEG_VERSION := 5.1.10
 # The plug-in's release zip, laid out as it goes into Lumen (PackMan's

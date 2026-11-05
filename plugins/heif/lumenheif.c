@@ -44,7 +44,7 @@ int __riscosify_control = __RISCOSIFY_NO_PROCESS;   /* paths are RISC OS paths, 
 #include <sys/auxv.h>
 #endif
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 #define THUMB_MAX 512                  /* a thumbnail made from the photo itself: this at most */
 
 /* --- writing results --- */
