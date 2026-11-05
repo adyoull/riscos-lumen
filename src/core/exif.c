@@ -239,7 +239,19 @@ int img_probe_named (const unsigned char *buf, size_t len, const char *name)
     return IMG_RAW;                                  /* Panasonic RW2 */
   if ((tiff || (len >= 4 && buf[0] == 'F' && buf[1] == 'O' && buf[2] == 'V')) && img_has_raw_extension (name))
     return IMG_RAW;
+  if (tiff)
+    return IMG_TIFF;                                 /* a TIFF picture: scanners, editors */
   return IMG_UNKNOWN;
+}
+
+void img_read_tiff_tags (const unsigned char *tiff, size_t len, img_info *info)
+{
+  int w = info->width, h = info->height;
+  if (tiff && len >= 8)
+    parse_exif (tiff, len, 0, info);
+  info->width = w;
+  info->height = h;
+  info->thumb_offset = info->thumb_length = 0;
 }
 
 int img_read_raw_info (const unsigned char *buf, size_t len, img_info *info)
@@ -330,7 +342,9 @@ static const tag_name names[] = {
   { 0x0115, "Samples per pixel" }, { 0x0116, "Rows per strip" }, { 0x0117, "Strip byte counts" },
   { 0x011A, "X resolution" }, { 0x011B, "Y resolution" }, { 0x011C, "Planar configuration" },
   { 0x0128, "Resolution unit" }, { 0x012D, "Transfer function" }, { 0x0131, "Software" },
-  { 0x0132, "Date and time" }, { 0x013B, "Artist" }, { 0x013C, "Host computer" },
+  { 0x0132, "Date and time" }, { 0x013B, "Artist" }, { 0x013C, "Host computer" }, { 0x013D, "Predictor" }, { 0x0140, "Colour map" },
+  { 0x0142, "Tile width" }, { 0x0143, "Tile length" }, { 0x0152, "Extra samples" }, { 0x0153, "Sample format" },
+  { 0x011D, "Page name" }, { 0x0129, "Page number" }, { 0x00FE, "Subfile type" },
   { 0x013E, "White point" }, { 0x013F, "Primary chromaticities" }, { 0x0201, "Thumbnail offset" },
   { 0x0202, "Thumbnail length" }, { 0x0211, "YCbCr coefficients" }, { 0x0212, "YCbCr subsampling" },
   { 0x0213, "YCbCr positioning" }, { 0x0214, "Reference black white" }, { 0x4746, "Rating" },

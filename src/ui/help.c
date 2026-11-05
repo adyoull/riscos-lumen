@@ -36,7 +36,7 @@ static const char *const tabs[3] = {
   "reduction, sharpening, vignette, glow and more for the photo in the Viewer. Your original is never changed.",
 };
 
-static const char *const exportbox[31] = {
+static const char *const exportbox[32] = {
   "Drag this icon to a directory display to save the export there (or to another program to send it).",
   "The file's name. Type a full pathname and click Save, or drag the icon.",
   NULL,
@@ -69,6 +69,7 @@ static const char *const exportbox[31] = {
   "How files are named when several photos are exported: {name}, {n}, {nnn}, {date}, {year}, {month}, {day}, {time}, "
   "{project}, {camera}, {rating}, and any text of your own.",
   "An example name pattern. The parts a pattern can use: {name}, {n} (1, 2, 3...), {nnn} (001, 002...), {date}, {year}, {month}, {day}, {time}, {project}, {camera}, {rating}.",
+  "Saves TIFF files: no loss of quality, for editing and printing programs (8 bits a channel, LZW compressed).",
 };
 
 static const char *main_part (int part)
@@ -115,12 +116,12 @@ const char *help_text (int window, int icon, int x, int y)
     return "The photo, with its adjustments. Keys: arrows next or previous photo, Z 100%, M before and after, "
            "A auto, C crop, G grid, [ and ] turn, Escape back. Menu has the rest.";
   if (window == exportbox_window ())
-    return icon >= 0 && icon < 31 && exportbox[icon] ? exportbox[icon] : "Exports photos with their adjustments.";
+    return icon >= 0 && icon < 32 && exportbox[icon] ? exportbox[icon] : "Exports photos with their adjustments.";
   if (window == choicewin_window ())
     switch (icon)
       {
       case 1: return "Where the library is kept, from the next start. Empty: the usual place. Drag a directory here to use it.";
-      case 4: case 5: return "The format the Export box starts with.";
+      case 4: case 5: case 31: return "The format the Export box starts with.";
       case 7: return "The JPEG quality the Export box starts with, 1-100.";
       case 9: case 10: case 11: case 12: return "The size the Export box starts with.";
       case 14: case 15: case 16: return "The thumbnail size Lumen starts with.";

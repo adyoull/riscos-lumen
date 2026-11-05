@@ -11,7 +11,9 @@ It is built with these, whose licences are in this directory:
   SQLite 3.49.2          the library's catalogue    public domain
   libjpeg-turbo 3.0.4    JPEG files                 IJG, BSD (3-clause) and zlib licences
   libpng 1.6.44          PNG files                  PNG Reference Library License v2
-  zlib 1.3.1             PNG compression            zlib licence
+  libtiff 4.7.1          TIFF files                 libtiff licence (BSD-like), and
+                                                    Berkeley's for its LZW code
+  zlib 1.3.1             PNG and TIFF compression   zlib licence
   UnixLib 5.0            C library (GCCSDK)         revised BSD, with parts under the LGPL
   GCC 10.2 runtime       libgcc                     GPL 3 with the Runtime Library Exception
 

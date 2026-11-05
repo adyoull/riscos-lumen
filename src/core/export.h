@@ -2,7 +2,7 @@
    Released under the MIT licence: see the LICENSE file.
    SPDX-License-Identifier: MIT */
 /* export: writes a version (an original through its recipe) as a new
-   JPEG or PNG, at full size or smaller, a few rows at a time so the
+   JPEG, PNG or TIFF (8 bits a channel, LZW: tiffmeta.h), at full size or smaller, a few rows at a time so the
    desktop stays usable.
 
    The original is decoded at the size needed (libjpeg's DCT scaling and
@@ -10,7 +10,7 @@
    picture held, 3 bytes a pixel - and then each band of output rows goes
    through the geometry (in linear light), the develop pipeline and
    straight into the encoder. The original's EXIF goes with it (see
-   exifout.h), in a JPEG's APP1 segment or a PNG's eXIf chunk. The file gets its RISC OS filetype at the
+   exifout.h), in a JPEG's APP1 segment, a PNG's eXIf chunk or a TIFF's own tags. The file gets its RISC OS filetype at the
    end; a failed or abandoned export leaves no file behind. */
 #ifndef LUMEN_EXPORT_H
 #define LUMEN_EXPORT_H
@@ -18,7 +18,7 @@
 #include "recipe.h"
 #include "exif.h"
 
-enum { EXPORT_JPEG, EXPORT_PNG };
+enum { EXPORT_JPEG, EXPORT_PNG, EXPORT_TIFF };
 
 /* Sharpening for the output, after any in the recipe: none, then for
    screens (low), for most uses (standard) and for print (high). */
@@ -26,7 +26,7 @@ enum { EXPORT_SHARP_NONE, EXPORT_SHARP_LOW, EXPORT_SHARP_STANDARD, EXPORT_SHARP_
 
 typedef struct
 {
-  int format;                          /* EXPORT_JPEG or EXPORT_PNG */
+  int format;                          /* EXPORT_JPEG, EXPORT_PNG or EXPORT_TIFF */
   int quality;                         /* JPEG, 1-100 */
   int max_side;                        /* longer side in pixels; 0 = full size */
   char software[32];                   /* EXIF Software, "" for none */

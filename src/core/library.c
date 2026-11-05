@@ -16,6 +16,7 @@
 #include "thumbgen.h"
 #include "develop.h"
 #include "rawjob.h"
+#include "tiffmeta.h"
 
 #define HEAD_BYTES (128 * 1024)       /* enough for EXIF in nearly every camera's files */
 #define PROBE_BYTES 4200              /* enough to tell what a file is (plug-ins' signatures are in the first 4 KB) */
@@ -438,7 +439,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   cat_original o;
   cat_id existing, v;
   unsigned long long h = 14695981039346656037ULL;
-  int fmt;
+  int fmt, have_tiff = 0;
+  tiff_meta tiff_info;
   if (!likely_image_type (e->filetype, path))
     return;
   {
@@ -470,6 +472,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   fmt = img_probe_named (l->head, got, path);
   if (fmt == IMG_UNKNOWN && rawjob_kind_for (IMG_UNKNOWN, path, l->head, got) > 0)
     fmt = IMG_PLUGIN;                  /* a format plug-in claims it */
+  if (fmt == IMG_TIFF && tiff_is_raw (f))
+    fmt = IMG_RAW;                     /* a camera raw file without a raw's name */
   if (fmt == IMG_UNKNOWN)
     {
       if (e->filetype == FT_JPEG || e->filetype == FT_PNG || has_photo_extension (path))
@@ -480,7 +484,23 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       fclose (f);
       return;
     }
-  if (got == PROBE_BYTES)
+  if (fmt == IMG_TIFF)
+    {
+      /* A TIFF's tags can be anywhere in it (often after the picture). */
+      tiff_meta m;
+      if (tiff_meta_read (f, &m))
+        {
+          snprintf (l->err, sizeof l->err, "%s isn't a TIFF Lumen can read", fsys_leaf (path));
+          l->skipped++;
+          fclose (f);
+          return;
+        }
+      tiff_info = m;
+      have_tiff = 1;
+      rewind (f);
+      got = fread (l->head, 1, HEAD_BYTES, f);
+    }
+  else if (got == PROBE_BYTES && fseek (f, (long) got, SEEK_SET) == 0)
     got += fread (l->head + got, 1, HEAD_BYTES - PROBE_BYTES, f);
   l->found++;
   if (fmt == IMG_RAW)
@@ -493,6 +513,15 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       info.format = IMG_PLUGIN;
       info.orientation = 1;
     }
+  else if (have_tiff)
+    {
+      memset (&info, 0, sizeof info);
+      info.format = IMG_TIFF;
+      info.width = tiff_info.width;
+      info.height = tiff_info.height;
+      img_read_tiff_tags (tiff_info.exif, tiff_info.exif_len, &info);
+      info.orientation = tiff_info.orientation;
+    }
   else if (img_read_info (l->head, got, &info))
     {
       snprintf (l->err, sizeof l->err, "%s: can't read its size", fsys_leaf (path));
@@ -502,7 +531,15 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
     }
   /* A caption and keywords given elsewhere (an XMP packet near the start). */
   char xcap[CAT_CAPTION_MAX], xkw[CAT_KEYWORDS_MAX];
-  xmp_read (l->head, got, xcap, sizeof xcap, xkw, sizeof xkw);
+  if (have_tiff)
+    {
+      xcap[0] = xkw[0] = '\0';
+      if (tiff_info.xmp)
+        xmp_read (tiff_info.xmp, tiff_info.xmp_len, xcap, sizeof xcap, xkw, sizeof xkw);
+      tiff_meta_free (&tiff_info);
+    }
+  else
+    xmp_read (l->head, got, xcap, sizeof xcap, xkw, sizeof xkw);
   /* Content hash: the size, the first 64 KB and the last 64 KB. */
   h = fnv (h, (const unsigned char *) &e->size, sizeof e->size);
   h = fnv (h, l->head, got < HASH_BYTES ? got : HASH_BYTES);
@@ -519,8 +556,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   o.size = e->size;
   o.mtime = e->mtime;
   o.hash = h;
-  /* JPEG and PNG files as what they are, however they were typed. */
-  o.filetype = info.format == IMG_JPEG ? FT_JPEG : info.format == IMG_PNG ? FT_PNG
+  /* JPEG, PNG and TIFF files as what they are, however they were typed. */
+  o.filetype = info.format == IMG_JPEG ? FT_JPEG : info.format == IMG_PNG ? FT_PNG : info.format == IMG_TIFF ? FT_TIFF
              : e->filetype != FT_NONE ? e->filetype : FT_DATA;
   o.batch = l->batch;
   o.info = &info;
@@ -822,7 +859,7 @@ int lib_preview_wanted (library *l, int format, const char *path)
 {
   if (img_is_plugin_format (format))
     return l->pv_mode != PREVIEWS_OFF && rawjob_available_kind (rawjob_kind_for (format, path, NULL, 0));
-  return l->pv_mode == PREVIEWS_ALL && (format == IMG_JPEG || format == IMG_PNG);
+  return l->pv_mode == PREVIEWS_ALL && (format == IMG_JPEG || format == IMG_PNG || format == IMG_TIFF);
 }
 
 int lib_previews_busy (library *l)

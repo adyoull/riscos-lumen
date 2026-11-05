@@ -48,7 +48,7 @@ enum
   I_FIT, I_BOX_W, I_BOX_X, I_BOX_H, I_BOX_PX,
   I_COLOUR_LABEL, I_SRGB, I_ADOBE, I_P3,
   I_SHARP_LABEL, I_SH_NONE, I_SH_LOW, I_SH_STD, I_SH_HIGH,
-  I_NAMES_LABEL, I_NAMES, I_NAMES_HINT, I_COUNT
+  I_NAMES_LABEL, I_NAMES, I_NAMES_HINT, I_TIFF, I_COUNT
 };
 static const int size_choice[4] = { 0, 3840, 2048, 1024 };
 
@@ -117,10 +117,11 @@ int exportbox_create (void)
   icon_at (ic + 8 * I_NAME, 24, -192, BOX_W - 24, -140, T_WRITE, name, v_name, (int) sizeof name);
   /* Format and quality */
   icon_at (ic + 8 * I_FORMAT_LABEL, 24, -252, 176, -208, T_LABEL, "Format", NULL, 7);
-  icon_at (ic + 8 * I_JPEG, 196, -252, 330, -208, T_RADIO | (1u << 16) | (1u << 21), "JPEG", v_radio, 5);
-  icon_at (ic + 8 * I_PNG, 344, -252, 470, -208, T_RADIO | (1u << 16), "PNG", v_radio, 4);
-  icon_at (ic + 8 * I_QUALITY_LABEL, 480, -252, 620, -208, T_LABEL, "Quality", NULL, 8);
-  icon_at (ic + 8 * I_QUALITY, 636, -252, 736, -208, T_WRITE, quality, v_num, (int) sizeof quality);
+  icon_at (ic + 8 * I_JPEG, 196, -252, 334, -208, T_RADIO | (1u << 16) | (1u << 21), "JPEG", v_radio, 5);
+  icon_at (ic + 8 * I_PNG, 344, -252, 464, -208, T_RADIO | (1u << 16), "PNG", v_radio, 4);
+  icon_at (ic + 8 * I_TIFF, 474, -252, 594, -208, T_RADIO | (1u << 16), "TIFF", v_radio, 5);
+  icon_at (ic + 8 * I_QUALITY_LABEL, 604, -252, 726, -208, T_LABEL, "Quality", NULL, 8);
+  icon_at (ic + 8 * I_QUALITY, 740, -252, 840, -208, T_WRITE, quality, v_num, (int) sizeof quality);
   /* Size: full, a longer side, or fit inside a box */
   icon_at (ic + 8 * I_SIZE_LABEL, 24, -312, 176, -268, T_LABEL, "Size", NULL, 5);
   icon_at (ic + 8 * I_FULL, 196, -312, 316, -268, T_RADIO | (2u << 16) | (1u << 21), "Full", v_radio, 5);
@@ -163,7 +164,7 @@ static void redraw_icon (int i)
 static void update_sprite (void)
 {
   snprintf (sprite_name, sizeof sprite_name, "%s",
-            box_n > 1 ? "directory" : opts.format == EXPORT_PNG ? "file_b60" : "file_c85");
+            box_n > 1 ? "directory" : opts.format == EXPORT_PNG ? "file_b60" : opts.format == EXPORT_TIFF ? "file_ff0" : "file_c85");
   if (win != -1)
     redraw_icon (I_FILE);
 }
@@ -330,7 +331,7 @@ static int queue (const char *dst)
               else
                 snprintf (l2, sizeof l2, "%s_%d", leaf, n);
 #ifndef __riscos__
-              strncat (l2, opts.format == EXPORT_PNG ? ".png" : ".jpg", sizeof l2 - strlen (l2) - 1);
+              strncat (l2, opts.format == EXPORT_PNG ? ".png" : opts.format == EXPORT_TIFF ? ".tif" : ".jpg", sizeof l2 - strlen (l2) - 1);
 #endif
               fsys_join (path, sizeof path, dst, l2);
               clash = exists (path);
@@ -559,6 +560,7 @@ void exportbox_click (int *b)
     {
     case I_JPEG: opts.format = EXPORT_JPEG; update_sprite (); break;
     case I_PNG: opts.format = EXPORT_PNG; update_sprite (); break;
+    case I_TIFF: opts.format = EXPORT_TIFF; update_sprite (); break;
     case I_FULL: case I_3840: case I_2048: case I_1024:
       opts.max_side = size_choice[i - I_FULL];
       fit_on = 0;
@@ -635,7 +637,7 @@ void exportbox_drag_end (void)
   m[4] = Message_DataSave;
   m[5] = ptr[3]; m[6] = ptr[4]; m[7] = ptr[0]; m[8] = ptr[1];
   m[9] = 1 << 20;                      /* an estimate */
-  m[10] = box_n > 1 ? FT_DIR : opts.format == EXPORT_PNG ? FT_PNG : FT_JPEG;
+  m[10] = box_n > 1 ? FT_DIR : opts.format == EXPORT_PNG ? FT_PNG : opts.format == EXPORT_TIFF ? FT_TIFF : FT_JPEG;
   memcpy ((char *) &m[11], leaf, len);
   ((char *) &m[11])[len] = '\0';
   if (_swix (Wimp_SendMessage, _INR (0, 3), User_Message, m, ptr[3], ptr[4]) == NULL)
@@ -666,14 +668,14 @@ void exportbox_save_ack (int *m)
 /* The box's radio buttons show opts (Wimp_SetIconState: bit 21, selected). */
 static void show_options (void)
 {
-  static const int radios[] = { I_JPEG, I_PNG, I_FULL, I_3840, I_2048, I_1024, I_FIT, I_SRGB, I_ADOBE, I_P3,
+  static const int radios[] = { I_JPEG, I_PNG, I_TIFF, I_FULL, I_3840, I_2048, I_1024, I_FIT, I_SRGB, I_ADOBE, I_P3,
                                 I_SH_NONE, I_SH_LOW, I_SH_STD, I_SH_HIGH };
   int k;
   for (k = 0; k < (int) (sizeof radios / sizeof radios[0]); k++)
     {
       int i = radios[k], on, st[4];
-      if (i == I_JPEG || i == I_PNG)
-        on = opts.format == (i == I_JPEG ? EXPORT_JPEG : EXPORT_PNG);
+      if (i == I_JPEG || i == I_PNG || i == I_TIFF)
+        on = opts.format == (i == I_JPEG ? EXPORT_JPEG : i == I_PNG ? EXPORT_PNG : EXPORT_TIFF);
       else if (i == I_FIT)
         on = fit_on;
       else if (i >= I_FULL && i <= I_1024)
@@ -692,7 +694,7 @@ static void show_options (void)
 /* The Choices' starting settings (what was used last). */
 void exportbox_use_prefs (const prefs *p)
 {
-  opts.format = p->export_format == EXPORT_PNG ? EXPORT_PNG : EXPORT_JPEG;
+  opts.format = p->export_format == EXPORT_PNG || p->export_format == EXPORT_TIFF ? p->export_format : EXPORT_JPEG;
   fit_on = p->export_size == -1;
   opts.max_side = fit_on ? 0 : p->export_size;
   opts.quality = p->export_quality;

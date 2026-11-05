@@ -20,7 +20,7 @@ VERSION := 0.0.38
 DATE := 04 Nov 2026
 OUT := out
 
-CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
+CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/tiffmeta.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
 CORE_H := $(wildcard src/core/*.h)
 UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/plugwin.c src/ui/choicewin.c src/ui/activity.c src/ui/printbox.c src/ui/tagbox.c src/ui/smartbox.c src/ui/libbox.c src/ui/help.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c
 UI_H := $(wildcard src/ui/*.h)
@@ -50,7 +50,7 @@ $(OUT)/host32/sqlite3.o: $(SQLITE)
 	$(FAKE_CC) -m32 -O1 -g -funsigned-char $(SQLITE_FLAGS) -c -o $@ $<
 
 # --- RISC OS build ------------------------------------------------------------
-RO_LIBS := -L$(DEPS)/riscos/lib -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
+RO_LIBS := -L$(DEPS)/riscos/lib -ltiff -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
 $(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/riscos/sqlite3.o Makefile
 	@mkdir -p $(OUT)
 	$(RO_CC) $(RISCOS_CFLAGS) $(WARN) $(DEFS) -Isrc/core -Isrc/ui -Ithird_party/sqlite -I$(DEPS)/riscos/include \
@@ -58,9 +58,9 @@ $(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/risc
 
 $(OUT)/bench: tests/bench.c $(CORE) $(CORE_H) $(OUT)/riscos/sqlite3.o
 	$(RO_CC) $(RISCOS_CFLAGS) $(WARN) $(DEFS) -Isrc/core -Ithird_party/sqlite -I$(DEPS)/riscos/include \
-	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/simd.c src/core/recipe.c src/core/thumbgen.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/fsys_riscos.c \
+	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/simd.c src/core/recipe.c src/core/thumbgen.c src/core/tiffmeta.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/fsys_riscos.c \
 	  src/core/export.c src/core/denoise.c src/core/xmp.c src/core/catalog.c src/core/sqlite_vfs.c $(OUT)/riscos/sqlite3.o \
-	  -L$(DEPS)/riscos/lib -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
+	  -L$(DEPS)/riscos/lib -ltiff -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
 
 checks: $(OUT)/lumen $(OUT)/bench
 	$(CHECK_ALL) $(OUT)/bench
@@ -91,22 +91,22 @@ $(OUT)/Lumen.zip: $(OUT)/lumen $(OUT)/!Sprites,ff9 $(APPFILES) $(LICENCES) $(GUI
 	@echo "$@: unzip on RISC OS and run !Lumen"
 
 # --- Tests ----------------------------------------------------------------------
-HOST_DEPS := -I$(DEPS)/host/include $(DEPS)/host/lib/libjpeg.a $(DEPS)/host/lib/libpng16.a -lz -lm
+HOST_DEPS := -I$(DEPS)/host/include $(DEPS)/host/lib/libtiff.a $(DEPS)/host/lib/libjpeg.a $(DEPS)/host/lib/libpng16.a -lz -lm
 $(OUT)/test_core_host: tests/test_core.c $(CORE) src/core/fsys_posix.c $(CORE_H) $(OUT)/host/sqlite3.o
 	gcc -O1 -g $(WARN) -fsanitize=address,undefined -Ithird_party/sqlite -I$(DEPS)/host/include -o $@ \
 	  tests/test_core.c $(CORE) src/core/fsys_posix.c $(OUT)/host/sqlite3.o \
-	  $(DEPS)/host/lib/libjpeg.a $(DEPS)/host/lib/libpng16.a -lz -lm
+	  $(DEPS)/host/lib/libtiff.a $(DEPS)/host/lib/libjpeg.a $(DEPS)/host/lib/libpng16.a -lz -lm
 test-host: $(OUT)/test_core_host $(OUT)/lumenraw-host $(OUT)/lumenheif-host
 	rm -rf $(OUT)/work-host && LUMENRAW=$(OUT)/lumenraw-host LUMENHEIF=$(OUT)/lumenheif-host RAW_SAMPLES=$(RAW_SAMPLES) $(OUT)/test_core_host $(OUT)/work-host
 
 $(OUT)/test_develop_host: tests/test_develop.c $(CORE) src/core/fsys_posix.c $(CORE_H) $(OUT)/host/sqlite3.o
 	gcc -O2 -g $(WARN) -fsanitize=address,undefined -Ithird_party/sqlite -I$(DEPS)/host/include -o $@ \
 	  tests/test_develop.c $(CORE) src/core/fsys_posix.c $(OUT)/host/sqlite3.o \
-	  $(DEPS)/host/lib/libjpeg.a $(DEPS)/host/lib/libpng16.a -lz -lm
+	  $(DEPS)/host/lib/libtiff.a $(DEPS)/host/lib/libjpeg.a $(DEPS)/host/lib/libpng16.a -lz -lm
 test-develop: $(OUT)/test_develop_host
 	rm -rf $(OUT)/work-dev && $(OUT)/test_develop_host $(OUT)/work-dev
 
-ARM_LIBS := $(DEPS)/linuxarm/lib/libjpeg.a $(DEPS)/linuxarm/lib/libpng16.a $(DEPS)/linuxarm/lib/libz.a -lm
+ARM_LIBS := $(DEPS)/linuxarm/lib/libtiff.a $(DEPS)/linuxarm/lib/libjpeg.a $(DEPS)/linuxarm/lib/libpng16.a $(DEPS)/linuxarm/lib/libz.a -lm
 $(OUT)/test_core_arm: tests/test_core.c $(CORE) src/core/fsys_posix.c $(CORE_H) $(OUT)/arm/sqlite3.o
 	$(LINUXARM_CC) $(LINUXARM_CFLAGS) $(WARN) -Ithird_party/sqlite -I$(DEPS)/linuxarm/include -o $@ \
 	  tests/test_core.c $(CORE) src/core/fsys_posix.c $(OUT)/arm/sqlite3.o $(ARM_LIBS)
@@ -126,7 +126,7 @@ H32 := $(DEPS)/host32
 $(OUT)/test_ui: tests/test_ui.c $(CORE) src/core/fsys_posix.c $(filter-out src/ui/main.c,$(UI)) $(CORE_H) $(UI_H) $(OUT)/host32/sqlite3.o $(FAKE_SRC)
 	$(FAKE_CC) $(FAKE_CFLAGS) -Wno-format-truncation $(DEFS) -Ithird_party/sqlite -I$(H32)/include -Isrc/core -Isrc/ui -o $@ \
 	  tests/test_ui.c $(CORE) src/core/fsys_posix.c $(filter-out src/ui/main.c,$(UI)) $(OUT)/host32/sqlite3.o $(FAKE_SRC) \
-	  $(H32)/lib/libjpeg.a $(H32)/lib/libpng16.a $(H32)/lib/libz.a -lm
+	  $(H32)/lib/libtiff.a $(H32)/lib/libjpeg.a $(H32)/lib/libpng16.a $(H32)/lib/libz.a -lm
 test-ui: $(OUT)/test_ui $(OUT)/test_core_host
 	rm -rf $(OUT)/work-ui && $(OUT)/test_ui $(OUT)/work-ui
 
@@ -260,7 +260,7 @@ test-heif: $(OUT)/lumenheif-host $(OUT)/lumenheif-arm
 $(OUT)/shot: tests/shots/shot.c tests/shots/widths.h $(CORE) src/core/fsys_posix.c $(filter-out src/ui/main.c,$(UI)) $(CORE_H) $(UI_H) $(OUT)/host32/sqlite3.o $(FAKE_SRC)
 	$(FAKE_CC) $(FAKE_CFLAGS) -Wno-format-truncation $(DEFS) -Ithird_party/sqlite -I$(H32)/include -Isrc/core -Isrc/ui -Itests/shots -o $@ \
 	  tests/shots/shot.c $(CORE) src/core/fsys_posix.c $(filter-out src/ui/main.c,$(UI)) $(OUT)/host32/sqlite3.o $(FAKE_SRC) \
-	  $(H32)/lib/libjpeg.a $(H32)/lib/libpng16.a $(H32)/lib/libz.a -lm
+	  $(H32)/lib/libtiff.a $(H32)/lib/libjpeg.a $(H32)/lib/libpng16.a $(H32)/lib/libz.a -lm
 shots: $(OUT)/shot
 	rm -rf $(OUT)/shots $(OUT)/photos
 	python3 tests/shots/make-photos.py "$(OUT)/photos/Lake District 2026"

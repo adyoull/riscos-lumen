@@ -17,13 +17,14 @@ library, and can be undone or reset at any time.
 
 Getting started
 ---------------
-Double-click !Lumen. Its window opens. Drag a folder of photos (JPEG or
-PNG) from the Filer onto the window or the icon bar icon. Lumen
+Double-click !Lumen. Its window opens. Drag a folder of photos (JPEG,
+PNG or TIFF) from the Filer onto the window or the icon bar icon. Lumen
 reads them in the background and makes thumbnails; the desktop stays
 usable while it works. Your photos are never changed or moved: the
 library only refers to them. Photos are known by their first bytes, so
-JPEG and PNG files typed DOS, Text or Data, or with no extension, are
-found too.
+JPEG, PNG and TIFF files typed DOS, Text or Data, or with no extension,
+are found too. TIFFs can be 8 or 16 bits a channel, compressed or not;
+Lumen works on them at 8 bits.
 
 The library lives in <Choices$Write>.Lumen.Library (normally inside
 !Boot.Choices). To keep it elsewhere, set Lumen$Library before running
@@ -313,7 +314,7 @@ Exporting
 Ctrl-E (or Export... in the Selection or Photo menu) opens the Export
 box. Drag its icon to a directory display, or into another program, or
 type a full pathname and click Save. In the box:
-  Format      JPEG (with its quality) or PNG
+  Format      JPEG (with its quality), PNG or TIFF (8 bits, LZW)
   Size        Full, the longer side at 3840, 2048 or 1024 pixels, or
               Fit in a box of so many pixels (for a screen, a web page,
               a slideshow). Photos are never made bigger
@@ -491,7 +492,7 @@ None) and Discard removes them; about 300-500 KB each.
 
 Other formats
 -------------
-Lumen reads JPEG, PNG and camera raw files itself. Other formats come
+Lumen reads JPEG, PNG, TIFF and camera raw files itself. Other formats come
 as plug-ins, which add them without a new Lumen: the first is LumenHEIF,
 for the HEIF photos (.heic) iPhones and many other phones take, and
 AVIF photos (.avif). Install
@@ -551,7 +552,7 @@ only a new plug-in. Lumen's source has the API, docs/plugin-api.md.
 Exported files
 --------------
 Exports keep the original's EXIF: camera, lens, exposure, date, GPS,
-author and copyright (a JPEG's EXIF block, a PNG's eXIf chunk). The
+author and copyright (a JPEG's EXIF block, a PNG's eXIf chunk, a TIFF's tags). The
 orientation, size and colour space are the export's own; the
 thumbnail and the maker's notes are left out. The caption and keywords
 go in as XMP (dc:description and dc:subject). For an original with no
@@ -630,7 +631,7 @@ licence: use it, change it and pass it on as you like, keeping the
 copyright notice. Its source code is published with each release. It is
 built with SQLite (public
 domain), libjpeg-turbo (IJG, BSD and zlib licences), libpng (PNG
-Reference Library License v2), zlib (zlib licence), UnixLib (revised
+Reference Library License v2), libtiff (its BSD-like licence), zlib (zlib licence), UnixLib (revised
 BSD, with parts under the LGPL) and GCC's runtime library (GPL 3 with
 the Runtime Library Exception). Their licences are in !Lumen.Licences;
 its ReadMe lists them. Each plug-in has its own Licence file.

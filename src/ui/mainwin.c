@@ -31,6 +31,7 @@
 #include <swis.h>
 #include "ui.h"
 #include "exif.h"
+#include "tiffmeta.h"
 #include "colour.h"
 #include "rawjob.h"
 
@@ -914,7 +915,10 @@ static void info_load (int force)
   info_add (it.name, "", 0);
   {
     char mp[24];
+    char *sp;
     img_megapixels (d.width, d.height, mp, sizeof mp);
+    if ((sp = strchr (mp, ' ')))
+      *sp = (char) 0xA0;               /* "12 MP" kept on one line */
     if (mp[0])
       snprintf (v, sizeof v, "%d x %d pixels (%s)", d.width, d.height, mp);
     else
@@ -978,7 +982,46 @@ static void info_load (int force)
           snprintf (cv, sizeof cv, "%s", prof[0] ? prof : "sRGB");
         info_add ("Colour", cv, 0);
       }
-    if (buf && got && img_probe_named (buf, got, d.path) == IMG_RAW)
+    int ifmt = buf && got ? img_probe_named (buf, got, d.path) : IMG_UNKNOWN;
+    tiff_meta tm;
+    int have_tm = 0;
+    if (ifmt == IMG_TIFF)
+      {
+        FILE *tf = fopen (d.path, "rb");
+        if (tf && tiff_meta_read (tf, &tm) == 0)
+          {
+            have_tm = 1;
+            if (tm.raw)
+              ifmt = IMG_RAW;
+          }
+        if (tf)
+          fclose (tf);
+      }
+    if (ifmt == IMG_TIFF && have_tm)
+      {
+        /* A TIFF: how it's stored, its colour space, and its tags (read
+           from wherever they are in the file). */
+        char enc[96], prof[64], cv[120];
+        tiff_encoding (&tm, enc, sizeof enc);
+        info_add ("Format", "TIFF", 0);
+        info_add ("Encoding", enc, 0);
+        if (tm.icc)
+          {
+            int cs = colour_from_icc (tm.icc, tm.icc_len, prof, sizeof prof);
+            if (cs == CS_ADOBE || cs == CS_P3)
+              snprintf (cv, sizeof cv, "%s, converted to sRGB", prof[0] ? prof : colour_name (cs));
+            else if (cs == CS_OTHER)
+              snprintf (cv, sizeof cv, "%s, shown as sRGB", prof[0] ? prof : "Unknown");
+            else
+              snprintf (cv, sizeof cv, "%s", prof[0] ? prof : "sRGB");
+            info_add ("Colour", cv, 0);
+          }
+        else
+          info_add ("Colour", "sRGB", 0);
+        if (tm.exif)
+          info_has_exif = exif_list_tiff (tm.exif, tm.exif_len, info_exif_tag, NULL) > 0;
+      }
+    else if (ifmt == IMG_RAW)
       {
         /* A camera raw file: through the plug-in. TIFF-based ones (NEF,
            CR2, ARW, DNG...) have their EXIF where a TIFF has. */
@@ -988,7 +1031,7 @@ static void info_load (int force)
         if ((buf[0] == 'I' && buf[1] == 'I') || (buf[0] == 'M' && buf[1] == 'M'))
           info_has_exif = exif_list_tiff (buf, got, info_exif_tag, NULL) > 0;
       }
-    else if (buf && got && img_probe (buf, got) == IMG_UNKNOWN)
+    else if (buf && got && ifmt == IMG_UNKNOWN)
       {
         /* A format plug-in's photo: what it is and its EXIF, as the
            plug-in said (Lumen knows nothing of the format itself). */
@@ -1024,6 +1067,8 @@ static void info_load (int force)
       }
     else if (buf && got)
       info_has_exif = exif_list (buf, got, info_exif_tag, NULL) > 0;
+    if (have_tm)
+      tiff_meta_free (&tm);
     free (buf);
     if (!info_has_exif)
       {

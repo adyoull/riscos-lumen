@@ -21,6 +21,7 @@
 #include "retouch.h"
 #include "denoise.h"
 #include "thumbgen.h"
+#include "tiffmeta.h"
 
 #define BAND 16                        /* rows rendered at a time */
 
@@ -60,6 +61,8 @@ struct exporter
   /* PNG */
   png_structp png;
   png_infop pinfo;
+  /* TIFF */
+  tiff_writer *tw;
   /* EXIF */
   unsigned char *src_tiff;             /* the original's, copied; NULL if none */
   size_t src_tiff_len;
@@ -86,6 +89,22 @@ static void read_source_exif (exporter *e, const char *src)
       return;
     }
   got = fread (buf, 1, HEAD_READ, f);
+  if (img_probe_named (buf, got, src) == IMG_TIFF)
+    {
+      /* A TIFF's tags can be anywhere in it: a compact copy of them. */
+      tiff_meta m;
+      free (buf);
+      if (tiff_meta_read (f, &m) == 0 && !m.raw && m.exif)
+        {
+          e->src_tiff = m.exif;
+          e->src_tiff_len = m.exif_len;
+          m.exif = NULL;
+        }
+      if (m.width)
+        tiff_meta_free (&m);
+      fclose (f);
+      return;
+    }
   fclose (f);
   if (exif_find_tiff (buf, got, &off, &n) == 0 && n >= 8)
     {
@@ -299,6 +318,18 @@ static int open_output (exporter *e)
           jpeg_write_marker (&e->jc, JPEG_APP0 + 1, app1, (unsigned) (sizeof XMP_NAMESPACE + e->xmp_len));
         }
     }
+  else if (e->o.format == EXPORT_TIFF)
+    {
+      e->tw = tiff_write_start (e->f, e->g.ow, e->g.oh, e->err, sizeof e->err);
+      if (!e->tw)
+        return -1;
+      {
+        static unsigned char icc[COLOUR_ICC_MAX];
+        size_t n = e->o.colour == CS_ADOBE || e->o.colour == CS_P3 ? colour_icc_profile (e->o.colour, icc, sizeof icc) : 0;
+        tiff_write_extras (e->tw, n ? icc : NULL, n, (const unsigned char *) e->xmp, e->xmp ? e->xmp_len : 0,
+                           exif_len ? exif + 6 : NULL, exif_len);
+      }
+    }
   else
     {
       e->png = png_create_write_struct (PNG_LIBPNG_VER_STRING, e, png_err, png_warn);
@@ -367,6 +398,14 @@ static int write_rows (exporter *e, int y0, int y1, const uint32_t *band)
             }
           jpeg_write_scanlines (&e->jc, &r, 1);
         }
+      else if (e->o.format == EXPORT_TIFF)
+        {
+          if (tiff_write_row (e->tw, e->row))
+            {
+              snprintf (e->err, sizeof e->err, "%s", tiff_write_error (e->tw));
+              return -1;
+            }
+        }
       else
         {
           if (setjmp (png_jmpbuf (e->png)))
@@ -391,6 +430,16 @@ static int finish_output (exporter *e)
       jpeg_destroy_compress (&e->jc);
       e->jc_live = 0;
     }
+  else if (e->o.format == EXPORT_TIFF)
+    {
+      if (tiff_write_finish (e->tw))
+        {
+          snprintf (e->err, sizeof e->err, "%s", tiff_write_error (e->tw));
+          return -1;
+        }
+      tiff_write_free (e->tw);
+      e->tw = NULL;
+    }
   else
     {
       if (setjmp (png_jmpbuf (e->png)))
@@ -407,7 +456,7 @@ static int finish_output (exporter *e)
       remove (e->dst);
       return -1;
     }
-  fsys_settype (e->dst, e->o.format == EXPORT_JPEG ? FT_JPEG : FT_PNG);
+  fsys_settype (e->dst, e->o.format == EXPORT_JPEG ? FT_JPEG : e->o.format == EXPORT_TIFF ? FT_TIFF : FT_PNG);
   return 0;
 }
 
@@ -577,6 +626,7 @@ void export_free (exporter *e)
     }
   if (e->png)
     png_destroy_write_struct (&e->png, &e->pinfo);
+  tiff_write_free (e->tw);
   if (e->f)
     fclose (e->f);
   if (e->done != 1 && e->created)

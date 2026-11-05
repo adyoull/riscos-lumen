@@ -1,6 +1,22 @@
 # Lumen changelog
 
-## 0.0.38 (4 November 2026): photos known by their fingerprint
+## 0.0.38: TIFF, and photos known by their fingerprint
+
+- TIFF photos are imported, shown, adjusted and exported, built into
+  Lumen (libtiff 4.7.1): 8 or 16 bits a channel (worked on at 8, as PNGs
+  are), RGB, grey, palette or CMYK, uncompressed, LZW, Deflate, PackBits
+  or JPEG, in strips or tiles, with their ICC profile. Their size,
+  orientation, camera, date and EXIF are read from their tags wherever
+  they are in the file, and their caption and keywords from their XMP.
+  The Info tab says how each is stored (Encoding: "LZW, 16 bits, RGB").
+  A camera raw file that's a TIFF inside (a DNG, a NEF) is still raw,
+  whatever it's called. Previews (All photos) cover TIFFs too.
+- Export as TIFF: 8 bits a channel, LZW with the predictor, with the
+  profile for Adobe RGB and Display P3, the EXIF in its own tags and
+  EXIF directory, and the caption and keywords as XMP. The Export box
+  and Choices have a TIFF button.
+- The Info tab gives the size in megapixels too ("4000 x 3000 pixels
+  (12 MP)"), and its lines no longer break inside a number.
 
 - JPEG and PNG files typed something else (DOS or Text, after being
   copied from a card or a network share without MimeMap) are imported,

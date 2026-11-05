@@ -129,7 +129,7 @@ a { color:#1f5fa8; }
 
 <h4>What you can do with it</h4>
 <ul>
-<li><b>Import</b> JPEG and PNG photos, and camera raw files with the free LumenRaw plug-in. Plug-ins add other formats.</li>
+<li><b>Import</b> JPEG, PNG and TIFF photos, and camera raw files with the free LumenRaw plug-in. Plug-ins add other formats.</li>
 <li><b>Browse</b> thumbnails in three sizes, and look at one photo large, at 100%, or through a round magnifier (the <b>loupe</b>).</li>
 <li><b>Rate, flag and reject</b> photos with one key each.</li>
 <li><b>Find</b> photos by name, caption, keyword, camera, date or project, and show only those with enough stars; or let a <b>smart album</b> gather them.</li>
@@ -139,7 +139,7 @@ a { color:#1f5fa8; }
 <li><b>Make versions</b> of a photo to try different looks, kept together in a <b>stack</b>; stack bursts and brackets too.</li>
 <li><b>Watch folders</b>: new photos you put in a folder you imported come into the library on their own, and the folders inside it can become albums.</li>
 <li><b>See what it's doing</b>: the bar at the bottom says what Lumen is busy with, and how far it has got.</li>
-<li><b>Export</b> JPEG or PNG copies at full size or smaller, in sRGB, Adobe RGB or Display P3, sharpened for their size and named as you choose, with the camera's details, caption and keywords kept in them.</li>
+<li><b>Export</b> JPEG, PNG or TIFF copies at full size or smaller, in sRGB, Adobe RGB or Display P3, sharpened for their size and named as you choose, with the camera's details, caption and keywords kept in them.</li>
 <li><b>Print</b> photos on any printer RISC OS knows, at a size you choose.</li>
 <li><b>See everything the camera recorded</b>: camera, lens, exposure, date and place.</li>
 <li><b>Notice when photos have moved</b>, and find them again.</li>
@@ -255,10 +255,11 @@ a { color:#1f5fa8; }
 <ul>
 <li><b>JPEG</b> photos, from any camera or phone.</li>
 <li><b>PNG</b> pictures.</li>
+<li><b>TIFF</b> files, as scanners and editing programs save them: 8 or 16 bits a channel, RGB, grey, palette or CMYK, uncompressed or compressed (LZW, Deflate, PackBits or JPEG), in strips or tiles. Lumen works on them at 8 bits a channel, as it does PNGs. Floating-point TIFFs can't be read, and a file with several pages shows its first.</li>
 <li><b>Camera raw files</b> (NEF, CR2, CR3, ARW, RAF, ORF, RW2, DNG and many more), with the LumenRaw plug-in (<a href="#ch16">Chapter 16</a>). Without it they're still imported, and their thumbnails come once the plug-in is installed.</li>
 <li><b>Other formats</b>, once a plug-in for them is installed (<a href="#ch16">Chapter 16</a>).</li>
 </ul>
-<p>Lumen knows photos by what's inside them, their first few bytes, so a JPEG or PNG is found even with the wrong file type (DOS or Text, say, after being copied from a card or a network share) or no extension. It looks inside files typed JPEG, PNG, DOS, Text, Data or TIFF, untyped files, and any whose name ends like a photo's (<code>/jpg</code>, <code>/png</code>, a raw file's). Files of other types, such as Sprites, are left unopened.</p>
+<p>Lumen knows photos by what's inside them, their first few bytes, so a JPEG, PNG or TIFF is found even with the wrong file type (DOS or Text, say, after being copied from a card or a network share) or no extension. It looks inside files typed JPEG, PNG, DOS, Text, Data or TIFF, untyped files, and any whose name ends like a photo's (<code>/jpg</code>, <code>/png</code>, a raw file's). A camera raw file that's a TIFF inside (a DNG, say) is still a raw file, whatever it's called. Files of other types, such as Sprites, are left unopened.</p>
 <p>Other files in the directory are left alone. Applications (directories whose names start with <code>!</code>) are skipped.</p>
 
 <div class="box tip"><b class="label">TIP</b>If you keep adding photos to the same directory, Lumen can watch it and bring new ones in by itself: see <a href="#ch6">Chapter 6</a>.</div>
@@ -688,7 +689,7 @@ a { color:#1f5fa8; }
 <figure><img src="images/export-box.png" alt="The Export box"><figcaption>The Export box.</figcaption></figure>
 <table>
 <tr><th>Setting</th><th>Choose</th></tr>
-<tr><td>Format</td><td><b>JPEG</b> for sharing (small files); <b>PNG</b> when no quality may be lost (much larger files).</td></tr>
+<tr><td>Format</td><td><b>JPEG</b> for sharing (small files); <b>PNG</b> when no quality may be lost (much larger files); <b>TIFF</b> for editing, publishing and printing programs that want one (no loss of quality: 8 bits a channel, LZW compressed).</td></tr>
 <tr><td>Quality</td><td>For JPEG, 1 to 100. Higher keeps more detail but makes larger files. 90 suits most photos.</td></tr>
 <tr><td>Size</td><td><b>Full</b> size; shrunk so the longer side is 3840 (4K screens), 2048 or 1024 pixels (email and the web); or <b>Fit in</b> a box, such as 1920 &times; 1080 for a full-HD screen or a slideshow. Photos are never made bigger.</td></tr>
 <tr><td>Colour</td><td><b>sRGB</b> for screens, the web and most printing services; <b>Adobe RGB</b> or <b>Display P3</b> for wider colour, when the printer or program that will use the file asks for it. The file says which it is (an ICC profile).</td></tr>
@@ -701,7 +702,7 @@ a { color:#1f5fa8; }
 
 <div class="box tip"><b class="label">TIP</b>Exported photos keep what the camera recorded: camera, lens, exposure, date, place, author and copyright, and your caption and keywords. Other programs (and websites) can show it. If you'd rather not share where a photo was taken, remember the GPS details go with it.</div>
 
-<div class="box tech"><b class="label">TECHNICAL STUFF</b>The camera's EXIF goes into a JPEG's APP1 block and a PNG's eXIf chunk, rewritten for the new file: its size is the export's, its orientation is "normal" (the export is already the right way up), the colour space is sRGB, and Software says Lumen. The camera's tiny thumbnail and the maker's private notes are left out. For an original with no EXIF of its own, Lumen writes what the library knows of it.</div>
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>The camera's EXIF goes into a JPEG's APP1 block, a PNG's eXIf chunk and a TIFF's own tags (with its EXIF and GPS directories), rewritten for the new file: its size is the export's, its orientation is "normal" (the export is already the right way up), the colour space is sRGB, and Software says Lumen. The camera's tiny thumbnail and the maker's private notes are left out. For an original with no EXIF of its own, Lumen writes what the library knows of it.</div>
 
 <h4>Printing</h4>
 <p>Lumen prints through RISC OS's printer drivers, so first choose your printer in <b>!Printers</b> (in the Printing directory), as for any other program.</p>
@@ -807,7 +808,7 @@ a { color:#1f5fa8; }
 <div class="box rem"><b class="label">REMEMBER</b>If you open a raw photo without LumenRaw installed, Lumen tells you what to install. Its stars and albums work anyway.</div>
 
 <h4>Other formats: plug-ins</h4>
-<p>Lumen reads JPEG, PNG and camera raw files itself. Other formats come as <b>plug-ins</b>, which add them to Lumen without a new Lumen. The first is <b>LumenHEIF</b>, for the HEIF photos (<code>.heic</code>) that iPhones and many other phones take, and AVIF photos (<code>.avif</code>); more may follow. Install one from PackMan, or drag it into <b>Plug-ins &rarr; Add plug-in...</b> (below). Each comes with its own guide, in <code>!Lumen.Plugins.<i>name</i>.Guide</code>.</p>
+<p>Lumen reads JPEG, PNG, TIFF and camera raw files itself. Other formats come as <b>plug-ins</b>, which add them to Lumen without a new Lumen. The first is <b>LumenHEIF</b>, for the HEIF photos (<code>.heic</code>) that iPhones and many other phones take, and AVIF photos (<code>.avif</code>); more may follow. Install one from PackMan, or drag it into <b>Plug-ins &rarr; Add plug-in...</b> (below). Each comes with its own guide, in <code>!Lumen.Plugins.<i>name</i>.Guide</code>.</p>
 <div class="box rem"><b class="label">REMEMBER</b>Lumen only imports photos in a plug-in's format once that plug-in is installed. If you imported a folder before, import it again: the new photos are added, and the ones already there aren't added twice.</div>
 
 <h4>The Plug-ins menu</h4>
@@ -888,7 +889,7 @@ a { color:#1f5fa8; }
 <li><b>Colour:</b> Adobe RGB (1998) and Display P3 photos (from their ICC profile, or EXIF's colour space and interoperability index) are converted to sRGB by matrix in linear light. Other profiles are treated as sRGB.</li>
 <li><b>Plug-ins</b> are directories in <code>!Lumen.Plugins</code> with a text <code>Plugin</code> file of <code>Name</code>, <code>Version</code>, <code>Kind</code>, <code>Program</code>, <code>Package</code> and <code>Description</code> lines. A format plug-in (<code>Kind: format</code>, like LumenHEIF) also gives an <code>API</code> line, and <code>Format</code>, <code>Extensions</code> and <code>Signature</code> lines for each format it reads, saying which files are its own; Lumen imports what it claims. It can say how each photo is encoded, shown on the Info tab as Encoding. Plug-ins run once per job in a task window and hand back a JPEG or PPM and a few lines of details (size, camera, date, encoding, and where the EXIF is in the file) through <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>. The format plug-in API is <code>docs/plugin-api.md</code> in Lumen's source. Switched-off plug-ins are listed in <code>&lt;Choices$Write&gt;.Lumen.Plugins</code>.</li>
 <li><b>Choices</b> are a text file, <code>&lt;Choices$Write&gt;.Lumen.Choices</code>, of <code>key value</code> lines; the Activity history is <code>&lt;Choices$Write&gt;.Lumen.Activity</code>, one <code>time kind text</code> line per entry, the last 200 kept.</li>
-<li><b>Versions, keywords and smart albums</b> live in the catalogue: a version is a row of its own sharing its original; keywords are a table of their own; a smart album keeps its rule as text and is worked out afresh each time it's shown. Captions and keywords go out as XMP (<code>dc:description</code>, <code>dc:subject</code>) in a JPEG's APP1 or a PNG's iTXt chunk, and come in the same way. Printing renders each photo to a scrap JPEG at the printer's resolution (150 to 300 dpi) and plots it with <code>JPEG_PlotScaled</code> inside the printer driver's rectangle loop.</li>
+<li><b>Versions, keywords and smart albums</b> live in the catalogue: a version is a row of its own sharing its original; keywords are a table of their own; a smart album keeps its rule as text and is worked out afresh each time it's shown. Captions and keywords go out as XMP (<code>dc:description</code>, <code>dc:subject</code>) in a JPEG's APP1, a PNG's iTXt chunk or a TIFF's XMP tag, and come in the same way. TIFFs are read with libtiff; their tags are read by Lumen itself from wherever in the file they are (often after the picture), and exported TIFFs are written by Lumen: strips of LZW with the horizontal predictor, which every TIFF reader understands. Printing renders each photo to a scrap JPEG at the printer's resolution (150 to 300 dpi) and plots it with <code>JPEG_PlotScaled</code> inside the printer driver's rectangle loop.</li>
 </ol>
 
 <!-- ======================================================================= -->
@@ -977,7 +978,7 @@ a { color:#1f5fa8; }
 <h2 class="part" id="credits">Photo credits</h2>
 <p>All the photos in this guide are by the author, Andrew Youll (&copy; Andrew Youll). They're shown smaller than the originals, and in Chapters 6, 7 and 10 to 14 with Lumen's adjustments, styles, versions and keywords applied. The raw photos are straight from his Nikon D700.</p>
 
-<p class="small">Lumen is &copy; Andrew Youll, 2026, and is free software under the MIT licence: you may use, change and pass it on, keeping the copyright notice. Its source code is published with each release. The licences of the code it includes (SQLite, libjpeg-turbo, libpng, zlib and UnixLib, and LibRaw in the LumenRaw plug-in) are in <code>!Lumen.Licences</code>.</p>
+<p class="small">Lumen is &copy; Andrew Youll, 2026, and is free software under the MIT licence: you may use, change and pass it on, keeping the copyright notice. Its source code is published with each release. The licences of the code it includes (SQLite, libjpeg-turbo, libpng, libtiff, zlib and UnixLib, and LibRaw in the LumenRaw plug-in) are in <code>!Lumen.Licences</code>.</p>
 
 </main>
 </body>

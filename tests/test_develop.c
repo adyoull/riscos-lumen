@@ -29,6 +29,9 @@
 #include "../src/core/styles.h"
 #include "../src/core/naming.h"
 #include "../src/core/colour.h"
+#include "../src/core/tiffmeta.h"
+#include "../src/core/exif.h"
+#include <tiffio.h>
 
 static int checks, fails;
 #define CHECK(c, what) do { checks++; if (!(c)) { fails++; fprintf (stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, what); } } while (0)
@@ -1149,6 +1152,406 @@ static void test_export (const char *work)
   free (img.rgb);
 }
 
+/* ---- TIFF: reading every kind with libtiff, writing our own ---- */
+static unsigned lcg_state = 12345;
+static unsigned lcg (void) { lcg_state = lcg_state * 1103515245u + 12345u; return lcg_state >> 16; }
+
+/* A w x h TIFF written by libtiff: the left half red, the right half
+   blue (grey: a ramp), the given layout. */
+static int lib_tiff (const char *path, int w, int h, int bps, int spp, int photo, int comp, int tiled,
+                     int planar, int orientation, const char *make)
+{
+  TIFF *t = TIFFOpen (path, "w");
+  int x, y, s, ss = bps / 8;
+  unsigned char *row;
+  if (!t)
+    return -1;
+  TIFFSetField (t, TIFFTAG_IMAGEWIDTH, w);
+  TIFFSetField (t, TIFFTAG_IMAGELENGTH, h);
+  TIFFSetField (t, TIFFTAG_BITSPERSAMPLE, bps);
+  TIFFSetField (t, TIFFTAG_SAMPLESPERPIXEL, spp);
+  TIFFSetField (t, TIFFTAG_PHOTOMETRIC, photo);
+  TIFFSetField (t, TIFFTAG_COMPRESSION, comp);
+  TIFFSetField (t, TIFFTAG_PLANARCONFIG, planar);
+  TIFFSetField (t, TIFFTAG_ORIENTATION, orientation);
+  if (make)
+    {
+      TIFFSetField (t, TIFFTAG_MAKE, make);
+      TIFFSetField (t, TIFFTAG_MODEL, "Scanner 9000");
+      TIFFSetField (t, TIFFTAG_DATETIME, "2026:11:05 10:30:00");
+    }
+  if (spp == 4 && photo == PHOTOMETRIC_RGB)
+    {
+      uint16_t ex = EXTRASAMPLE_UNASSALPHA;
+      TIFFSetField (t, TIFFTAG_EXTRASAMPLES, 1, &ex);
+    }
+  if (comp == COMPRESSION_JPEG)
+    {
+      TIFFSetField (t, TIFFTAG_JPEGQUALITY, 95);
+      if (photo == PHOTOMETRIC_YCBCR)
+        TIFFSetField (t, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);
+    }
+  if (comp == COMPRESSION_LZW || comp == COMPRESSION_ADOBE_DEFLATE)
+    TIFFSetField (t, TIFFTAG_PREDICTOR, 2);
+  if (photo == PHOTOMETRIC_PALETTE)
+    {
+      static uint16_t r[256], g[256], b[256];
+      for (x = 0; x < 256; x++)
+        {
+          r[x] = (uint16_t) ((x == 1 ? 220 : 20) * 257);
+          g[x] = (uint16_t) (30 * 257);
+          b[x] = (uint16_t) ((x == 2 ? 230 : 20) * 257);
+        }
+      TIFFSetField (t, TIFFTAG_COLORMAP, r, g, b);
+    }
+  /* the pixel at x, y, sample s, as 0-255 */
+#define PIX(x, y, s) (spp == 1 || (spp == 2 && s == 0) ? (photo == PHOTOMETRIC_PALETTE ? ((x) < w / 2 ? 1 : 2) : (x) * 255 / (w - 1)) \
+                      : s == 3 || (spp == 2 && s == 1) ? 255 : s == 0 ? ((x) < w / 2 ? 220 : 20) : s == 1 ? 30 : ((x) < w / 2 ? 20 : 230))
+  if (tiled)
+    {
+      int tw = 32, th = 32, tx, ty;
+      tmsize_t tsize;
+      unsigned char *tile;
+      TIFFSetField (t, TIFFTAG_TILEWIDTH, tw);
+      TIFFSetField (t, TIFFTAG_TILELENGTH, th);
+      tsize = TIFFTileSize (t);
+      tile = calloc (1, (size_t) tsize);
+      for (ty = 0; ty < h; ty += th)
+        for (tx = 0; tx < w; tx += tw)
+          {
+            memset (tile, 0, (size_t) tsize);
+            for (y = 0; y < th; y++)
+              for (x = 0; x < tw; x++)
+                for (s = 0; s < spp; s++)
+                  {
+                    unsigned v = tx + x < w && ty + y < h ? (unsigned) PIX (tx + x, ty + y, s) : 0;
+                    size_t at = ((size_t) (y * tw + x) * spp + s) * ss;
+                    if (ss == 2)
+                      ((uint16_t *) (void *) tile)[at / 2] = (uint16_t) (v * 257);
+                    else
+                      tile[at] = (unsigned char) v;
+                  }
+            TIFFWriteTile (t, tile, (uint32_t) tx, (uint32_t) ty, 0, 0);
+          }
+      free (tile);
+    }
+  else
+    {
+      TIFFSetField (t, TIFFTAG_ROWSPERSTRIP, comp == COMPRESSION_JPEG ? 16 : 8);
+      row = calloc (1, (size_t) w * spp * ss + 16);
+      for (y = 0; y < h; y++)
+        {
+          if (planar == PLANARCONFIG_SEPARATE)
+            for (s = 0; s < spp; s++)
+              {
+                for (x = 0; x < w; x++)
+                  row[x] = (unsigned char) PIX (x, y, s);
+                TIFFWriteScanline (t, row, (uint32_t) y, (uint16_t) s);
+              }
+          else
+            {
+              for (x = 0; x < w; x++)
+                for (s = 0; s < spp; s++)
+                  {
+                    unsigned v = (unsigned) PIX (x, y, s);
+                    if (ss == 2)
+                      ((uint16_t *) (void *) row)[x * spp + s] = (uint16_t) (v * 257);
+                    else
+                      row[x * spp + s] = (unsigned char) v;
+                  }
+              TIFFWriteScanline (t, row, (uint32_t) y, 0);
+            }
+        }
+      free (row);
+    }
+#undef PIX
+  TIFFClose (t);
+  return 0;
+}
+
+/* The picture read back is red on the left, blue on the right (within tol). */
+static int red_blue (const rgb_image *im, int tol)
+{
+  const unsigned char *l = im->rgb + ((size_t) (im->h / 2) * im->w + im->w / 4) * 3;
+  const unsigned char *r = im->rgb + ((size_t) (im->h / 2) * im->w + 3 * im->w / 4) * 3;
+  return abs (l[0] - 220) <= tol && abs (l[1] - 30) <= tol && abs (l[2] - 20) <= tol
+         && abs (r[0] - 20) <= tol && abs (r[1] - 30) <= tol && abs (r[2] - 230) <= tol;
+}
+
+static void test_tiff (const char *work)
+{
+  char path[700], err[200], enc[96];
+  rgb_image back;
+  FILE *f;
+  tiff_meta m;
+  img_info info;
+  static const struct { const char *name; int bps, spp, photo, comp, tiled, planar; const char *enc; } kinds[] = {
+    { "rgb8-lzw", 8, 3, PHOTOMETRIC_RGB, COMPRESSION_LZW, 0, 1, "LZW, 8 bits, RGB" },
+    { "rgb16-deflate", 16, 3, PHOTOMETRIC_RGB, COMPRESSION_ADOBE_DEFLATE, 0, 1, "Deflate, 16 bits, RGB" },
+    { "rgb8-none", 8, 3, PHOTOMETRIC_RGB, COMPRESSION_NONE, 0, 1, "uncompressed, 8 bits, RGB" },
+    { "rgb8-tiles", 8, 3, PHOTOMETRIC_RGB, COMPRESSION_LZW, 1, 1, "LZW, 8 bits, RGB, in tiles" },
+    { "rgb16-tiles", 16, 3, PHOTOMETRIC_RGB, COMPRESSION_ADOBE_DEFLATE, 1, 1, "Deflate, 16 bits, RGB, in tiles" },
+    { "rgb8-planes", 8, 3, PHOTOMETRIC_RGB, COMPRESSION_PACKBITS, 0, 2, "PackBits, 8 bits, RGB" },
+    { "rgba8", 8, 4, PHOTOMETRIC_RGB, COMPRESSION_LZW, 0, 1, "LZW, 8 bits, RGB" },
+    { "jpeg", 8, 3, PHOTOMETRIC_YCBCR, COMPRESSION_JPEG, 0, 1, "JPEG, 8 bits, YCbCr" },
+    { "palette", 8, 1, PHOTOMETRIC_PALETTE, COMPRESSION_LZW, 0, 1, "LZW, 8 bits, palette" },
+  };
+  int k;
+  for (k = 0; k < (int) (sizeof kinds / sizeof kinds[0]); k++)
+    {
+      char what[160];
+      snprintf (path, sizeof path, "%s/%s.tif", work, kinds[k].name);
+      CHECK (lib_tiff (path, 96, 64, kinds[k].bps, kinds[k].spp, kinds[k].photo, kinds[k].comp, kinds[k].tiled,
+                       kinds[k].planar, 1, "Scanco") == 0, "a TIFF written by libtiff");
+      f = fopen (path, "rb");
+      CHECK (f && tiff_meta_read (f, &m) == 0, "tiff: its details read");
+      if (f)
+        fclose (f);
+      tiff_encoding (&m, enc, sizeof enc);
+      snprintf (what, sizeof what, "tiff %s: 96 x 64, \"%s\" (got \"%s\")", kinds[k].name, kinds[k].enc, enc);
+      CHECK (m.width == 96 && m.height == 64 && !strcmp (enc, kinds[k].enc) && !m.raw, what);
+      memset (&info, 0, sizeof info);
+      img_read_tiff_tags (m.exif, m.exif_len, &info);
+      snprintf (what, sizeof what, "tiff %s: the scanner's make, model and date from its tags", kinds[k].name);
+      CHECK (!strcmp (info.make, "Scanco") && !strcmp (info.model, "Scanner 9000")
+             && !strcmp (info.taken, "2026:11:05 10:30:00"), what);
+      tiff_meta_free (&m);
+      snprintf (what, sizeof what, "tiff %s: decoded, red on the left and blue on the right", kinds[k].name);
+      if (kinds[k].photo == PHOTOMETRIC_PALETTE || kinds[k].comp == COMPRESSION_JPEG)
+        CHECK (read_back (path, &back) == 0 && back.w == 96 && back.h == 64
+               && red_blue (&back, kinds[k].comp == COMPRESSION_JPEG ? 12 : 1), what);
+      else
+        CHECK (read_back (path, &back) == 0 && back.w == 96 && back.h == 64 && red_blue (&back, 0), what);
+      free (back.rgb);
+    }
+  /* Grey, white is zero, and orientation. */
+  snprintf (path, sizeof path, "%s/grey.tif", work);
+  lib_tiff (path, 100, 20, 8, 1, PHOTOMETRIC_MINISBLACK, COMPRESSION_LZW, 0, 1, 6, NULL);
+  f = fopen (path, "rb");
+  CHECK (f && tiff_meta_read (f, &m) == 0 && m.orientation == 6 && m.photometric == 1, "grey tiff: turned (6)");
+  if (f)
+    fclose (f);
+  tiff_meta_free (&m);
+  CHECK (read_back (path, &back) == 0 && back.w == 100 && back.rgb[0] == 0 && back.rgb[1] == 0
+         && back.rgb[99 * 3] == 255 && back.rgb[50 * 3] == back.rgb[50 * 3 + 2], "grey tiff: a ramp, black to white, as stored");
+  free (back.rgb);
+  /* 16-bit RGB and grey at widths NEON doesn't divide: the same as the plain way. */
+  snprintf (path, sizeof path, "%s/rgb16-odd.tif", work);
+  lib_tiff (path, 101, 9, 16, 3, PHOTOMETRIC_RGB, COMPRESSION_NONE, 0, 1, 1, NULL);
+  CHECK (read_back (path, &back) == 0 && back.w == 101 && red_blue (&back, 0)
+         && back.rgb[(4 * 101 + 100) * 3 + 2] == 230, "16-bit RGB, 101 wide: every pixel, the last too");
+  free (back.rgb);
+  snprintf (path, sizeof path, "%s/grey16.tif", work);
+  lib_tiff (path, 37, 5, 16, 1, PHOTOMETRIC_MINISWHITE, COMPRESSION_LZW, 0, 1, 1, NULL);
+  CHECK (read_back (path, &back) == 0 && back.w == 37 && back.rgb[0] == 255 && back.rgb[36 * 3] == 0
+         && back.rgb[18 * 3 + 1] == 255 - 18 * 255 / 36, "16-bit grey, white is zero, 37 wide: inverted");
+  free (back.rgb);
+  /* CMYK (separated): through libtiff's RGBA interface. */
+  {
+    TIFF *t;
+    unsigned char row[40 * 4];
+    int x, y;
+    snprintf (path, sizeof path, "%s/cmyk.tif", work);
+    t = TIFFOpen (path, "w");
+    TIFFSetField (t, TIFFTAG_IMAGEWIDTH, 40);
+    TIFFSetField (t, TIFFTAG_IMAGELENGTH, 10);
+    TIFFSetField (t, TIFFTAG_BITSPERSAMPLE, 8);
+    TIFFSetField (t, TIFFTAG_SAMPLESPERPIXEL, 4);
+    TIFFSetField (t, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_SEPARATED);
+    TIFFSetField (t, TIFFTAG_INKSET, INKSET_CMYK);
+    TIFFSetField (t, TIFFTAG_PLANARCONFIG, 1);
+    TIFFSetField (t, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
+    for (x = 0; x < 40; x++)
+      {
+        row[4 * x] = 35; row[4 * x + 1] = 225; row[4 * x + 2] = 235; row[4 * x + 3] = 0;
+      }
+    for (y = 0; y < 10; y++)
+      TIFFWriteScanline (t, row, (uint32_t) y, 0);
+    TIFFClose (t);
+    CHECK (read_back (path, &back) == 0 && back.w == 40 && abs (back.rgb[0] - 220) <= 2 && abs (back.rgb[1] - 30) <= 2
+           && abs (back.rgb[2] - 20) <= 2, "CMYK tiff: shown in RGB");
+    free (back.rgb);
+  }
+  /* A floating-point TIFF: said so. */
+  {
+    TIFF *t;
+    float row[10 * 3] = { 0 };
+    int y;
+    snprintf (path, sizeof path, "%s/float.tif", work);
+    t = TIFFOpen (path, "w");
+    TIFFSetField (t, TIFFTAG_IMAGEWIDTH, 10);
+    TIFFSetField (t, TIFFTAG_IMAGELENGTH, 4);
+    TIFFSetField (t, TIFFTAG_BITSPERSAMPLE, 32);
+    TIFFSetField (t, TIFFTAG_SAMPLESPERPIXEL, 3);
+    TIFFSetField (t, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
+    TIFFSetField (t, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+    TIFFSetField (t, TIFFTAG_PLANARCONFIG, 1);
+    for (y = 0; y < 4; y++)
+      TIFFWriteScanline (t, row, (uint32_t) y, 0);
+    TIFFClose (t);
+    CHECK (thumbgen_start (path, NULL, 256, 1, err, sizeof err) == NULL && strstr (err, "floating-point"),
+           "floating-point tiff: refused, and said why");
+  }
+  /* A DNG (a TIFF with DNGVersion) is a raw file, whatever it's called. */
+  {
+    TIFF *t;
+    static const unsigned char ver[4] = { 1, 4, 0, 0 };
+    unsigned char row[8 * 3] = { 0 };
+    int y;
+    snprintf (path, sizeof path, "%s/camera.tif", work);
+    t = TIFFOpen (path, "w");
+    TIFFSetField (t, TIFFTAG_IMAGEWIDTH, 8);
+    TIFFSetField (t, TIFFTAG_IMAGELENGTH, 2);
+    TIFFSetField (t, TIFFTAG_BITSPERSAMPLE, 8);
+    TIFFSetField (t, TIFFTAG_SAMPLESPERPIXEL, 3);
+    TIFFSetField (t, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+    TIFFSetField (t, TIFFTAG_DNGVERSION, ver);
+    for (y = 0; y < 2; y++)
+      TIFFWriteScanline (t, row, (uint32_t) y, 0);
+    TIFFClose (t);
+    f = fopen (path, "rb");
+    CHECK (f && tiff_is_raw (f), "a DNG named .tif is a raw file");
+    if (f)
+      fclose (f);
+  }
+
+  /* Our own writer: LZW with the predictor, read by libtiff exactly.
+     Noise, so the LZW table fills and is cleared many times. */
+  {
+    int w = 301, h = 203, x, y, same = 1;
+    unsigned char *pic = malloc ((size_t) w * h * 3);
+    tiff_writer *tw;
+    TIFF *t;
+    uint32_t *ras = malloc ((size_t) w * h * 4);
+    uint16_t comp = 0, pred = 0;
+    for (y = 0; y < h; y++)
+      for (x = 0; x < w * 3; x++)
+        pic[(size_t) y * w * 3 + x] = (unsigned char) (y < 100 ? lcg () : (x / 3 + y) & 0xFF);
+    snprintf (path, sizeof path, "%s/ours.tif", work);
+    f = fopen (path, "wb");
+    tw = f ? tiff_write_start (f, w, h, err, sizeof err) : NULL;
+    CHECK (tw != NULL, "tiff writer: started");
+    for (y = 0; tw && y < h; y++)
+      tiff_write_row (tw, pic + (size_t) y * w * 3);
+    CHECK (tw && tiff_write_finish (tw) == 0, "tiff writer: finished");
+    tiff_write_free (tw);
+    if (f)
+      fclose (f);
+    t = TIFFOpen (path, "r");
+    CHECK (t != NULL, "tiff writer: libtiff opens it");
+    if (t)
+      {
+        TIFFGetField (t, TIFFTAG_COMPRESSION, &comp);
+        TIFFGetField (t, TIFFTAG_PREDICTOR, &pred);
+        CHECK (comp == COMPRESSION_LZW && pred == 2, "tiff writer: LZW with the horizontal predictor");
+        CHECK (TIFFReadRGBAImageOriented (t, (uint32_t) w, (uint32_t) h, ras, ORIENTATION_TOPLEFT, 0), "and reads it");
+        for (y = 0; y < h && same; y++)
+          for (x = 0; x < w && same; x++)
+            {
+              const unsigned char *p = pic + ((size_t) y * w + x) * 3;
+              uint32_t v = ras[(size_t) y * w + x];
+              same = TIFFGetR (v) == p[0] && TIFFGetG (v) == p[1] && TIFFGetB (v) == p[2];
+            }
+        CHECK (same, "tiff writer: every pixel exactly (noise, LZW cleared and restarted)");
+        TIFFClose (t);
+      }
+    free (pic);
+    free (ras);
+  }
+
+  /* Exporting as TIFF: the same pixels as a PNG export; the camera's
+     details in its own tags and an EXIF IFD; a profile for Adobe RGB. */
+  {
+    char src[700], dpng[700], dtif[700], dj[700];
+    recipe r;
+    export_opts o = { EXPORT_PNG, 90, 0, "Lumen 9.9", 0, 0, CS_SRGB, EXPORT_SHARP_NONE };
+    exporter *e;
+    rgb_image a, b;
+    img_info known;
+    TIFF *t;
+    snprintf (src, sizeof src, "%s/rgb8-lzw.tif", work);
+    snprintf (dpng, sizeof dpng, "%s/as.png", work);
+    snprintf (dtif, sizeof dtif, "%s/as.tif", work);
+    recipe_default (&r);
+    recipe_set (&r, P_EV, 0.5f);
+    e = export_start (src, 96, 64, 1, &r, dpng, &o, err, sizeof err);
+    CHECK (e && run_export (e) >= 0, "a TIFF exported as PNG");
+    export_free (e);
+    o.format = EXPORT_TIFF;
+    memset (&known, 0, sizeof known);
+    snprintf (known.make, sizeof known.make, "Testcam");
+    snprintf (known.model, sizeof known.model, "T-1");
+    snprintf (known.taken, sizeof known.taken, "2026:07:01 12:00:00");
+    known.exposure = 1.0 / 250;
+    known.fnumber = 8;
+    known.iso = 200;
+    e = export_start (src, 96, 64, 1, &r, dtif, &o, err, sizeof err);
+    if (e)
+      export_set_tags (e, "A lake", "water, hills");
+    CHECK (e && run_export (e) >= 0, "and as TIFF");
+    export_free (e);
+    CHECK (read_back (dpng, &a) == 0 && read_back (dtif, &b) == 0 && a.w == b.w && a.h == b.h
+           && memcmp (a.rgb, b.rgb, (size_t) a.w * a.h * 3) == 0, "TIFF export: exactly the PNG's pixels");
+    free (a.rgb);
+    free (b.rgb);
+    f = fopen (dtif, "rb");
+    CHECK (f && tiff_meta_read (f, &m) == 0 && m.bits == 8 && m.compression == 5 && !m.icc, "TIFF export: 8-bit LZW, sRGB without a profile");
+    if (f)
+      fclose (f);
+    memset (&info, 0, sizeof info);
+    img_read_tiff_tags (m.exif, m.exif_len, &info);
+    CHECK (!strcmp (info.make, "Scanco") && !strcmp (info.taken, "2026:11:05 10:30:00"), "TIFF export: the original's camera and date carried over");
+    CHECK (m.xmp && memmem (m.xmp, m.xmp_len, "A lake", 6), "TIFF export: the caption in its XMP");
+    tiff_meta_free (&m);
+    /* No EXIF of its own (a PNG): the library's details, in an EXIF IFD libtiff reads. */
+    o.colour = CS_ADOBE;
+    snprintf (dj, sizeof dj, "%s/known.tif", work);
+    e = export_start (dpng, 96, 64, 1, &r, dj, &o, err, sizeof err);
+    if (e)
+      export_set_known (e, &known);
+    CHECK (e && run_export (e) >= 0, "a PNG exported as Adobe RGB TIFF");
+    export_free (e);
+    f = fopen (dj, "rb");
+    CHECK (f && tiff_meta_read (f, &m) == 0 && m.icc && m.icc_len > 100, "Adobe RGB TIFF: with its profile");
+    if (f)
+      fclose (f);
+    memset (&info, 0, sizeof info);
+    img_read_tiff_tags (m.exif, m.exif_len, &info);
+    CHECK (!strcmp (info.make, "Testcam") && info.iso == 200 && fabs (info.fnumber - 8) < 0.01
+           && !strcmp (info.taken, "2026:07:01 12:00:00"), "Adobe RGB TIFF: the camera, ISO, f-number and date");
+    tiff_meta_free (&m);
+    t = TIFFOpen (dj, "r");
+    {
+      toff_t exif_off = 0;
+      char *dto = NULL;
+      CHECK (t && TIFFGetField (t, TIFFTAG_EXIFIFD, &exif_off) && exif_off && TIFFReadEXIFDirectory (t, exif_off)
+             && TIFFGetField (t, EXIFTAG_DATETIMEORIGINAL, &dto) && dto && !strcmp (dto, "2026:07:01 12:00:00"),
+             "libtiff reads its EXIF IFD");
+    }
+    if (t)
+      TIFFClose (t);
+    /* And from that TIFF to a JPEG: its EXIF goes with it. */
+    o.format = EXPORT_JPEG;
+    o.colour = CS_SRGB;
+    snprintf (dpng, sizeof dpng, "%s/from-tiff.jpg", work);
+    e = export_start (dj, 96, 64, 1, &r, dpng, &o, err, sizeof err);
+    CHECK (e && run_export (e) >= 0, "a TIFF exported as JPEG");
+    export_free (e);
+    {
+      unsigned char head[4096];
+      size_t got = 0;
+      f = fopen (dpng, "rb");
+      if (f)
+        {
+          got = fread (head, 1, sizeof head, f);
+          fclose (f);
+        }
+      CHECK (img_read_info (head, got, &info) == 0 && !strcmp (info.make, "Testcam") && info.iso == 200,
+             "JPEG from a TIFF: the TIFF's EXIF carried over");
+    }
+  }
+}
+
 static void test_sharpen (void)
 {
   uint32_t px[40 * 10], before[40 * 10];
@@ -2202,6 +2605,7 @@ int main (int argc, char **argv)
   test_retouch ();
   test_brush ();
   test_export_exif (argv[1]);
+  test_tiff (argv[1]);
   printf ("test_develop: %d checks, %d failed\n", checks, fails);
   return fails != 0;
 }

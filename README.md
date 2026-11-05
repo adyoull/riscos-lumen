@@ -50,7 +50,7 @@ were written with Anthropic's Claude as a coding assistant.
 
 ## What it does
 
-- Imports JPEG and PNG photos (raw files with LumenRaw, HEIF and AVIF
+- Imports JPEG, PNG and TIFF photos (raw files with LumenRaw, HEIF and AVIF
   photos with LumenHEIF), in the
   background, never copying or changing them; finds them again if they
   move; watches folders for new photos.
@@ -61,7 +61,7 @@ were written with Anthropic's Claude as a coding assistant.
 - Adjustments in 16-bit linear light, with undo, before and after, Auto,
   presets, styles shown on the photo as you move down the list, and
   copying adjustments between photos.
-- Exports JPEG or PNG at any size, in sRGB, Adobe RGB or Display P3,
+- Exports JPEG, PNG or TIFF at any size, in sRGB, Adobe RGB or Display P3,
   sharpened for the size, with EXIF, caption and keywords; prints to any
   RISC OS printer.
 - Exports, imports and checks (and repairs) whole libraries.
@@ -102,7 +102,8 @@ one `Catalogue-backup`.
 ## Building
 
 Needs [riscos-crossdev](https://github.com/adyoull/riscos-crossdev) 1.8.2 (`make prebuilt devkit`) and libjpeg-turbo
-3.0.4 and libpng 1.6.44 built for four targets (`deps/build-deps.sh`):
+3.0.4 and libpng 1.6.44 built for four targets (`deps/build-deps.sh`), and
+libtiff 4.7.1 (`deps/build-tiff.sh`):
 RISC OS, x86-64, ARM Linux and 32-bit x86 (for the Fake RISC OS tests).
 
 ```
@@ -129,7 +130,7 @@ Linux (RISC OS 5.31-5 under QEMU); its automated tests run on Linux
 
 ## Plug-ins
 
-Lumen reads JPEG and PNG itself. Other formats come from plug-ins in
+Lumen reads JPEG, PNG and TIFF itself. Other formats come from plug-ins in
 `!Lumen.Plugins`: LumenRaw for camera raw files, and format plug-ins
 such as LumenHEIF, whose `Plugin` file says which files they read. The
 format plug-in API is in [docs/plugin-api.md](docs/plugin-api.md).
@@ -145,5 +146,5 @@ FFmpeg's libavcodec and libavutil under the LGPL 2.1 or later, dav1d
 under its BSD licence, and their sources and the patches ship as `LumenHEIF-1.1-sources.zip`. The
 libraries built into Lumen keep their own licences, collected in
 `app/Licences` (installed as `!Lumen.Licences`): SQLite (public domain),
-libjpeg-turbo, libpng, zlib and UnixLib (BSD-style, with LGPL parts:
+libjpeg-turbo, libpng, libtiff, zlib and UnixLib (BSD-style, with LGPL parts:
 Lumen's source is published so it can be relinked).

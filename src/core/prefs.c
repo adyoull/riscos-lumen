@@ -58,7 +58,7 @@ int prefs_load (const char *path, prefs *p)
           if (end == v)
             continue;
           if (!strcmp (line, "export_format"))
-            p->export_format = clamp ((int) n, 0, 1);
+            p->export_format = clamp ((int) n, 0, 2);
           else if (!strcmp (line, "export_quality"))
             p->export_quality = clamp ((int) n, 1, 100);
           else if (!strcmp (line, "export_size"))

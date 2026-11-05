@@ -12,6 +12,7 @@
 #include <string.h>
 #include <jpeglib.h>
 #include <png.h>
+#include <tiffio.h>
 #include <sys/stat.h>
 #include "../src/core/catalog.h"
 #include "../src/core/xmp.h"
@@ -24,6 +25,7 @@
 #include "../src/core/libcheck.h"
 #include "sqlite3.h"
 #include "../src/core/thumbgen.h"
+#include "../src/core/tiffmeta.h"
 #include "../src/core/plugins.h"
 #include "../src/core/prefs.h"
 
@@ -1241,7 +1243,11 @@ static void test_raw (void)
   fclose (f);
   CHECK (img_probe_named (head, (size_t) r, "ADFS::4.$.Photos.DSC_0001/NEF") == IMG_RAW, "NEF: raw by its /NEF name (RISC OS)");
   CHECK (img_probe_named (head, (size_t) r, "/home/x/DSC_0001.nef") == IMG_RAW, "and by .nef (POSIX)");
-  CHECK (img_probe_named (head, (size_t) r, "picture/tif") == IMG_UNKNOWN, "a TIFF with another name isn't taken for raw");
+  CHECK (img_probe_named (head, (size_t) r, "picture/tif") == IMG_TIFF, "a NEF with another name: a TIFF by its first bytes...");
+  f = fopen (nef, "rb");
+  CHECK (f && tiff_is_raw (f), "...and raw once its directory is read (a thumbnail first, the photo in sub-IFDs)");
+  if (f)
+    fclose (f);
 
   /* No plug-in: a clear message. */
   rawjob_setup (NULL, NULL, NULL);
@@ -1696,6 +1702,78 @@ static void test_mistyped (void)
   CHECK (jpg == 2 && png == 2, "mistyped: kept as JPEG and PNG, whatever they were typed");
   CHECK (pr.skipped == 1 && strstr (lib_last_error (l) ? lib_last_error (l) : "", "fake") != NULL,
          "mistyped: a .png that isn't one is reported");
+  free (items);
+  lib_close (l);
+}
+
+/* --- TIFF photos: imported by their fingerprint, their details from
+   tags libtiff put after the picture; a DNG with another name is raw. */
+static void small_tiff (const char *path, int w, int h, int orientation, int dng)
+{
+  TIFF *t = TIFFOpen (path, "w");
+  unsigned char *row = malloc ((size_t) w * 3);
+  int x, y;
+  static const unsigned char ver[4] = { 1, 4, 0, 0 };
+  TIFFSetField (t, TIFFTAG_IMAGEWIDTH, w);
+  TIFFSetField (t, TIFFTAG_IMAGELENGTH, h);
+  TIFFSetField (t, TIFFTAG_BITSPERSAMPLE, 8);
+  TIFFSetField (t, TIFFTAG_SAMPLESPERPIXEL, 3);
+  TIFFSetField (t, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+  TIFFSetField (t, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
+  TIFFSetField (t, TIFFTAG_ORIENTATION, orientation);
+  TIFFSetField (t, TIFFTAG_MAKE, "Scanco");
+  TIFFSetField (t, TIFFTAG_DATETIME, "2025:12:24 09:15:00");
+  if (dng)
+    TIFFSetField (t, TIFFTAG_DNGVERSION, ver);
+  for (y = 0; y < h; y++)
+    {
+      for (x = 0; x < w * 3; x++)
+        row[x] = (unsigned char) (x + y * 7 + w);
+      TIFFWriteScanline (t, row, (uint32_t) y, 0);
+    }
+  TIFFClose (t);
+  free (row);
+}
+
+static void test_tiff_import (void)
+{
+  library *l;
+  char err[256], path[1024], libdir[1024];
+  cat_item *items;
+  cat_details d;
+  int n, k, tiffs = 0, ok = 0;
+  cat_source all = { SRC_ALL, 0, 0, "" };
+  p (path, "Scans"); mkdir (path, 0777);
+  p (path, "Scans/page1.tif,ff0"); small_tiff (path, 300, 200, 1, 0);
+  p (path, "Scans/page2,fff"); small_tiff (path, 240, 160, 6, 0);     /* typed Text, no name: its fingerprint */
+  p (path, "Scans/camera.tif,ff0"); small_tiff (path, 64, 48, 1, 1);  /* a DNG: raw */
+  p (libdir, "ScansLibrary");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "tiff: library");
+  p (path, "Scans");
+  lib_import (l, path);
+  drain (l);
+  cat_list (lib_cat (l), &all, &items, &n);
+  CHECK (n == 3, "tiff: the two TIFFs and the DNG imported");
+  for (k = 0; k < n; k++)
+    if (items[k].filetype == FT_TIFF && cat_get_details (lib_cat (l), items[k].id, &d) == 0)
+      {
+        tiffs++;
+        if (strstr (d.path, "page1"))
+          ok += d.width == 300 && d.height == 200 && d.orientation == 1 && !strcmp (d.make, "Scanco")
+                && !strcmp (d.taken, "2025:12:24 09:15:00") && items[k].thumb_state == THUMB_READY;
+        else if (strstr (d.path, "page2"))
+          ok += d.width == 240 && d.height == 160 && d.orientation == 6 && items[k].thumb_state == THUMB_READY;
+      }
+  CHECK (tiffs >= 2 && ok == 2, "tiff: sizes, orientation, scanner and date from the tags after the picture, thumbnails made");
+  {
+    cat_origin o;
+    int raw = 0;
+    for (k = 0; k < n; k++)
+      if (cat_get_details (lib_cat (l), items[k].id, &d) == 0 && strstr (d.path, "camera")
+          && cat_origin_of (lib_cat (l), d.original, &o) == 1)
+        raw = o.format == IMG_RAW;
+    CHECK (raw, "tiff: the DNG called camera.tif is a raw file");
+  }
   free (items);
   lib_close (l);
 }
@@ -2737,6 +2815,7 @@ int main (int argc, char **argv)
   test_plugins ();
   test_raw_names ();
   test_mistyped ();
+  test_tiff_import ();
   test_prefs ();
   rawjob_set_switched_off (1);
   checks++; if (!strstr (rawjob_missing_message (), "switched off")) { fails++; fprintf (stderr, "FAIL: raw plug-in off: says so\n"); }

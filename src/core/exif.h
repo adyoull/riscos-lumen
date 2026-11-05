@@ -11,8 +11,9 @@
 
 /* IMG_PLUGIN: a format Lumen knows nothing of itself, read by a format
    plug-in that claims it (by its extension or first bytes: plugins.h).
-   (4 is thumbgen's own: a picture the raw plug-in made.) */
-enum { IMG_UNKNOWN = 0, IMG_JPEG = 1, IMG_PNG = 2, IMG_RAW = 3, IMG_PLUGIN = 5 };
+   (4 is thumbgen's own: a picture the raw plug-in made.) IMG_TIFF: a
+   TIFF that isn't a camera raw file (read with libtiff: tiffmeta.h). */
+enum { IMG_UNKNOWN = 0, IMG_JPEG = 1, IMG_PNG = 2, IMG_RAW = 3, IMG_PLUGIN = 5, IMG_TIFF = 6 };
 
 typedef struct
 {
@@ -45,8 +46,12 @@ int img_probe (const unsigned char *buf, size_t len);
    LibRaw plug-in) are IMG_RAW, by their own signature (Canon CR2 and CR3,
    Fuji RAF, Olympus ORF, Panasonic RW2) or, for the many that are TIFF
    files inside (Nikon NEF, Sony ARW, Adobe DNG, Pentax PEF...), by a TIFF
-   header and a raw file's extension ("/nef" on RISC OS, ".nef" elsewhere). */
+   header and a raw file's extension ("/nef" on RISC OS, ".nef" elsewhere).
+   Any other TIFF is IMG_TIFF. */
 int img_probe_named (const unsigned char *buf, size_t len, const char *name);
+/* The camera, date, exposure and orientation from a TIFF's tags (the
+   compact copy tiffmeta.h makes); the size is the caller's. */
+void img_read_tiff_tags (const unsigned char *tiff, size_t len, img_info *info);
 /* What can be read of a raw file's metadata without the plug-in: the
    camera, date and exposure from a TIFF-based raw's EXIF. Its size and
    orientation come from the plug-in. 0 if anything was found. */

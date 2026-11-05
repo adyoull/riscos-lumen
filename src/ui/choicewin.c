@@ -24,7 +24,7 @@ enum
   C_LIB_LABEL, C_LIB, C_LIB_NOTE, C_EXPORT_LABEL, C_JPEG, C_PNG, C_QUALITY_LABEL, C_QUALITY, C_SIZE_LABEL,
   C_FULL, C_3840, C_2048, C_1024, C_THUMB_LABEL, C_SMALL, C_MEDIUM, C_LARGE, C_VERIFY, C_CANCEL, C_SAVE,
   C_FOLDERS_LABEL, C_WATCH_NEW, C_ALBUMS_NEW, C_EVERY, C_MINUTES, C_MINUTES_LABEL,
-  C_PREVIEWS_LABEL, C_PV_RAW, C_PV_ALL, C_PV_OFF, C_PV_DISCARD,
+  C_PREVIEWS_LABEL, C_PV_RAW, C_PV_ALL, C_PV_OFF, C_PV_DISCARD, C_TIFF,
   C_COUNT
 };
 static const int size_choice[4] = { 0, 3840, 2048, 1024 };
@@ -56,7 +56,7 @@ int choicewin_create (void)
   static const char v_radio[] = "Sradiooff,radioon", v_option[] = "Soptoff,opton", v_write[] = "Pptr_write";
   static const char v_num[] = "A0-9;Pptr_write", v_save[] = "R6,3", v_cancel[] = "R5,3";
   static char t_lib[] = "Library", t_note[] = "Used from the next start. Empty: the usual place.";
-  static char t_export[] = "Export", t_jpeg[] = "JPEG", t_png[] = "PNG", t_quality[] = "Quality", t_size[] = "Size";
+  static char t_export[] = "Export", t_jpeg[] = "JPEG", t_png[] = "PNG", t_tiff[] = "TIFF", t_quality[] = "Quality", t_size[] = "Size";
   static char t_full[] = "Full", t_3840[] = "3840", t_2048[] = "2048", t_1024[] = "1024", t_thumb[] = "Thumbnails";
   static char t_small[] = "Small", t_medium[] = "Medium", t_large[] = "Large";
   static char t_verify[] = "Check the photos' files are still there when Lumen opens";
@@ -80,10 +80,11 @@ int choicewin_create (void)
   icon_at (ic + 8 * C_LIB, 240, -72, W - 24, -20, T_WRITE, lib_text, v_write, (int) sizeof lib_text);
   icon_at (ic + 8 * C_LIB_NOTE, 240, -124, W - 24, -80, T_NOTE, t_note, NULL, (int) sizeof t_note);
   LABEL (C_EXPORT_LABEL, -150, t_export);
-  icon_at (ic + 8 * C_JPEG, 240, -194, 420, -150, T_RADIO | (1u << 16), t_jpeg, v_radio, (int) sizeof t_jpeg);
-  icon_at (ic + 8 * C_PNG, 440, -194, 620, -150, T_RADIO | (1u << 16), t_png, v_radio, (int) sizeof t_png);
-  icon_at (ic + 8 * C_QUALITY_LABEL, 640, -194, 800, -150, T_LABEL, t_quality, NULL, (int) sizeof t_quality);
-  icon_at (ic + 8 * C_QUALITY, 820, -198, 920, -146, T_WRITE, quality_text, v_num, (int) sizeof quality_text);
+  icon_at (ic + 8 * C_JPEG, 240, -194, 390, -150, T_RADIO | (1u << 16), t_jpeg, v_radio, (int) sizeof t_jpeg);
+  icon_at (ic + 8 * C_PNG, 400, -194, 540, -150, T_RADIO | (1u << 16), t_png, v_radio, (int) sizeof t_png);
+  icon_at (ic + 8 * C_TIFF, 550, -194, 690, -150, T_RADIO | (1u << 16), t_tiff, v_radio, (int) sizeof t_tiff);
+  icon_at (ic + 8 * C_QUALITY_LABEL, 710, -194, 860, -150, T_LABEL, t_quality, NULL, (int) sizeof t_quality);
+  icon_at (ic + 8 * C_QUALITY, 880, -198, 980, -146, T_WRITE, quality_text, v_num, (int) sizeof quality_text);
   LABEL (C_SIZE_LABEL, -214, t_size);
   icon_at (ic + 8 * C_FULL, 240, -258, 370, -214, T_RADIO | (2u << 16), t_full, v_radio, (int) sizeof t_full);
   icon_at (ic + 8 * C_3840, 390, -258, 520, -214, T_RADIO | (2u << 16), t_3840, v_radio, (int) sizeof t_3840);
@@ -146,6 +147,7 @@ static void show (const prefs *p)
   snprintf (quality_text, sizeof quality_text, "%d", p->export_quality);
   set_on (C_JPEG, p->export_format == EXPORT_JPEG);
   set_on (C_PNG, p->export_format == EXPORT_PNG);
+  set_on (C_TIFF, p->export_format == EXPORT_TIFF);
   for (k = 0; k < 4; k++)
     set_on (C_FULL + k, p->export_size == size_choice[k]);
   for (k = 0; k < 3; k++)
@@ -203,7 +205,7 @@ static void save (void)
   while (l && (unsigned char) s[l - 1] <= ' ')
     s[--l] = '\0';
   snprintf (p.library, sizeof p.library, "%s", s);
-  p.export_format = is_on (C_PNG) ? EXPORT_PNG : EXPORT_JPEG;
+  p.export_format = is_on (C_PNG) ? EXPORT_PNG : is_on (C_TIFF) ? EXPORT_TIFF : EXPORT_JPEG;
   p.export_quality = q < 1 ? 1 : q > 100 ? 100 : q;
   for (k = 0; k < 4; k++)
     if (is_on (C_FULL + k))

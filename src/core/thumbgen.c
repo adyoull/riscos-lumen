@@ -2,14 +2,20 @@
    Released under the MIT licence: see the LICENSE file.
    SPDX-License-Identifier: MIT */
 /* thumbgen.c: see thumbgen.h. libjpeg and libpng report errors by
-   longjmp; each call into them sits under a setjmp in the same function. */
+   longjmp; each call into them sits under a setjmp in the same function.
+   libtiff returns them, and its messages are caught (not printed). */
 #include <setjmp.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <jpeglib.h>
 #include <png.h>
+#include <tiffio.h>
 #include "exif.h"
+#include "tiffmeta.h"
+#include "simd.h"
 #include "thumbgen.h"
 #include "colour.h"
 #include "rawjob.h"
@@ -164,6 +170,16 @@ struct thumbgen
   png_structp png;
   png_infop pinfo;
   int interlaced;
+  /* TIFF: a row at a time when libtiff can give them (strips of 8 or 16
+     bits a sample, RGB, grey or palette), or else its RGBA interface a
+     strip's or tile's height of rows at a time. */
+  TIFF *tif;
+  int tif_simple, tif_bits, tif_spp, tif_photo, tif_alpha, tif_assoc;
+  unsigned char *tif_line;
+  uint16_t *tif_map[3];
+  TIFFRGBAImage rgba;
+  int rgba_live, band_rows, band_y, band_n;
+  uint32_t *raster;
 };
 
 /* Decoding JPEGs at any eighth of their size (not only 1/2, 1/4, 1/8). */
@@ -306,6 +322,334 @@ static void png_err (png_structp p, png_const_charp msg)
 static void png_warn (png_structp p, png_const_charp msg)
 {
   (void) p; (void) msg;
+}
+
+/* --- TIFF (libtiff) */
+
+static char tiff_msg[160];
+
+static void tiff_error (const char *module, const char *fmt, va_list ap)
+{
+  (void) module;
+  vsnprintf (tiff_msg, sizeof tiff_msg, fmt, ap);
+}
+
+static void tiff_warning (const char *module, const char *fmt, va_list ap)
+{
+  (void) module; (void) fmt; (void) ap;
+}
+
+static void tiff_quiet (void)
+{
+  TIFFSetErrorHandler (tiff_error);
+  TIFFSetWarningHandler (tiff_warning);
+  tiff_msg[0] = '\0';
+}
+
+static void tiff_seterr (thumbgen *t, const char *what)
+{
+  if (tiff_msg[0])
+    snprintf (t->err, sizeof t->err, "%s: %s", what, tiff_msg);
+  else
+    seterr (t, what);
+}
+
+/* RGBA to RGB over the dark grey Lumen's browser draws behind thumbnails. */
+static void flatten (unsigned char *row, int w);
+
+static int start_tiff (thumbgen *t, const char *src)
+{
+  uint32_t w = 0, h = 0, rps = 0;
+  uint16_t bps = 1, spp = 1, photo = 0, planar = 1, sfmt = 1, comp = 1, nextra = 0, *extra = NULL;
+  uint32_t icc_len = 0;
+  void *icc = NULL;
+  char emsg[1024];
+  tiff_quiet ();
+  if (t->f)
+    {
+      fclose (t->f);
+      t->f = NULL;
+    }
+  t->tif = TIFFOpen (src, "rm");     /* m: read, not mapped into memory */
+  if (!t->tif)
+    {
+      tiff_seterr (t, "Can't read this TIFF file");
+      return -1;
+    }
+  TIFFGetField (t->tif, TIFFTAG_IMAGEWIDTH, &w);
+  TIFFGetField (t->tif, TIFFTAG_IMAGELENGTH, &h);
+  TIFFGetFieldDefaulted (t->tif, TIFFTAG_BITSPERSAMPLE, &bps);
+  TIFFGetFieldDefaulted (t->tif, TIFFTAG_SAMPLESPERPIXEL, &spp);
+  TIFFGetFieldDefaulted (t->tif, TIFFTAG_PLANARCONFIG, &planar);
+  TIFFGetFieldDefaulted (t->tif, TIFFTAG_SAMPLEFORMAT, &sfmt);
+  TIFFGetFieldDefaulted (t->tif, TIFFTAG_COMPRESSION, &comp);
+  if (!TIFFGetField (t->tif, TIFFTAG_PHOTOMETRIC, &photo))
+    photo = spp >= 3 ? PHOTOMETRIC_RGB : PHOTOMETRIC_MINISBLACK;
+  if (w == 0 || h == 0 || w > 65535 || h > 65535)
+    {
+      seterr (t, "This TIFF's size can't be read");
+      return -1;
+    }
+  if (sfmt == SAMPLEFORMAT_IEEEFP || sfmt == SAMPLEFORMAT_COMPLEXIEEEFP || sfmt == SAMPLEFORMAT_COMPLEXINT)
+    {
+      seterr (t, "Lumen can't read floating-point TIFFs");
+      return -1;
+    }
+  t->cs = CS_SRGB;
+  if (TIFFGetField (t->tif, TIFFTAG_ICCPROFILE, &icc_len, &icc) && icc && icc_len)
+    t->cs = colour_from_icc (icc, icc_len, NULL, 0);
+  if (comp == COMPRESSION_JPEG && photo == PHOTOMETRIC_YCBCR)
+    {
+      TIFFSetField (t->tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);
+      photo = PHOTOMETRIC_RGB;
+    }
+  TIFFGetFieldDefaulted (t->tif, TIFFTAG_EXTRASAMPLES, &nextra, &extra);
+  t->tif_bits = bps;
+  t->tif_spp = spp;
+  t->tif_photo = photo;
+  t->tif_simple = !TIFFIsTiled (t->tif) && planar == PLANARCONFIG_CONTIG && (bps == 8 || bps == 16)
+                  && sfmt != SAMPLEFORMAT_INT
+                  && ((photo == PHOTOMETRIC_RGB && spp >= 3) || photo == PHOTOMETRIC_MINISBLACK
+                      || photo == PHOTOMETRIC_MINISWHITE
+                      || (photo == PHOTOMETRIC_PALETTE && bps == 8 && spp == 1));
+  if (t->tif_simple)
+    {
+      int colours = photo == PHOTOMETRIC_RGB ? 3 : 1;
+      if (spp > colours && nextra > 0 && extra)
+        {
+          t->tif_alpha = extra[0] == EXTRASAMPLE_ASSOCALPHA || extra[0] == EXTRASAMPLE_UNASSALPHA;
+          t->tif_assoc = extra[0] == EXTRASAMPLE_ASSOCALPHA;
+        }
+      if (photo == PHOTOMETRIC_PALETTE
+          && !TIFFGetField (t->tif, TIFFTAG_COLORMAP, &t->tif_map[0], &t->tif_map[1], &t->tif_map[2]))
+        {
+          seterr (t, "This TIFF's palette is missing");
+          return -1;
+        }
+      t->tif_line = malloc ((size_t) TIFFScanlineSize (t->tif) + 16);
+      if (!t->tif_line)
+        {
+          seterr (t, "Not enough memory for the TIFF reader");
+          return -1;
+        }
+    }
+  else
+    {
+      if (!TIFFRGBAImageOK (t->tif, emsg) || !TIFFRGBAImageBegin (&t->rgba, t->tif, 0, emsg))
+        {
+          snprintf (t->err, sizeof t->err, "Lumen can't read this kind of TIFF: %s", emsg);
+          return -1;
+        }
+      t->rgba_live = 1;
+      /* Rows top first, as stored: Lumen turns it by its orientation. */
+      t->rgba.req_orientation = ORIENTATION_TOPLEFT;
+      t->rgba.orientation = ORIENTATION_TOPLEFT;
+      if (TIFFIsTiled (t->tif))
+        TIFFGetField (t->tif, TIFFTAG_TILELENGTH, &rps);
+      else
+        TIFFGetFieldDefaulted (t->tif, TIFFTAG_ROWSPERSTRIP, &rps);
+      if (rps < 1)
+        rps = 1;
+      if (rps > h)
+        rps = h;
+      if (rps < 16 && h >= 16)
+        rps = 16;
+      if ((uint64_t) rps * w * 4 > 128ull * 1024 * 1024)
+        {
+          seterr (t, "This TIFF's strips are too big for the memory there is");
+          return -1;
+        }
+      t->band_rows = (int) rps;
+      t->raster = _TIFFmalloc ((tmsize_t) rps * w * 4);
+      if (!t->raster)
+        {
+          seterr (t, "Not enough memory for the TIFF reader");
+          return -1;
+        }
+    }
+  t->row = malloc ((size_t) w * 4);
+  if (!t->row || scaler_init (&t->sc, (int) w, (int) h, t->max_side))
+    {
+      seterr (t, "Not enough memory for the thumbnail");
+      return -1;
+    }
+  return 0;
+}
+
+/* Opaque RGB or grey, 8 or 16 bits: straight to RGB, with NEON where the
+   processor has it (16-bit samples narrowed, grey spread to three). The
+   pixels done; the plain loop does the rest, giving the same bytes. */
+#if defined(__arm__)
+#pragma GCC push_options
+#pragma GCC target ("fpu=neon")
+#include <arm_neon.h>
+static int tiff_rgb_neon (const unsigned char *in, int bits, int grey, int invert, unsigned char *out, int w)
+{
+  int x = 0;
+  const uint16_t *p16 = (const uint16_t *) (const void *) in;
+  if (grey && bits == 16)
+    for (; x + 8 <= w; x += 8)
+      {
+        uint8x8_t g = vshrn_n_u16 (vld1q_u16 (p16 + x), 8);
+        uint8x8x3_t o;
+        if (invert)
+          g = vmvn_u8 (g);
+        o.val[0] = o.val[1] = o.val[2] = g;
+        vst3_u8 (out + 3 * x, o);
+      }
+  else if (grey)
+    for (; x + 16 <= w; x += 16)
+      {
+        uint8x16_t g = vld1q_u8 (in + x);
+        uint8x16x3_t o;
+        if (invert)
+          g = vmvnq_u8 (g);
+        o.val[0] = o.val[1] = o.val[2] = g;
+        vst3q_u8 (out + 3 * x, o);
+      }
+  else if (bits == 16)
+    for (; x + 8 <= w; x += 8)
+      {
+        uint16x8x3_t v = vld3q_u16 (p16 + 3 * x);
+        uint8x8x3_t o;
+        o.val[0] = vshrn_n_u16 (v.val[0], 8);
+        o.val[1] = vshrn_n_u16 (v.val[1], 8);
+        o.val[2] = vshrn_n_u16 (v.val[2], 8);
+        vst3_u8 (out + 3 * x, o);
+      }
+  return x;
+}
+#pragma GCC pop_options
+#endif
+
+/* Opaque RGB (3 samples) or grey (1): to RGB in t->row. 1 if it was one
+   of those; 0 to go the general way. */
+static int tiff_line_to_rgb (thumbgen *t)
+{
+  int x = 0, w = t->sc.sw, grey = t->tif_photo != PHOTOMETRIC_RGB;
+  int invert = t->tif_photo == PHOTOMETRIC_MINISWHITE;
+  const unsigned char *b8 = t->tif_line;
+  const uint16_t *b16 = (const uint16_t *) (const void *) t->tif_line;
+  unsigned char *o = t->row;
+  if (t->tif_alpha || t->tif_photo == PHOTOMETRIC_PALETTE || t->tif_spp != (grey ? 1 : 3))
+    return 0;
+  if (!grey && t->tif_bits == 8)
+    {
+      memcpy (o, b8, (size_t) w * 3);
+      return 1;
+    }
+#if defined(__arm__)
+  if (simd_neon ())
+    x = tiff_rgb_neon (t->tif_line, t->tif_bits, grey, invert, o, w);
+#endif
+  for (; x < w; x++)
+    if (grey)
+      {
+        unsigned v = t->tif_bits == 16 ? (unsigned) (b16[x] >> 8) : b8[x];
+        if (invert)
+          v = 255 - v;
+        o[3 * x] = o[3 * x + 1] = o[3 * x + 2] = (unsigned char) v;
+      }
+    else
+      {
+        o[3 * x] = (unsigned char) (b16[3 * x] >> 8);
+        o[3 * x + 1] = (unsigned char) (b16[3 * x + 1] >> 8);
+        o[3 * x + 2] = (unsigned char) (b16[3 * x + 2] >> 8);
+      }
+  return 1;
+}
+
+/* One row from libtiff's scanline to RGBA in t->row (alpha, palettes,
+   extra samples). */
+static void tiff_line_to_rgba (thumbgen *t)
+{
+  int x, w = t->sc.sw, spp = t->tif_spp;
+  int colours = t->tif_photo == PHOTOMETRIC_RGB ? 3 : 1;
+  const unsigned char *b8 = t->tif_line;
+  const uint16_t *b16 = (const uint16_t *) (const void *) t->tif_line;
+  unsigned char *o = t->row;
+  for (x = 0; x < w; x++)
+    {
+      unsigned v[4], a = 255;
+      int k;
+      for (k = 0; k < colours + t->tif_alpha && k < 4; k++)
+        v[k] = t->tif_bits == 16 ? (unsigned) (b16[(size_t) x * spp + k] >> 8) : b8[(size_t) x * spp + k];
+      if (t->tif_alpha)
+        a = v[colours];
+      if (t->tif_photo == PHOTOMETRIC_PALETTE)
+        {
+          unsigned i = v[0];
+          v[0] = t->tif_map[0][i] >> 8;
+          v[1] = t->tif_map[1][i] >> 8;
+          v[2] = t->tif_map[2][i] >> 8;
+        }
+      else if (colours == 1)
+        {
+          if (t->tif_photo == PHOTOMETRIC_MINISWHITE)
+            v[0] = 255 - v[0];
+          v[1] = v[2] = v[0];
+        }
+      if (t->tif_assoc && a > 0 && a < 255)
+        for (k = 0; k < 3; k++)
+          {
+            unsigned c = (v[k] * 255 + a / 2) / a;
+            v[k] = c > 255 ? 255 : c;
+          }
+      o[4 * x] = (unsigned char) v[0];
+      o[4 * x + 1] = (unsigned char) v[1];
+      o[4 * x + 2] = (unsigned char) v[2];
+      o[4 * x + 3] = (unsigned char) a;
+    }
+}
+
+static int step_tiff (thumbgen *t, int rows)
+{
+  int w = t->sc.sw;
+  while (rows-- > 0 && t->y < t->sc.sh)
+    {
+      if (t->tif_simple)
+        {
+          if (TIFFReadScanline (t->tif, t->tif_line, (uint32_t) t->y, 0) < 0)
+            {
+              tiff_seterr (t, "This TIFF file is damaged");
+              return -1;
+            }
+          if (!tiff_line_to_rgb (t))
+            {
+              tiff_line_to_rgba (t);
+              flatten (t->row, w);
+            }
+        }
+      else
+        {
+          int x;
+          const uint32_t *p;
+          if (t->y >= t->band_y + t->band_n)
+            {
+              t->band_y = t->y;
+              t->band_n = t->sc.sh - t->y < t->band_rows ? t->sc.sh - t->y : t->band_rows;
+              t->rgba.row_offset = t->y;
+              t->rgba.col_offset = 0;
+              if (!TIFFRGBAImageGet (&t->rgba, t->raster, (uint32_t) w, (uint32_t) t->band_n))
+                {
+                  tiff_seterr (t, "This TIFF file is damaged");
+                  return -1;
+                }
+            }
+          p = t->raster + (size_t) (t->y - t->band_y) * (size_t) w;
+          for (x = 0; x < w; x++)
+            {
+              t->row[4 * x] = (unsigned char) TIFFGetR (p[x]);
+              t->row[4 * x + 1] = (unsigned char) TIFFGetG (p[x]);
+              t->row[4 * x + 2] = (unsigned char) TIFFGetB (p[x]);
+              t->row[4 * x + 3] = (unsigned char) TIFFGetA (p[x]);
+            }
+          flatten (t->row, w);
+        }
+      colour_row_to_srgb (t->cs, t->row, w);
+      scaler_row (&t->sc, t->y++, t->row);
+    }
+  return t->y >= t->sc.sh;
 }
 
 /* --- PPM (P6, 8 bits): what the raw plug-in develops to */
@@ -542,6 +886,9 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
   t->format = img_probe_named (head, got, src);
   if (t->format == IMG_UNKNOWN && rawjob_kind_for (IMG_UNKNOWN, src, head, got) > 0)
     t->format = IMG_PLUGIN;            /* a format plug-in claims it */
+  if (t->format == IMG_TIFF && tiff_is_raw (t->f))
+    t->format = IMG_RAW;               /* a camera raw file without a raw's name */
+  rewind (t->f);
   if (img_is_plugin_format (t->format))
     {
       /* A plug-in does the work (LumenRaw, or a format plug-in): the
@@ -558,8 +905,8 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
       return NULL;
     }
   if (t->format == IMG_UNKNOWN)
-    seterr (t, "Not a JPEG or PNG file");
-  else if ((t->format == IMG_JPEG ? start_jpeg (t) : start_png (t)) == 0)
+    seterr (t, "Not a JPEG, PNG or TIFF file");
+  else if ((t->format == IMG_JPEG ? start_jpeg (t) : t->format == IMG_TIFF ? start_tiff (t, src) : start_png (t)) == 0)
     return t;
   snprintf (err, errlen, "%s", t->err);
   thumbgen_free (t);
@@ -586,7 +933,8 @@ int thumbgen_step (thumbgen *t, int rows)
         return t->done = -1;
       return 0;
     }
-  r = t->format == IMG_JPEG ? step_jpeg (t, rows) : t->format == IMG_PPM ? step_ppm (t, rows) : step_png (t, rows);
+  r = t->format == IMG_JPEG ? step_jpeg (t, rows) : t->format == IMG_PPM ? step_ppm (t, rows)
+      : t->format == IMG_TIFF ? step_tiff (t, rows) : step_png (t, rows);
   if (r == 0)
     return 0;
   if (r < 0)
@@ -654,6 +1002,13 @@ void thumbgen_free (thumbgen *t)
     }
   if (t->png)
     png_destroy_read_struct (&t->png, t->pinfo ? &t->pinfo : NULL, NULL);
+  if (t->rgba_live)
+    TIFFRGBAImageEnd (&t->rgba);
+  if (t->raster)
+    _TIFFfree (t->raster);
+  if (t->tif)
+    TIFFClose (t->tif);
+  free (t->tif_line);
   if (t->f)
     fclose (t->f);
   rawjob_free (t->rj);
