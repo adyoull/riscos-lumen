@@ -529,6 +529,21 @@ One Lumen at a time
 Running Lumen again while it is already running opens the one that is
 running, rather than a second copy on the same library.
 
+Double-clicking photos: File types
+----------------------------------
+File types, on the icon bar menu, says which photos a double-click in
+the Filer opens in Lumen: Never, While Lumen is running (to begin
+with), or Always, even when not running (Lumen sets those types' Run
+action). Then the types: JPEG, PNG and TIFF (not ticked to begin with),
+the types of your plug-ins' photos (ticked), and Data files named like
+a photo (while running). A photo not in the library yet is imported,
+then opened in the Viewer.
+A plug-in's types come from MimeMap (InetDBase:MimeMap), which pairs
+its MIME types (image/heic, image/avif...) with filetypes; RISC OS
+5.31's MimeMap has none for HEIF and AVIF yet. A ticked type with no
+name or icon gets MimeMap's name and Lumen's file icon, kept in
+Choices:Lumen.Types and Choices:Lumen.Sprites for !Boot.
+
 Plug-ins
 --------
 Plug-ins add to what Lumen can do: LumenRaw (camera raw files), and

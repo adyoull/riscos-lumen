@@ -4,3 +4,6 @@
 | !Boot for !Lumen: the Filer runs this when it first sees the application
 If "<Lumen$Dir>"="" Then Set Lumen$Dir <Obey$Dir>
 IconSprites <Obey$Dir>.!Sprites
+| File types (the icon bar menu): the photos a double-click opens in
+| Lumen, and names and icons for types the desktop has none for.
+IfThere Choices:Lumen.Types Then Obey Choices:Lumen.Types

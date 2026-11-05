@@ -19,4 +19,4 @@ Set Lumen$DefaultLibrary <Choices$Write>.Lumen.Library
 If "<Lumen$DefaultLibrary>"=".Lumen.Library" Then Set Lumen$DefaultLibrary <Lumen$Dir>.^.LumenLibrary
 If "<Lumen$Library>"="<Lumen$DefaultLibrary>" Then Unset Lumen$Library
 WimpSlot -min 5120K -max 5120K
-Run <Lumen$Dir>.!RunImage
+Run <Lumen$Dir>.!RunImage %*0

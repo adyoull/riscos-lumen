@@ -24,6 +24,8 @@ void prefs_default (prefs *p)
   p->albums_new = 0;
   p->watch_minutes = 5;
   p->previews = 1;                     /* raw files */
+  p->open_mode = -1;                   /* File types: not chosen yet (filetypes.c decides) */
+  p->open_data = -1;
 }
 
 static int clamp (int v, int lo, int hi)
@@ -50,6 +52,8 @@ int prefs_load (const char *path, prefs *p)
       *v++ = '\0';
       if (!strcmp (line, "library"))
         snprintf (p->library, sizeof p->library, "%s", v);
+      else if (!strcmp (line, "open_types"))
+        snprintf (p->open_types, sizeof p->open_types, "%s", v);
       else if (!strcmp (line, "export_names"))
         snprintf (p->export_names, sizeof p->export_names, "%s", v);
       else
@@ -83,6 +87,10 @@ int prefs_load (const char *path, prefs *p)
             p->watch_minutes = clamp ((int) n, 0, 1440);
           else if (!strcmp (line, "previews"))
             p->previews = clamp ((int) n, 0, 2);
+          else if (!strcmp (line, "open_mode"))
+            p->open_mode = clamp ((int) n, 0, 2);
+          else if (!strcmp (line, "open_data"))
+            p->open_data = n != 0;
         }
     }
   fclose (f);
@@ -120,6 +128,9 @@ int prefs_save (const char *path, const prefs *p)
            p->export_box_h, p->export_colour, p->export_sharpen);
   if (p->export_names[0])
     fprintf (f, "export_names %s\n", p->export_names);
+  if (p->open_mode >= 0)
+    fprintf (f, "open_mode %d\nopen_data %d\nopen_types %s\n", p->open_mode, p->open_data > 0,
+             p->open_types[0] ? p->open_types : "-");
   if (fclose (f) != 0)
     return -1;
   remove (path);

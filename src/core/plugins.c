@@ -113,15 +113,40 @@ static int format_claims_name (const plugin_format *p, const char *x)
   return 0;
 }
 
+int plugins_claims_mime (const plugin_info *p, const char *mime)
+{
+  int f;
+  if (!mime || !*mime || strcmp (p->kind, "format"))
+    return 0;
+  for (f = 0; f < p->nformats; f++)
+    {
+      plugin_format probe;
+      /* (format_claims_name matches a word in a list, any case) */
+      memcpy (probe.extensions, p->formats[f].mime, sizeof probe.extensions);
+      if (format_claims_name (&probe, mime))
+        return f + 1;
+    }
+  return 0;
+}
+
 int plugins_claims_name (const plugin_info *p, const char *name)
 {
   const char *x = name ? extension (name) : NULL;
+  char ext[24], mime[128];
+  size_t k;
   int f;
   if (!x || strcmp (p->kind, "format"))
     return 0;
   for (f = 0; f < p->nformats; f++)
     if (format_claims_name (&p->formats[f], x))
       return f + 1;
+  /* An extension MimeMap gives one of its MIME types ("hif": image/heif).
+     (Without a ",xxx" filetype suffix, as files from other systems have.) */
+  for (k = 0; x[k] && x[k] != ',' && k + 1 < sizeof ext; k++)
+    ext[k] = x[k];
+  ext[k] = '\0';
+  if (fsys_mime_of_ext (ext, mime, sizeof mime) == 0)
+    return plugins_claims_mime (p, mime);
   return 0;
 }
 
@@ -205,6 +230,14 @@ int plugins_read (const char *path, plugin_info *p)
             }
           else if (!strcmp (line, "Signature"))
             add_sig (current_format (p), colon + 1);
+          else if (!strcmp (line, "MIME"))
+            {
+              plugin_format *fm = current_format (p);
+              char *c;
+              set (fm->mime, sizeof fm->mime, colon + 1);
+              for (c = fm->mime; *c; c++)
+                *c = *c == ',' || *c == '\t' ? ' ' : (char) tolower ((unsigned char) *c);
+            }
         }
       fclose (f);
       if (!p->name[0])

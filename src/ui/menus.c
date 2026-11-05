@@ -691,11 +691,34 @@ void menus_open_viewer_menu (int x, int y)
     _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
 
+/* File types: when a double-click opens a photo in Lumen (the three
+   choices, as Iris and Reel give), then the types (ticked: Lumen opens
+   them), then Data files named like a photo. */
+static menu *build_filetypes_menu (void)
+{
+  int n = filetypes_count (), k, mode = filetypes_mode ();
+  menu *m = new_menu ("File types", 3 + n + 1);
+  static const char *const modes[3] = { "Never", "While Lumen is running", "Always, even when not running" };
+  if (!m)
+    return NULL;
+  for (k = 0; k < 3; k++)
+    set_item (m, k, 0, modes[k], (mode == k ? MF_TICK : 0) | (k == 2 ? MF_DOTTED : 0), -1, 0);
+  for (k = 0; k < n; k++)
+    {
+      char t[96];
+      snprintf (t, sizeof t, "%s", filetypes_label (k));
+      set_item (m, 3 + k, 0, t, filetypes_ticked (k) ? MF_TICK : 0, -1, mode == OPEN_NEVER);
+    }
+  set_item (m, 3 + n, 1, "Data, by name", filetypes_data () ? MF_TICK : 0, -1, mode == OPEN_NEVER);
+  return m;
+}
+
 static menu *build_iconbar_menu (void)
 {
-  menu *m, *plugm, *libm;
+  menu *m, *plugm, *libm, *ftm;
   used = 0;
   plugm = build_plugins_menu ();
+  ftm = build_filetypes_menu ();
   libm = new_menu ("Library", 3);
   if (libm)
     {
@@ -703,7 +726,7 @@ static menu *build_iconbar_menu (void)
       set_item (libm, 1, 0, "Import library...", MF_DOTTED, -1, 0);
       set_item (libm, 2, 1, "Check library...", 0, -1, 0);
     }
-  m = new_menu (APP_NAME, 8);
+  m = new_menu (APP_NAME, 9);
   if (m)
     {
       set_item (m, 0, 0, "Info", 0, info_window, info_window == -1);
@@ -712,8 +735,9 @@ static menu *build_iconbar_menu (void)
       set_item (m, 3, 0, "Open library", 0, (int) libm, 0);
       set_item (m, 4, 0, "Activity...", MF_DOTTED, -1, 0);
       set_item (m, 5, 0, "Choices...", 0, -1, 0);
-      set_item (m, 6, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
-      set_item (m, 7, 1, "Quit", 0, -1, 0);
+      set_item (m, 6, 0, "Plug-ins", 0, (int) plugm, 0);
+      set_item (m, 7, 0, "File types", MF_DOTTED, ftm ? (int) ftm : -1, 0);
+      set_item (m, 8, 1, "Quit", 0, -1, 0);
     }
   return m;
 }
@@ -1265,7 +1289,9 @@ int menus_selection (const int *choice)
         choicewin_open ();
       else if (choice[0] == 6)
         plugins_choice (choice + 1);
-      else if (choice[0] == 7)
+      else if (choice[0] == 7 && choice[1] >= 0)
+        filetypes_select (choice[1]);
+      else if (choice[0] == 8)
         quit_requested = 1;
     }
   if (quit_requested)
@@ -1433,7 +1459,24 @@ const char *menus_help (int window, int icon)
         return "Opens Lumen's window. Its menu: export, import or check the library.";
       case 4: return "What Lumen is doing now and what it has done: imports, thumbnails, exports, watched folders.";
       case 5: return "Where the library is, how exports and thumbnails start, and checking for missing files.";
-      case 7: return "Leaves Lumen. Everything is saved as you go.";
+      case 7:
+        {
+          int n = filetypes_count ();
+          if (c[1] < 0)
+            return "Which photos a double-click in the Filer opens in Lumen, and when.";
+          if (c[1] == 0)
+            return "Lumen opens no double-clicked photos.";
+          if (c[1] == 1)
+            return "While Lumen is running, double-clicking a photo of a ticked type opens it in Lumen.";
+          if (c[1] == 2)
+            return "Double-clicking a photo of a ticked type opens it in Lumen, starting Lumen if it isn't running.";
+          if (c[1] - 3 < n)
+            return "Ticked: a double-click opens these photos in Lumen (as the choice above says). Lumen gives "
+                   "them a name and its file icon if the desktop has none.";
+          return "Ticked: while Lumen is running, a double-clicked Data file whose name ends like a photo's "
+                 "(/jpg, /heic, /nef...) opens in Lumen.";
+        }
+      case 8: return "Leaves Lumen. Everything is saved as you go.";
       }
   if (which == 1)
     switch (c[0])

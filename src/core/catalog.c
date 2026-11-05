@@ -1301,6 +1301,20 @@ int cat_watched (cat *c, cat_watch **out, int *count)
   return w ? 0 : -1;
 }
 
+cat_id cat_version_of_path (cat *c, const char *path)
+{
+  sqlite3_stmt *s = prep (c, "SELECT v.id FROM version v JOIN original o ON v.original = o.id"
+                             " WHERE o.path = ?1 COLLATE NOCASE ORDER BY v.id LIMIT 1");
+  cat_id id = 0;
+  if (!s)
+    return 0;
+  sqlite3_bind_text (s, 1, path, -1, SQLITE_TRANSIENT);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    id = sqlite3_column_int64 (s, 0);
+  sqlite3_finalize (s);
+  return id;
+}
+
 int cat_known_file (cat *c, const char *path, long long size, long long mtime, cat_id *original, int *missing)
 {
   sqlite3_stmt *s = prep (c, "SELECT id, missing FROM original WHERE path = ?1 AND size = ?2 AND mtime = ?3");

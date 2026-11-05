@@ -67,6 +67,8 @@ typedef struct
   char what[200];              /* this import: the first file or folder's name */
 } lib_progress;
 void lib_get_progress (library *l, lib_progress *p);
+/* 1 while an import is running or waiting to start. */
+int lib_importing (library *l);
 
 void lib_thumb_path (library *l, cat_id version, char *out, size_t n);
 

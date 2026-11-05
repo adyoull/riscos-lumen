@@ -8,13 +8,34 @@
   or JPEG, in strips or tiles, with their ICC profile. Their size,
   orientation, camera, date and EXIF are read from their tags wherever
   they are in the file, and their caption and keywords from their XMP.
-  The Info tab says how each is stored (Encoding: "LZW, 16 bits, RGB").
+  The Info tab says how each is stored (Encoding: "LZW, 16 bits, RGB",
+  "with alpha" when it has an alpha channel).
   A camera raw file that's a TIFF inside (a DNG, a NEF) is still raw,
   whatever it's called. Previews (All photos) cover TIFFs too.
 - Export as TIFF: 8 bits a channel, LZW with the predictor, with the
   profile for Adobe RGB and Display P3, the EXIF in its own tags and
   EXIF directory, and the caption and keywords as XMP. The Export box
   and Choices have a TIFF button.
+- File types, on the icon bar menu: which photos a double-click in the
+  Filer opens in Lumen, as Iris and Reel do it: Never, While Lumen is
+  running, or Always (Lumen sets the types' Run actions, written to
+  Choices:Lumen.Types for !Boot); JPEG, PNG, TIFF and the plug-ins'
+  types to tick, and Data files named like a photo. A photo not in the
+  library is imported, then opened in the Viewer. Lumen started with a
+  photo while another Lumen runs hands it over.
+- Format plug-ins can give MIME types (a MIME line for each format, in
+  API 1: older Lumens ignore it). MimeMap gives their filetypes: files
+  of those types are imported whatever they're called, and the types
+  are on File types. Lumen also knows JPEG, PNG and TIFF by any
+  extension MimeMap gives them.
+- A ticked type the desktop has no name or icon for gets MimeMap's
+  name for it and Lumen's file icon (tools/mkfileicon.py, in the
+  desktop's style), kept in Choices:Lumen.Sprites.
+- Fixed: a plug-in's task ending wasn't noticed (TaskWindow_Ego was
+  taken for a menu closing), so when the Viewer opened a photo while its
+  thumbnail was being made, the plug-in never got the Viewer's job.
+  The Activity line names the plug-in at work ("Reading a photo with
+  LumenHEIF").
 - The Info tab gives the size in megapixels too ("4000 x 3000 pixels
   (12 MP)"), and its lines no longer break inside a number.
 

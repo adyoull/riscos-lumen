@@ -66,4 +66,25 @@ int fsys_remove_tree (const char *path);
    on ARM Linux the kernel's HWCAP_NEON; elsewhere 0. */
 int fsys_neon (void);
 
+/* MimeMap: the desktop's table of MIME types, filetypes and extensions
+   (InetDBase:MimeMap, read by the MimeMap module: MimeMap_Translate, SWI
+   &50B00, PRM p? / the module's own documentation). Lower-case MIME
+   types. The MIME type for a filetype or an extension ("heic", no dot):
+   0 and mime filled, -1 if MimeMap has none (or isn't loaded); Data,
+   application/octet-stream and application/riscos count as none. (A
+   filetype's MIME type isn't always found even when MimeMap has a line
+   for it, so to ask "is this type one of these MIME types", compare the
+   types fsys_type_of_mime gives them.) The filetype for a MIME type,
+   or -1. On Linux a small table of its own (fsys_mimemap_add adds to it,
+   for tests). */
+int fsys_mime_of_type (int filetype, char *mime, size_t n);
+int fsys_mime_of_ext (const char *ext, char *mime, size_t n);
+int fsys_type_of_mime (const char *mime);
+/* MimeMap's name for a MIME type's filetype ("HEIC"), or "" if it has none. */
+void fsys_mimemap_name (const char *mime, char *out, size_t n);
+/* A filetype's name ("JPEG"; OS_FSControl 18), or "" if it has none. */
+void fsys_type_name (int filetype, char *out, size_t n);
+/* Linux: one more line of the table ("image/heic", 0xA3A, "heic heif"). */
+void fsys_mimemap_add (const char *mime, int filetype, const char *name, const char *exts);
+
 #endif

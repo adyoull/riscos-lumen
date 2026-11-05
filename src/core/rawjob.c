@@ -78,6 +78,45 @@ int rawjob_claims_name (const char *path)
   return 0;
 }
 
+int rawjob_claims_type (int filetype)
+{
+  int k, f;
+  if (filetype < 0 || filetype >= 0xFFD)
+    return 0;
+  for (k = 1; k < RAWJOB_KINDS; k++)
+    for (f = 0; formats[k].dir[0] && f < formats[k].nformats; f++)
+      {
+        const char *w = formats[k].formats[f].mime;
+        while (*w)
+          {
+            char mime[64];
+            size_t l = 0;
+            while (*w == ' ')
+              w++;
+            while (w[l] && w[l] != ' ')
+              l++;
+            if (l && l < sizeof mime)
+              {
+                memcpy (mime, w, l);
+                mime[l] = '\0';
+                if (fsys_type_of_mime (mime) == filetype)
+                  return k;
+              }
+            w += l;
+          }
+      }
+  return 0;
+}
+
+int rawjob_claims_mime (const char *mime)
+{
+  int k;
+  for (k = 1; k < RAWJOB_KINDS; k++)
+    if (formats[k].dir[0] && plugins_claims_mime (&formats[k], mime))
+      return k;
+  return 0;
+}
+
 int rawjob_kind_for (int format, const char *path, const unsigned char *head, size_t len)
 {
   unsigned char buf[4200];
@@ -231,6 +270,16 @@ static const char *plugin_name (int kind)
 }
 
 int rawjob_busy (void) { return queue || running; }
+
+const char *rawjob_busy_title (void)
+{
+  const rawjob *j = running ? running : queue;
+  const plugin_info *p;
+  if (!j || j->kind == RAWJOB_RAW)
+    return "LumenRaw";
+  p = rawjob_format (j->kind);
+  return p && p->title[0] ? p->title : "a plug-in";
+}
 
 static void unlink_job (rawjob *j)
 {
@@ -413,10 +462,19 @@ int rawjob_poll (rawjob *j)
   return 0;
 }
 
+/* Its task has ended: the next job can start at once, without waiting
+   for this one's owner to look at its result (the Viewer opening a photo
+   holds thumbnails back, and so the polling of a thumbnail's job: its
+   plug-in would otherwise never get the next job, the Viewer's own,
+   found when a double-clicked photo opened as its thumbnail was made). */
 void rawjob_ended (int tag)
 {
   if (running && running->tag == tag)
-    running->state = J_ENDED;
+    {
+      running->state = J_ENDED;
+      running = NULL;
+      run_next ();
+    }
 }
 
 const char *rawjob_error (const rawjob *j) { return j->err; }

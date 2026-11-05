@@ -22,7 +22,7 @@ OUT := out
 
 CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/tiffmeta.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
 CORE_H := $(wildcard src/core/*.h)
-UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/plugwin.c src/ui/choicewin.c src/ui/activity.c src/ui/printbox.c src/ui/tagbox.c src/ui/smartbox.c src/ui/libbox.c src/ui/help.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c
+UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/plugwin.c src/ui/choicewin.c src/ui/activity.c src/ui/printbox.c src/ui/tagbox.c src/ui/smartbox.c src/ui/libbox.c src/ui/help.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c src/ui/filetypes.c
 UI_H := $(wildcard src/ui/*.h)
 SQLITE := third_party/sqlite/sqlite3.c
 SQLITE_FLAGS := -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION \
@@ -75,13 +75,20 @@ $(OUT)/!Sprites,ff9: app/lumen.png app/sm-lumen.png $(LABEL_PNGS)
 APPFILES := app/!Run,feb app/!Boot,feb app/!Help,fff
 LICENCES := $(wildcard app/Licences/*)
 GUIDE := docs/guide/index.html $(wildcard docs/guide/images/*.png)
-$(OUT)/Lumen.zip: $(OUT)/lumen $(OUT)/!Sprites,ff9 $(APPFILES) $(LICENCES) $(GUIDE) | checks
+# Lumen's file icon, for file types it opens that the desktop has none for
+# (filetypes.c): templates lmnfile (34 x 34) and lmnsmall (17 x 17).
+$(OUT)/FileIcons,ff9: tools/mkfileicon.py tools/riscosdraw.py app/lumen.png
+	@mkdir -p $(OUT)
+	cd tools && python3 mkfileicon.py ../$(OUT)/fileicon34.png ../$(OUT)/fileicon17.png ../app/lumen.png
+	$(PNG2SPRITE) $@ 'lmnfile=$(OUT)/fileicon34.png' 'lmnsmall=$(OUT)/fileicon17.png'
+
+$(OUT)/Lumen.zip: $(OUT)/lumen $(OUT)/!Sprites,ff9 $(OUT)/FileIcons,ff9 $(APPFILES) $(LICENCES) $(GUIDE) | checks
 	rm -rf $(OUT)/!Lumen && mkdir -p $(OUT)/!Lumen
 	$(RO_STRIP) -o $(OUT)/lumen.stripped $(OUT)/lumen
 	$(ELF2AIF) -e $(OUT)/lumen.stripped $(OUT)/!Lumen/!RunImage,ff8 >/dev/null
 	$(RO_STRIP) -o $(OUT)/bench.stripped $(OUT)/bench
 	$(ELF2AIF) -e $(OUT)/bench.stripped $(OUT)/!Lumen/Bench,ff8 >/dev/null
-	cp $(APPFILES) $(OUT)/!Sprites,ff9 $(OUT)/!Lumen/
+	cp $(APPFILES) $(OUT)/!Sprites,ff9 $(OUT)/FileIcons,ff9 $(OUT)/!Lumen/
 	mkdir -p $(OUT)/!Lumen/Licences
 	for f in $(LICENCES); do cp $$f $(OUT)/!Lumen/Licences/$$(basename $$f),fff; done
 	mkdir -p $(OUT)/!Lumen/Guide/images

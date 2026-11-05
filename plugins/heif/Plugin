@@ -8,6 +8,7 @@ Kind: format
 API: 1
 Format: HEIF photo
 Extensions: heic heif hif
+MIME: image/heic image/heif
 Signature: 4 ftypheic
 Signature: 4 ftypheix
 Signature: 4 ftypheim
@@ -18,6 +19,7 @@ Signature: 4 ftypmif1
 Signature: 4 ftypmsf1
 Format: AVIF photo
 Extensions: avif
+MIME: image/avif
 Signature: 4 ftypavif
 Signature: 4 ftypavis
 Program: LumenHEIF

@@ -823,6 +823,17 @@ a { color:#1f5fa8; }
 
 <div class="box warn"><b class="label">WARNING</b>If PackMan installed a plug-in, remove it with PackMan, not with Lumen's Remove: otherwise PackMan still thinks it's there. Lumen reminds you when you choose Remove.</div>
 
+<h4>Double-clicking photos: File types</h4>
+<p><b>File types</b> on the icon bar menu says which photos a double-click in the Filer opens in Lumen, and when:</p>
+<ul>
+<li><b>Never</b>: Lumen opens no double-clicked photos.</li>
+<li><b>While Lumen is running</b> (to begin with): a double-clicked photo of a ticked type opens in Lumen while it's running.</li>
+<li><b>Always, even when not running</b>: Lumen starts with the photo if it isn't running. It sets those types' Run action (<code>Alias$@RunType_XXX</code>), and puts back nobody else's when you change your mind.</li>
+</ul>
+<p>Below are the types: <b>JPEG</b>, <b>PNG</b> and <b>TIFF</b> (not ticked to begin with, since Paint or another program may be the one you want for those), and the types of the photos your plug-ins read (ticked). Last, <b>Data, by name</b>: a Data file whose name ends like a photo's (<code>/jpg</code>, <code>/heic</code>, <code>/nef</code>...) opens in Lumen while it's running. A double-clicked photo already in the library opens in the Viewer; one that isn't is imported first (into a project named after its directory), then opened.</p>
+<p>A plug-in's types come from the desktop's <b>MimeMap</b> (<code>InetDBase:MimeMap</code>), which pairs MIME types with RISC OS filetypes: a plug-in says which MIME types it reads (LumenHEIF: <code>image/heic</code>, <code>image/heif</code> and <code>image/avif</code>), and MimeMap says which filetypes they are. A file of one of those filetypes is imported even without its usual extension. RISC OS 5.31's MimeMap has no filetypes for HEIF and AVIF yet, so until it has, HEIF and AVIF photos are known by their names and contents, as before, and aren't on the menu.</p>
+<p>A ticked type the desktop has no name or icon for gets MimeMap's name for it and Lumen's file icon: a picture on a page, with Lumen's icon in the corner. Lumen keeps them in <code>Choices:Lumen.Types</code> and <code>Choices:Lumen.Sprites</code>, which !Lumen's !Boot reads each time the desktop starts.</p>
+
 <h3 class="chapter" id="ch17"><span>17</span> Choices</h3>
 <p>Choose <b>Choices...</b> from the icon bar menu.</p>
 <figure><img src="images/choices.png" alt="Lumen's Choices"><figcaption>Lumen's Choices.</figcaption></figure>

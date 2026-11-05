@@ -249,6 +249,8 @@ int cat_stack_open (cat *c, cat_id v, int open);       /* v's stack: 1 open, 0 c
    brackets); those with no date are left. How many stacks were made. */
 int cat_auto_stack (cat *c, const cat_id *v, int n, int seconds);
 int cat_count_versions (cat *c, cat_id original);      /* versions of an original */
+/* The first version of the photo whose file is path, or 0 if the library hasn't it. */
+cat_id cat_version_of_path (cat *c, const char *path);
 
 /* Details for the info line and tests. */
 typedef struct

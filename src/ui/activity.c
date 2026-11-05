@@ -250,7 +250,8 @@ int activity_now (act_job *jobs, int max)
   }
   if (rawjob_busy () && n < max)
     {
-      snprintf (jobs[n].text, sizeof jobs[n].text, "Reading a raw photo with LumenRaw");
+      const char *who = rawjob_busy_title ();
+      snprintf (jobs[n].text, sizeof jobs[n].text, "Reading a %sphoto with %s", strcmp (who, "LumenRaw") ? "" : "raw ", who);
       jobs[n++].pct = -1;
     }
   if (p.thumbs_pending > 0 && n < max)

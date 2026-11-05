@@ -14,7 +14,7 @@
    unchanged (see fsys.h). */
 int __riscosify_control = __RISCOSIFY_NO_PROCESS;
 
-int main (void)
+int main (int argc, char **argv)
 {
   /* A copy, at once: UnixLib's getenv hands back a buffer that the next
      getenv may reuse (found on a Pi: Lumen$Dir, read later, left this
@@ -35,7 +35,8 @@ int main (void)
       v = getenv ("Lumen$DefaultLibrary");
       snprintf (path, sizeof path, "%s", v && *v ? v : "<Choices$Write>.Lumen.Library");
     }
-  switch (app_init (path))
+  /* A photo to open: !Run passes it on (a double-click, File types). */
+  switch (app_init (path, argc > 1 ? argv[1] : NULL))
     {
     case 0: break;
     case 2: return 0;                  /* handed over to the Lumen already running */

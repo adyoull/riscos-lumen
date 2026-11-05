@@ -23,7 +23,13 @@ typedef struct
   int albums_new;                      /* and get albums from the folders inside them */
   int watch_minutes;                   /* how often watched folders are looked through (0: only at start) */
   int previews;                        /* PREVIEWS_* (library.h): 0 off, 1 raw files, 2 all photos */
+  /* File types (the icon bar menu): which double-clicks open in Lumen. */
+  int open_mode;                       /* OPEN_NEVER, OPEN_RUNNING, OPEN_ALWAYS; -1 not chosen yet */
+  char open_types[160];                /* the ticked filetypes, "C85 B60 ..."; "-" none yet */
+  int open_data;                       /* Data files named like a photo (while running); -1 not chosen */
 } prefs;
+
+enum { OPEN_NEVER, OPEN_RUNNING, OPEN_ALWAYS };
 
 void prefs_default (prefs *p);
 /* Reads the file into *p (defaults first). 0 if it was there. */

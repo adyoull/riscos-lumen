@@ -57,6 +57,7 @@ typedef struct
 {
   char name[48];                       /* "HEIF photo" */
   char extensions[160];                /* "heic heif hif", lower case */
+  char mime[160];                      /* "image/heic image/heif", lower case: MimeMap gives their filetypes and extensions */
   int nsigs;
   plugin_sig sigs[PLUGIN_SIGS];
 } plugin_format;
@@ -84,6 +85,8 @@ typedef struct
 int plugins_claims (const plugin_info *p, const char *name, const unsigned char *head, size_t len);
 /* The same by the name alone (for choosing which files to look at). */
 int plugins_claims_name (const plugin_info *p, const char *name);
+/* The same by a MIME type ("image/avif"), from its MIME lines. */
+int plugins_claims_mime (const plugin_info *p, const char *mime);
 
 /* Fills out[] from plugins_dir, at most max, sorted by name; the
    number found. state is the Choices file (may not exist yet). */

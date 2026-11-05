@@ -473,9 +473,13 @@ void tiff_encoding (const tiff_meta *m, char *out, size_t n)
     case 8: case 9: ph = "Lab"; break;
     default: ph = "";
     }
-  snprintf (out, n, "%s, %d bit%s%s%s%s%s", c, m->bits, m->bits == 1 ? "" : "s",
-            m->sample_format == 3 ? " floating point" : "", ph[0] ? ", " : "", ph,
-            m->tiled ? ", in tiles" : "");
+  {
+    int colours = m->photometric == 2 || m->photometric == 6 || m->photometric == 8 || m->photometric == 9 ? 3
+                : m->photometric == 5 ? 4 : 1;
+    snprintf (out, n, "%s, %d bit%s%s%s%s%s%s", c, m->bits, m->bits == 1 ? "" : "s",
+              m->sample_format == 3 ? " floating point" : "", ph[0] ? ", " : "", ph,
+              m->samples > colours ? " with alpha" : "", m->tiled ? ", in tiles" : "");
+  }
 }
 
 /* --- writing a TIFF */

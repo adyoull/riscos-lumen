@@ -47,6 +47,10 @@ const plugin_info *rawjob_format (int kind);
 int rawjob_kind_for (int format, const char *path, const unsigned char *head, size_t len);
 /* Whether an installed format plug-in claims a file by its name. */
 int rawjob_claims_name (const char *path);
+/* The format plug-in (its kind) whose MIME lines have this MIME type, or 0. */
+int rawjob_claims_mime (const char *mime);
+/* The format plug-in whose MIME types MimeMap gives this filetype, or 0. */
+int rawjob_claims_type (int filetype);
 void rawjob_setup_kind (int kind, const char *helper, const char *scratch, rawjob_runner run);
 int rawjob_available_kind (int kind);
 unsigned rawjob_stamp_kind (int kind);
@@ -88,6 +92,8 @@ void rawjob_hurry (rawjob *j);
 
 /* From the front end: the program started with tag has ended. */
 void rawjob_ended (int tag);
-int rawjob_busy (void);                /* any job waiting or running */
+int rawjob_busy (void);
+/* The plug-in at work (or next): its title ("LumenRaw", "LumenHEIF"). */
+const char *rawjob_busy_title (void);                /* any job waiting or running */
 
 #endif

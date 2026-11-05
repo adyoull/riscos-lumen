@@ -1,6 +1,12 @@
 LumenHEIF changes
 =================
 
+Next (not released yet)
+
+- Its Plugin file gives the MIME types it reads (image/heic, image/heif,
+  image/avif), so Lumen 0.0.38 and later know HEIF and AVIF files by the
+  filetypes MimeMap gives those, and can open them with a double-click.
+
 1.1 (4 November 2026): the first release
 
 - HEIF photos (.heic, .heif, .hif), as iPhones and many other phones take

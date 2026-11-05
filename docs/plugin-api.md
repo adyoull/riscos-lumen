@@ -35,10 +35,12 @@ Kind: format
 API: 1
 Format: HEIF photo
 Extensions: heic heif hif
+MIME: image/heic image/heif
 Signature: 4 ftypheic
 Signature: 4 ftypmif1
 Format: AVIF photo
 Extensions: avif
+MIME: image/avif
 Signature: 4 ftypavif
 Program: LumenHEIF
 Package: LumenHEIF
@@ -46,8 +48,8 @@ Description: Reads HEIF photos (HEVC) and AVIF photos (AV1) with libheif
 ```
 
 A plug-in can read several formats. Each `Format` line starts one, and the
-`Extensions` and `Signature` lines after it belong to that format, until
-the next `Format` line.
+`Extensions`, `MIME` and `Signature` lines after it belong to that format,
+until the next `Format` line.
 
 | Key | Meaning |
 | --- | --- |
@@ -56,19 +58,35 @@ the next `Format` line.
 | `API` | The version of this API that the plug-in follows: `1`. Lumen lists a plug-in that asks for a newer API but doesn't run it, and says a newer Lumen is needed. |
 | `Format` | Starts a format, and names one of its files, for Lumen's messages and the Info tab: "This is an AVIF photo...", "AVIF photo, read by the LumenHEIF plug-in". At most 6 formats. |
 | `Extensions` | The file extensions this format claims, separated by spaces, in any case: `heic` matches `IMG_0001/HEIC` on RISC OS and `IMG_0001.heic` elsewhere. |
+| `MIME` | The format's MIME types, separated by spaces, such as `image/heic image/heif`. Optional. Lumen asks the desktop's MimeMap (`InetDBase:MimeMap`) about them: a file whose RISC OS filetype MimeMap gives one of these MIME types is the plug-in's, and so is one whose extension MimeMap gives one, even if `Extensions` doesn't list it. These filetypes also go on Lumen's File types menu, so a double-click can open them in Lumen (below). Lumens before 0.0.38 ignore the line. |
 | `Signature` | Bytes this format claims at an offset in the file: the offset in decimal, a space, then the bytes. `\xNN` gives any byte, `\\` a backslash, and `\x20` a space at the end. A file matches if any one signature matches. At most 12 signatures a format, each up to 24 bytes, within the first 4 KB of the file. |
 | `Program` | The program in the directory that Lumen runs (`LumenHEIF,ff8`, an absolute file). |
 | `Package` | The PackMan package it comes in, such as LumenHEIF. Lumen calls the plug-in by this name in its Plug-ins menu (followed by `Version`) and in its messages. |
 | `Description` | One line about it. |
 
 A file is the plug-in's if its extension is one of a format's
-`Extensions`, or if its first bytes match a format's `Signature`; the
-extension is looked at first, so `photo.avif` is an AVIF photo whatever
-its bytes. Lumen reads JPEG and PNG files
+`Extensions`, if MimeMap gives its filetype or its extension one of the
+format's `MIME` types, or if its first bytes match a format's
+`Signature`; the name is looked at first, so `photo.avif` is an AVIF
+photo whatever its bytes. Lumen reads JPEG and PNG files
 itself, whatever their names, and camera raw files go to LumenRaw. Lumen
 imports a file a format plug-in claims even while that plug-in is
 switched off, because it is still installed. Files that no installed
 plug-in claims are left alone.
+
+## Double-clicks
+
+Lumen's File types menu (on its icon bar menu) lists JPEG, PNG and TIFF
+and every filetype MimeMap gives an installed plug-in's `MIME` types.
+Whether a double-click in the Filer opens them in Lumen is the user's
+choice there: Never, While Lumen is running, or Always (Lumen sets the
+types' `Alias$@RunType_XXX`). The plug-ins' types are ticked to begin
+with. A type the desktop has no name or icon for gets MimeMap's name
+for it (`File$Type_XXX`) and Lumen's file icon, kept in
+`Choices:Lumen.Types` and `Choices:Lumen.Sprites`, which Lumen's !Boot
+reads at start-up. A format whose MIME type MimeMap has no filetype for
+(HEIF and AVIF have none in RISC OS 5.31's MimeMap) is still read by its
+extensions and signatures; it just has no type to double-click.
 
 ## The program
 

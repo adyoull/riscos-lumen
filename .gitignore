@@ -2,3 +2,4 @@
 # Released under the MIT licence: see the LICENSE file.
 # SPDX-License-Identifier: MIT
 out/
+__pycache__/

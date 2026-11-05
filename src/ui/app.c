@@ -207,6 +207,21 @@ static char prefs_path[700];
 
 const prefs *app_prefs (void) { return &the_prefs; }
 
+/* A file beside the Choices ("Types": filetypes.c). */
+void app_choices_file (char *out, size_t n, const char *leaf)
+{
+  char dir[700];
+  const char *l;
+  if (!prefs_path[0])
+    app_load_prefs ();
+  snprintf (dir, sizeof dir, "%s", prefs_path);
+  l = fsys_leaf (dir);
+  if (l > dir)
+    dir[l - dir - 1] = '\0';
+  fsys_mkdirs (dir);
+  fsys_join (out, n, dir, leaf);
+}
+
 void app_load_prefs (void)
 {
   const char *v = getenv ("Lumen$ChoicesFile");   /* the tests' own */
@@ -332,6 +347,7 @@ void app_plugins_rescan (void)
       }
   if (changed && lib)
     lib_retry_failed_thumbs (lib);     /* photos imported while there was no plug-in */
+  filetypes_setup ();                  /* the plug-ins' file types */
 }
 
 /* A plug-in can't change under a job that is running it. */
@@ -465,9 +481,70 @@ int app_other_instance (void)
   return 0;
 }
 
-int app_init (const char *library_path)
+/* --- photos double-clicked, or Lumen started with one */
+
+static char pending_open[1024];       /* imported, to open when the import has finished */
+
+/* Opens version v in the Viewer, showing its project in the Browser. */
+static int show_version (cat_id v)
 {
-  static const int messages[] = { Message_DataLoad, 2 /* DataSaveAck */, Message_ModeChange, Message_HelpRequest,
+  cat_details d;
+  cat_source s = { SRC_PROJECT, 0, 0, "" };
+  int i, n;
+  if (!v || cat_get_details (lib_cat (lib), v, &d))
+    return -1;
+  s.id = d.project;
+  browser_set_source (&s);
+  n = browser_count ();
+  for (i = 0; i < n; i++)
+    {
+      cat_item it;
+      if (browser_item (i, &it) && it.id == v)
+        {
+          mainwin_open (NULL);
+          viewer_open (i);
+          return 0;
+        }
+    }
+  return -1;
+}
+
+void app_open_file (const char *path)
+{
+  cat_id v = lib ? cat_version_of_path (lib_cat (lib), path) : 0;
+  pending_open[0] = '\0';
+  if (!lib)
+    return;
+  if (v && show_version (v) == 0)
+    return;
+  if (lib_import (lib, path))
+    {
+      app_report ("Not enough memory to start the import.");
+      return;
+    }
+  snprintf (pending_open, sizeof pending_open, "%s", path);
+}
+
+/* The import of a photo to open has finished: open it (or say why not). */
+static void open_pending (void)
+{
+  cat_id v;
+  if (!pending_open[0] || lib_importing (lib))
+    return;
+  v = cat_version_of_path (lib_cat (lib), pending_open);
+  if (!v || show_version (v))
+    {
+      char m[1200];
+      snprintf (m, sizeof m, "Lumen can't open %s: it isn't a photo Lumen (or one of its plug-ins) reads.",
+                fsys_leaf (pending_open));
+      app_report (m);
+    }
+  pending_open[0] = '\0';
+}
+
+int app_init (const char *library_path, const char *start_file)
+{
+  static const int messages[] = { Message_DataLoad, Message_DataOpen, 2 /* DataSaveAck */, Message_ModeChange, Message_HelpRequest,
                                   Message_TaskWindow_Output, Message_TaskWindow_Ego, Message_TaskWindow_Morio,
                                   Message_MenusDeleted, Message_MenuWarning, 0 };
   char err[300];
@@ -476,6 +553,23 @@ int app_init (const char *library_path)
   atexit (close_down);
   {
     int first = app_other_instance ();
+    if (first && start_file && *start_file && strlen (start_file) < 200)
+      {
+        /* Started with a photo (a double-click its Run alias sent here,
+           which the Lumen running didn't claim): to that Lumen, as if
+           dropped on its icon bar icon (icon -1: open it). */
+        int m[64];
+        memset (m, 0, sizeof m);
+        m[0] = (int) ((44 + strlen (start_file) + 1 + 3) & ~3u);
+        m[4] = Message_DataLoad;
+        m[5] = -2;
+        m[6] = -1;
+        m[10] = FT_DATA;
+        snprintf ((char *) &m[11], sizeof m - 44, "%s", start_file);
+        _swix (Wimp_SendMessage, _INR (0, 2), User_Message, m, first);
+        close_down ();
+        return 2;
+      }
     if (first)
       {
         int b[5];
@@ -514,6 +608,8 @@ int app_init (const char *library_path)
   lib_set_previews (lib, the_prefs.previews);
   app_plugins_rescan ();               /* also retries raw files imported before the plug-in was installed */
   mainwin_open (NULL);
+  if (start_file && *start_file)
+    app_open_file (start_file);
   return 0;
 }
 
@@ -530,7 +626,7 @@ static int previews_due (void);
 
 int app_busy (void)
 {
-  return viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib)
+  return pending_open[0] || viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib)
          || rawjob_busy () || printbox_busy () || libbox_busy () || previews_due ();
 }
 
@@ -627,6 +723,7 @@ static void idle (void)
   unsigned start, deadline, wake;
   int changed;
   menus_idle ();
+  open_pending ();
   if (app_next_wake (&wake) && (int) (app_now () - wake) >= 0 && !lib_busy (lib))
     app_watch_now ();
   /* The photo being edited comes first; until the one shown is open,
@@ -704,6 +801,15 @@ static void data_load (int *b)
       && b[5] != mainwin_inspector () && b[5] != -2 && b[5] != plugwin_window () && b[5] != choicewin_window ()
       && b[5] != libbox_import_window ())
     return;
+  if (b[5] == -2 && b[6] == -1 && type != FT_DIR && type != FT_APP)
+    {
+      /* From another Lumen started with this photo: open it. */
+      b[3] = b[2];
+      b[4] = Message_DataLoadAck;
+      _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
+      app_open_file (path);
+      return;
+    }
   if (b[5] == choicewin_window ())
     {
       /* A directory for the library. */
@@ -925,6 +1031,19 @@ static int app_event_1 (int reason, int *b, int sender)
         case Message_DataLoad:
           data_load (b);
           break;
+        case Message_DataOpen:
+          /* A double-click in the Filer: a photo of a type File types
+             says Lumen opens. Claimed with DataLoadAck (PRM p1007). */
+          if (filetypes_claims (b[10], (const char *) &b[11]))
+            {
+              char path[1024];
+              snprintf (path, sizeof path, "%s", (const char *) &b[11]);
+              b[3] = b[2];
+              b[4] = Message_DataLoadAck;
+              _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
+              app_open_file (path);
+            }
+          break;
         case Message_HelpRequest:
           help_request (b);
           break;
@@ -932,13 +1051,13 @@ static int app_event_1 (int reason, int *b, int sender)
           if (!libbox_save_ack (b))
             exportbox_save_ack (b);
           break;
-        case Message_TaskWindow_Ego:
         case Message_MenusDeleted:
           menus_closed ();
           break;
         case Message_MenuWarning:
           menus_warning (b);
           break;
+        case Message_TaskWindow_Ego:     /* a plug-in's task window: its handle, then its end */
         case Message_TaskWindow_Morio:
           raw_message (b);
           break;

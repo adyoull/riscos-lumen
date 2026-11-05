@@ -225,3 +225,101 @@ int fsys_remove_tree (const char *path)
     rc = -1;
   return rc;
 }
+
+/* --- MimeMap: a small table of its own on Linux (tests add to it) */
+/* named: the desktop has a name for the type (File$Type_XXX); types tests
+   add have only MimeMap's. */
+typedef struct { char mime[64]; int type; char name[12]; char exts[64]; int named; } mime_line;
+static mime_line mimes[32] = {
+  { "image/jpeg", 0xC85, "JPEG", "jpg jpeg jfif jpe", 1 },
+  { "image/png", 0xB60, "PNG", "png", 1 },
+  { "image/tiff", 0xFF0, "TIFF", "tif tiff", 1 },
+  { "text/plain", 0xFFF, "Text", "txt", 1 },
+};
+static int nmimes = 4;
+
+void fsys_mimemap_add (const char *mime, int filetype, const char *name, const char *exts)
+{
+  if (nmimes < (int) (sizeof mimes / sizeof mimes[0]))
+    {
+      snprintf (mimes[nmimes].mime, sizeof mimes[0].mime, "%s", mime);
+      mimes[nmimes].type = filetype;
+      snprintf (mimes[nmimes].name, sizeof mimes[0].name, "%s", name ? name : "");
+      snprintf (mimes[nmimes].exts, sizeof mimes[0].exts, "%s", exts ? exts : "");
+      nmimes++;
+    }
+}
+
+static int has_word (const char *list, const char *w)
+{
+  size_t n = strlen (w);
+  while (*list)
+    {
+      size_t k = 0;
+      while (*list == ' ')
+        list++;
+      while (list[k] && list[k] != ' ')
+        k++;
+      if (k == n && !strncasecmp (list, w, n))
+        return 1;
+      list += k;
+    }
+  return 0;
+}
+
+int fsys_mime_of_type (int filetype, char *mime, size_t n)
+{
+  int i;
+  for (i = 0; i < nmimes; i++)
+    if (mimes[i].type == filetype && filetype != FT_DATA)
+      {
+        snprintf (mime, n, "%s", mimes[i].mime);
+        return 0;
+      }
+  return -1;
+}
+
+int fsys_mime_of_ext (const char *ext, char *mime, size_t n)
+{
+  int i;
+  for (i = 0; ext && *ext && i < nmimes; i++)
+    if (has_word (mimes[i].exts, ext))
+      {
+        snprintf (mime, n, "%s", mimes[i].mime);
+        return 0;
+      }
+  return -1;
+}
+
+int fsys_type_of_mime (const char *mime)
+{
+  int i;
+  for (i = 0; mime && i < nmimes; i++)
+    if (!strcasecmp (mimes[i].mime, mime))
+      return mimes[i].type;
+  return -1;
+}
+
+void fsys_mimemap_name (const char *mime, char *out, size_t n)
+{
+  int i;
+  out[0] = '\0';
+  for (i = 0; mime && i < nmimes; i++)
+    if (!strcasecmp (mimes[i].mime, mime))
+      {
+        snprintf (out, n, "%s", mimes[i].name);
+        return;
+      }
+}
+
+void fsys_type_name (int filetype, char *out, size_t n)
+{
+  int i;
+  out[0] = '\0';
+  for (i = 0; i < nmimes; i++)
+    if (mimes[i].type == filetype && mimes[i].named)
+      {
+        snprintf (out, n, "%s", mimes[i].name);
+        return;
+      }
+}

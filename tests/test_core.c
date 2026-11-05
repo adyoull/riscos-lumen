@@ -1669,6 +1669,9 @@ static void test_mistyped (void)
   p (path, "Mistyped/jpeg.jpeg,fe4"); make_jpeg (path, 200, 150, 1, NULL);
   p (path, "Mistyped/noname,fff"); make_png (path, 140, 90, 0, 0);  /* no name to go by: its fingerprint */
   p (path, "Mistyped/sprite,ff9"); make_png (path, 150, 90, 0, 0);  /* typed Sprite: left unopened */
+  fsys_mimemap_add ("image/pjpeg", 0xA3B, "PJPEG", "pjp");
+  p (path, "Mistyped/progressive,a3b"); make_jpeg (path, 220, 150, 1, NULL);  /* MimeMap: a JPEG type */
+  p (path, "Mistyped/odd.pjp,123"); make_jpeg (path, 230, 150, 1, NULL);      /* MimeMap: a JPEG extension */
   p (path, "Mistyped/notes,fff");
   f = fopen (path, "wb");
   if (f)
@@ -1695,11 +1698,12 @@ static void test_mistyped (void)
       jpg += items[k].filetype == FT_JPEG;
       png += items[k].filetype == FT_PNG;
     }
-  CHECK (n == 4, "mistyped: PNGs typed Text (one without a photo's name) and two JPEGs typed DOS are imported");
-  if (n != 4)
+  CHECK (n == 6, "mistyped: PNGs typed Text (one without a photo's name), two JPEGs typed DOS, and two JPEGs "
+                 "MimeMap knows by their type or extension are imported");
+  if (n != 6)
     for (k = 0; k < n; k++)
       fprintf (stderr, "  imported %s (type %x)\n", items[k].name, items[k].filetype);
-  CHECK (jpg == 2 && png == 2, "mistyped: kept as JPEG and PNG, whatever they were typed");
+  CHECK (jpg == 4 && png == 2, "mistyped: kept as JPEG and PNG, whatever they were typed");
   CHECK (pr.skipped == 1 && strstr (lib_last_error (l) ? lib_last_error (l) : "", "fake") != NULL,
          "mistyped: a .png that isn't one is reported");
   free (items);
@@ -2668,6 +2672,13 @@ static void test_heif (void)
            && !plugins_claims (&pi, "photo", mp4, sizeof mp4) && !plugins_claims (&pi, "photo", head, 8),
            "format plug-ins: its signatures (HEIC and AVIF, not an MP4 film), whatever the name");
   }
+  /* Its MIME types: claimed by those, and by any extension MimeMap gives one of them. */
+  CHECK (!strcmp (pi.formats[0].mime, "image/heic image/heif") && !strcmp (pi.formats[1].mime, "image/avif")
+         && plugins_claims_mime (&pi, "image/avif") == 2 && plugins_claims_mime (&pi, "image/HEIF") == 1
+         && !plugins_claims_mime (&pi, "image/jpeg"), "format plug-ins: MIME lines, a format's own");
+  fsys_mimemap_add ("image/heif", 0xA3C, "HEIF", "hif2 heifs");
+  CHECK (plugins_claims_name (&pi, "Pics.Lake/hif2") == 1 && plugins_claims_name (&pi, "x.heifs") == 1
+         && !plugins_claims_name (&pi, "x.tph"), "format plug-ins: an extension MimeMap says is image/heif");
   {
     plugin_info q;
     memset (&q, 0, sizeof q);
@@ -2774,6 +2785,7 @@ static void test_heif (void)
           }
       }
     CHECK (n == 9 && ready == 9, "heif: the nine (six HEIC, three AVIF) imported, thumbnails made");
+
     CHECK (turned, "heif: a turned photo upright in the catalogue (800 x 1200, orientation 1)");
     CHECK (cam, "heif: camera, date and size in the catalogue, from the plug-in");
     CHECK (tags > 5, "heif: the Info tab's EXIF list, where the plug-in said it is");
@@ -2793,6 +2805,29 @@ static void test_heif (void)
       found += lib_preview_find (l, o.id, pv, sizeof pv);
     CHECK (found == 9, "heif: a preview of each");
   }
+    /* One typed as MimeMap's type for image/heic, without an extension:
+       taken by its type (a double-clicked photo comes in this way). */
+    {
+      char td[700], tf[760], src[760];
+      FILE *a, *bf;
+      size_t got2;
+      unsigned char buf[65536];
+      fsys_mimemap_add ("image/heic", 0xA3A, "HEIC", "heic");
+      p (td, "HeifTyped");
+      fsys_mkdirs (td);
+      snprintf (src, sizeof src, "%s/plain.heic", dir);
+      snprintf (tf, sizeof tf, "%s/Safe,a3a", td);
+      a = fopen (src, "rb");
+      bf = fopen (tf, "wb");
+      while (a && bf && (got2 = fread (buf, 1, sizeof buf, a)) > 0)
+        fwrite (buf, 1, got2, bf);
+      if (bf) fputc (0, bf);           /* not the same file as plain.heic (by its content) */
+      if (a) fclose (a);
+      if (bf) fclose (bf);
+      lib_import (l, tf);
+      drain (l);
+      CHECK (cat_version_of_path (lib_cat (l), tf) != 0, "heif: a photo typed image/heic's filetype, no extension, imported alone");
+    }
   lib_close (l);
   rawjob_clear_format (kind);
   CHECK (!rawjob_format (kind) && rawjob_kind_for (IMG_UNKNOWN, path, NULL, 0) < 0, "format plug-ins: removed: forgotten");

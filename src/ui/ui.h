@@ -56,7 +56,22 @@ enum { Button_Adjust = 1, Button_Menu = 2, Button_Select = 4 };
 
 /* --- app.c: the task, its icon bar icon, the poll dispatch */
 /* 0 started; 1 failed; 2 another Lumen is running (told to open its window). */
-int app_init (const char *library_path);
+int app_init (const char *library_path, const char *start_file);
+/* A photo to show: double-clicked, or Lumen started with it. In the
+   library already: opened in the Viewer; otherwise imported, then opened. */
+void app_open_file (const char *path);
+
+/* File types (filetypes.c): which double-clicks open in Lumen. */
+void filetypes_setup (void);           /* at start, and when the plug-ins change */
+int filetypes_claims (int type, const char *path);   /* a Message_DataOpen for Lumen? */
+int filetypes_count (void);
+const char *filetypes_label (int i);
+int filetypes_type (int i);
+int filetypes_ticked (int i);
+int filetypes_mode (void);             /* OPEN_* (prefs.h) */
+int filetypes_data (void);
+/* File types item: 0-2 the three choices, 3... the types, then Data. */
+void filetypes_select (int item);
 /* Watched folders: look through them now; when to wake next (0: no need). */
 void app_watch_now (void);
 int app_next_wake (unsigned *when);
@@ -82,6 +97,8 @@ int app_task (void);
 void app_open_doc (const char *leaf);
 /* Lumen's Choices (prefs.h), read at start from <Choices$Write>.Lumen.Choices. */
 void app_load_prefs (void);
+/* A file of Lumen's own beside its Choices (<Choices$Write>.Lumen.<leaf>). */
+void app_choices_file (char *out, size_t n, const char *leaf);
 const prefs *app_prefs (void);
 int app_set_prefs (const prefs *p);    /* saves and applies them; 0 on success */
 /* Lumen's plug-ins (plugins.h): the list as last read, sorted by name. */

@@ -217,6 +217,11 @@ int lib_import (library *l, const char *path)
   return queue_root (l, path, 0);
 }
 
+int lib_importing (library *l)
+{
+  return l->importing || l->roots != NULL;
+}
+
 void lib_set_new_folders (library *l, int watch, int folder_albums)
 {
   l->watch_new = watch;
@@ -392,9 +397,16 @@ static unsigned long long fnv (unsigned long long h, const unsigned char *p, siz
 /* Whether the name ends /jpg, /jpeg, /jpe or /png (.png elsewhere), in
    any case; a ",xxx" filetype suffix (files from other systems) is
    ignored. */
+/* The MIME types Lumen reads itself. */
+static int builtin_mime (const char *m)
+{
+  return !strcmp (m, "image/jpeg") || !strcmp (m, "image/pjpeg") || !strcmp (m, "image/png")
+         || !strcmp (m, "image/x-png") || !strcmp (m, "image/tiff");
+}
+
 static int has_photo_extension (const char *path)
 {
-  static const char *const ext[] = { "jpg", "jpeg", "jpe", "png" };
+  static const char *const ext[] = { "jpg", "jpeg", "jpe", "png", "tif", "tiff" };
   const char *dot = NULL, *end, *q;
   size_t n, k;
   if (!path)
@@ -412,7 +424,33 @@ static int has_photo_extension (const char *path)
   for (k = 0; k < sizeof ext / sizeof ext[0]; k++)
     if (n == strlen (ext[k]) && strncasecmp (dot + 1, ext[k], n) == 0)
       return 1;
+  /* Or one MimeMap says is a JPEG, PNG or TIFF ("jfif", "pjpeg"). */
+  if (n > 0 && n < 17)
+    {
+      char x[20], mime[128];
+      memcpy (x, dot + 1, n);
+      x[n] = '\0';
+      if (fsys_mime_of_ext (x, mime, sizeof mime) == 0 && builtin_mime (mime))
+        return 1;
+    }
   return 0;
+}
+
+/* A filetype MimeMap gives a MIME type Lumen or a plug-in reads (a type
+   for HEIF photos that a MimeMap line names image/heic, say). */
+static int claimed_type (int ft)
+{
+  static const char *const builtin[] = { "image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/tiff" };
+  char mime[128];
+  size_t k;
+  if (ft < 0 || ft >= FT_DATA)
+    return 0;
+  if (rawjob_claims_type (ft) > 0)
+    return 1;
+  for (k = 0; k < sizeof builtin / sizeof builtin[0]; k++)
+    if (fsys_type_of_mime (builtin[k]) == ft)
+      return 1;
+  return fsys_mime_of_type (ft, mime, sizeof mime) == 0 && (builtin_mime (mime) || rawjob_claims_mime (mime) > 0);
 }
 
 /* Which files are worth opening to look at. Photos are known by their
@@ -425,7 +463,7 @@ static int has_photo_extension (const char *path)
 static int likely_image_type (int ft, const char *path)
 {
   return ft == FT_JPEG || ft == FT_PNG || ft == FT_NONE || ft == FT_DATA || ft == FT_TIFF
-         || ft == FT_TEXT || ft == FT_DOS
+         || ft == FT_TEXT || ft == FT_DOS || claimed_type (ft)
          || has_photo_extension (path) || img_has_raw_extension (path) || rawjob_claims_name (path);
 }
 

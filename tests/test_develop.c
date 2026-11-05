@@ -1292,7 +1292,7 @@ static void test_tiff (const char *work)
     { "rgb8-tiles", 8, 3, PHOTOMETRIC_RGB, COMPRESSION_LZW, 1, 1, "LZW, 8 bits, RGB, in tiles" },
     { "rgb16-tiles", 16, 3, PHOTOMETRIC_RGB, COMPRESSION_ADOBE_DEFLATE, 1, 1, "Deflate, 16 bits, RGB, in tiles" },
     { "rgb8-planes", 8, 3, PHOTOMETRIC_RGB, COMPRESSION_PACKBITS, 0, 2, "PackBits, 8 bits, RGB" },
-    { "rgba8", 8, 4, PHOTOMETRIC_RGB, COMPRESSION_LZW, 0, 1, "LZW, 8 bits, RGB" },
+    { "rgba8", 8, 4, PHOTOMETRIC_RGB, COMPRESSION_LZW, 0, 1, "LZW, 8 bits, RGB with alpha" },
     { "jpeg", 8, 3, PHOTOMETRIC_YCBCR, COMPRESSION_JPEG, 0, 1, "JPEG, 8 bits, YCbCr" },
     { "palette", 8, 1, PHOTOMETRIC_PALETTE, COMPRESSION_LZW, 0, 1, "LZW, 8 bits, palette" },
   };

@@ -328,7 +328,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       menu_open = b;
       return NULL;
     case Wimp_SpriteOp:                /* 40, read sprite information: the icon is there */
-      CHECK (r[0] == 40 && strcmp ((const char *) r[2], "!lumen") == 0, "Wimp_SpriteOp 40 on !lumen");
+      CHECK (r[0] == 40 && (strcmp ((const char *) r[2], "!lumen") == 0 || strncmp ((const char *) r[2], "file_", 5) == 0),
+             "Wimp_SpriteOp 40 on !lumen, or a file type's icon");
       return NULL;
     case Wimp_GetPointerInfo:
       b[0] = ptr_x; b[1] = ptr_y; b[2] = ptr_buttons; b[3] = ptr_window; b[4] = ptr_icon;
@@ -522,6 +523,30 @@ static const _kernel_oserror *graphics (int swi, int r[10])
   return NULL;
 }
 
+static const char *getvar (const char *name)
+{
+  static char v[700];
+  int len = 0;
+  if (_swix (OS_ReadVarVal, _INR (0, 4) | _OUT (2), name, v, (int) sizeof v - 1, 0, 0, &len) || len < 0)
+    return NULL;
+  v[len] = '\0';
+  return v;
+}
+
+static const _kernel_oserror *setvarval (int swi, int r[10])
+{
+  char v[700];
+  (void) swi;
+  if (r[2] < 0)
+    fake_setvar ((const char *) r[0], NULL);
+  else
+    {
+      snprintf (v, sizeof v, "%.*s", r[2], (const char *) r[1]);
+      fake_setvar ((const char *) r[0], v);
+    }
+  return NULL;
+}
+
 static void fakes (void)
 {
   static const struct { int swi; const char *name; int wimp; } list[] = {
@@ -548,6 +573,7 @@ static void fakes (void)
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
     fake_swi (list[i].swi, list[i].name, list[i].wimp ? wimp : graphics);
   fake_swi (TaskManager_EnumerateTasks, "TaskManager_EnumerateTasks", tasks);
+  fake_swi (OS_SetVarVal, "OS_SetVarVal", setvarval);
   {
     static const struct { int swi; const char *name; } pl[] = {
       { PDriver_Info, "PDriver_Info" }, { PDriver_PageSize, "PDriver_PageSize" },
@@ -735,7 +761,7 @@ int main (int argc, char **argv)
     setenv ("Lumen$ActivityFile", d, 1);
   }
   fakes ();
-  CHECK (app_init (lib) == 0, "app_init succeeds");
+  CHECK (app_init (lib, NULL) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
   CHECK (nwindows == 15, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity, Print, "
                         "Caption and keywords, Smart album, Export library, Import library, Check library and Info windows");
@@ -2451,8 +2477,10 @@ int main (int argc, char **argv)
     app_event (Mouse_Click, b, 0);
     menu_state[0] = 6; menu_state[1] = 0; menu_state[2] = -1;
     CHECK (strstr (help_text (0x9000, 0, 0, 0), "plug-in is on") != NULL, "help: Plug-ins > LibRaw (on)");
-    menu_state[0] = 7; menu_state[1] = -1;
+    menu_state[0] = 8; menu_state[1] = -1;
     CHECK (strstr (help_text (0x9000, 3, 0, 0), "Leaves Lumen") != NULL, "help: icon bar menu > Quit");
+    menu_state[0] = 7; menu_state[1] = -1;
+    CHECK (strstr (help_text (0x9000, 3, 0, 0), "double-click") != NULL, "help: icon bar menu > File types");
     menu_state[0] = -1;
     CHECK (strstr (help_text (0x9000, 3, 0, 0), "") != NULL && help_text (0x9000, 3, 0, 0)[0] == '\0',
            "help: a window that isn't ours: nothing");
@@ -2476,8 +2504,9 @@ int main (int argc, char **argv)
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strcmp (item_text (menu_open, 1), "Help...") == 0 && strcmp (item_text (menu_open, 2), "User guide") == 0
            && strcmp (item_text (menu_open, 4), "Activity...") == 0 && strcmp (item_text (menu_open, 5), "Choices...") == 0
-           && strcmp (item_text (menu_open, 6), "Plug-ins") == 0 && strcmp (item_text (menu_open, 7), "Quit") == 0,
-           "icon bar menu: Info, Help..., User guide, Open library, Activity..., Choices..., Plug-ins, Quit");
+           && strcmp (item_text (menu_open, 6), "Plug-ins") == 0 && strcmp (item_text (menu_open, 7), "File types") == 0
+           && strcmp (item_text (menu_open, 8), "Quit") == 0,
+           "icon bar menu: Info, Help..., User guide, Open library, Activity..., Choices..., Plug-ins, File types, Quit");
     pm = submenu (menu_open, 6);
     CHECK (strcmp (item_text (pm, 0), "LumenRaw 1.0") == 0 && (item (pm, 0)[0] & 1),
            "Plug-ins: LibRaw, ticked (on)");
@@ -2766,7 +2795,97 @@ int main (int argc, char **argv)
     activity_init ();
     CHECK (activity_history_count () == 0, "Clear history: the file too");
   }
-  CHECK (choose (7, -1, -1) == 1, "Quit from the icon bar menu quits");
+  /* File types: which double-clicks open in Lumen (Message_DataOpen). */
+  {
+    char f[800], val[2000], d[760];
+    int n, k, jpeg = -1, other = -1;
+    FILE *fp;
+    /* A format plug-in with a MIME line MimeMap gives a filetype. */
+    fsys_mimemap_add ("image/x-testphoto", 0xA3A, "TestPhoto", "tph");
+    snprintf (d, sizeof d, "%s/App/Plugins/TestPhoto", work);
+    fsys_mkdirs (d);
+    snprintf (f, sizeof f, "%s/Plugin,fff", d);
+    if ((fp = fopen (f, "w")))
+      {
+        fputs ("Name: Test photos\nVersion: 1\nKind: format\nAPI: 1\nFormat: Test photo\nExtensions: tph\n"
+               "MIME: image/x-testphoto\nProgram: Run\nPackage: TestPhoto\n", fp);
+        fclose (fp);
+      }
+    snprintf (f, sizeof f, "%s/Run,ff8", d);
+    if ((fp = fopen (f, "w")))
+      fclose (fp);
+    app_plugins_rescan ();
+    n = filetypes_count ();
+    for (k = 0; k < n; k++)
+      {
+        if (filetypes_type (k) == 0xC85)
+          jpeg = k;
+        if (filetypes_type (k) == 0xA3A)
+          other = k;
+      }
+    CHECK (jpeg == 0 && filetypes_type (1) == 0xB60 && filetypes_type (2) == 0xFF0,
+           "File types: JPEG, PNG and TIFF first");
+    CHECK (other > 2 && !strcmp (filetypes_label (other), "Test photo (TestPhoto)") && filetypes_ticked (other)
+           && !filetypes_ticked (jpeg) && filetypes_mode () == OPEN_RUNNING,
+           "and the plug-in's type (from its MIME line, by MimeMap), ticked; JPEG not; While running");
+    CHECK (getvar ("File$Type_A3A") && !strcmp (getvar ("File$Type_A3A"), "TestPhoto"),
+           "a type with no name gets MimeMap's");
+    app_event (Mouse_Click, (memset (b, 0, sizeof b), b[0] = 1000, b[2] = Button_Menu, b[3] = -2, b), 0);
+    {
+      int *fm = submenu (menu_open, 7);
+      CHECK (fm && !strcmp (item_text (fm, 0), "Never") && !strcmp (item_text (fm, 1), "While Lumen is running")
+             && (item (fm, 1)[0] & 1) && !strcmp (item_text (fm, 3), "JPEG") && !(item (fm, 3)[0] & 1)
+             && !strcmp (item_text (fm, 3 + n), "Data, by name"), "File types menu: the choices, the types, Data");
+    }
+    /* A JPEG double-clicked: not claimed until it's ticked. */
+    snprintf (f, sizeof f, "%s/Opened", work);
+    fsys_mkdirs (f);
+    snprintf (f, sizeof f, "%s/Opened/Lake.jpg", work);
+    make_jpeg (f, 64, 48);
+#define DATAOPEN(type, path) (memset (b, 0, sizeof b), b[0] = 256, b[1] = 0x6789, b[2] = 77, b[4] = 5, \
+                              b[10] = (type), snprintf ((char *) &b[11], 200, "%s", (path)), sent_block[4] = 0, \
+                              app_event (User_Message_Recorded, b, 0), sent_block[4] == 4 && sent_to == 0x6789)
+    CHECK (!DATAOPEN (0xC85, f), "a JPEG double-clicked: not Lumen's (not ticked)");
+    choose (7, 3 + jpeg, -1);
+    CHECK (filetypes_ticked (jpeg), "File types > JPEG: ticked");
+    CHECK (DATAOPEN (0xC85, f), "now a JPEG double-clicked is claimed (DataLoadAck)");
+    nulls_until_idle ();
+    CHECK (viewer_item () != 0 && mainwin_mode () != LAYOUT_BROWSER, "imported and opened in the Viewer");
+    {
+      cat_details d;
+      CHECK (cat_get_details (lib_cat (app_library ()), viewer_item (), &d) == 0 && strstr (d.path, "Lake.jpg"),
+             "the photo double-clicked");
+    }
+    CHECK (DATAOPEN (0xC85, f), "again: claimed, and opened (it's in the library)");
+    /* Always: a Run alias for it, written for !Boot too. */
+    choose (7, 2, -1);
+    CHECK (getvar ("Alias$@RunType_C85") && strstr (getvar ("Alias$@RunType_C85"), "%*0")
+           && !getvar ("Alias$@RunType_B60"), "Always: JPEG's Run alias starts Lumen; PNG's (not ticked) untouched");
+    app_choices_file (f, sizeof f, "Types");
+    val[0] = '\0';
+    if ((fp = fopen (f, "r")))
+      {
+        size_t got = fread (val, 1, sizeof val - 1, fp);
+        val[got] = '\0';
+        fclose (fp);
+      }
+    CHECK (strstr (val, "Set Alias$@RunType_C85 /<Lumen$Dir> %%*0") && strstr (val, "File$Type_A3A TestPhoto"),
+           "the Types file for !Boot: the alias, and the name");
+    fake_setvar ("Alias$@RunType_B60", "/Paint %*0");
+    choose (7, 1, -1);
+    CHECK (!getvar ("Alias$@RunType_C85") && getvar ("Alias$@RunType_B60"),
+           "While running: Lumen's alias goes, another program's stays");
+    /* Data files named like a photo, while running. */
+    snprintf (val, sizeof val, "%s/Opened/scan/tif", work);
+    CHECK (DATAOPEN (0xFFD, val) && !DATAOPEN (0xFFD, "Notes/txt"), "Data, by name: /tif claimed, /txt not");
+    choose (7, 3 + n, -1);
+    CHECK (!DATAOPEN (0xFFD, val), "Data unticked: not claimed");
+    choose (7, 0, -1);
+    CHECK (!DATAOPEN (0xC85, f) && filetypes_mode () == OPEN_NEVER, "Never: nothing claimed");
+    choose (7, 1, -1);
+#undef DATAOPEN
+  }
+  CHECK (choose (8, -1, -1) == 1, "Quit from the icon bar menu quits");
   memset (b, 0, sizeof b);
   b[4] = 0;
   CHECK (app_event (User_Message, b, 0) == 1, "Message_Quit quits");
