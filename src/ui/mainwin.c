@@ -23,6 +23,7 @@
 
    Keys: V cycles the layouts, I shows or hides the
    inspector, W cycles its tabs, F is full screen. */
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -798,7 +799,8 @@ static int wrap (const char *s, int width, int draw, int x, int y, unsigned fg)
           line[n + 1] = '\0';
           if (draw_text_width (line) > width)
             break;
-          if (s[n] == ' ' || s[n] == '.' || s[n] == ',')
+          /* a space, or a stop or comma not inside a number ("0.4", "1,000") */
+          if (s[n] == ' ' || ((s[n] == '.' || s[n] == ',') && !(n > 0 && isdigit ((unsigned char) s[n - 1]) && isdigit ((unsigned char) s[n + 1]))))
             brk = n + 1;
           n++;
         }
@@ -808,6 +810,11 @@ static int wrap (const char *s, int width, int draw, int x, int y, unsigned fg)
         n = 1;
       memcpy (line, s, (size_t) n);
       line[n] = '\0';
+      {
+        int k = n;
+        while (k > 1 && line[k - 1] == ' ')
+          line[--k] = '\0';       /* the space it broke at isn't drawn */
+      }
       if (draw)
         draw_text (x, y - lines * INFO_LINE, line, fg, COL_PANEL);
       lines++;
@@ -905,7 +912,14 @@ static void info_load (int force)
       return;
     }
   info_add (it.name, "", 0);
-  snprintf (v, sizeof v, "%d x %d pixels", d.width, d.height);
+  {
+    char mp[24];
+    img_megapixels (d.width, d.height, mp, sizeof mp);
+    if (mp[0])
+      snprintf (v, sizeof v, "%d x %d pixels (%s)", d.width, d.height, mp);
+    else
+      snprintf (v, sizeof v, "%d x %d pixels", d.width, d.height);
+  }
   info_add ("Size", v, 0);
   if (it.rating == RATING_REJECT)
     snprintf (v, sizeof v, "Rejected");

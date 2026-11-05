@@ -1487,6 +1487,21 @@ static void test_plugins (void)
    extension is what lets them in to be probed. */
 static void test_raw_names (void)
 {
+  char mp[24];
+  img_megapixels (4000, 3000, mp, sizeof mp);
+  CHECK (!strcmp (mp, "12 MP"), "megapixels: 4000 x 3000 is 12 MP");
+  img_megapixels (4032, 3024, mp, sizeof mp);
+  CHECK (!strcmp (mp, "12.2 MP"), "megapixels: 4032 x 3024 is 12.2 MP");
+  img_megapixels (4824, 3232, mp, sizeof mp);
+  CHECK (!strcmp (mp, "15.6 MP"), "megapixels: 4824 x 3232 is 15.6 MP");
+  img_megapixels (1000, 1000, mp, sizeof mp);
+  CHECK (!strcmp (mp, "1 MP"), "megapixels: 1000 x 1000 is 1 MP");
+  img_megapixels (760, 480, mp, sizeof mp);
+  CHECK (!strcmp (mp, "0.4 MP"), "megapixels: 760 x 480 is 0.4 MP");
+  img_megapixels (200, 150, mp, sizeof mp);
+  CHECK (!strcmp (mp, "0.03 MP"), "megapixels: a small one, 0.03 MP");
+  img_megapixels (0, 3000, mp, sizeof mp);
+  CHECK (!mp[0], "megapixels: none when the size isn't known");
   CHECK (img_has_raw_extension ("SDFS::Card.$.DCIM.IMG_0001/CR2"), "raw names: RISC OS /CR2");
   CHECK (img_has_raw_extension ("/media/card/dsc_0001.nef"), "raw names: POSIX .nef");
   CHECK (img_has_raw_extension ("x.y.Photo/Dng"), "raw names: any case");

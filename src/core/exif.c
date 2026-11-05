@@ -173,6 +173,22 @@ int img_probe (const unsigned char *buf, size_t len)
   return IMG_UNKNOWN;
 }
 
+void img_megapixels (int width, int height, char *out, size_t n)
+{
+  double mp = (double) width * (double) height / 1e6;
+  long tenths = (long) (mp * 10 + 0.5);
+  if (!n)
+    return;
+  if (width <= 0 || height <= 0)
+    out[0] = '\0';
+  else if (tenths < 1)
+    snprintf (out, n, "%.2f MP", mp < 0.01 ? 0.01 : mp);
+  else if (tenths % 10 == 0)
+    snprintf (out, n, "%ld MP", tenths / 10);
+  else
+    snprintf (out, n, "%ld.%ld MP", tenths / 10, tenths % 10);
+}
+
 int img_has_raw_extension (const char *name)
 {
   static const char *const ext[] = { "nef", "nrw", "arw", "srf", "sr2", "dng", "pef", "raf", "orf", "rw2", "rwl",

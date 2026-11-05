@@ -33,6 +33,10 @@ typedef struct
 
 /* 1 if the name ends in a camera raw extension ("/nef" or ".nef"). */
 int img_has_raw_extension (const char *name);
+/* A photo's size in megapixels, for people: "12 MP", "15.6 MP", "0.4 MP"
+   (one decimal place, none when it's whole; two below 0.1 MP). "" if the
+   size isn't known. */
+void img_megapixels (int width, int height, char *out, size_t n);
 /* Read by a plug-in (a camera raw, or a format a plug-in claims). */
 int img_is_plugin_format (int format);
 /* What kind of image the first bytes are. */
