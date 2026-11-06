@@ -190,8 +190,6 @@ $(OUT)/LumenRaw-User-Guide.zip: $(RAW_GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenraw-guide
 $(OUT)/LumenHEIF-User-Guide.zip: $(HEIF_GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenheif-guide
-$(OUT)/LumenLens-User-Guide.zip: $(LENS_GUIDE)
-	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenlens-guide
 guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip $(OUT)/LumenHEIF-User-Guide.zip $(OUT)/LumenLens-User-Guide.zip
 
 # The lens plug-in (LumenLens): only data, the lensfun project's lens
@@ -213,6 +211,8 @@ $(OUT)/LumenLens-$(LENS_VERSION).zip: plugins/lens/Lenses plugins/lens/ReadMe pl
 	for f in docs/lumenlens-guide/images/*.png; do [ -f $$f ] && cp $$f $(OUT)/lenspkg/!Lumen/Plugins/Lens/Guide/images/$$(basename $$f),b60; done; true
 	$(ROZIP) $@ -C $(OUT)/lenspkg !Lumen
 lens-plugin: $(OUT)/LumenLens-$(LENS_VERSION).zip
+$(OUT)/LumenLens-User-Guide.zip: $(LENS_GUIDE)
+	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenlens-guide
 plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-$(LIBRAW_VERSION)-source.zip
 # The helper on real raw files (not in the repository: their licences
 # vary), on Linux and on ARM with RISC OS's alignment rules.
