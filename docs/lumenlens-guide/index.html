@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see the LICENSE file. SPDX-License-Identifier: MIT -->
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LumenLens User Guide</title>
+<style>
+:root { --ink:#1d1d1f; --paper:#fffdf7; --accent:#1f7a4a; --soft:#f1f0ea; --line:#d6d3c7;
+        --tip:#2f7d4f; --rem:#2a5d9f; --warn:#b3261e; --tech:#6b4fa0; --try:#9a6a00; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family: "Homerton", "Helvetica Neue", Arial, sans-serif;
+       line-height:1.55; font-size:17px; }
+main { max-width:860px; margin:0 auto; padding:16px 18px 80px; }
+header.cover { background:#14301f; color:#fff; padding:40px 18px 34px; }
+header.cover div { max-width:860px; margin:0 auto; }
+header.cover h1 { font-size:2.4em; margin:0 0 6px; letter-spacing:-0.5px; }
+header.cover p { margin:4px 0; font-size:1.1em; color:#d4ecdc; }
+header.cover .badge { display:inline-block; background:#9fdcb4; color:#14301f; font-weight:bold; padding:3px 10px;
+                      border-radius:3px; margin-top:12px; }
+h2.part { margin-top:56px; padding:12px 14px; background:#14301f; color:#fff; font-size:1.5em; border-radius:4px; }
+h2.part small { display:block; font-size:0.6em; font-weight:normal; color:#bfe0cb; }
+h3.chapter { margin-top:40px; font-size:1.35em; border-bottom:3px solid var(--accent); padding-bottom:4px; }
+h3.chapter span { color:var(--accent); }
+h4 { margin:26px 0 6px; font-size:1.08em; }
+figure { margin:18px 0; text-align:center; }
+figure img { max-width:100%; height:auto; border:1px solid var(--line); box-shadow:0 2px 6px rgba(0,0,0,0.12); }
+figcaption { font-size:0.88em; color:#555; margin-top:6px; }
+.box { border-left:6px solid; background:var(--soft); padding:10px 14px 10px 14px; margin:18px 0; border-radius:0 4px 4px 0; }
+.box b.label { display:block; font-size:0.85em; letter-spacing:1px; margin-bottom:2px; }
+.tip { border-color:var(--tip); } .tip b.label { color:var(--tip); }
+.rem { border-color:var(--rem); } .rem b.label { color:var(--rem); }
+.warn { border-color:var(--warn); } .warn b.label { color:var(--warn); }
+.tech { border-color:var(--tech); } .tech b.label { color:var(--tech); }
+.try { border-color:var(--try); background:#fbf4e2; } .try b.label { color:var(--try); }
+kbd { font-family:inherit; font-size:0.9em; background:#fff; border:1px solid #aaa; border-bottom-width:2px;
+      border-radius:3px; padding:0 5px; white-space:nowrap; }
+code { font-family: "Corpus", "Courier New", monospace; font-size:0.92em; background:#eceae2; padding:0 3px; }
+table { border-collapse:collapse; width:100%; margin:14px 0; font-size:0.95em; }
+th, td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+th { background:var(--soft); }
+ol.steps li { margin-bottom:6px; }
+nav.toc { background:var(--soft); border:1px solid var(--line); padding:6px 18px 12px; border-radius:4px; }
+nav.toc ul { padding-left:20px; margin:4px 0; }
+nav.toc li { margin:2px 0; }
+.small { font-size:0.88em; color:#555; }
+.pair { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+.pair figure { margin:8px 0; }
+a { color:#1f5fa8; }
+
+.author { border-left:4px solid var(--accent); padding:4px 0 4px 16px; margin:12px 0 20px; font-style:italic; }
+.author p { margin:6px 0; }
+.author .sign { font-style:normal; font-weight:600; text-align:right; }
+p.cams { margin:2px 0 10px; font-size:0.92em; }
+span.count { font-weight:normal; font-size:0.85em; color:#777; }
+</style>
+</head>
+<body>
+<header class="cover">
+<div>
+<h1>LumenLens User Guide</h1>
+<p>Lens profiles for Lumen, on RISC OS</p>
+<p>The plug-in that gives Lumen's Lens Correction the measurements of 1,533 lenses, so it can undo their distortion, colour fringes and dark corners.</p>
+<span class="badge">LumenLens 1.0 &middot; the lensfun database &middot; 1,533 lenses &middot; 1,059 cameras</span>
+</div>
+</header>
+<main>
+
+<figure><img src="images/cover.png" alt="Polo, before and after lens correction"><figcaption>Polo, taken with a Nikon 80-200mm f/2.8 at 200 mm, wide open: the left half as it came from the camera, the right half with Lens Correction. The darker corners the lens made are lifted.</figcaption></figure>
+
+<nav class="toc">
+<h3>Contents</h3>
+<ul>
+<li><a href="#intro">Introduction</a></li>
+<li><a href="#part1">Part I: Getting Started</a>
+<ul><li><a href="#ch1">1. What LumenLens does</a></li><li><a href="#ch2">2. Installing LumenLens</a></li></ul></li>
+<li><a href="#part2">Part II: Correcting Your Photos</a>
+<ul><li><a href="#ch3">3. Auto: finding the lens</a></li><li><a href="#ch4">4. Choosing the lens yourself</a></li><li><a href="#ch5">5. The camera</a></li><li><a href="#ch6">6. How much: the sliders</a></li></ul></li>
+<li><a href="#part3">Part III: Looking After the Plug-in</a>
+<ul><li><a href="#ch7">7. Switching it off, removing and updating</a></li></ul></li>
+<li><a href="#part4">Part IV: The Part of Tens</a>
+<ul><li><a href="#ch8">8. Ten problems and what to do about them</a></li><li><a href="#ch9">9. Ten things for experienced users</a></li></ul></li>
+<li><a href="#credits">Credits and licences</a></li>
+</ul>
+</nav>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="intro">Introduction</h2>
+
+<p>No lens is perfect. Straight lines near the edges of a photo bow outwards (<b>barrel distortion</b>, usual in wide-angle lenses and zooms at their short end) or inwards (<b>pincushion</b>, in many zooms at their long end). The corners come out darker than the middle (<b>vignetting</b>), most of all with the lens wide open. And edges towards the corners get thin red and blue fringes (<b>lateral chromatic aberration</b>), because the lens bends red and blue light by slightly different amounts.</p>
+<p>All three can be undone, if you know how the lens does them. Photographers working with the <b>lensfun</b> project have measured hundreds of lenses, at each of their focal lengths and apertures, and published the results as a free database. <b>LumenLens</b> brings that database to Lumen, and Lumen's <b>Lens Correction</b> uses it.</p>
+<p>LumenLens is a plug-in so that you can keep Lumen as light or as heavy as you like: without it, Lumen is about 1 MB smaller, and Lens Correction still corrects distortion by hand.</p>
+
+<h4>About this guide</h4>
+<p>This guide is about the plug-in and Lens Correction. Everything else about Lumen is in the <b>Lumen User Guide</b>: choose <b>User guide</b> from the menu on Lumen's icon bar icon. The pictures are screenshots of Lumen 0.0.38 with LumenLens 1.0 on RISC OS 5. The photos are the author's own, taken with a Nikon D700 and an 80-200mm f/2.8 lens.</p>
+
+<h4>The boxes in this guide</h4>
+<div class="box tip"><b class="label">TIP</b>A quicker or easier way to do something.</div>
+<div class="box rem"><b class="label">REMEMBER</b>Worth keeping in mind as you work.</div>
+<div class="box warn"><b class="label">WARNING</b>Get this wrong and you could lose work, or time.</div>
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>How it works underneath. You can skip these.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part1">Part I: Getting Started<small>What the plug-in is, and installing it</small></h2>
+
+<h3 class="chapter" id="ch1"><span>1</span> What LumenLens does</h3>
+<p>LumenLens is a plug-in of a different kind from LumenRaw and LumenHEIF: it has no program, only data. It's one text file, <code>Lenses</code>, holding:</p>
+<ul>
+<li><b>1,533 lenses</b>: each one's name, the mounts it fits, and its measurements: distortion and lateral colour at each focal length, vignetting at each focal length and aperture.</li>
+<li><b>1,059 cameras</b>: each one's mount (which lenses fit it) and the size of its sensor (its crop factor).</li>
+</ul>
+<p>Lumen reads it itself, the first time a photo needs it. From the lens's measurements Lumen works out a <b>profile</b> for the photo, for the focal length and aperture it was taken at, and corrects the photo with it.</p>
+
+<h4>What LumenLens doesn't do</h4>
+<ul>
+<li>It never changes your photos' files. Like all Lumen's adjustments, the correction is part of the photo's recipe, and can be taken away again.</li>
+<li>It doesn't turn a fisheye photo into an ordinary one: a fisheye lens's profile corrects how far it is from a perfect fisheye, and its vignetting and colour, but the photo stays a fisheye.</li>
+<li>It doesn't know every lens. If yours isn't there, Manual still corrects distortion by hand (<a href="#ch6">Chapter 6</a>).</li>
+</ul>
+
+<h3 class="chapter" id="ch2"><span>2</span> Installing LumenLens</h3>
+<h4>What you need</h4>
+<ul>
+<li><b>Lumen</b> 0.0.38 or later. Earlier versions have no Lens Correction.</li>
+<li>For camera raw files, <b>LumenRaw 1.3</b> or later is best: it passes on what the camera's own notes say about the lens, which many cameras (Nikons especially) don't put in the EXIF.</li>
+<li>About 1 MB of disc space, and a little more memory for Lumen once it has read the database.</li>
+</ul>
+<h4>Installing</h4>
+<p>Install the <b>LumenLens</b> package with PackMan. Or unzip <code>LumenLens-1.0.zip</code>, Shift-double-click the <b>!Lumen</b> in it to open it, open <b>Plugins</b>, and drag the <b>Lens</b> directory into Lumen's <b>Add plug-in</b> window (<b>Plug-ins &rarr; Add plug-in...</b> on the icon bar menu). Lumen copies it to <code>!Lumen.Plugins.Lens</code> and uses it straight away.</p>
+<p>Once it's there, the <b>Lens Correction</b> group in the Adjustments tab has two links, <b>Auto</b> and <b>Lens</b>, beside its Reset.</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part2">Part II: Correcting Your Photos<small>Auto, the Lens and Camera menus, and the sliders</small></h2>
+
+<h3 class="chapter" id="ch3"><span>3</span> Auto: finding the lens</h3>
+<p>Open a photo in the Viewer, go to the <b>Adjustments</b> tab, open <b>Lens Correction</b> and click <b>Auto</b>. Lumen finds the photo's lens and corrects the photo.</p>
+<figure><img src="images/panel.png" alt="Lens Correction after Auto"><figcaption>Lens Correction after Auto: the lens, then the focal length and aperture the profile was worked out for.</figcaption></figure>
+<p>To find the lens, Lumen looks at what the camera wrote in the photo's file:</p>
+<ul>
+<li><b>The camera</b> (make and model): its mount says which lenses could have been on it, and its sensor size how much of the lens's picture it saw.</li>
+<li><b>The lens's name</b>, when the camera writes one (most newer cameras do). Lumen compares it with the names in the database in words and numbers, so "EF24-105mm f/4L IS USM" is found as "Canon EF 24-105mm f/4L IS USM".</li>
+<li><b>The lens's focal lengths and widest aperture</b> (80-200 mm, f/2.8, say), when there's no name. For raw files LumenRaw 1.3 finds these in the camera's own notes.</li>
+<li><b>The focal length and aperture</b> the photo was taken at, to work out the profile.</li>
+</ul>
+<p>A compact camera's lens can't be changed, so its profile is found from the camera alone.</p>
+<p>If Lumen can't tell which lens it was (no lens details in the file, or two lenses as likely as each other), it says so: choose the lens from the Lens menu (<a href="#ch4">Chapter 4</a>).</p>
+<div class="box rem"><b class="label">REMEMBER</b>For a raw file opened from its preview, Lumen asks LumenRaw for the lens's details in the background the moment the photo opens. If you click Auto in the first second or two, Lumen may ask you to try again in a moment.</div>
+
+<h3 class="chapter" id="ch4"><span>4</span> Choosing the lens yourself</h3>
+<p><b>Lens</b> opens a menu of lenses. At the top are the <b>likeliest</b>: lenses that fit the photo's camera and have its focal length, the most likely first. A tick shows the one in use.</p>
+<figure><img src="images/lens-menu.png" alt="The Lens menu"><figcaption>The Lens menu for a raw photo from a Nikon D700 at 100 mm: the 80-200mm lenses that fit it.</figcaption></figure>
+<p><b>All lenses</b> has every lens that fits the camera, by maker. A maker with many lenses has them in parts, by the shortest focal length: <b>From 70 to 85 mm</b> holds the lenses whose range starts between 70 and 85 mm.</p>
+<figure><img src="images/all-lenses.png" alt="All lenses"><figcaption>All lenses &rarr; Nikon &rarr; From 70 to 85 mm. If the photo's camera isn't known, every lens is listed.</figcaption></figure>
+<p><b>None</b> takes the profile away (Manual stays as it is).</p>
+
+<h3 class="chapter" id="ch5"><span>5</span> The camera</h3>
+<p>A lens draws a round picture a little bigger than the sensor. A camera with a smaller sensor (an APS-C camera, say, with a crop factor of 1.5) sees only the middle of it, where the lens bends and darkens less. So a profile has to be scaled for the camera's sensor, and Lumen needs to know the camera as well as the lens.</p>
+<p>Usually it does. But if the camera isn't in the database, or the photo has lost its camera's name (as an edited copy saved by another program sometimes has), the second line of Lens Correction says <b>camera not known</b>. Lumen then takes the sensor to be like the one on the camera the lens was measured on.</p>
+<p><b>Camera</b>, at the end of that line, opens a menu of cameras the lens fits: those with the photo's sensor size first (when the file says its focal length "in 35 mm terms", Lumen works the size out from that), the lens's own mount next, then the photo's maker. Choose the camera the photo was taken with, or one like it: the same mount, the same size of sensor. <b>All cameras</b> lists them all by maker.</p>
+<figure><img src="images/camera-menu.png" alt="The Camera menu"><figcaption>Show_jumping, an edited copy whose EXIF names no camera: the Camera menu offers full-frame Nikons the lens fits.</figcaption></figure>
+<p>The camera you choose is kept with the photo's profile; the second line says <i>as on</i> it. The last item goes back: <b>Its own</b> (the photo's camera, when the database knows it), or <b>Like the lens was measured on</b>.</p>
+
+<h3 class="chapter" id="ch6"><span>6</span> How much: the sliders</h3>
+<ul>
+<li><b>Distortion</b>, <b>Fringing</b> and <b>Vignetting</b> say how much of each correction is made: 100% is the lens's measurements, 0% none, up to 200% for more. A slider is only there when the profile has that measurement: not every lens has been measured for all three.</li>
+<li><b>Manual</b> corrects distortion by hand, with or without a profile, on top of it: drag right to straighten barrel distortion (lines bowing out), left for pincushion (lines bowing in). Turn on the <b>Grid</b> and line something straight up with it.</li>
+</ul>
+<p>Correcting distortion moves the picture's edges, so Lumen fills the frame again with as much of the photo as it can, with no empty corners, as straightening does. A crop, straightening and perspective then work on the corrected picture.</p>
+<div class="box tip"><b class="label">TIP</b>Some photographers like a little vignetting. If the corrected corners look too bright, drag Vignetting down to 50% or so, or add a vignette of your own in the Vignette group.</div>
+<div class="box warn"><b class="label">WARNING</b>A profile is for the whole picture the camera took. If a photo has already been cropped by another program, its corners aren't the lens's corners, and the correction is too strong there: use less, or none.</div>
+<div class="box rem"><b class="label">REMEMBER</b>The profile, worked out for the photo, is kept in the photo's adjustments. The photo looks the same with or without LumenLens installed, and with a newer one. Presets and copied adjustments don't carry it: each photo's lens is its own. Reset takes the profile away, with the sliders.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part3">Part III: Looking After the Plug-in<small>Switching it off, removing and updating</small></h2>
+
+<h3 class="chapter" id="ch7"><span>7</span> Switching it off, removing and updating</h3>
+<figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>Plug-ins, on the menu on Lumen's icon bar icon.</figcaption></figure>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. <b>LumenLens 1.0</b> is ticked while it's on; choose it to switch it off, and again to switch it back on. While it's off, Lens Correction has no Auto or Lens links, but photos already corrected stay corrected: their profiles are in their adjustments.</p>
+<p><b>Remove &rarr; LumenLens</b> deletes it from Lumen, after asking. If PackMan installed it, remove it with PackMan instead.</p>
+<p>New versions of LumenLens bring the lensfun project's newest measurements. Photos you've already corrected keep the profile they have; click <b>Auto</b> again to use the new one.</p>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part4">Part IV: The Part of Tens<small>Quick answers</small></h2>
+
+<h3 class="chapter" id="ch8"><span>8</span> Ten problems and what to do about them</h3>
+<table>
+<tr><th>Problem</th><th>What to do</th></tr>
+<tr><td>Lens Correction has no Auto or Lens</td><td>LumenLens isn't installed, or is switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
+<tr><td>"Lumen couldn't tell which lens this photo was taken with"</td><td>The file doesn't say, or two lenses are as likely as each other. Choose it from <b>Lens</b>.</td></tr>
+<tr><td>"Lumen is still reading this raw file's details"</td><td>Wait a moment and click Auto again.</td></tr>
+<tr><td>A raw photo's lens isn't found, but its JPEGs' are</td><td>Install LumenRaw 1.3 or later: it reads the lens from the camera's own notes.</td></tr>
+<tr><td>The wrong lens was found</td><td>Choose the right one from <b>Lens</b>. A lens with versions (the same lens, revised) may be found as another version: they're much alike.</td></tr>
+<tr><td>"camera not known"</td><td>Choose the camera, or one like it, from <b>Camera</b> (<a href="#ch5">Chapter 5</a>).</td></tr>
+<tr><td>My lens isn't in the database</td><td>Use <b>Manual</b> for distortion, and the Vignette group for dark corners. The lensfun project welcomes new measurements (<a href="#ch9">Chapter 9</a>).</td></tr>
+<tr><td>The corners are too bright after correction</td><td>The photo may have been cropped already, or you prefer some vignetting: lower Vignetting.</td></tr>
+<tr><td>Straight lines are still bent</td><td>The lens may have been measured on a different camera, or focused close: add <b>Manual</b>.</td></tr>
+<tr><td>The first Auto or Lens takes a moment</td><td>Normal: Lumen reads the database the first time it's wanted. After that it's instant.</td></tr>
+</table>
+
+<h3 class="chapter" id="ch9"><span>9</span> Ten things for experienced users</h3>
+<ol>
+<li><b>Where the data comes from:</b> lensfun's database (<code>data/db/*.xml</code>), converted by Lumen's <code>tools/lensdb.py</code> to a smaller form Lumen reads a line at a time. Lumen's own code reads it; none of lensfun's library is used.</li>
+<li><b>The file:</b> <code>LumenLens 1</code>, then <code>M</code> lines (mounts, and what fits them), <code>C</code> lines (cameras: names, mount, crop factor), and <code>L</code> lines (lenses: names, mounts, crop factor and aspect ratio of the camera measured on, type), each followed by its <code>D</code> (distortion), <code>T</code> (lateral colour) and <code>V</code> (vignetting) lines. The format is described at the top of <code>tools/lensdb.py</code>.</li>
+<li><b>The models are lensfun's:</b> distortion <code>ptlens</code>, <code>poly3</code> and <code>poly5</code>, lateral colour <code>linear</code> and <code>poly3</code>, vignetting <code>pa</code>.</li>
+<li><b>Between measurements:</b> distortion and colour are interpolated linearly between the two nearest focal lengths measured; vignetting between focal lengths, and between apertures in 1/N. Of vignetting measured at several focus distances, the longest is kept.</li>
+<li><b>Scaling:</b> distances are taken from the corner of the photo and scaled by the ratio of the measuring camera's crop factor to the photo's camera's, and for distortion and colour by the measuring camera's aspect ratio (lensfun's coordinates are 1 at half its shorter side).</li>
+<li><b>Where it's applied:</b> in Lumen's geometry stage, before straightening and perspective: each pixel of the corrected picture is taken from where the lens put it, red and blue from a little further out or in than green, and lightened by the vignetting's gain, in linear light.</li>
+<li><b>Fill:</b> the scale of the corrected picture is found by searching for the largest that still has every point of its edge inside the photo.</li>
+<li><b>In the recipe:</b> a <code>lens</code> line holds the profile (<code>d=</code>, <code>t=</code>, <code>v=</code>, <code>rh=</code>, <code>rv=</code>, focal length, aperture and type), <code>lensname</code> and <code>lenscamera</code> lines its names, and <code>lenscorr</code> the sliders.</li>
+<li><b>Finding the lens:</b> names are compared as words and numbers (letters and digits apart, <code>.0</code> dropped, <code>mm</code> and <code>f</code> ignored); numbers for focal lengths that differ count against a lens; among lenses that fit the camera's mount, its maker's are preferred; and the same lens measured on more than one camera is taken from the one nearest in sensor size.</li>
+<li><b>Adding lenses:</b> lensfun welcomes calibrations of lenses it hasn't got: see <a href="https://lensfun.github.io/calibration/">lensfun.github.io/calibration</a>. A newer database can be made from a lensfun clone with <code>make lensdb LENSFUN=<i>path</i></code> in Lumen's source.</li>
+</ol>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="credits">Credits and licences</h2>
+<p>The lens database is the <b>lensfun</b> project's (<a href="https://lensfun.github.io">lensfun.github.io</a>), by the lensfun contributors, who measured the lenses. It is shared under the <b>Creative Commons Attribution-ShareAlike 3.0</b> licence, and so is LumenLens's <code>Lenses</code> file, which is the same facts in a smaller form. The licence is in <code>!Lumen.Plugins.Lens.Licence</code>.</p>
+<p class="small">The photos in this guide are &copy; Andrew Youll. LumenLens's description, ReadMe and this guide are &copy; Andrew Youll, 2026, under the MIT licence. Product names are the trademarks of their owners and are used here only to say which lenses and cameras are known.</p>
+
+</main>
+
+</body>
+</html>

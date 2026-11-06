@@ -71,6 +71,10 @@ const recipe_param recipe_params[P_COUNT] = {
   { "crop",     "y0",         "Top",            0,   1, 0, 0.001f, 3, 1 },
   { "crop",     "x1",         "Right",          0,   1, 1, 0.001f, 3, 1 },
   { "crop",     "y1",         "Bottom",         0,   1, 1, 0.001f, 3, 1 },
+  { "lenscorr", "distortion", "Distortion",     0, 200, 100, 1, 0, 0 },
+  { "lenscorr", "fringing",   "Fringing",       0, 200, 100, 1, 0, 0 },
+  { "lenscorr", "vignetting", "Vignetting",     0, 200, 100, 1, 0, 0 },
+  { "lenscorr", "manual",     "Manual",      -100, 100, 0, 1, 0, 0 },
 };
 
 const recipe_group recipe_groups[] = {
@@ -87,6 +91,7 @@ const recipe_group recipe_groups[] = {
   { "Sharpen", P_SHARPEN, P_SHARP_RADIUS, 1, 0, 0 },
   { "Vignette", P_VIG_AMOUNT, P_VIG_MID, 1, 0, 0 },
   { "Glow", P_GLOW_AMOUNT, P_GLOW_WARM, 1, 0, 0 },
+  { "Lens Correction", P_LENS_DIST, P_LENS_MANUAL, 1, 0, 0 },
   { "Geometry", P_ROTATE, P_PERSP_H, 1, 0, 0 },
   { "Crop", P_CROP_X0, P_CROP_Y1, 0, 0, 0 },
 };
@@ -119,7 +124,7 @@ int recipe_is_default (const recipe *r)
   for (i = 0; i < CURVE_COUNT; i++)
     if (!recipe_curve_is_identity (&r->curve[i]))
       return 0;
-  if (r->nspots || r->nstrokes || r->nmasks)
+  if (r->nspots || r->nstrokes || r->nmasks || r->lens.on)
     return 0;
   return 1;
 }
@@ -148,7 +153,132 @@ int recipe_equal (const recipe *a, const recipe *b)
       return 0;
   if (!recipe_spots_equal (a, b) || !recipe_masks_equal (a, b) || !recipe_strokes_equal (a, b))
     return 0;
+  return recipe_lens_equal (&a->lens, &b->lens);
+}
+
+int recipe_lens_equal (const recipe_lens *a, const recipe_lens *b)
+{
+  int i;
+  if (a->on != b->on)
+    return 0;
+  if (!a->on)
+    return 1;
+  if (a->dist != b->dist || a->tca != b->tca || a->vig != b->vig || a->type != b->type || strcmp (a->name, b->name) || strcmp (a->camera, b->camera)
+      || !same (a->rh, b->rh) || !same (a->rv, b->rv) || !same (a->focal, b->focal) || !same (a->aperture, b->aperture))
+    return 0;
+  for (i = 0; i < 3; i++)
+    if (a->d[i] != b->d[i] || a->k[i] != b->k[i])
+      return 0;
+  for (i = 0; i < 6; i++)
+    if (a->t[i] != b->t[i])
+      return 0;
   return 1;
+}
+
+/* "1.00006,0,0" into up to n floats: how many. */
+static int parse_floats (const char *s, float *v, int n)
+{
+  int k = 0;
+  while (*s && k < n)
+    {
+      char *end;
+      float f = strtof (s, &end);
+      if (end == s)
+        break;
+      v[k++] = f;
+      s = end;
+      if (*s != ',')
+        break;
+      s++;
+    }
+  return k;
+}
+
+static void parse_lens (recipe_lens *L, char *save)
+{
+  char *tok;
+  float v[6];
+  int n;
+  memset (L, 0, sizeof *L);
+  L->on = 1;
+  L->rh = 1.8028f;
+  L->rv = 1;
+  L->type = 'r';
+  while ((tok = strtok_r (NULL, " \t\r", &save)) != NULL)
+    {
+      char *eq = strchr (tok, '=');
+      if (!eq)
+        continue;
+      *eq++ = '\0';
+      if (!strcmp (tok, "d") && eq[0] && eq[1] == ':')
+        {
+          n = parse_floats (eq + 2, v, 3);
+          L->dist = eq[0] == 'p' && n == 3 ? LENS_D_PTLENS : eq[0] == '3' && n >= 1 ? LENS_D_POLY3
+                    : eq[0] == '5' && n >= 2 ? LENS_D_POLY5 : LENS_D_NONE;
+          memset (L->d, 0, sizeof L->d);
+          if (L->dist)
+            memcpy (L->d, v, (size_t) n * sizeof v[0]);
+        }
+      else if (!strcmp (tok, "t") && eq[0] && eq[1] == ':')
+        {
+          n = parse_floats (eq + 2, v, 6);
+          L->tca = eq[0] == 'l' && n == 2 ? LENS_T_LINEAR : eq[0] == '3' && n == 6 ? LENS_T_POLY3 : LENS_T_NONE;
+          memset (L->t, 0, sizeof L->t);
+          if (L->tca)
+            memcpy (L->t, v, (size_t) n * sizeof v[0]);
+        }
+      else if (!strcmp (tok, "v"))
+        {
+          L->vig = parse_floats (eq, v, 3) == 3;
+          if (L->vig)
+            memcpy (L->k, v, sizeof L->k);
+        }
+      else if (!strcmp (tok, "rh")) L->rh = strtof (eq, NULL);
+      else if (!strcmp (tok, "rv")) L->rv = strtof (eq, NULL);
+      else if (!strcmp (tok, "focal")) L->focal = strtof (eq, NULL);
+      else if (!strcmp (tok, "aperture")) L->aperture = strtof (eq, NULL);
+      else if (!strcmp (tok, "type") && eq[0]) L->type = eq[0];
+    }
+  if (!(L->rh > 0.01f && L->rh < 100) || !(L->rv > 0.01f && L->rv < 100))
+    memset (L, 0, sizeof *L);
+}
+
+/* The "lens" and "lensname" lines; the length, or -1. */
+static int format_lens (const recipe_lens *L, char *out, size_t room)
+{
+  size_t used = 0;
+  int k, i;
+  if (!L->on)
+    return 0;
+#define ADD(...) do { k = snprintf (out + used, room - used, __VA_ARGS__); \
+                      if (k < 0 || used + (size_t) k >= room) \
+                        return -1; \
+                      used += (size_t) k; } while (0)
+  ADD ("lens");
+  if (L->dist)
+    {
+      int nd = L->dist == LENS_D_PTLENS ? 3 : L->dist == LENS_D_POLY5 ? 2 : 1;
+      ADD (" d=%c:", L->dist == LENS_D_PTLENS ? 'p' : L->dist == LENS_D_POLY5 ? '5' : '3');
+      for (i = 0; i < nd; i++)
+        ADD ("%s%.7g", i ? "," : "", (double) L->d[i]);
+    }
+  if (L->tca)
+    {
+      int nt = L->tca == LENS_T_LINEAR ? 2 : 6;
+      ADD (" t=%c:", L->tca == LENS_T_LINEAR ? 'l' : '3');
+      for (i = 0; i < nt; i++)
+        ADD ("%s%.8g", i ? "," : "", (double) L->t[i]);
+    }
+  if (L->vig)
+    ADD (" v=%.7g,%.7g,%.7g", (double) L->k[0], (double) L->k[1], (double) L->k[2]);
+  ADD (" rh=%.4f rv=%.4f focal=%g aperture=%g type=%c\n", (double) L->rh, (double) L->rv, (double) L->focal,
+       (double) L->aperture, L->type ? L->type : 'r');
+  if (L->name[0])
+    ADD ("lensname %s\n", L->name);
+  if (L->camera[0])
+    ADD ("lenscamera %s\n", L->camera);
+#undef ADD
+  return (int) used;
 }
 
 /* --- curves */
@@ -331,6 +461,34 @@ int recipe_parse (recipe *r, const char *text)
       tok = strtok_r (line, " \t\r", &save);
       if (!tok)
         continue;
+      if (strcmp (tok, "lens") == 0)
+        {
+          char keep[96], cam[64];
+          snprintf (keep, sizeof keep, "%s", r->lens.name);
+          snprintf (cam, sizeof cam, "%s", r->lens.camera);
+          parse_lens (&r->lens, save);
+          if (r->lens.on)
+            {
+              snprintf (r->lens.name, sizeof r->lens.name, "%s", keep);
+              snprintf (r->lens.camera, sizeof r->lens.camera, "%s", cam);
+            }
+          continue;
+        }
+      if (strcmp (tok, "lensname") == 0 || strcmp (tok, "lenscamera") == 0)
+        {
+          /* The rest of the line (it has spaces). */
+          size_t tl = strlen (tok), l;
+          const char *nm = tok + tl < line + len ? tok + tl + 1 : "";
+          char *dst = tok[4] == 'n' ? r->lens.name : r->lens.camera;
+          size_t room = tok[4] == 'n' ? sizeof r->lens.name : sizeof r->lens.camera;
+          while (*nm == ' ' || *nm == '\t')
+            nm++;
+          snprintf (dst, room, "%s", nm);
+          l = strlen (dst);
+          while (l && (dst[l - 1] == '\r' || dst[l - 1] == ' '))
+            dst[--l] = '\0';
+          continue;
+        }
       if (strcmp (tok, "brush") == 0 || strcmp (tok, "paint") == 0)
         {
           static const char *const old_keys[4] = { "dodge", "burn", "saturate", "desaturate" };
@@ -500,7 +658,7 @@ int recipe_geometry_is_default (const recipe *r)
   for (i = P_FIRST_GEOMETRY; i < P_COUNT; i++)
     if (!same (r->v[i], recipe_params[i].def))
       return 0;
-  return 1;
+  return !r->lens.on;
 }
 
 void recipe_copy_look (recipe *dst, const recipe *src)
@@ -905,6 +1063,9 @@ int recipe_format (const recipe *r, char *out, size_t n)
       out[used++] = '\n';
       out[used] = '\0';
     }
+  if ((k = format_lens (&r->lens, out + used, n - used)) < 0)
+    return -1;
+  used += (size_t) k;
   {
     int i;
     for (i = 0; i < r->nspots; i++)

@@ -233,6 +233,7 @@ void develop_prepare (develop *d, const recipe *r)
     for (p = P_FIRST_GEOMETRY; p < P_COUNT; p++)      /* and geometry before it */
       look.v[p] = recipe_params[p].def;
     look.nspots = look.nstrokes = look.nmasks = 0;    /* and retouching and masks */
+    look.lens.on = 0;                                 /* and lens correction */
     d->identity = recipe_is_default (&look);
   }
 }

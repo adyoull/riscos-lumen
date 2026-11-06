@@ -11,6 +11,7 @@
 #include "recipe.h"
 #include "plugins.h"
 #include "prefs.h"
+#include "lens.h"
 
 #define APP_NAME "Lumen"
 #ifndef LUMEN_VERSION
@@ -105,6 +106,8 @@ int app_set_prefs (const prefs *p);    /* saves and applies them; 0 on success *
 /* Lumen's plug-ins (plugins.h): the list as last read, sorted by name. */
 int app_plugins (const plugin_info **list);
 void app_plugins_rescan (void);        /* reads the Plugins directory again and puts what is on to work */
+int app_has_lens_db (void);            /* the lens plug-in (LumenLens) is there and on */
+lens_db *app_lens_db (void);           /* its database, read when first wanted; NULL if none */
 void app_plugin_toggle (int k);        /* switches plug-in k on or off */
 void app_plugin_remove (int k);        /* asks, then deletes it */
 void app_plugin_add (const char *path);   /* a plug-in's directory dropped on Lumen */
@@ -271,6 +274,18 @@ void viewer_reload (cat_id version);   /* its recipe changed from outside */
 void viewer_apply_look (const char *look);
 void viewer_look (char *out, size_t n);
 void viewer_auto (void);
+/* Lens correction (the Lens Correction group, and its menus in menus.c):
+   the profile of database lens i for the photo; none; and the camera
+   it's scaled for (-1: as the lens was measured). The photo's details,
+   for the menus (0 if no photo). */
+void viewer_lens_choose (int i);
+void viewer_lens_none (void);
+void viewer_lens_camera (int c);
+int viewer_lens_photo (lens_photo *ph);
+const recipe_lens *viewer_lens_profile (void);
+void viewer_lens_auto (void);
+/* The Lens and Camera menus (from the group's Lens and Camera links). */
+void menus_open_lens_menu (int x, int y, int cameras);
 void viewer_toggle_zoom (void);        /* fit, or 100% of the original */
 int viewer_zoomed (void);
 void viewer_toggle_loupe (void);       /* the loupe on or off */

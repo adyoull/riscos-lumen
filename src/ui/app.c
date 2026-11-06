@@ -360,6 +360,32 @@ void app_plugins_rescan (void)
   filetypes_setup ();                  /* the plug-ins' file types */
 }
 
+/* Lens correction's database, from the lens plug-in. */
+static lens_db *lensdb;
+static char lensdb_path[1024];
+static int lensdb_read;
+
+int app_has_lens_db (void)
+{
+  return plugins_find (plugin_list, nplugins, "lens") != NULL;
+}
+
+lens_db *app_lens_db (void)
+{
+  const plugin_info *pi = plugins_find (plugin_list, nplugins, "lens");
+  const char *path = pi ? pi->data : "";
+  if (!lensdb_read || strcmp (path, lensdb_path))
+    {
+      lens_db_close (lensdb);
+      snprintf (lensdb_path, sizeof lensdb_path, "%s", path);
+      _swix (Hourglass_On, 0);
+      lensdb = path[0] ? lens_db_open (path) : NULL;
+      _swix (Hourglass_Off, 0);
+      lensdb_read = 1;
+    }
+  return lensdb;
+}
+
 /* A plug-in can't change under a job that is running it. */
 static int plugins_in_use (void)
 {

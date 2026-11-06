@@ -24,6 +24,17 @@ layers drawn round the terrier, the second inverted at -0.75 EV; the
 window cropped to 1800 x 952 and scaled to 1100 wide; the panel pictures
 are 350 x 880 crops of the Adjustments tab.
 
+0.0.38: Lens Correction, by hand, with LumenLens and LumenRaw 1.3 in
+the test bed: lens-panel (the guide's, and the LumenLens guide's panel)
+from Polo after Auto, a 350 x 190 crop of the Adjustments tab;
+lens-camera from Show_jumping (Eventing; its EXIF names no camera)
+with the Camera menu open, the menu cropped; the LumenLens guide's
+lens-menu and all-lenses from _DSC2370 (Raw) after Auto, Lens, All
+lenses > Nikon > From 70 to 85 mm; plugins-menu from the icon bar
+menu's Plug-ins. lens-vignetting (and the LumenLens cover) is a host
+render of Polo at 1800 pixels, before and with its Auto profile, the
+halves side by side, scaled to 900 wide.
+
 The photos are Andrew Youll's own (copyright Andrew Youll, used with his
 permission), in IXFS:$.RISCOS.Photos: Eventing, Schooling, Portraits,
 Dogs_and_garden, Polo and Jousting (JPEGs) and Raw (three Nikon D700

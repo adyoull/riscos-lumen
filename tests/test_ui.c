@@ -1113,6 +1113,82 @@ int main (int argc, char **argv)
       key (0x1A);
       CHECK (viewer_recipe ()->v[HSL_PARAM (HSL_GREEN, HSL_SAT)] == 0, "undone");
     }
+    /* Lens Correction: Manual without the plug-in; with it, a lens from
+       the Lens menu, a camera from the Camera menu, and None. */
+    {
+      char d[760], f[800], cmd[1700];
+      const int *m, *all;
+      int k, base;
+      ntexts = 0;
+      memset (b, 0, sizeof b);
+      b[0] = INSP;
+      app_event (Redraw_Window_Request, b, 0);
+      CHECK (text_drawn ("Lens Correction"), "Lens Correction: drawn");
+      CHECK (text_drawn ("No lens profiles: add LumenLens"), "Lens Correction: no plug-in: says so");
+      CHECK (viewer_row_top (P_LENS_MANUAL) != 0 && viewer_row_top (P_LENS_DIST) == 0 && !text_drawn ("Camera"),
+             "Lens Correction: without the plug-in, Manual only");
+      snprintf (d, sizeof d, "%s/App/Plugins/Lens", work);
+      fsys_mkdirs (d);
+      snprintf (f, sizeof f, "%s/Plugin,fff", d);
+      snprintf (cmd, sizeof cmd, "cp plugins/lens/Plugin '%s' && cp plugins/lens/Lenses '%s/Lenses,fff'", f, d);
+      CHECK (system (cmd) == 0, "the lens plug-in installed");
+      app_plugins_rescan ();
+      CHECK (app_has_lens_db () && app_lens_db () && lens_db_count (app_lens_db ()) > 1000, "the lens plug-in found, its database read");
+      reported[0] = '\0';
+      viewer_lens_auto ();
+      CHECK (strstr (reported, "couldn't tell which lens") != NULL && !viewer_recipe ()->lens.on,
+             "Auto on a photo that doesn't say its camera or lens: says so");
+      menus_open_lens_menu (100, 500, 0);
+      m = menu_open;
+      for (k = 0; k < 40 && !(item (m, k)[0] & 0x80); k++)
+        ;
+      base = k - 1;                    /* All lenses, then None last */
+      CHECK (m && !strncmp ((const char *) m, "Lens", 4) && base >= 1 && !strcmp (item_text (m, base), "All lenses")
+             && !strcmp (item_text (m, base + 1), "None") && (item (m, base + 1)[2] & 0x00400000),
+             "the Lens menu: likely lenses, All lenses, None (shaded: no profile yet)");
+      all = submenu (m, base);
+      CHECK (all && (intptr_t) all != -1 && item_text (all, 0)[0] && submenu (all, 0) && (intptr_t) submenu (all, 0) != -1,
+             "All lenses: by maker");
+      {
+        char want[96];
+        snprintf (want, sizeof want, "%s", item_text (m, 0));
+        choose (0, -1, -1);
+        cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+        CHECK (viewer_recipe ()->lens.on && !strcmp (viewer_recipe ()->lens.name, want) && strstr (text, "lensname ")
+               && strstr (text, "lens "), "a lens chosen: its profile in the recipe, saved");
+      }
+      ntexts = 0;
+      memset (b, 0, sizeof b);
+      b[0] = INSP;
+      app_event (Redraw_Window_Request, b, 0);
+      CHECK (text_drawn ("Camera") && text_drawn ("Lens") && text_drawn ("Auto"), "with a profile: the Camera link; Auto and Lens");
+      menus_open_lens_menu (100, 500, 1);
+      m = menu_open;
+      CHECK (m && !strncmp ((const char *) m, "Camera", 6), "the Camera menu");
+      {
+        char want[64];
+        snprintf (want, sizeof want, "%s", item_text (m, 0));
+        choose (0, -1, -1);
+        CHECK (viewer_recipe ()->lens.on && strstr (viewer_recipe ()->lens.camera, want) != NULL, "a camera chosen to stand in");
+      }
+      cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+      CHECK (strstr (text, "lenscamera ") != NULL, "and saved with it");
+      key (0x1A);
+      CHECK (viewer_recipe ()->lens.on && !viewer_recipe ()->lens.camera[0], "undo: the camera as measured again");
+      menus_open_lens_menu (100, 500, 0);
+      m = menu_open;
+      for (k = 0; k < 40 && !(item (m, k)[0] & 0x80); k++)
+        ;
+      choose (k, -1, -1);
+      CHECK (!viewer_recipe ()->lens.on, "None: the profile gone");
+      key (0x1A);
+      key (0x1A);
+      CHECK (!viewer_recipe ()->lens.on, "undone back to none");
+      snprintf (cmd, sizeof cmd, "rm -rf '%s'", d);
+      CHECK (system (cmd) == 0, "the lens plug-in taken away again");
+      app_plugins_rescan ();
+      CHECK (!app_has_lens_db () && !app_lens_db (), "and gone");
+    }
 #undef PX
 #undef PY
     }

@@ -33,7 +33,8 @@ static const char *const tabs[3] = {
   "The Info tab: the photo's size, caption and keywords (click them to change them), file, colour, and everything "
   "its camera recorded (EXIF).",
   "The Adjustments tab: exposure, white balance, curves, colour by hue (pick a band, then its sliders), noise "
-  "reduction, sharpening, vignette, glow and more for the photo in the Viewer. Your original is never changed.",
+  "reduction, sharpening, vignette, glow, lens correction and more for the photo in the Viewer. Your original is "
+  "never changed.",
 };
 
 static const char *const exportbox[32] = {

@@ -44,6 +44,7 @@
 #include "ui.h"
 #include "fsys.h"
 #include "rawjob.h"
+#include "lens.h"
 
 #define PROXY_SIDE 1600
 #define BAND_ROWS 32
@@ -79,11 +80,12 @@
 
 enum { V_CLOSED, V_LOADING, V_READY, V_FAILED };
 enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE, HIT_GROUP, HIT_CURVE, HIT_CURVE_TAB,
-       HIT_HSL_BAND, HIT_LABEL, HIT_MASK_LINE, HIT_MASK_TICK, HIT_MASK_BUTTON, HIT_MASK_SLIDER, HIT_MASK_BRUSH, HIT_MASK_RT, HIT_FOLD_ALL };
+       HIT_HSL_BAND, HIT_LABEL, HIT_MASK_LINE, HIT_MASK_TICK, HIT_MASK_BUTTON, HIT_MASK_SLIDER, HIT_MASK_BRUSH, HIT_MASK_RT, HIT_FOLD_ALL,
+       HIT_LENS_CAMERA };
 #define LABEL_X0 250                   /* the panel's colour label dots: the first's centre */
 #define LABEL_DX 24
 enum { TOOL_AUTO, TOOL_CROP, TOOL_GRID, TOOL_PRESETS, TOOL_RETOUCH, TOOL_BRUSH, TOOL_COUNT };
-enum { LINK_RESET, LINK_PICK, LINK_AUTO_WB, LINK_LEFT, LINK_RIGHT, LINK_AUTO_NR };
+enum { LINK_RESET, LINK_PICK, LINK_AUTO_WB, LINK_LEFT, LINK_RIGHT, LINK_AUTO_NR, LINK_AUTO_LENS, LINK_LENS_MENU };
 /* Crop drags: which edges move (or all of it). */
 enum { E_L = 1, E_R = 2, E_T = 4, E_B = 8, E_MOVE = 16, E_NEW = 32 };
 #define DRAG_CROP (-2)
@@ -104,6 +106,7 @@ static uint16_t *geo, *geo_half;       /* after geometry (the proxy itself when 
 static int gw, gh, ghw, ghh, geo_own, geo_pending;
 static geom_plan plan_full, plan_half;
 static float geo_key[P_COUNT - P_FIRST_GEOMETRY + 2];
+static recipe_lens geo_lens;           /* and the lens profile it was made with */
 static int geo_key_valid;
 static sprite32 full_spr, half_spr;
 static int show_half;                  /* displaying the half-size render */
@@ -209,6 +212,182 @@ static int loaded_noise;
 static int raw_nr_photo (void)
 {
   return src && photo_is_raw && photo_kind == RAWJOB_RAW;
+}
+
+/* Lens correction: what the photo says of its camera and lens (read from
+   its file when first wanted; a raw's lens as the plug-in found it). */
+static lens_photo vlens;
+static cat_id vlens_id;
+static img_info raw_info;               /* a raw's details from the plug-in (lens, focal lengths) */
+static int raw_info_ok;
+static thumbgen *info_gen;             /* opened from its preview: the plug-in's quick look, for them */
+static int info_tried;
+
+int viewer_lens_photo (lens_photo *ph)
+{
+  cat_details d;
+  memset (ph, 0, sizeof *ph);
+  ph->camera = -1;
+  if (state == V_CLOSED || !item.id)
+    return 0;
+  if (vlens_id != item.id)
+    {
+      memset (&vlens, 0, sizeof vlens);
+      vlens.camera = -1;
+      if (cat_get_details (lib_cat (app_library ()), item.id, &d) == 0)
+        {
+          snprintf (vlens.make, sizeof vlens.make, "%s", d.make);
+          snprintf (vlens.model, sizeof vlens.model, "%s", d.model);
+          vlens.focal = d.focal;
+          vlens.fnumber = d.fnumber;
+          lens_photo_read (&vlens, d.path);
+        }
+      if (raw_info_ok)
+        {
+          if (!vlens.lens[0] && raw_info.lens[0])
+            snprintf (vlens.lens, sizeof vlens.lens, "%s", raw_info.lens);
+          if (vlens.fmin <= 0 && raw_info.lens_fmin > 0)
+            {
+              vlens.fmin = raw_info.lens_fmin;
+              vlens.fmax = raw_info.lens_fmax;
+              vlens.amin = raw_info.lens_amin;
+            }
+          if (vlens.crop <= 0 && raw_info.focal35 > 0 && vlens.focal > 0)
+            vlens.crop = raw_info.focal35 / vlens.focal;
+        }
+      vlens_id = item.id;
+    }
+  *ph = vlens;
+  return 1;
+}
+
+const recipe_lens *viewer_lens_profile (void) { return &current.lens; }
+
+/* The camera the profile is scaled for: the one chosen for it, by name. */
+static int lens_chosen_camera (lens_db *db)
+{
+  int c;
+  if (!db || !current.lens.camera[0])
+    return -1;
+  for (c = 0; c < lens_db_cameras (db); c++)
+    {
+      char nm[128];
+      const char *mk = lens_db_camera_maker (db, c), *md = lens_db_camera_model (db, c);
+      if (!strcmp (md, current.lens.camera))
+        return c;
+      snprintf (nm, sizeof nm, "%.20s %.40s", mk, md);
+      if (!strcmp (nm, current.lens.camera))
+        return c;
+    }
+  return -1;
+}
+
+/* Whether the photo's camera is in the database (2 if there's no
+   database to say: taken to be). */
+static cat_id lens_cam_known_id;
+static int lens_cam_known_v;
+static int lens_camera_known (void)
+{
+  lens_db *db;
+  lens_photo ph;
+  const char *mount;
+  double crop;
+  if (!app_has_lens_db ())
+    return 2;
+  if (lens_cam_known_id == item.id)
+    return lens_cam_known_v;
+  db = app_lens_db ();
+  viewer_lens_photo (&ph);
+  lens_cam_known_v = !db ? 2 : lens_db_camera (db, ph.make, ph.model, &mount, &crop) >= 0;
+  lens_cam_known_id = item.id;
+  return lens_cam_known_v;
+}
+
+static void commit (void);
+static void changed_everything (void);
+
+/* Lens i's profile for the photo, the camera chosen kept (c: -2 keep, -1
+   none, else that camera). */
+static void lens_set (int i, int c)
+{
+  lens_db *db = app_lens_db ();
+  lens_photo ph;
+  recipe_lens L;
+  if (!db || !src || i < 0)
+    return;
+  viewer_lens_photo (&ph);
+  ph.camera = c == -2 ? lens_chosen_camera (db) : c;
+  if (lens_db_profile (db, i, &ph, &L))
+    return;
+  current.lens = L;
+  commit ();
+  changed_everything ();
+}
+
+static int lens_current_index (lens_db *db)
+{
+  int i;
+  if (!db || !current.lens.on)
+    return -1;
+  for (i = 0; i < lens_db_count (db); i++)
+    if (!strcmp (lens_db_name (db, i), current.lens.name))
+      {
+        /* the same lens measured more than once: the one whose scales these are */
+        return i;
+      }
+  return -1;
+}
+
+void viewer_lens_choose (int i) { lens_set (i, -2); }
+
+void viewer_lens_camera (int c)
+{
+  lens_db *db = app_lens_db ();
+  lens_photo ph;
+  int i;
+  if (!db || !current.lens.on)
+    return;
+  /* The lens again, likeliest for that camera if measured more than once. */
+  viewer_lens_photo (&ph);
+  ph.camera = c;
+  snprintf (ph.lens, sizeof ph.lens, "%s", current.lens.name);
+  i = lens_db_match (db, &ph);
+  if (i < 0 || strcmp (lens_db_name (db, i), current.lens.name))
+    i = lens_current_index (db);
+  lens_set (i, c);
+}
+
+void viewer_lens_none (void)
+{
+  if (!current.lens.on)
+    return;
+  memset (&current.lens, 0, sizeof current.lens);
+  commit ();
+  changed_everything ();
+}
+
+void viewer_lens_auto (void)
+{
+  lens_db *db = app_lens_db ();
+  lens_photo ph;
+  int i;
+  if (!db || !src)
+    {
+      if (!app_has_lens_db ())
+        app_report ("Lens profiles come with the LumenLens plug-in: with it installed, Auto finds the photo's lens.");
+      return;
+    }
+  viewer_lens_photo (&ph);
+  i = lens_db_match (db, &ph);
+  if (i < 0)
+    {
+      if (photo_is_raw && !raw_info_ok)
+        app_inform ("Lumen is still reading this raw file's details from the plug-in. Try Auto again in a moment.");
+      else
+        app_report ("Lumen couldn't tell which lens this photo was taken with. Choose it from the Lens menu.");
+      return;
+    }
+  lens_set (i, -1);
 }
 
 /* Starts developing the full size, with the photo's raw noise reduction. */
@@ -335,6 +514,11 @@ static recipe preview_saved;           /* the photo's own recipe meanwhile */
 
 static void free_photo (void)
 {
+  thumbgen_free (info_gen);
+  info_gen = NULL;
+  info_tried = 0;
+  raw_info_ok = 0;
+  vlens_id = 0;
   previewing = 0;
   photo_raw = 0;
   lummap_ok = 0;
@@ -430,8 +614,18 @@ static int folded[MAX_GROUPS], folded_by_hand[MAX_GROUPS];
 static int raw_nr_photo (void);
 static int param_hidden (int p)
 {
+  if (p == P_LENS_DIST)
+    return !current.lens.on || !current.lens.dist;
+  if (p == P_LENS_TCA)
+    return !current.lens.on || !current.lens.tca;
+  if (p == P_LENS_VIG)
+    return !current.lens.on || !current.lens.vig;
   return recipe_params[p].hidden || (p == P_NOISE_RAW && !raw_nr_photo ());
 }
+
+/* Lens Correction: two lines (the lens, and what it's for) above its sliders. */
+#define LENS_INFO_H 92
+static int group_pre (int g) { return recipe_groups[g].first == P_LENS_DIST ? LENS_INFO_H : 0; }
 
 static int group_rows (int g)
 {
@@ -463,7 +657,7 @@ static int group_body (int g)
     return CURVE_SEL_H + CURVE_BOX_H;
   if (recipe_groups[g].hsl)
     return HSL_SEL_H + 3 * ROW_H;
-  return ROW_H * group_rows (g);
+  return group_pre (g) + ROW_H * group_rows (g);
 }
 
 /* The top of group g's header, and of parameter p's row (0 if it has none). */
@@ -500,7 +694,7 @@ static int row_top (int p)
         for (i = 0, q = recipe_groups[g].first; q < p; q++)
           if (!param_hidden (q))
             i++;
-        return group_top (g) - GROUP_H - ROW_H * i;
+        return group_top (g) - GROUP_H - group_pre (g) - ROW_H * i;
       }
   return 0;
 }
@@ -520,6 +714,8 @@ static int group_changed (int g)
           return 1;
       return 0;
     }
+  if (recipe_groups[g].first == P_LENS_DIST && current.lens.on)
+    return 1;
   for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
     if (current.v[p] != recipe_params[p].def)
       return 1;
@@ -616,6 +812,49 @@ static void tool_rect (int k, int r[4])
     button_at (k - TOOL_RETOUCH, 2, tools_top () - BUTTON_H - 12, r);
 }
 
+/* The Lens Correction group's two lines: the lens (or why there's none),
+   and what its profile is for, with a Camera link (when there's a
+   profile and a database). Text fitted to w. */
+static void fit_text (char *t, int w)
+{
+  size_t l = strlen (t);
+  if (draw_text_width (t) <= w)
+    return;
+  while (l > 3 && (t[l - 3] = '.', t[l - 2] = '.', t[l - 1] = '.', t[l] = '\0', draw_text_width (t) > w))
+    {
+      l--;
+      t[l] = '\0';
+    }
+}
+
+static int lens_camera_link (void) { return current.lens.on && app_has_lens_db (); }
+
+static void lens_lines (char *a, char *b, size_t n)
+{
+  const recipe_lens *L = &current.lens;
+  a[0] = b[0] = '\0';
+  if (!L->on)
+    {
+      snprintf (a, n, "%s", app_has_lens_db () ? "No lens profile yet" : "No lens profiles: add LumenLens");
+      snprintf (b, n, "%s", app_has_lens_db () ? "Auto finds it, or choose from Lens" : "Manual corrects distortion by hand");
+      return;
+    }
+  snprintf (a, n, "%s", L->name);
+  {
+    char f[48] = "";
+    if (L->focal > 0 && L->aperture > 0)
+      snprintf (f, sizeof f, "%g mm, f/%g", (double) L->focal, (double) L->aperture);
+    else if (L->focal > 0)
+      snprintf (f, sizeof f, "%g mm", (double) L->focal);
+    if (L->camera[0])
+      snprintf (b, n, "%s%sas on %s", f, f[0] ? ", " : "", L->camera);
+    else if (lens_camera_known () == 0)
+      snprintf (b, n, "%s%scamera not known", f, f[0] ? ", " : "");
+    else
+      snprintf (b, n, "%s", f);
+  }
+}
+
 /* The links on a group's header, right to left: Reset, then the group's own. */
 static int group_links (int g, int ids[3], const char *names[3])
 {
@@ -629,6 +868,11 @@ static int group_links (int g, int ids[3], const char *names[3])
   else if (recipe_groups[g].first == P_NOISE_LUM)
     {
       ids[n] = LINK_AUTO_NR; names[n++] = "Auto";
+    }
+  else if (recipe_groups[g].first == P_LENS_DIST && app_has_lens_db ())
+    {
+      ids[n] = LINK_LENS_MENU; names[n++] = "Lens";
+      ids[n] = LINK_AUTO_LENS; names[n++] = "Auto";
     }
   else if (recipe_groups[g].first == P_ROTATE)
     {
@@ -789,6 +1033,13 @@ static int hit (int wx, int wy, int *what, int panel)
           return HIT_FOLD_ALL;
         }
     }
+  for (g = 0; g < recipe_ngroups; g++)
+    if (group_pre (g) && group_shown (g) && !(g < MAX_GROUPS && folded[g]) && lens_camera_link ())
+      {
+        int y = group_top (g) - GROUP_H - 44, x1 = PANEL_W - PAD, x0 = x1 - draw_text_width ("Camera");
+        if (wy <= y && wy > y - 44 && wx >= x0 - 12 && wx <= x1 + 4)
+          return HIT_LENS_CAMERA;
+      }
   for (p = 0; p < P_COUNT; p++)
     {
       int top = row_top (p);
@@ -1031,7 +1282,7 @@ static void prepare (void)
 
 static int plan_identity (const geom_plan *g)
 {
-  return g->quarter == 0 && g->sn == 0 && g->kv == 0 && g->kh == 0
+  return geom_plan_is_simple (g)
     && g->x0 == 0 && g->y0 == 0 && g->x1 == 1 && g->y1 == 1;
 }
 
@@ -1043,12 +1294,13 @@ static int geometry_changed (void)
   int p;
   effective (&r);
   for (p = P_FIRST_GEOMETRY; p < P_COUNT; p++)
-    key[p - P_FIRST_GEOMETRY] = crop_mode && p >= P_CROP_X0 ? 0 : r.v[p];
+    key[p - P_FIRST_GEOMETRY] = crop_mode && p >= P_CROP_X0 && p <= P_CROP_Y1 ? 0 : r.v[p];
   key[P_COUNT - P_FIRST_GEOMETRY] = (float) crop_mode;
   key[P_COUNT - P_FIRST_GEOMETRY + 1] = (float) sw;
-  if (geo_key_valid && memcmp (key, geo_key, sizeof key) == 0)
+  if (geo_key_valid && memcmp (key, geo_key, sizeof key) == 0 && recipe_lens_equal (&r.lens, &geo_lens))
     return 0;
   memcpy (geo_key, key, sizeof key);
+  geo_lens = r.lens;
   geo_key_valid = 1;
   return 1;
 }
@@ -1340,6 +1592,11 @@ static void zoom_idle (unsigned deadline)
       while (r == 0 && (int) (app_now () - deadline) < 0);
       if (r == 0)
         return;
+      if (r > 0 && photo_is_raw && !raw_info_ok && thumbgen_raw_details (zgen, &raw_info) == 1)
+        {
+          raw_info_ok = 1;             /* (opened from its preview: the plug-in's details now) */
+          vlens_id = 0;
+        }
       if (r < 0 || thumbgen_take (zgen, &zfull))
         {
           char m[300];
@@ -1720,6 +1977,9 @@ static int proxy_ready (void)
 {
   rgb_image img;
   int x, y;
+  raw_info_ok = photo_is_raw && thumbgen_raw_details (tg, &raw_info) == 1;
+  if (raw_info_ok)
+    vlens_id = 0;                      /* read again, with it */
   if (thumbgen_take (tg, &img))
     return -1;
   sw = img.w; sh = img.h;
@@ -2023,9 +2283,17 @@ int viewer_loading (void)
   return is_open && state == V_LOADING && tg != NULL;
 }
 
+/* A raw opened from its preview: the plug-in's quick look for its lens
+   is to be had (Lens Correction). */
+static int info_wanted (void)
+{
+  return state == V_READY && from_kept && photo_is_raw && photo_kind == RAWJOB_RAW && !raw_info_ok
+         && !info_tried && app_has_lens_db () && rawjob_available_kind (photo_kind);
+}
+
 int viewer_busy (void)
 {
-  return is_open && (dragging != -1 || (state == V_LOADING && tg) || full_y >= 0 || zgen || (zoom == 2 && zy >= 0)
+  return is_open && (dragging != -1 || info_gen || info_wanted () || (state == V_LOADING && tg) || full_y >= 0 || zgen || (zoom == 2 && zy >= 0)
                      || (loupe_on && !loupe_pinned && zfull.rgb) || retouching);
 }
 
@@ -2134,7 +2402,31 @@ void viewer_idle (void)
       if (wanted || (full_y < 0 && state == V_READY))
         zoom_idle (wanted ? deadline : app_now () + 1);
     }
-  else if (photo_raw && state == V_READY && full_y < 0 && !zfull.rgb && !crop_mode && !comparing && dragging == -1)
+  if (info_gen)
+    {
+      int r = thumbgen_step (info_gen, 32);
+      if (r != 0)
+        {
+          if (r > 0 && thumbgen_raw_details (info_gen, &raw_info) == 1)
+            {
+              raw_info_ok = 1;
+              vlens_id = 0;
+            }
+          thumbgen_free (info_gen);
+          info_gen = NULL;
+        }
+    }
+  else if (info_wanted ())
+    {
+      /* The lens, for Lens Correction: the plug-in's quick look at the raw
+         (its camera's preview), not the slow full development. */
+      char e[200];
+      info_tried = 1;
+      info_gen = thumbgen_start (photo_path, NULL, THUMBGEN_PREVIEW_SIDE, photo_orientation, e, sizeof e);
+      if (info_gen)
+        thumbgen_hurry (info_gen);
+    }
+  if (!info_gen && !zgen && !(zoom == 2 && zy >= 0) && photo_raw && state == V_READY && full_y < 0 && !zfull.rgb && !crop_mode && !comparing && dragging == -1)
     {
       char e[200];
       zgen = start_full (e, sizeof e);   /* quietly: asked for again if it fails */
@@ -2652,7 +2944,7 @@ static void start_drag (int x, int y, int x0, int y0, int x1, int y1, int what)
     }
 }
 
-static void link_click (int g, int id)
+static void link_click (int g, int id, int mx, int my)
 {
   int p;
   switch (id)
@@ -2662,6 +2954,8 @@ static void link_click (int g, int id)
         current.v[p] = recipe_params[p].def;
       if (recipe_groups[g].curves)
         memset (current.curve, 0, sizeof current.curve);
+      if (recipe_groups[g].first == P_LENS_DIST)
+        memset (&current.lens, 0, sizeof current.lens);   /* and the profile */
       if (recipe_groups[g].first == P_ROTATE && !crop_mode)
         for (p = P_CROP_X0; p <= P_CROP_Y1; p++)   /* the crop was of the turned picture */
           current.v[p] = recipe_params[p].def;
@@ -2672,6 +2966,8 @@ static void link_click (int g, int id)
     case LINK_PICK: viewer_pick_white (); break;
     case LINK_AUTO_WB: auto_wb (); break;
     case LINK_AUTO_NR: auto_nr (); break;
+    case LINK_AUTO_LENS: viewer_lens_auto (); break;
+    case LINK_LENS_MENU: if (src) menus_open_lens_menu (mx, my, 0); break;
     case LINK_LEFT: viewer_rotate (0); break;
     case LINK_RIGHT: viewer_rotate (1); break;
     }
@@ -2877,7 +3173,9 @@ static void click_in (int *b, int w, int panel)
   else if (h == HIT_CURVE)
     curve_click (b, st, wx, wy);
   else if (h == HIT_LINK && b[2] == Button_Select)
-    link_click (what / 8, what % 8);
+    link_click (what / 8, what % 8, b[0], b[1]);
+  else if (h == HIT_LENS_CAMERA && b[2] == Button_Select && src)
+    menus_open_lens_menu (b[0], b[1], 1);
   else if (h == HIT_GROUP && what < MAX_GROUPS && b[2] == Button_Select)
     {
       folded[what] = !folded[what];
@@ -3222,6 +3520,8 @@ static void draw_slider (int p, int ox, int oy)
   draw_rect (kx - 7, mid - 15, kx + 7, mid + 15, p == dragging ? COL_ACCENT : COL_KNOB);
   snprintf (value, sizeof value, "%s%.*f", current.v[p] > 0 && d->min < 0 ? "+" : "",
             d->decimals, (double) current.v[p]);
+  if (p >= P_LENS_DIST && p <= P_LENS_VIG)
+    snprintf (value, sizeof value, "%.0f%%", (double) current.v[p]);
   if (p == P_NOISE_RAW)
     {
       static const char *const levels[3] = { "Off", "Light", "Strong" };
@@ -3552,6 +3852,18 @@ static void draw_panel (int ox, int oy)
               continue;
             }
           draw_text (ox + x0, top - 36, names[k], src ? (col == COL_STAR_OFF ? COL_QUIET : col) : COL_QUIET, COL_HEADER);
+        }
+      if (group_pre (g) && !(g < MAX_GROUPS && folded[g]))
+        {
+          char a[160], bl[160];
+          int y = top - GROUP_H - 36, camw = lens_camera_link () ? draw_text_width ("Camera") + 24 : 0;
+          lens_lines (a, bl, sizeof a);
+          fit_text (a, PANEL_W - 2 * PAD - 8);
+          fit_text (bl, PANEL_W - 2 * PAD - 8 - camw);
+          draw_text (px + PAD + 8, y, a, current.lens.on ? COL_TEXT : COL_QUIET, COL_PANEL);
+          draw_text (px + PAD + 8, y - 44, bl, COL_QUIET, COL_PANEL);
+          if (camw)
+            draw_text (ox + PANEL_W - PAD - draw_text_width ("Camera"), y - 44, "Camera", src ? COL_ACCENT : COL_QUIET, COL_PANEL);
         }
       if (recipe_groups[g].curves && !(g < MAX_GROUPS && folded[g]))
         draw_curves (ox, oy);

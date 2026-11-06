@@ -543,7 +543,25 @@ a { color:#1f5fa8; }
 </ul>
 <p>The glow follows the crop and straightening, like the other adjustments, and is in thumbnails, exports and prints. The <b>Sunlit Garden</b> style uses it (<a href="#ch12">Chapter 12</a>).</p>
 
-<div class="box try"><b class="label">TRY IT</b>Find a photo with a bright sky and dark ground. Drag <b>Shadows</b> to about 40, then <b>Highlights</b> to about 50. Press <kbd>M</kbd> to see the photo as it was; press it again to see your changes. Then press <kbd>Ctrl</kbd>+<kbd>Z</kbd> a few times and watch your changes go, and <kbd>Ctrl</kbd>+<kbd>Y</kbd> to bring them back.</div>
+<h4 id="lens">Lens Correction</h4>
+<p>Every lens bends the picture a little. Straight lines near the edges bow outwards (<b>barrel</b> distortion, usual in wide-angle lenses) or inwards (<b>pincushion</b>, in many zooms at their long end); the corners come out darker than the middle (<b>vignetting</b>); and edges towards the corners get thin red and blue fringes (<b>lateral colour</b>). The <b>Lens Correction</b> group undoes them.</p>
+<div class="pair">
+<figure><img src="images/lens-panel.png" alt="The Lens Correction group"><figcaption>Lens Correction after Auto: the lens, the focal length and aperture its profile was worked out for, and how much of each correction.</figcaption></figure>
+<figure><img src="images/lens-vignetting.png" alt="Before and after lens correction"><figcaption>Polo at 200 mm, f/2.8: the left half as it came from the camera, the right half corrected. The lens's darker corners are lifted.</figcaption></figure>
+</div>
+<p>The corrections come from a <b>lens profile</b>: measurements of the lens, at each of its focal lengths and apertures, made by the photographers of the lensfun project. The profiles come with the <b>LumenLens</b> plug-in (<a href="#ch16">Chapter 16</a>), which has 1,533 lenses. With it installed:</p>
+<ul>
+<li><b>Auto</b> finds the photo's lens from what the camera wrote in the file: the lens's name, or its focal lengths and widest aperture, and the camera, which says which lenses fit it. For a raw file, LumenRaw 1.3 also passes on what the camera's own notes say of the lens.</li>
+<li><b>Lens</b> opens a menu of lenses: the likeliest first (ones that fit the camera and have the photo's focal length), then <b>All lenses</b>, by maker. <b>None</b> takes the profile away.</li>
+<li><b>Distortion</b>, <b>Fringing</b> and <b>Vignetting</b> say how much of each correction is made: 100% is the lens's measurements, 0% none, and up to 200% for more. A slider is only there when the profile has that measurement.</li>
+<li><b>Manual</b> corrects distortion by hand, with or without a profile: drag it right to straighten barrel distortion, left for pincushion. Use the <b>Grid</b> (<a href="#ch11">Chapter 11</a>) to line up something straight.</li>
+</ul>
+<p>Correcting distortion moves the edges of the picture, so Lumen fills the frame again with as much of the photo as it can, with no empty corners, as straightening does.</p>
+<p>A lens draws a circle bigger than the sensor, and a camera with a smaller sensor sees only the middle of it, where the lens bends less. So the profile is scaled for the camera's sensor, and Lumen needs to know the camera too. If it isn't in the database (or the photo has lost its camera's name, as an edited copy sometimes does), the second line says <i>camera not known</i>, and Lumen takes the sensor to be like the one the lens was measured on. <b>Camera</b> lets you say which it was, or choose one like it: the cameras the lens fits, those with the photo's sensor size first. The camera you choose is kept with the photo's profile.</p>
+<figure><img src="images/lens-camera.png" alt="The Camera menu"><figcaption>Show_jumping, an edited copy whose EXIF names no camera: the Camera menu offers full-frame Nikons the lens fits.</figcaption></figure>
+<div class="box rem"><b class="label">REMEMBER</b>The profile, worked out for the photo, is kept in the photo's adjustments. The photo looks the same with or without LumenLens installed, and with a newer one. Presets and pasted adjustments don't carry it: each photo's lens is its own.</div>
+
+ Drag <b>Shadows</b> to about 40, then <b>Highlights</b> to about 50. Press <kbd>M</kbd> to see the photo as it was; press it again to see your changes. Then press <kbd>Ctrl</kbd>+<kbd>Z</kbd> a few times and watch your changes go, and <kbd>Ctrl</kbd>+<kbd>Y</kbd> to bring them back.</div>
 
 <h4>Before and after, Undo, and Auto</h4>
 <ul>
@@ -807,7 +825,7 @@ a { color:#1f5fa8; }
 <p>Many cameras can save <b>raw</b> files: everything the sensor saw, before the camera made a JPEG of it. They hold more detail in bright and dark parts, but every camera maker has its own format. Lumen reads them with a <b>plug-in</b> called <b>LumenRaw</b>, which uses the free LibRaw library and knows over a thousand cameras.</p>
 
 <h4>Installing LumenRaw</h4>
-<p>Install the <b>LumenRaw</b> package with PackMan, or unzip <code>LumenRaw-1.2.zip</code> from Lumen's release page and drag the <b>LibRaw</b> directory in it (in <code>!Lumen.Plugins</code>; Shift-double-click the zip's !Lumen to open it) into the Add plug-in window (below). It goes inside Lumen (in <code>!Lumen.Plugins.LibRaw</code>), and Lumen finds it the next time it starts. (A plug-in added from the Plug-ins menu, below, works at once, without restarting.) Raw files you imported before then get their thumbnails as soon as it's there.</p>
+<p>Install the <b>LumenRaw</b> package with PackMan, or unzip <code>LumenRaw-1.3.zip</code> from Lumen's release page and drag the <b>LibRaw</b> directory in it (in <code>!Lumen.Plugins</code>; Shift-double-click the zip's !Lumen to open it) into the Add plug-in window (below). It goes inside Lumen (in <code>!Lumen.Plugins.LibRaw</code>), and Lumen finds it the next time it starts. (A plug-in added from the Plug-ins menu, below, works at once, without restarting.) Raw files you imported before then get their thumbnails as soon as it's there.</p>
 
 <h4>Working with raw files</h4>
 <p>Import them as you would JPEGs. Thumbnails come from the preview the camera saved in the file, so they're quick. To show a raw photo in the Viewer, Lumen develops it (with the camera's own white balance and colour); a big file takes a few seconds. Everything else (stars, adjustments, export) is the same as for any photo.</p>
@@ -822,7 +840,10 @@ a { color:#1f5fa8; }
 <p>LumenRaw has a guide of its own, the <b>LumenRaw User Guide</b>, inside the plug-in: open <code>!Lumen.Plugins.LibRaw.Guide.index/html</code>. It explains how raw photos are developed, and lists every camera LumenRaw knows.</p>
 <div class="box rem"><b class="label">REMEMBER</b>If you open a raw photo without LumenRaw installed, Lumen tells you what to install. Its stars and albums work anyway.</div>
 
-<h4>Other formats: plug-ins</h4>
+<h4>Lens profiles: LumenLens</h4>
+<p><b>LumenLens</b> is a plug-in of a different kind: no program, only data. It's the lensfun project's database of lenses (1,533 of them, and 1,059 cameras), which Lens Correction (<a href="#lens">Chapter 10</a>) uses to correct a lens's distortion, colour fringes and vignetting. Install it from PackMan, or unzip <code>LumenLens-1.0.zip</code> and drag its <b>Lens</b> directory (in <code>!Lumen.Plugins</code>) into the Add plug-in window. It takes about 1 MB, and Lumen reads it the first time a photo needs it. Leave it out if you'd rather keep Lumen light: Lens Correction then has only Manual.</p>
+
+<h4>Other formats</h4>
 <p>Lumen reads JPEG, PNG, TIFF and camera raw files itself. Other formats come as <b>plug-ins</b>, which add them to Lumen without a new Lumen. The first is <b>LumenHEIF</b>, for the HEIF photos (<code>.heic</code>) that iPhones and many other phones take, and AVIF photos (<code>.avif</code>); more may follow. Install one from PackMan, or drag it into <b>Plug-ins &rarr; Add plug-in...</b> (below). Each comes with its own guide, in <code>!Lumen.Plugins.<i>name</i>.Guide</code>.</p>
 <div class="box rem"><b class="label">REMEMBER</b>Lumen only imports photos in a plug-in's format once that plug-in is installed. If you imported a folder before, import it again: the new photos are added, and the ones already there aren't added twice.</div>
 

@@ -25,6 +25,7 @@ for f in "${samples[@]}"; do
   check "[ -z \"\$out\" ]" "$f: thumb says nothing (output would open a task window): $out"
   check "head -c 2 \"$b.thumb\" | od -An -tx1 | grep -q 'ff d8' || head -c 2 \"$b.thumb\" | grep -q P6" "$f: the preview is a JPEG or PPM"
   check "grep -q '^width=[1-9]' \"$b.tinfo\" && grep -q '^make=.' \"$b.tinfo\"" "$f: info has the size and camera"
+  check "grep -q '^lensspec=[0-9.]* [0-9.]* [0-9.]*\$' \"$b.tinfo\" && grep -q '^focal35=[0-9]*\$' \"$b.tinfo\"" "$f: info has the lens's focal lengths (LumenRaw 1.3)"
   check "[ ! -e \"$b.thumb_t\" ] && [ ! -e \"$b.tinfo_t\" ]" "$f: no temporary files left"
   out=$(eval $wrap "$helper" decode "\"$f\"" "\"$b.ppm\"" "\"$b.info\"" 1000 2>&1); rc=$?
   check "[ $rc -eq 0 ] && [ -z \"\$out\" ]" "$f: decode exits 0 and quietly ($rc: $out)"

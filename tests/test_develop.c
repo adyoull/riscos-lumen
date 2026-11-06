@@ -2821,6 +2821,106 @@ static void test_simd (void)
   simd_force (-1);
 }
 
+/* Lens correction: the profile in the recipe, and what geometry does with it. */
+static void test_lens_correction (void)
+{
+  int w = 300, h = 200, x, y, k, inside = 1;
+  recipe r, back;
+  geom_plan g;
+  char text[RECIPE_TEXT_MAX];
+  double sx, sy, ox, oy, edge = 0, sxr[3], syr[3], gain, gc;
+  uint16_t *flat = malloc ((size_t) w * h * 6), *out = malloc ((size_t) w * h * 6);
+  recipe_default (&r);
+  r.lens.on = 1;
+  snprintf (r.lens.name, sizeof r.lens.name, "Test 16-35mm f/4");
+  r.lens.dist = LENS_D_POLY3;
+  r.lens.d[0] = -0.08f;                /* barrel: corners drawn in */
+  r.lens.tca = LENS_T_POLY3;
+  r.lens.t[0] = 1.001f; r.lens.t[3] = 0.999f;
+  r.lens.vig = 1;
+  r.lens.k[0] = -0.5f;
+  r.lens.rh = 1.8028f;
+  r.lens.rv = 1;
+  r.lens.focal = 16;
+  r.lens.aperture = 4;
+  r.lens.type = 'r';
+  snprintf (r.lens.camera, sizeof r.lens.camera, "Nikon D750");
+  CHECK (!recipe_geometry_is_default (&r) && !recipe_is_default (&r), "lens: a profile is an adjustment");
+  CHECK (recipe_format (&r, text, sizeof text) > 0 && strstr (text, "lens d=3:-0.08") && strstr (text, "lensname Test 16-35mm f/4\n")
+         && strstr (text, "lenscamera Nikon D750\n"), "lens: in the recipe's text");
+  recipe_parse (&back, text);
+  CHECK (recipe_equal (&r, &back) && !strcmp (back.lens.name, "Test 16-35mm f/4") && back.lens.tca == LENS_T_POLY3
+         && fabsf (back.lens.t[0] - 1.001f) < 1e-6f, "lens: read back the same");
+  back.lens.k[0] = -0.4f;
+  CHECK (!recipe_equal (&r, &back), "lens: a different profile isn't equal");
+  recipe_set (&r, P_LENS_MANUAL, -30);
+  CHECK (recipe_format (&r, text, sizeof text) > 0 && strstr (text, "lenscorr ") && strstr (text, "manual=-30"), "lens: amounts' line");
+  recipe_set (&r, P_LENS_MANUAL, 0);
+  /* A preset carries looks, not the lens. */
+  recipe_default (&back);
+  recipe_copy_look (&back, &r);
+  CHECK (!back.lens.on, "lens: not copied with a look");
+
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (g.lens && !geom_plan_is_simple (&g), "lens: geometry has work to do");
+  geom_to_source (&g, w / 2.0, h / 2.0, &sx, &sy);
+  CHECK (fabs (sx - w / 2.0) < 1e-6 && fabs (sy - h / 2.0) < 1e-6, "lens: the centre stays");
+  /* Every edge point from inside the photo, and some of them right at its edge (filled). */
+  for (k = 0; k <= 40; k++)
+    {
+      double t = k / 40.0, pts[4][2] = { { t * w, 0 }, { t * w, h }, { 0, t * h }, { w, t * h } };
+      int e;
+      for (e = 0; e < 4; e++)
+        {
+          double ex, ey;
+          geom_to_source (&g, pts[e][0], pts[e][1], &sx, &sy);
+          if (sx < -0.01 || sy < -0.01 || sx > w + 0.01 || sy > h + 0.01)
+            inside = 0;
+          ex = fabs (sx - w / 2.0) / (w / 2.0);
+          ey = fabs (sy - h / 2.0) / (h / 2.0);
+          if (ex > edge) edge = ex;
+          if (ey > edge) edge = ey;
+        }
+    }
+  CHECK (inside && edge > 0.995, "lens: fills the frame with as much of the photo as it can");
+  CHECK (g.ls > 0.97 && g.ls < 1.03, "lens: poly3 keeps the middle of the shorter side where it is");
+  geom_to_source (&g, 0, 0, &sx, &sy);
+  geom_from_source (&g, sx, sy, &ox, &oy);
+  CHECK (fabs (ox) < 0.01 && fabs (oy) < 0.01, "lens: the way back finds the corner");
+  geom_to_source_rgb (&g, 0, 0, sxr, syr, &gain);
+  geom_to_source_rgb (&g, w / 2.0, h / 2.0, sxr + 0, syr + 0, &gc);
+  CHECK (gain > 1.3 && fabs (gc - 1) < 1e-6, "lens: vignetting lifted at the corner, not the middle");
+  geom_to_source_rgb (&g, 0, 0, sxr, syr, &gain);
+  CHECK (sxr[0] < sxr[1] && sxr[2] > sxr[1], "lens: red from further out, blue from further in, at the top left");
+  /* A flat grey comes out lighter towards the corners, the same in the middle. */
+  for (k = 0; k < w * h * 3; k++)
+    flat[k] = 10000;
+  geom_rows (&g, flat, out, 0, g.oh);
+  CHECK (abs (out[((h / 2) * w + w / 2) * 3 + 1] - 10000) <= 1 && out[1] > 13000, "lens: rows: vignetting undone");
+  /* Amounts at 0: nothing. */
+  recipe_set (&r, P_LENS_DIST, 0);
+  recipe_set (&r, P_LENS_TCA, 0);
+  recipe_set (&r, P_LENS_VIG, 0);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (!g.lens && geom_plan_is_simple (&g), "lens: at 0% nothing is done");
+  /* Manual alone, without a profile: pincushion corrected (-) takes the corners from further out, so zooms in. */
+  recipe_default (&r);
+  recipe_set (&r, P_LENS_MANUAL, -50);
+  CHECK (!recipe_geometry_is_default (&r), "lens: manual is geometry");
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (g.lens && g.ls < 1, "lens: manual pincushion fills by zooming in");
+  geom_to_source (&g, 0, 0, &sx, &sy);
+  CHECK (sx >= -0.01 && sy >= -0.01 && sx < 5 && sy < 5, "lens: manual: the corner still from the corner");
+  /* A strong barrel's correction keeps more of the photo than at 1. */
+  recipe_default (&r);
+  recipe_set (&r, P_LENS_MANUAL, 80);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (g.lens && g.ls > 1, "lens: manual barrel shows more of the photo");
+  (void) x; (void) y;
+  free (flat);
+  free (out);
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -2833,6 +2933,7 @@ int main (int argc, char **argv)
   test_histogram_and_speed ();
   test_edited_thumbnail (argv[1]);
   test_geometry ();
+  test_lens_correction ();
   test_resample ();
   test_sharpen ();
   test_simd ();

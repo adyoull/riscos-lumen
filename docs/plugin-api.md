@@ -54,7 +54,7 @@ until the next `Format` line.
 | Key | Meaning |
 | --- | --- |
 | `Name` | A longer name, such as "HEIF photos (libheif)". Lumen uses it only when there is no `Package`. |
-| `Kind` | `format` for these plug-ins. (`raw` is LumenRaw's.) |
+| `Kind` | `format` for these plug-ins. (`raw` is LumenRaw's; `lens`, LumenLens's: see Data plug-ins below.) |
 | `API` | The version of this API that the plug-in follows: `1`. Lumen lists a plug-in that asks for a newer API but doesn't run it, and says a newer Lumen is needed. |
 | `Format` | Starts a format, and names one of its files, for Lumen's messages and the Info tab: "This is an AVIF photo...", "AVIF photo, read by the LumenHEIF plug-in". At most 6 formats. |
 | `Extensions` | The file extensions this format claims, separated by spaces, in any case: `heic` matches `IMG_0001/HEIC` on RISC OS and `IMG_0001.heic` elsewhere. |
@@ -121,6 +121,9 @@ in one of two ways:
 | `iso`, `exposure`, `fnumber`, `focal` | Exposure details: `exposure` in seconds, `focal` in mm. |
 | `taken` | When the photo was taken, as `YYYY:MM:DD HH:MM:SS`. |
 | `encoding` | How the photo is encoded, in a few words, for the Info tab's Encoding line: the codec, then bits a channel, chroma subsampling and anything else worth knowing, such as `HEVC, 10 bits, 4:2:0` or `AV1, 8 bits, 4:2:0, in tiles`. |
+| `lens` | The lens's name, as the camera gives it (Lumen 0.0.38 and later; optional). Lens Correction's Auto looks for it in the lens database. |
+| `lensspec` | `MIN MAX APERTURE`: the lens's shortest and longest focal length in mm and its widest aperture (0 when not known), as EXIF's LensSpecification gives them (optional). Auto uses them when there's no name. |
+| `focal35` | The focal length in 35 mm terms (optional): with `focal`, it gives the camera's sensor size when the camera isn't known. |
 | `exif` | `OFFSET LENGTH`: where the photo's EXIF data (a TIFF header, `II*\0` or `MM\0*`, and its IFDs) is in `SRC`, as a byte offset and length. Lumen lists it on the Info tab. Leave it out if there's no EXIF. |
 | `error` | Something went wrong. The value says what, in a few words, and Lumen shows it. |
 
@@ -132,6 +135,26 @@ it, the job has failed.
 Lumen keeps the details in its library, and makes thumbnails and previews
 from the pictures. It does everything else itself: adjustments, exports
 and printing. It never changes the photo's file.
+
+## Data plug-ins: lens profiles
+
+A plug-in can also be data only, with no program: a `Data` line names a
+file in its directory that Lumen reads itself. The one kind so far is
+`Kind: lens`, the lens database Lens Correction uses (LumenLens):
+
+```
+Name: Lens profiles (lensfun)
+Version: 1.0
+Kind: lens
+Data: Lenses
+Package: LumenLens
+Description: Corrects lenses' distortion, fringing and vignetting, from the lensfun database
+```
+
+The Data file's form (made from lensfun's database by `tools/lensdb.py`)
+is described at the top of that script. It is switched on and off,
+added and removed like any other plug-in. Lumen 0.0.37 and earlier list
+it but don't use it.
 
 ## Building one
 

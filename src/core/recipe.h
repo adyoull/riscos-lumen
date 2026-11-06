@@ -19,6 +19,10 @@
      glow amount=25 spread=40 highlights=60 warmth=20
      geometry rotate=1 angle=-1.5 vertical=0 horizontal=0
      crop x0=0.050 y0=0.000 x1=0.950 y1=1.000
+     lenscorr distortion=100 fringing=50 vignetting=100 manual=-20
+     lens d=p:0.01589,-0.08067,0.06712 t=3:1.00006,0,0,1.00033,0,0 v=-0.49,0.016,-0.19 rh=1.8028 rv=1.0000 focal=16 aperture=4.0 type=r
+     lensname Nikon AF-S Nikkor 16-35mm f/4G ED VR
+     lenscamera Nikon D750                (a camera chosen to stand in for the photo's)
 
    An empty recipe is the original. The parameter table also drives the
    adjustments panel (labels, ranges, steps), as plug-ins' parameters will
@@ -50,6 +54,8 @@ enum
   P_GLOW_AMOUNT, P_GLOW_SPREAD, P_GLOW_HIGH, P_GLOW_WARM,   /* glow: light from the bright parts spread round them */
   P_ROTATE, P_ANGLE, P_PERSP_V, P_PERSP_H,  /* geometry: quarter turns, straighten, perspective */
   P_CROP_X0, P_CROP_Y0, P_CROP_X1, P_CROP_Y1, /* crop, as fractions of the straightened picture */
+  P_LENS_DIST, P_LENS_TCA, P_LENS_VIG, /* lens correction: how much of the lens profile's (percent) */
+  P_LENS_MANUAL,                       /* and barrel (+) or pincushion (-) distortion corrected by hand */
   P_COUNT,
   P_FIRST_GEOMETRY = P_ROTATE
 };
@@ -136,9 +142,44 @@ extern const char *const recipe_brush_keys[BRUSH_KINDS];   /* "add", "erase" */
 #define RECIPE_STROKE_MAX 256          /* one stroke's (or painted spot's) */
 typedef struct { int mask, kind, first, n; float r, f, amount; } recipe_stroke;
 
+/* Lens correction: a lens's profile (from the lens database, lens.h),
+   worked out for the photo's focal length and aperture, kept in the
+   recipe so the photo looks the same with or without the database (or a
+   newer one). The models are lensfun's (its database's terms):
+   distortion maps a point's distance from the centre in the corrected
+   picture, ru, to where it is in the photo, rd:
+     ptlens: rd = ru (a ru^3 + b ru^2 + c ru + 1 - a - b - c)
+     poly3:  rd = ru (1 - k1 + k1 ru^2)
+     poly5:  rd = ru (1 + k1 ru^2 + k2 ru^4)
+   lateral colour moves red and blue out from green's place, r:
+     linear: r * kr, r * kb
+     poly3:  r (vr + cr r + br r^2), r (vb + cb r + bb r^2)
+   and vignetting darkens by 1 + k1 r^2 + k2 r^4 + k3 r^6.
+   Distances for distortion and colour are rh at the corner (1 at half
+   the shorter side of the camera the lens was measured on); for
+   vignetting rv (1 at that camera's corner). */
+enum { LENS_D_NONE, LENS_D_PTLENS, LENS_D_POLY3, LENS_D_POLY5 };
+enum { LENS_T_NONE, LENS_T_LINEAR, LENS_T_POLY3 };
+typedef struct
+{
+  int on;                              /* a profile is set */
+  char name[96];                       /* the lens, as the database names it */
+  char camera[64];                     /* the camera it's scaled for, when chosen to stand in for the photo's ("" if not) */
+  int dist;                            /* LENS_D_* */
+  float d[3];                          /* ptlens a b c; poly3 k1; poly5 k1 k2 */
+  int tca;                             /* LENS_T_* */
+  float t[6];                          /* linear kr kb; poly3 vr cr br vb cb bb */
+  int vig;                             /* 1: k[] is set */
+  float k[3];
+  float rh, rv;
+  float focal, aperture;               /* what it was worked out for (0 unknown) */
+  char type;                           /* 'r' rectilinear, 'f' fisheye... (lensdb.py) */
+} recipe_lens;
+
 typedef struct
 {
   float v[P_COUNT];
+  recipe_lens lens;
   recipe_curve curve[CURVE_COUNT];
   int nspots, nspoints;
   recipe_spot spot[RECIPE_SPOTS];
@@ -162,7 +203,7 @@ int recipe_parse (recipe *r, const char *text);
    n was too small. */
 int recipe_format (const recipe *r, char *out, size_t n);
 
-/* Geometry (rotation, straightening, perspective, crop) is all default. */
+/* Geometry (rotation, straightening, perspective, crop, lens correction) is all default. */
 int recipe_geometry_is_default (const recipe *r);
 /* The tone and colour adjustments of src into dst, keeping dst's geometry
    (presets and pasting carry looks, not crops). */
@@ -202,6 +243,8 @@ int recipe_masks_equal (const recipe *a, const recipe *b);
 int recipe_stroke_add (recipe *r, int mask, int kind, float radius, float feather, float amount, const float *xy, int n);
 void recipe_stroke_remove (recipe *r, int i);
 int recipe_strokes_equal (const recipe *a, const recipe *b);
+/* Lens profiles: the same? (Only what changes the picture, and the name.) */
+int recipe_lens_equal (const recipe_lens *a, const recipe_lens *b);
 /* Formats only the look (no geometry lines): what a preset stores. */
 int recipe_format_look (const recipe *r, char *out, size_t n);
 

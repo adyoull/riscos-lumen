@@ -124,6 +124,24 @@ static unsigned long walk (const tiff *t, size_t ifd, int which, img_info *info,
           case 0x829D: info->fnumber = rational (t, e, type, count); break;
           case 0x8827: info->iso = (int) int_value (t, e, type, count); break;
           case 0x920A: info->focal = rational (t, e, type, count); break;
+          case 0xA405: info->focal35 = (double) int_value (t, e, type, count); break;
+          case 0xA434: ascii (t, e, type, count, info->lens, sizeof info->lens); break;
+          case 0xA432:
+            if (count == 4 && (type == 5 || type == 10))
+              {
+                size_t at = value_at (t, e, type, count);
+                int k;
+                double v[4];
+                for (k = 0; k < 4; k++)
+                  {
+                    unsigned long n = at != (size_t) -1 ? rd32 (t, at + 8 * k) : 0, d = at != (size_t) -1 ? rd32 (t, at + 8 * k + 4) : 0;
+                    v[k] = d ? (double) n / d : 0;
+                  }
+                info->lens_fmin = v[0];
+                info->lens_fmax = v[1];
+                info->lens_amin = v[2];
+              }
+            break;
           }
     }
   return rd32 (t, ifd + 2 + 12 * (size_t) n);

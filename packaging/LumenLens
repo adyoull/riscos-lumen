@@ -1,0 +1,25 @@
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
+# Spec for tools/riscpkg.py: the lens plug-in, from LumenLens-<ver>.zip.
+Package: LumenLens
+Section: Graphics
+Priority: Optional
+Licence: Free
+Maintainer: Andrew Youll <adyoull@users.noreply.github.com>
+Standards-Version: 0.4.0
+Environment: any
+Depends: Lumen (>= 0.0.38)
+Description: Lens profiles for Lumen (lensfun)
+ Gives Lumen's Lens Correction the profiles of 1,533 lenses, from the
+ lensfun project's database: Lumen corrects their distortion, colour
+ fringing and vignetting for each photo's focal length and aperture,
+ finding the lens from the photo's EXIF. Only data: it goes into Lumen's
+ Plugins directory; Lumen finds it the next time it starts.
+Build-Map: !Lumen/Plugins/Lens -> Apps/Graphics/!Lumen/Plugins/Lens
+Build-Notice: The lens plug-in for Lumen, packaged for PackMan from its
+ release zip.
+ .
+ The lens database is the lensfun project's, by its contributors, under
+ the Creative Commons Attribution-ShareAlike 3.0 licence, which follows.
+Build-Copyright: !Lumen/Plugins/Lens/Licence

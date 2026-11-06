@@ -413,6 +413,9 @@ static int read_details (rawjob *j)
       else if (!strcmp (line, "exposure")) in->exposure = atof (v);
       else if (!strcmp (line, "fnumber")) in->fnumber = atof (v);
       else if (!strcmp (line, "focal")) in->focal = atof (v);
+      else if (!strcmp (line, "lens")) snprintf (in->lens, sizeof in->lens, "%s", v);
+      else if (!strcmp (line, "lensspec")) sscanf (v, "%lf %lf %lf", &in->lens_fmin, &in->lens_fmax, &in->lens_amin);
+      else if (!strcmp (line, "focal35")) in->focal35 = atof (v);
       else if (!strcmp (line, "taken")) snprintf (in->taken, sizeof in->taken, "%s", v);
       else if (!strcmp (line, "encoding")) snprintf (in->encoding, sizeof in->encoding, "%s", v);
       else if (!strcmp (line, "exif"))

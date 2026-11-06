@@ -90,6 +90,29 @@
   concertina. Fold all and Open all, under the tool buttons, fold or open
   the Layers list and every group.
 
+- Lens Correction, a new group: undoes a lens's distortion, lateral
+  colour (fringing) and vignetting from a lens profile, for the photo's
+  focal length and aperture, scaled for its camera's sensor. Auto finds
+  the lens from the EXIF (LensModel, LensSpecification, the camera's
+  mount and crop factor); Lens chooses it (the likeliest, then All lenses
+  by maker); Camera chooses a camera like the photo's (the same mount,
+  the nearest sensor size) when the photo's isn't known; Distortion,
+  Fringing and Vignetting say how much (0-200%). Manual corrects barrel
+  or pincushion by hand, with or without a profile. Done in the geometry
+  stage, before straightening: the frame filled again with as much of
+  the photo as fits. The profile is kept in the recipe ("lens",
+  "lensname", "lenscamera" and "lenscorr" lines), so photos look the
+  same without the plug-in; presets don't carry it.
+- The LumenLens plug-in (1.0): the lensfun project's database (1,533
+  lenses, 1,059 cameras, CC BY-SA 3.0), converted by tools/lensdb.py to
+  a smaller form Lumen reads itself (none of lensfun's library is used).
+  It's a data plug-in, a new kind: Kind: lens and a Data line in its
+  Plugin file, no program.
+- LumenRaw 1.3: its INFO gives what LibRaw finds of the lens (its name
+  from the maker's notes when the EXIF hasn't it, lensspec= its focal
+  lengths and widest aperture, focal35= the focal length in 35 mm
+  terms), for Auto. A raw photo opened from its preview asks LumenRaw for
+  them in the background.
 - Presets are files: each a Text file named after it in
   <Choices$Write>.Lumen.Presets, used by every library. To share one,
   copy it into another Lumen's Presets directory, or drop it on Lumen's

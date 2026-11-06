@@ -29,6 +29,8 @@
 #include "../src/core/tiffmeta.h"
 #include "../src/core/plugins.h"
 #include "../src/core/prefs.h"
+#include <math.h>
+#include "../src/core/lens.h"
 
 static int checks, fails;
 #define CHECK(c, what) do { checks++; if (!(c)) { fails++; fprintf (stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, what); } } while (0)
@@ -2959,6 +2961,151 @@ static void test_heif (void)
   CHECK (!rawjob_format (kind) && rawjob_kind_for (IMG_UNKNOWN, path, NULL, 0) < 0, "format plug-ins: removed: forgotten");
 }
 
+/* --- the lens database (the LumenLens plug-in's) */
+static lens_photo photo_of (const char *make, const char *model, const char *lens, double focal, double f)
+{
+  lens_photo ph;
+  memset (&ph, 0, sizeof ph);
+  ph.camera = -1;
+  snprintf (ph.make, sizeof ph.make, "%s", make);
+  snprintf (ph.model, sizeof ph.model, "%s", model);
+  snprintf (ph.lens, sizeof ph.lens, "%s", lens);
+  ph.focal = focal;
+  ph.fnumber = f;
+  return ph;
+}
+
+static void test_lensdb (void)
+{
+  char path[600], dir[600];
+  FILE *f;
+  lens_db *db;
+  lens_photo ph;
+  recipe_lens L;
+  plugin_info pi;
+  const char *mount;
+  double crop;
+  int i, c, list[12], n, k, ok;
+  /* A small one: every kind of line. */
+  snprintf (dir, sizeof dir, "%s/lensplug", work);
+  fsys_mkdirs (dir);
+  snprintf (path, sizeof path, "%s/Plugin", dir);
+  f = fopen (path, "w");
+  fputs ("Name: Lens profiles (test)\nVersion: 1.0\nKind: lens\nData: Lenses\nPackage: LumenLens\n", f);
+  fclose (f);
+  snprintf (path, sizeof path, "%s/Lenses", dir);
+  f = fopen (path, "w");
+  fputs ("LumenLens 1\n# test\n"
+         "M Nikon F AF|Nikon F|Generic\nM Nikon Z|Nikon F AF|Generic\n"
+         "C Nikon Corporation~Nikon|Nikon D750~D750|Nikon F AF|1\n"
+         "C Nikon Corporation~Nikon|Nikon D7500~D7500|Nikon F AF|1.534\n"
+         "C Nikon Corporation~Nikon|Nikon Z 6~Z 6|Nikon Z|1\n"
+         "C Canon|Canon PowerShot G12~PowerShot G12|canonG12|4.63\n"
+         "L Nikon|Nikon AF-S Nikkor 16-35mm f/4G ED VR~Nikkor AF-S 16-35mm f/4G ED VR|Nikon F AF|1|1.5|r\n"
+         "D 16 p 0.01589 -0.08067 0.06712\nD 20 p 0.00036 -0.01787 0.02308\nD 35 p 0 0.00551 0\n"
+         "T 16 3 1.0001 0 0 1.0003 0 0\nT 35 3 1.0003 0 0 1.0001 0 0\n"
+         "V 16 4 -0.5 0 0\nV 16 8 -0.3 0 0\nV 35 4 -0.4 0 0\nV 35 8 -0.2 0 0\n"
+         "L Nikon|Nikon AF-S DX Nikkor 18-55mm f/3.5-5.6G VR|Nikon F AF|1.53|1.5|r\n"
+         "D 18 3 -0.03\nD 55 3 0.01\n"
+         "L Sigma|Sigma 17-50mm f/2.8 EX DC OS HSM|Nikon F AF;Canon EF|1.53|1.5|r\n"
+         "D 17 5 -0.05 0.01\n"
+         "L Canon|Canon PowerShot G12 & compatibles (Standard)~fixed lens|canonG12|4.63|1.333333|r\n"
+         "D 6.1 3 -0.02\n"
+         "L Nikon|Nikon Nothing Measured|Nikon F AF|1|1.5|r\n", f);
+  fclose (f);
+  CHECK (plugins_read (dir, &pi) == 0 && !strcmp (pi.kind, "lens") && !strcmp (pi.data, path) && !pi.program[0],
+         "lens db: a data plug-in, its Data file found");
+  pi.enabled = 1;
+  CHECK (plugins_find (&pi, 1, "lens") == &pi, "lens db: found by kind without a program");
+  db = lens_db_open (path);
+  CHECK (db && lens_db_count (db) == 4 && lens_db_cameras (db) == 4, "lens db: read (a lens with nothing measured left out)");
+  if (!db)
+    return;
+  CHECK (lens_db_camera (db, "NIKON CORPORATION", "NIKON D750", &mount, &crop) == 0 && !strcmp (mount, "Nikon F AF") && crop == 1,
+         "lens db: the camera from EXIF's make and model");
+  CHECK (lens_db_camera (db, "Nikon", "D7500", &mount, &crop) == 1 && fabs (crop - 1.534) < 1e-6, "lens db: and LibRaw's");
+  CHECK (lens_db_camera (db, "NIKON CORPORATION", "NIKON D850", &mount, &crop) < 0, "lens db: one it hasn't");
+  ph = photo_of ("NIKON CORPORATION", "NIKON D750", "AF-S Nikkor 16-35mm f/4G ED VR", 20, 5.6);
+  CHECK ((i = lens_db_match (db, &ph)) == 0, "lens db: the lens by its name");
+  CHECK (lens_name_score ("EF24-105mm f/4L IS USM", "Canon EF 24-105mm f/4L IS USM") > 0.9
+         && lens_name_score ("16.0-35.0 mm f/4.0", "16-35mm f/4") == 1, "lens db: names alike, in words and numbers");
+  ph = photo_of ("NIKON CORPORATION", "NIKON D7500", "17-50mm F2.8", 30, 4);
+  CHECK (lens_db_match (db, &ph) == 2, "lens db: another maker's, by its numbers");
+  ph = photo_of ("NIKON CORPORATION", "NIKON D7500", "17-55mm F2.8", 30, 4);
+  CHECK (lens_db_match (db, &ph) < 0, "lens db: numbers that differ aren't it");
+  ph = photo_of ("NIKON CORPORATION", "NIKON D7500", "", 30, 4);
+  ph.fmin = 18; ph.fmax = 55; ph.amin = 3.5;
+  CHECK (lens_db_match (db, &ph) == 1, "lens db: by the lens's focal lengths and aperture (LensSpecification)");
+  ph = photo_of ("Canon", "Canon PowerShot G12", "", 10, 4);
+  CHECK (lens_db_match (db, &ph) == 3, "lens db: a compact's own lens");
+  ph = photo_of ("Canon", "Canon EOS 5D Mark III", "Nikon AF-S Nikkor 16-35mm f/4G ED VR", 20, 4);
+  CHECK (lens_db_match (db, &ph) == 0, "lens db: the camera unknown, the lens by name");
+  /* Suggestions: what fits and covers the focal length. */
+  ph = photo_of ("NIKON CORPORATION", "NIKON D7500", "", 30, 4);
+  n = lens_db_suggest (db, &ph, list, 12);
+  for (k = 0, ok = 1; k < n; k++)
+    if (list[k] == 3)
+      ok = 0;                          /* not the compact's */
+  CHECK (n == 3 && ok, "lens db: suggestions fit the camera");
+  /* Profiles: between measurements. */
+  ph = photo_of ("NIKON CORPORATION", "NIKON D750", "AF-S Nikkor 16-35mm f/4G ED VR", 18, 5.6);
+  CHECK (lens_db_profile (db, 0, &ph, &L) == 0 && L.on && !strcmp (L.name, "Nikon AF-S Nikkor 16-35mm f/4G ED VR")
+         && L.dist == LENS_D_PTLENS && fabsf (L.d[0] - (0.01589f + 0.00036f) / 2) < 1e-6f, "lens db: distortion between 16 and 20 mm");
+  CHECK (L.tca == LENS_T_POLY3 && L.t[0] > 1.0001f && L.t[0] < 1.0003f, "lens db: colour between 16 and 35 mm");
+  {
+    /* f/5.6 between f/4 and f/8 in 1/N: a third of the way at 16 mm... */
+    double t = (1 / 5.6 - 1 / 4.0) / (1 / 8.0 - 1 / 4.0), a16 = -0.5 + 0.2 * t, a35 = -0.4 + 0.2 * t;
+    double want = a16 + (a35 - a16) * (18 - 16) / (35.0 - 16);
+    CHECK (L.vig && fabs (L.k[0] - want) < 1e-5, "lens db: vignetting between focal lengths and apertures");
+  }
+  CHECK (fabsf (L.rh - 1.8028f) < 1e-3f && fabsf (L.rv - 1) < 1e-6f && !L.camera[0], "lens db: scales for a camera the size measured on");
+  /* A smaller sensor sees less of the lens's circle. */
+  ph = photo_of ("NIKON CORPORATION", "NIKON D7500", "AF-S Nikkor 16-35mm f/4G ED VR", 20, 5.6);
+  lens_db_profile (db, 0, &ph, &L);
+  CHECK (fabsf (L.rv - 1 / 1.534f) < 1e-4f, "lens db: scaled for the camera's crop factor");
+  /* A camera it hasn't: one like it chosen instead. */
+  ph = photo_of ("NIKON CORPORATION", "NIKON D850", "AF-S Nikkor 16-35mm f/4G ED VR", 20, 5.6);
+  ph.crop = 1.5;
+  n = lens_db_similar (db, 0, ph.crop, ph.make, list, 12);
+  CHECK (n == 3 && list[0] == 1 && list[1] == 0, "lens db: cameras it fits (a Z with an adapter), the nearest sensor first");
+  ph.camera = list[0];
+  CHECK (lens_db_photo_camera (db, &ph) == 1 && lens_db_profile (db, 0, &ph, &L) == 0 && fabsf (L.rv - 1 / 1.534f) < 1e-4f
+         && !strcmp (L.camera, "Nikon D7500"), "lens db: the chosen camera's sensor, and its name kept");
+  n = lens_db_similar (db, 3, 0, NULL, list, 12);
+  CHECK (n == 1 && list[0] == 3, "lens db: a compact's lens fits only its camera");
+  lens_db_close (db);
+  /* The real one. */
+  db = lens_db_open ("plugins/lens/Lenses");
+  CHECK (db && lens_db_count (db) > 1400 && lens_db_cameras (db) > 1000, "lens db: the plug-in's");
+  if (db)
+    {
+      ph = photo_of ("NIKON CORPORATION", "NIKON D750", "AF-S Nikkor 16-35mm f/4G ED VR", 20, 5.6);
+      i = lens_db_match (db, &ph);
+      CHECK (i >= 0 && strstr (lens_db_name (db, i), "16-35mm f/4G") && lens_db_profile (db, i, &ph, &L) == 0 && L.dist && L.vig,
+             "lens db: the plug-in's: a Nikon lens");
+      ph = photo_of ("Canon", "Canon EOS 5D Mark III", "EF24-105mm f/4L IS USM", 50, 8);
+      i = lens_db_match (db, &ph);
+      CHECK (i >= 0 && !strcmp (lens_db_name (db, i), "Canon EF 24-105mm f/4L IS USM"), "lens db: the plug-in's: a Canon lens");
+      c = lens_db_camera (db, "SONY", "ILCE-7M3", &mount, &crop);
+      CHECK (c >= 0 && !strcmp (mount, "Sony E"), "lens db: the plug-in's: a Sony camera");
+      lens_db_close (db);
+    }
+  /* The raw samples' lenses, as their files say. */
+  {
+    const char *rs = getenv ("RAW_SAMPLES");
+    if (rs && *rs)
+      {
+        char nef[700];
+        snprintf (nef, sizeof nef, "%s/iss030e122639.NEF", rs);
+        memset (&ph, 0, sizeof ph);
+        ph.camera = -1;
+        CHECK (lens_photo_read (&ph, nef) == 0 && ph.make[0] && ph.focal > 0, "lens db: a raw's camera and focal length");
+        printf ("test_core: %s: %s %s, lens \"%s\" %g mm f/%g (%g-%g mm), crop %.2f\n", nef, ph.make, ph.model, ph.lens,
+                ph.focal, ph.fnumber, ph.fmin, ph.fmax, ph.crop);
+      }
+  }
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -2974,6 +3121,7 @@ int main (int argc, char **argv)
   test_jpeg_scaling ();
   test_raw ();
   test_plugins ();
+  test_lensdb ();
   test_raw_names ();
   test_mistyped ();
   test_tiff_import ();

@@ -1,0 +1,10 @@
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
+# Lumen plug-in description (see Lumen's !Help, Plug-ins)
+Name: Lens profiles (lensfun)
+Version: 1.0
+Kind: lens
+Data: Lenses
+Package: LumenLens
+Description: Corrects lenses' distortion, fringing and vignetting, from the lensfun database

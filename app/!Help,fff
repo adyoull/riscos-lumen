@@ -246,6 +246,18 @@ coloured fringes, and leaves very small differences alone so skies stay
 smooth. Look at 100% (Z) to judge it; exports are sharpened at their own
 size, so a small export looks as sharp as the full-size one.
 
+Lens Correction undoes a lens's distortion (lines bowing out or in),
+its colour fringes towards the corners and its darker corners. With the
+LumenLens plug-in (lens profiles from the lensfun project), Auto finds
+the photo's lens from its EXIF (or, for a raw file, what LumenRaw 1.3
+reads from the camera's notes) and Lens chooses one: the likeliest, then
+All lenses by maker; None takes it away. Distortion, Fringing and
+Vignetting say how much of each (100% is the lens's measurements).
+Camera chooses the camera (or one like it: the same mount and sensor
+size) when the photo's isn't known. Manual corrects barrel (+) or
+pincushion (-) by hand, with or without the plug-in. The profile is kept
+with the photo's adjustments, so the photo looks the same without it.
+
 White Balance: "Pick" then click something that should be grey or white
 (a cloud, a wall, a shirt); "Auto" works it out from the whole photo.
 Geometry: -90 and +90 turn the photo; Straighten (up to 15 degrees
@@ -493,7 +505,7 @@ Camera raw files
 ----------------
 Lumen reads camera raw files (Canon, Nikon, Sony, Fujifilm, Olympus,
 Panasonic, Pentax, DNG and many more) with its LibRaw plug-in, which is
-a separate package: LumenRaw, in PackMan or as LumenRaw-1.1.zip on
+a separate package: LumenRaw, in PackMan or as LumenRaw-1.3.zip on
 Lumen's release page (drag the LibRaw directory in its !Lumen.Plugins
 into Plug-ins > Add plug-in). It goes into !Lumen.Plugins,
 and Lumen finds it when it next starts (or at once, if it is added from
@@ -514,6 +526,15 @@ in the viewer always comes first: until it is open Lumen does nothing
 else. A preview is made again if the file, its orientation or LumenRaw
 changes. Choices sets which photos get them (Raw files, All photos or
 None) and Discard removes them; about 300-500 KB each.
+
+Lens profiles
+-------------
+LumenLens is a plug-in of data only: the lensfun project's lens database
+(1,533 lenses, 1,059 cameras), which Lens Correction uses (see
+Adjustments). Install it from PackMan, or drag the Lens directory in
+LumenLens-1.0.zip's !Lumen.Plugins into Plug-ins > Add plug-in. It takes
+about 1 MB; without it Lens Correction has Manual only. Its guide is in
+!Lumen.Plugins.Lens.Guide.
 
 Other formats
 -------------
@@ -571,8 +592,8 @@ Choices:Lumen.Types and Choices:Lumen.Sprites for !Boot.
 
 Plug-ins
 --------
-Plug-ins add to what Lumen can do: LumenRaw (camera raw files), and
-format plug-ins for other formats. Each is a directory in
+Plug-ins add to what Lumen can do: LumenRaw (camera raw files),
+format plug-ins for other formats, and LumenLens (lens profiles). Each is a directory in
 !Lumen.Plugins, where PackMan puts them.
 Plug-ins, on the icon bar menu and the main window's menu, lists them:
 choose one to switch it off (it stays installed, unticked) or back on.
@@ -587,7 +608,8 @@ Name, Version, Kind, Program, Package and Description lines. A format
 plug-in (Kind: format) also says which files are its own (Extensions
 and Signature lines) and what one is called (Format); Lumen imports
 the files it claims and runs it to read them, so a new format needs
-only a new plug-in. Lumen's source has the API, docs/plugin-api.md.
+only a new plug-in. A data plug-in (Kind: lens) has a Data line naming
+its file instead of a program. Lumen's source has the API, docs/plugin-api.md.
 
 Exported files
 --------------

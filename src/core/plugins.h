@@ -32,6 +32,13 @@
    thumbnails and pictures as it runs LumenRaw: docs/plugin-api.md has the
    API. Nothing about the format is in Lumen itself.
 
+   A data plug-in has no program, but a file of facts Lumen reads itself,
+   named by a Data line. The lens one (Kind: lens) is the lens database
+   lens.h reads:
+
+     Kind: lens
+     Data: Lenses                 the file in the directory
+
    A plug-in directory with no Plugin file but a LumenRaw program in it is
    taken to be the LibRaw plug-in (as the first one was).
 
@@ -70,6 +77,7 @@ typedef struct
   char version[24];
   char kind[16];
   char program[1024];                  /* full path of the program, "" if it has none or it isn't there */
+  char data[1024];                     /* full path of its Data file, "" if it has none or it isn't there */
   char package[48];
   char description[256];
   int enabled;
@@ -100,7 +108,8 @@ int plugins_enabled (const char *state, const char *dir);
 /* Switches it on or off. 0 on success. */
 int plugins_set_enabled (const char *state, const char *dir, int on);
 
-/* The first switched-on plug-in of a kind; NULL if none. */
+/* The first switched-on plug-in of a kind (with its program or data
+   file there); NULL if none. */
 const plugin_info *plugins_find (const plugin_info *list, int n, const char *kind);
 
 /* Copies the plug-in directory src into plugins_dir. If one of that name

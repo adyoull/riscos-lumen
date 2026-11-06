@@ -178,7 +178,7 @@ static plugin_format *current_format (plugin_info *p)
 
 int plugins_read (const char *path, plugin_info *p)
 {
-  char file[1100], line[400], prog[64] = "";
+  char file[1100], line[400], prog[64] = "", data[64] = "";
   fsys_entry e;
   FILE *f;
   memset (p, 0, sizeof *p);
@@ -203,6 +203,8 @@ int plugins_read (const char *path, plugin_info *p)
             set (p->kind, sizeof p->kind, colon + 1);
           else if (!strcmp (line, "Program"))
             set (prog, sizeof prog, colon + 1);
+          else if (!strcmp (line, "Data"))
+            set (data, sizeof data, colon + 1);
           else if (!strcmp (line, "Package"))
             set (p->package, sizeof p->package, colon + 1);
           else if (!strcmp (line, "Description"))
@@ -280,6 +282,8 @@ int plugins_read (const char *path, plugin_info *p)
   }
   if (prog[0] && strchr (prog, '.') == NULL && strchr (prog, '/') == NULL)
     find_file (path, prog, ",ff8", p->program, sizeof p->program);
+  if (data[0] && strchr (data, '.') == NULL && strchr (data, '/') == NULL)
+    find_file (path, data, ",fff", p->data, sizeof p->data);
   return 0;
 }
 
@@ -396,7 +400,7 @@ const plugin_info *plugins_find (const plugin_info *list, int n, const char *kin
 {
   int k;
   for (k = 0; k < n; k++)
-    if (list[k].enabled && list[k].program[0] && !strcmp (list[k].kind, kind))
+    if (list[k].enabled && (list[k].program[0] || list[k].data[0]) && !strcmp (list[k].kind, kind))
       return &list[k];
   return NULL;
 }

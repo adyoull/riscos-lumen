@@ -1,0 +1,36 @@
+Lens profiles plug-in for Lumen 1.0
+===================================
+
+Gives Lumen's Lens Correction group (in the Adjustments tab, Lumen 0.0.38
+and later) the profiles of 1,533 lenses: how each bends straight lines
+(distortion), fringes edges with colour towards the corners (lateral
+chromatic aberration) and darkens the corners (vignetting), as measured
+by the lensfun project. Lumen undoes them for the photo's focal length
+and aperture, as much as you choose.
+
+Auto finds the photo's lens from what the camera wrote in the file (the
+lens's name, or its focal lengths and aperture, and the camera, which
+says which lenses fit it). When it can't tell, choose the lens from the
+Lens menu: the likeliest first, then every one that fits by maker. If
+the camera isn't in the database, the Camera link chooses one like it
+(the same mount, the nearest sensor size), so the profile is scaled for
+the right size of sensor.
+
+The profile is kept with the photo's adjustments, so the photo looks the
+same with or without the plug-in (and with a newer one). Without it,
+Lumen's Lens Correction group still has Manual, which corrects barrel
+or pincushion distortion by hand.
+
+It is only data: a text file, Lenses, which Lumen reads itself. It lives
+in Lumen's Plugins directory (!Lumen.Plugins.Lens); PackMan puts it
+there. Lumen finds it the next time it starts.
+
+The LumenLens User Guide is in Guide, beside this ReadMe: open
+Guide.index/html in a web browser.
+
+The lens database is the lensfun project's (https://lensfun.github.io),
+by its contributors, under the Creative Commons Attribution-ShareAlike
+3.0 licence (see Licence): Lenses is the same facts in a smaller form,
+made by Lumen's tools/lensdb.py, and shared under the same licence.
+Lumen's own code reads it (none of lensfun's library is used). The
+plug-in's description and ReadMe are copyright (C) 2026 Andrew Youll.

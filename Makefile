@@ -20,7 +20,7 @@ VERSION := 0.0.38
 DATE := 04 Nov 2026
 OUT := out
 
-CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/tiffmeta.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/presets.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
+CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/tiffmeta.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/lens.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/presets.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
 CORE_H := $(wildcard src/core/*.h)
 UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/plugwin.c src/ui/choicewin.c src/ui/activity.c src/ui/printbox.c src/ui/tagbox.c src/ui/smartbox.c src/ui/libbox.c src/ui/help.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c src/ui/filetypes.c
 UI_H := $(wildcard src/ui/*.h)
@@ -165,7 +165,7 @@ $(OUT)/lumenraw-arm: $(RAW_SRC)
 	arm-linux-gnueabihf-g++ -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard -mno-unaligned-access -no-pie $(RAW_FLAGS) \
 	  -I$(DEPS)/linuxarm/include -o $@ $(RAW_SRC) $(DEPS)/linuxarm/lib/libraw.a $(DEPS)/linuxarm/lib/libjpeg.a \
 	  $(DEPS)/linuxarm/lib/libz.a -lm
-RAW_VERSION := 1.2
+RAW_VERSION := 1.3
 LIBRAW_VERSION := 0.22.3
 # The plug-in's release zip, laid out as it goes into Lumen (PackMan's
 # LumenRaw package maps it into Apps.Graphics.!Lumen.Plugins.LibRaw), and
@@ -190,7 +190,29 @@ $(OUT)/LumenRaw-User-Guide.zip: $(RAW_GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenraw-guide
 $(OUT)/LumenHEIF-User-Guide.zip: $(HEIF_GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenheif-guide
-guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip $(OUT)/LumenHEIF-User-Guide.zip
+$(OUT)/LumenLens-User-Guide.zip: $(LENS_GUIDE)
+	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenlens-guide
+guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip $(OUT)/LumenHEIF-User-Guide.zip $(OUT)/LumenLens-User-Guide.zip
+
+# The lens plug-in (LumenLens): only data, the lensfun project's lens
+# database in the form Lumen reads (tools/lensdb.py makes it, from a
+# lensfun clone: make lensdb LENSFUN=/path/to/lensfun).
+LENS_VERSION := 1.0
+LENSFUN ?= /build/src/lensfun
+LENS_GUIDE := docs/lumenlens-guide/index.html $(wildcard docs/lumenlens-guide/images/*.png)
+lensdb:
+	python3 tools/lensdb.py $(LENSFUN)/data/db plugins/lens/Lenses \
+	  "lensfun $$(git -C $(LENSFUN) log -1 --format='%h, %cs')"
+$(OUT)/LumenLens-$(LENS_VERSION).zip: plugins/lens/Lenses plugins/lens/ReadMe plugins/lens/Licence plugins/lens/Plugin $(LENS_GUIDE)
+	rm -rf $(OUT)/lenspkg && mkdir -p $(OUT)/lenspkg/!Lumen/Plugins/Lens/Guide/images
+	cp plugins/lens/Lenses $(OUT)/lenspkg/!Lumen/Plugins/Lens/Lenses,fff
+	cp plugins/lens/ReadMe $(OUT)/lenspkg/!Lumen/Plugins/Lens/ReadMe,fff
+	cp plugins/lens/Licence $(OUT)/lenspkg/!Lumen/Plugins/Lens/Licence,fff
+	cp plugins/lens/Plugin $(OUT)/lenspkg/!Lumen/Plugins/Lens/Plugin,fff
+	cp docs/lumenlens-guide/index.html $(OUT)/lenspkg/!Lumen/Plugins/Lens/Guide/index.html,faf
+	for f in docs/lumenlens-guide/images/*.png; do [ -f $$f ] && cp $$f $(OUT)/lenspkg/!Lumen/Plugins/Lens/Guide/images/$$(basename $$f),b60; done; true
+	$(ROZIP) $@ -C $(OUT)/lenspkg !Lumen
+lens-plugin: $(OUT)/LumenLens-$(LENS_VERSION).zip
 plugin: $(OUT)/LumenRaw-$(RAW_VERSION).zip $(OUT)/LibRaw-$(LIBRAW_VERSION)-source.zip
 # The helper on real raw files (not in the repository: their licences
 # vary), on Linux and on ARM with RISC OS's alignment rules.

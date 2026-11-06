@@ -8,6 +8,130 @@
 
 #define PERSP_SCALE 0.6                /* +100 = edges 30% wider or narrower than the middle */
 #define MIN_CROP 0.02                  /* a crop is at least 2% of the canvas each way */
+#define MANUAL_SCALE 0.2               /* Manual +100: the corners taken from 20% further in */
+
+/* --- lens correction (recipe.h has the models) */
+
+/* rd / ru for the profile's distortion. */
+static double dist_ratio (const geom_plan *g, double ru)
+{
+  double r2 = ru * ru;
+  switch (g->dm)
+    {
+    case LENS_D_PTLENS: return g->d[0] * r2 * ru + g->d[1] * r2 + g->d[2] * ru + 1 - g->d[0] - g->d[1] - g->d[2];
+    case LENS_D_POLY3: return 1 - g->d[0] + g->d[0] * r2;
+    case LENS_D_POLY5: return 1 + g->d[0] * r2 + g->d[1] * r2 * r2;
+    }
+  return 1;
+}
+
+/* A point of the corrected picture (pixels from the source's centre) is
+   at this many times the distance in the photo. */
+static double lens_factor (const geom_plan *g, double px, double py)
+{
+  double ux = px * g->ls, uy = py * g->ls, h, m = 1;
+  if (!g->dm && g->man == 0)
+    return g->ls;
+  h = sqrt (ux * ux + uy * uy) / g->lhd;   /* 1 at the corner */
+  if (g->dm)
+    m = 1 + g->damt * (dist_ratio (g, h * g->rh) - 1);
+  if (g->man != 0)
+    m *= 1 + g->man * h * h;
+  return g->ls * m;
+}
+
+static void lens_apply (const geom_plan *g, double *sx, double *sy)
+{
+  double px = *sx - g->lcx, py = *sy - g->lcy, f = lens_factor (g, px, py);
+  *sx = g->lcx + px * f;
+  *sy = g->lcy + py * f;
+}
+
+/* Whether the whole corrected frame, at fill ls, comes from inside the photo. */
+static int lens_fills (geom_plan *g, double ls)
+{
+  int k, e;
+  g->ls = ls;
+  for (k = 0; k <= 32; k++)
+    {
+      double t = k / 32.0 - 0.5, hw = 0.5 * g->sw, hh = 0.5 * g->sh;
+      double pts[4][2] = { { t * g->sw, -hh }, { t * g->sw, hh }, { -hw, t * g->sh }, { hw, t * g->sh } };
+      for (e = 0; e < 4; e++)
+        {
+          double f = lens_factor (g, pts[e][0], pts[e][1]);
+          if (fabs (pts[e][0] * f) > hw * 1.0001 || fabs (pts[e][1] * f) > hh * 1.0001)
+            return 0;
+        }
+    }
+  return 1;
+}
+
+static void lens_plan (geom_plan *g, const recipe *r)
+{
+  const recipe_lens *L = &r->lens;
+  double lo = 0.2, hi = 1.6;
+  int i;
+  g->lens = 0;
+  g->dm = g->tm = g->vm = 0;
+  g->man = -r->v[P_LENS_MANUAL] / 100.0 * MANUAL_SCALE;
+  g->damt = r->v[P_LENS_DIST] / 100.0;
+  g->tamt = r->v[P_LENS_TCA] / 100.0;
+  g->vamt = r->v[P_LENS_VIG] / 100.0;
+  g->rh = L->rh;
+  g->rv = L->rv;
+  g->ls = 1;
+  if (L->on)
+    {
+      if (L->dist && g->damt > 0)
+        g->dm = L->dist;
+      if (L->tca && g->tamt > 0)
+        g->tm = L->tca;
+      if (L->vig && g->vamt > 0)
+        g->vm = 1;
+      for (i = 0; i < 3; i++)
+        {
+          g->d[i] = L->d[i];
+          g->k[i] = L->k[i];
+        }
+      for (i = 0; i < 6; i++)
+        g->t[i] = L->t[i];
+    }
+  if (!g->dm && !g->tm && !g->vm && g->man == 0)
+    return;
+  g->lens = 1;
+  g->lcx = g->sw / 2.0;
+  g->lcy = g->sh / 2.0;
+  g->lhd = sqrt (g->lcx * g->lcx + g->lcy * g->lcy);
+  if (!g->dm && g->man == 0)
+    return;
+  /* The most of the photo that still fills the frame. */
+  if (lens_fills (g, hi))
+    lo = hi;
+  else
+    for (i = 0; i < 40; i++)
+      {
+        double mid = (lo + hi) / 2;
+        if (lens_fills (g, mid))
+          lo = mid;
+        else
+          hi = mid;
+      }
+  g->ls = lo / 1.0005;                 /* a hair in, so bilinear sampling stays inside */
+}
+
+/* Red (c 0) or blue (2) is this many times further out than green, at r. */
+static double tca_factor (const geom_plan *g, int c, double r)
+{
+  double f;
+  if (g->tm == LENS_T_LINEAR)
+    f = c == 0 ? g->t[0] : g->t[1];
+  else
+    {
+      const double *t = g->t + (c == 0 ? 0 : 3);
+      f = t[0] + t[1] * r + t[2] * r * r;
+    }
+  return 1 + g->tamt * (f - 1);
+}
 
 /* Canvas point (pixels from the canvas centre, y down) to the canvas
    before straightening and perspective, at zoom 1. */
@@ -43,6 +167,45 @@ void geom_to_source (const geom_plan *g, double x, double y, double *sx, double 
   double X = (fu - 0.5) * g->cw / g->zoom, Y = (fv - 0.5) * g->ch / g->zoom, u, v;
   undo_straighten (g, X, Y, &u, &v);
   canvas_to_source (g, u + g->cw / 2.0, v + g->ch / 2.0, sx, sy);
+  if (g->lens)
+    lens_apply (g, sx, sy);
+}
+
+void geom_to_source_rgb (const geom_plan *g, double x, double y, double sx[3], double sy[3], double *gain)
+{
+  double qx, qy, q;
+  geom_to_source (g, x, y, &sx[1], &sy[1]);
+  sx[0] = sx[2] = sx[1];
+  sy[0] = sy[2] = sy[1];
+  *gain = 1;
+  if (!g->lens || (!g->tm && !g->vm))
+    return;
+  qx = sx[1] - g->lcx;
+  qy = sy[1] - g->lcy;
+  q = sqrt (qx * qx + qy * qy) / g->lhd;
+  if (g->tm)
+    {
+      double fr = tca_factor (g, 0, q * g->rh), fb = tca_factor (g, 2, q * g->rh);
+      sx[0] = g->lcx + qx * fr;
+      sy[0] = g->lcy + qy * fr;
+      sx[2] = g->lcx + qx * fb;
+      sy[2] = g->lcy + qy * fb;
+    }
+  if (g->vm)
+    {
+      double r2 = q * g->rv * q * g->rv;
+      double c = 1 + g->k[0] * r2 + g->k[1] * r2 * r2 + g->k[2] * r2 * r2 * r2;
+      if (c < 0.2)
+        c = 0.2;
+      *gain = 1 + g->vamt * (1 / c - 1);
+      if (*gain < 0.2)
+        *gain = 0.2;
+    }
+}
+
+int geom_plan_is_simple (const geom_plan *g)
+{
+  return g->quarter == 0 && g->sn == 0 && g->kv == 0 && g->kh == 0 && !g->lens;
 }
 
 /* The other way: where a source pixel ends up in the output (it may be
@@ -113,6 +276,7 @@ void geom_plan_make (geom_plan *g, const recipe *r, int sw, int sh, int with_cro
         }
     }
   g->zoom *= 1.0005;                   /* a hair more, so bilinear sampling stays inside */
+  lens_plan (g, r);
   if (with_crop)
     {
       g->x0 = clampd (r->v[P_CROP_X0], 0, 1 - MIN_CROP);
@@ -139,13 +303,70 @@ void geom_plan_make (geom_plan *g, const recipe *r, int sw, int sh, int with_cro
     }
 }
 
+/* One channel at (sx, sy) of 3-channel pixels, bilinear, clamped. */
+static double sample16 (const uint16_t *src, int w, int h, double sx, double sy, int c)
+{
+  int ix, iy, ix1, iy1;
+  double fx, fy, top, bot;
+  const uint16_t *r0, *r1;
+  sx = clampd (sx - 0.5, 0, w - 1);
+  sy = clampd (sy - 0.5, 0, h - 1);
+  ix = (int) sx;
+  iy = (int) sy;
+  fx = sx - ix;
+  fy = sy - iy;
+  ix1 = ix + 1 < w ? ix + 1 : ix;
+  iy1 = iy + 1 < h ? iy + 1 : iy;
+  r0 = src + (size_t) iy * w * 3;
+  r1 = src + (size_t) iy1 * w * 3;
+  top = r0[ix * 3 + c] + (r0[ix1 * 3 + c] - r0[ix * 3 + c]) * fx;
+  bot = r1[ix * 3 + c] + (r1[ix1 * 3 + c] - r1[ix * 3 + c]) * fx;
+  return top + (bot - top) * fy;
+}
+
+static double sample8 (const unsigned char *src, const uint16_t *s2l, int w, int h, double sx, double sy, int c)
+{
+  int ix, iy, ix1, iy1;
+  double fx, fy, top, bot;
+  const unsigned char *r0, *r1;
+  sx = clampd (sx - 0.5, 0, w - 1);
+  sy = clampd (sy - 0.5, 0, h - 1);
+  ix = (int) sx;
+  iy = (int) sy;
+  fx = sx - ix;
+  fy = sy - iy;
+  ix1 = ix + 1 < w ? ix + 1 : ix;
+  iy1 = iy + 1 < h ? iy + 1 : iy;
+  r0 = src + (size_t) iy * w * 3;
+  r1 = src + (size_t) iy1 * w * 3;
+  top = s2l[r0[ix * 3 + c]] + (s2l[r0[ix1 * 3 + c]] - s2l[r0[ix * 3 + c]]) * fx;
+  bot = s2l[r1[ix * 3 + c]] + (s2l[r1[ix1 * 3 + c]] - s2l[r1[ix * 3 + c]]) * fx;
+  return top + (bot - top) * fy;
+}
+
+static uint16_t to16 (double v)
+{
+  return (uint16_t) (v <= 0 ? 0 : v >= 65535 ? 65535 : v + 0.5);
+}
+
 void geom_rows (const geom_plan *g, const uint16_t *src, uint16_t *dst, int y0, int y1)
 {
   int x, y, c;
-  int simple = g->quarter == 0 && g->sn == 0 && g->kv == 0 && g->kh == 0;
+  int simple = geom_plan_is_simple (g);
   for (y = y0; y < y1; y++)
     {
       uint16_t *o = dst + (size_t) y * g->ow * 3;
+      if (g->lens)
+        {
+          for (x = 0; x < g->ow; x++, o += 3)
+            {
+              double sx[3], sy[3], gain;
+              geom_to_source_rgb (g, x + 0.5, y + 0.5, sx, sy, &gain);
+              for (c = 0; c < 3; c++)
+                o[c] = to16 (sample16 (src, g->sw, g->sh, sx[c], sy[c], c) * gain);
+            }
+          continue;
+        }
       for (x = 0; x < g->ow; x++, o += 3)
         {
           double sx, sy, fx, fy;
@@ -217,7 +438,7 @@ void geom_region_rgb8 (const geom_plan *g, const unsigned char *src, const uint1
                        uint16_t *dst, int rx, int ry, int rw, int rh)
 {
   int x, y, c;
-  int simple = g->quarter == 0 && g->sn == 0 && g->kv == 0 && g->kh == 0;
+  int simple = geom_plan_is_simple (g);
   /* Not turned, straightened or put in perspective: where each column
      comes from is the same on every row, so it is worked out once (the
      same sums as below, so the same pixels; no divisions per pixel). */
@@ -280,6 +501,17 @@ void geom_region_rgb8 (const geom_plan *g, const unsigned char *src, const uint1
   for (y = ry; y < ry + rh; y++)
     {
       uint16_t *o = dst + (size_t) (y - ry) * rw * 3;
+      if (g->lens)
+        {
+          for (x = rx; x < rx + rw; x++, o += 3)
+            {
+              double sx[3], sy[3], gain;
+              geom_to_source_rgb (g, x + 0.5, y + 0.5, sx, sy, &gain);
+              for (c = 0; c < 3; c++)
+                o[c] = to16 (sample8 (src, s2l, g->sw, g->sh, sx[c], sy[c], c) * gain);
+            }
+          continue;
+        }
       for (x = rx; x < rx + rw; x++, o += 3)
         {
           double sx, sy, fx, fy;

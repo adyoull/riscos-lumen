@@ -76,6 +76,36 @@ static int exif_orientation (int flip)
   return 1;
 }
 
+/* The lens: its name (EXIF's, else the maker's notes'), its shortest and
+   longest focal length and widest aperture (0 when not known). */
+static const char *lens_name (LibRaw &r)
+{
+  const libraw_lensinfo_t &l = r.imgdata.lens;
+  if (l.Lens[0])
+    return l.Lens;
+  if (l.makernotes.Lens[0])
+    return l.makernotes.Lens;
+  return "";
+}
+
+static double lens_min (LibRaw &r)
+{
+  const libraw_lensinfo_t &l = r.imgdata.lens;
+  return l.MinFocal > 0 ? l.MinFocal : l.makernotes.MinFocal > 0 ? l.makernotes.MinFocal : 0;
+}
+
+static double lens_max (LibRaw &r)
+{
+  const libraw_lensinfo_t &l = r.imgdata.lens;
+  return l.MaxFocal > 0 ? l.MaxFocal : l.makernotes.MaxFocal > 0 ? l.makernotes.MaxFocal : 0;
+}
+
+static double lens_ap (LibRaw &r)
+{
+  const libraw_lensinfo_t &l = r.imgdata.lens;
+  return l.MaxAp4MinFocal > 0 ? l.MaxAp4MinFocal : l.makernotes.MaxAp4MinFocal > 0 ? l.makernotes.MaxAp4MinFocal : 0;
+}
+
 static void describe (LibRaw &r, char *t, size_t n)
 {
   const libraw_iparams_t &ip = r.imgdata.idata;
@@ -90,10 +120,10 @@ static void describe (LibRaw &r, char *t, size_t n)
     }
   snprintf (t, n,
             "width=%d\nheight=%d\norientation=%d\nmake=%s\nmodel=%s\niso=%.0f\nexposure=%g\n"
-            "fnumber=%g\nfocal=%g\ntaken=%s\nlens=%s\n",
+            "fnumber=%g\nfocal=%g\ntaken=%s\nlens=%s\nlensspec=%g %g %g\nfocal35=%d\n",
             r.imgdata.sizes.width, r.imgdata.sizes.height, exif_orientation (r.imgdata.sizes.flip),
             ip.make, ip.model, o.iso_speed, o.shutter, o.aperture, o.focal_len, when,
-            r.imgdata.lens.Lens);
+            lens_name (r), lens_min (r), lens_max (r), lens_ap (r), (int) r.imgdata.lens.FocalLengthIn35mmFormat);
 }
 
 static int write_ppm (const char *path, const unsigned char *rgb, int w, int h)
@@ -163,7 +193,7 @@ int main (int argc, char **argv)
       fprintf (stderr, "LumenRaw %s (LibRaw %s)\n"
                "  LumenRaw thumb SRC IMAGE INFO\n  LumenRaw decode SRC IMAGE INFO MAXSIDE [NOISE]\n"
                "  (NOISE: 0 none, 1 light, 2 strong noise reduction before demosaicing)\n",
-               "1.2", libraw_version ());
+               "1.3", libraw_version ());
       return 2;
     }
   const char *src = argv[2], *image = argv[3], *info = argv[4];

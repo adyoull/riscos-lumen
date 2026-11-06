@@ -25,6 +25,9 @@ typedef struct
   double exposure;            /* seconds, 0 if unknown */
   double fnumber, focal;      /* 0 if unknown */
   int iso;                    /* 0 if unknown */
+  char lens[96];              /* the lens's name (EXIF LensModel, or the raw plug-in's), or "" */
+  double focal35;             /* the focal length in 35 mm terms (EXIF), 0 unknown */
+  double lens_fmin, lens_fmax, lens_amin;   /* its focal lengths and widest aperture (LensSpecification), 0 unknown */
   long thumb_offset;          /* embedded JPEG thumbnail, from the file start; 0 if none */
   long thumb_length;
   long exif_offset;           /* its EXIF (TIFF) data, from the file start, when a plug-in */

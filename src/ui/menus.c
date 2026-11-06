@@ -6,6 +6,7 @@
    Every menu is rebuilt into the same static pool each time it opens, so
    an Adjust click can reopen the same tree at the same addresses with
    fresh ticks and shading. */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,9 +31,11 @@
    keys are shown with Shift (Lumen's letter keys work either way). */
 #define SH "\x8B"
 
-static char pool[32 * 1024];
+static char pool0[32 * 1024];
+static char *pool = pool0;
+static size_t pool_size = sizeof pool0;
 static size_t used;
-static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu, 4 presets, 5 New, 6 rating filter */
+static int which;                      /* 1 window menu, 2 icon bar menu, 3 viewer menu, 4 presets, 5 New, 6 rating filter, 9 lens or camera */
 static int open_x, open_y;
 static int info_window = -1;
 static char album_name[40], preset_name[40], stack_secs[6] = "2";
@@ -64,7 +67,7 @@ static void *alloc (size_t n)
 {
   void *p;
   n = (n + 3) & ~(size_t) 3;
-  if (used + n > sizeof pool)
+  if (used + n > pool_size)
     return NULL;
   p = pool + used;
   used += n;
@@ -331,7 +334,7 @@ static menu *build_plugins_menu (void)
   for (k = 0; k < n; k++)
     {
       snprintf (label, sizeof label, "%s%s%s", pl[k].title, pl[k].version[0] ? " " : "", pl[k].version);
-      set_item (m, k, 0, label, (pl[k].enabled ? MF_TICK : 0) | (k == n - 1 ? MF_DOTTED : 0), -1, !pl[k].program[0]);
+      set_item (m, k, 0, label, (pl[k].enabled ? MF_TICK : 0) | (k == n - 1 ? MF_DOTTED : 0), -1, !pl[k].program[0] && !pl[k].data[0]);
     }
   set_item (m, base, 0, "Add plug-in...", 0, -1, 0);
   set_item (m, base + 1, 1, "Remove", 0, (int) rem, n == 0);
@@ -673,6 +676,315 @@ static menu *build_viewer_menu (void)
       set_item (m, PM_REMOVE, 1, "Remove from library...", 0, -1, 0);
     }
   return m;
+}
+
+/* --- the Lens Correction group's Lens and Camera menus: the likeliest
+   first, then every one that fits by maker (in parts of a manageable
+   length when a maker has many), built in a pool of their own (there
+   can be over a thousand lenses). */
+#define LENS_LIKELY 10
+#define LENS_PART 24                   /* a submenu's most; more go in parts */
+static char lens_pool[224 * 1024];
+static int lens_cameras;               /* the menu is the Camera one */
+static int lens_likely[16], nlens_likely;
+static int *lens_order;                /* the ones that fit, by maker */
+static int nlens_order;
+static int lens_mstart[256], nlens_makers;
+static int lens_ticked;                /* the lens or camera ticked, -1 none */
+static int lens_own_camera;            /* the photo's own camera in the database, -1 if it isn't */
+static double lens_crop;               /* the photo's camera's crop factor, 0 not known */
+
+static const char *lm_name (lens_db *db, int i)
+{
+  return lens_cameras ? lens_db_camera_model (db, i) : lens_db_name (db, i);
+}
+
+static const char *lm_maker (lens_db *db, int i)
+{
+  return lens_cameras ? lens_db_camera_maker (db, i) : lens_db_maker (db, i);
+}
+
+static lens_db *lm_db;
+/* Alphabetical, whatever the case ("MTO" between "Mamiya" and "Meike"). */
+static int ci_compare (const char *a, const char *b)
+{
+  for (; *a && *b; a++, b++)
+    {
+      int x = *a >= 'A' && *a <= 'Z' ? *a + 32 : (unsigned char) *a, y = *b >= 'A' && *b <= 'Z' ? *b + 32 : (unsigned char) *b;
+      if (x != y)
+        return x - y;
+    }
+  return (unsigned char) *a - (unsigned char) *b;
+}
+
+static int lm_compare (const void *a, const void *b)
+{
+  int x = *(const int *) a, y = *(const int *) b, c = ci_compare (lm_maker (lm_db, x), lm_maker (lm_db, y));
+  if (c)
+    return c;
+  if (!lens_cameras)
+    {
+      double f0, f1, a0, g0, g1, b0;
+      lens_db_range (lm_db, x, &f0, &f1, &a0);
+      lens_db_range (lm_db, y, &g0, &g1, &b0);
+      if (f0 != g0)
+        return f0 < g0 ? -1 : 1;
+      if (f1 != g1)
+        return f1 < g1 ? -1 : 1;
+    }
+  c = ci_compare (lm_name (lm_db, x), lm_name (lm_db, y));
+  return c ? c : x - y;
+}
+
+/* n of them from idx, ticked where tick is. */
+static menu *lens_list (lens_db *db, const char *title, const int *idx, int n)
+{
+  menu *m = new_menu (title, n);
+  int k;
+  if (!m)
+    return NULL;
+  for (k = 0; k < n; k++)
+    set_item (m, k, k == n - 1, lm_name (db, idx[k]), idx[k] == lens_ticked ? MF_TICK : 0, -1, 0);
+  return m;
+}
+
+/* A maker's: as one list, or in parts named for what's in them. */
+static menu *lens_maker_menu (lens_db *db, const char *title, const int *idx, int n)
+{
+  int parts = (n + LENS_PART - 1) / LENS_PART, k;
+  menu *m;
+  if (n <= LENS_PART + 4)
+    return lens_list (db, title, idx, n);
+  if (!(m = new_menu (title, parts)))
+    return NULL;
+  for (k = 0; k < parts; k++)
+    {
+      const int *p = idx + k * LENS_PART;
+      int c = k == parts - 1 ? n - k * LENS_PART : LENS_PART, j, tick = 0;
+      char label[96];
+      if (lens_cameras)
+        snprintf (label, sizeof label, "%.24s to %.24s", lm_name (db, p[0]), lm_name (db, p[c - 1]));
+      else
+        {
+          double a0, a1, aa, b0, b1, ba;
+          lens_db_range (db, p[0], &a0, &a1, &aa);
+          lens_db_range (db, p[c - 1], &b0, &b1, &ba);
+          if (a0 > 0 && b0 > 0)
+            snprintf (label, sizeof label, a0 == b0 ? "From %g mm" : "From %g to %g mm", a0, b0);
+          else
+            snprintf (label, sizeof label, "%.24s to %.24s", lm_name (db, p[0]), lm_name (db, p[c - 1]));
+        }
+      for (j = 0; j < c; j++)
+        tick |= p[j] == lens_ticked;
+      set_item (m, k, k == parts - 1, label, tick ? MF_TICK : 0, (int) lens_list (db, title, p, c), 0);
+    }
+  return m;
+}
+
+static menu *build_lens_menu (int cameras)
+{
+  lens_db *db = app_lens_db ();
+  lens_photo ph;
+  const recipe_lens *L = viewer_lens_profile ();
+  menu *m, *all;
+  int i, k, n, total, fits_lens = -1;
+  lens_cameras = cameras;
+  lens_crop = 0;
+  nlens_likely = nlens_order = nlens_makers = 0;
+  lens_ticked = -1;
+  if (!db || !viewer_lens_photo (&ph))
+    return NULL;
+  free (lens_order);
+  total = cameras ? lens_db_cameras (db) : lens_db_count (db);
+  if (!(lens_order = malloc ((size_t) (total ? total : 1) * sizeof *lens_order)))
+    return NULL;
+  if (cameras)
+    {
+      /* the lens it's for: the profile's (any of that name) */
+      for (i = 0; i < lens_db_count (db); i++)
+        if (!strcmp (lens_db_name (db, i), L->name))
+          {
+            fits_lens = i;
+            break;
+          }
+      for (i = 0; i < lens_db_cameras (db); i++)
+        {
+          char nm[128];
+          snprintf (nm, sizeof nm, "%.20s %.40s", lens_db_camera_maker (db, i), lens_db_camera_model (db, i));
+          if (L->camera[0] && (!strcmp (L->camera, lens_db_camera_model (db, i)) || !strcmp (L->camera, nm)))
+            lens_ticked = i;
+        }
+      {
+        /* the photo's own camera, if the database has it, is "Its own" */
+        int own, j;
+        lens_photo q = ph;
+        q.camera = -1;
+        own = lens_db_photo_camera (db, &q);
+        lens_own_camera = own;
+        if (own >= 0 && ph.crop <= 0)
+          {
+            const char *mt;
+            lens_db_camera_info (db, own, &mt, &ph.crop);
+          }
+        nlens_likely = lens_db_similar (db, fits_lens, ph.crop, ph.make, lens_likely, LENS_LIKELY + 1);
+        for (j = k = 0; j < nlens_likely; j++)
+          if (lens_likely[j] != own && k < LENS_LIKELY)
+            lens_likely[k++] = lens_likely[j];
+        nlens_likely = k;
+      }
+      nlens_order = lens_db_similar (db, fits_lens, 0, NULL, lens_order, total);
+    }
+  else
+    {
+      const char *mount = NULL;
+      double crop;
+      int c = lens_db_photo_camera (db, &ph);
+      crop = ph.crop;
+      if (c >= 0)
+        lens_db_camera_info (db, c, &mount, &crop);
+      lens_crop = crop;
+      for (i = 0; i < lens_db_count (db); i++)
+        {
+          if (lens_ticked < 0 && L->on && !strcmp (lens_db_name (db, i), L->name))
+            lens_ticked = i;
+          if (lens_db_fits (db, i, mount))
+            lens_order[nlens_order++] = i;
+        }
+      nlens_likely = lens_db_suggest (db, &ph, lens_likely, LENS_LIKELY);
+      /* the tick on the one in the lists */
+      for (k = 0; lens_ticked >= 0 && k < nlens_likely; k++)
+        if (!strcmp (lens_db_name (db, lens_likely[k]), L->name))
+          lens_likely[k] = lens_ticked;
+    }
+  lm_db = db;
+  qsort (lens_order, (size_t) nlens_order, sizeof *lens_order, lm_compare);
+  if (!cameras)
+    {
+      /* A lens measured on more than one camera, once: the one measured
+         on a camera the nearest in size to the photo's (or the first). */
+      int j, n = 0;
+      for (i = 0; i < nlens_order; i = j)
+        {
+          int best = lens_order[i];
+          for (j = i + 1; j < nlens_order && !ci_compare (lens_db_name (db, lens_order[j]), lens_db_name (db, best)); j++)
+            if (lens_crop > 0 && fabs (log (lens_db_lens_crop (db, lens_order[j]) / lens_crop))
+                                 < fabs (log (lens_db_lens_crop (db, best) / lens_crop)))
+              best = lens_order[j];
+          if (lens_ticked >= 0 && !strcmp (lens_db_name (db, best), lens_db_name (db, lens_ticked)))
+            lens_ticked = best;
+          lens_order[n++] = best;
+        }
+      nlens_order = n;
+      for (k = 0; lens_ticked >= 0 && k < nlens_likely; k++)
+        if (!strcmp (lens_db_name (db, lens_likely[k]), lens_db_name (db, lens_ticked)))
+          lens_likely[k] = lens_ticked;
+    }
+  for (i = 0; i < nlens_order && nlens_makers < 255; i++)
+    if (!i || ci_compare (lm_maker (db, lens_order[i]), lm_maker (db, lens_order[i - 1])))
+      lens_mstart[nlens_makers++] = i;
+  lens_mstart[nlens_makers] = nlens_order;
+  pool = lens_pool;
+  pool_size = sizeof lens_pool;
+  used = 0;                            /* (menus_open_lens_menu puts the others' back) */
+  all = new_menu (cameras ? "Cameras" : "Lenses", nlens_makers);
+  for (k = 0; all && k < nlens_makers; k++)
+    {
+      const int *idx = lens_order + lens_mstart[k];
+      int c = lens_mstart[k + 1] - lens_mstart[k], j, tick = 0;
+      for (j = 0; j < c; j++)
+        tick |= idx[j] == lens_ticked;
+      set_item (all, k, k == nlens_makers - 1, lm_maker (db, idx[0]), tick ? MF_TICK : 0,
+                (int) lens_maker_menu (db, lm_maker (db, idx[0]), idx, c), 0);
+    }
+  n = (nlens_likely ? nlens_likely : 1) + 2;
+  m = new_menu (cameras ? "Camera" : "Lens", n);
+  if (!m)
+    return NULL;
+  if (!nlens_likely)
+    set_item (m, 0, 0, cameras ? "No cameras it fits" : "No likely lenses", MF_DOTTED, -1, 1);
+  for (k = 0; k < nlens_likely; k++)
+    set_item (m, k, 0, lm_name (db, lens_likely[k]), (lens_likely[k] == lens_ticked ? MF_TICK : 0)
+              | (k == nlens_likely - 1 ? MF_DOTTED : 0), -1, 0);
+  k = nlens_likely ? nlens_likely : 1;
+  set_item (m, k, 0, cameras ? "All cameras" : "All lenses", 0, all ? (int) all : -1, !nlens_makers);
+  if (cameras)
+    {
+      char own[96];
+      if (lens_own_camera >= 0)
+        snprintf (own, sizeof own, "Its own (%.60s)", lens_db_camera_model (db, lens_own_camera));
+      else
+        snprintf (own, sizeof own, "Like the lens was measured on");
+      set_item (m, k + 1, 1, own, lens_ticked < 0 ? MF_TICK : 0, -1, 0);
+    }
+  else
+    set_item (m, k + 1, 1, "None", 0, -1, !L->on);
+  return m;
+}
+
+static void lens_choice (const int *c)
+{
+  int base = nlens_likely ? nlens_likely : 1, i = -1;
+  if (c[0] >= 0 && c[0] < nlens_likely)
+    i = lens_likely[c[0]];
+  else if (c[0] == base && c[1] >= 0 && c[1] < nlens_makers)
+    {
+      int first = lens_mstart[c[1]], n = lens_mstart[c[1] + 1] - first;
+      if (n <= LENS_PART + 4)
+        i = c[2] >= 0 && c[2] < n ? lens_order[first + c[2]] : -1;
+      else if (c[2] >= 0 && c[3] >= 0 && c[2] * LENS_PART + c[3] < n)
+        i = lens_order[first + c[2] * LENS_PART + c[3]];
+    }
+  else if (c[0] == base + 1)
+    {
+      if (lens_cameras)
+        viewer_lens_camera (-1);
+      else
+        viewer_lens_none ();
+      return;
+    }
+  if (i < 0)
+    return;
+  if (lens_cameras)
+    viewer_lens_camera (i);
+  else
+    viewer_lens_choose (i);
+}
+
+static const char *lens_help (const int *c)
+{
+  int base = nlens_likely ? nlens_likely : 1;
+  if (lens_cameras)
+    {
+      if (c[0] >= 0 && c[0] < nlens_likely)
+        return "A camera the lens fits, its sensor the nearest in size to the photo's: the profile is scaled for its sensor.";
+      if (c[0] == base)
+        return "Every camera in the lens database that the lens fits, by maker.";
+      if (c[0] == base + 1)
+        return lens_own_camera >= 0 ? "The photo's own camera: the profile scaled for its sensor."
+                                    : "The photo's camera taken to be like the one the lens was measured on.";
+      return NULL;
+    }
+  if (c[0] >= 0 && c[0] < nlens_likely)
+    return "A lens the photo may have been taken with (that fits its camera and has its focal length): its profile corrects the photo.";
+  if (c[0] == base)
+    return "Every lens in the lens database that fits the photo's camera, by maker.";
+  if (c[0] == base + 1)
+    return "No lens profile: only Manual corrects distortion.";
+  return NULL;
+}
+
+void menus_open_lens_menu (int x, int y, int cameras)
+{
+  size_t was = used;
+  menu *m = build_lens_menu (cameras);
+  pool = pool0;                        /* the others' own again */
+  pool_size = sizeof pool0;
+  used = was;
+  which = 9;
+  open_x = x - 64;
+  open_y = y;
+  if (m)
+    _swix (Wimp_CreateMenu, _INR (1, 3), m, open_x, open_y);
 }
 
 void menus_open_presets_menu (int x, int y)
@@ -1247,6 +1559,11 @@ int menus_selection (const int *choice)
     presets_choice (choice);
   else if (which == 7)
     group_choice (choice);
+  else if (which == 9)
+    {
+      lens_choice (choice);
+      return 0;
+    }
   else if (which == 8)
     {
       if (choice[0] >= 0 && choice[0] < nkeywords)
@@ -1433,6 +1750,8 @@ const char *menus_help (int window, int icon)
   if (n > MAX_LIST)
     n = MAX_LIST;
   base = n ? n : 1;
+  if (which == 9)
+    return lens_help (c);
   /* The Plug-ins submenu, from the icon bar menu (2) or the window menu (4). */
   if ((which == 2 && c[0] == 6) || (which == 1 && c[0] == 5))
     {

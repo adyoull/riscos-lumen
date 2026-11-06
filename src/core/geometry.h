@@ -6,7 +6,13 @@
 
    Each output pixel is mapped back to the source and sampled bilinearly:
      output -> crop (fractions of the canvas) -> zoom -> perspective
-            -> straighten -> quarter turn -> source.
+            -> straighten -> quarter turn -> lens -> source.
+   The lens step (lens correction, recipe.h) undoes the lens's distortion
+   (and the Manual barrel or pincushion), scaled so the corrected picture
+   fills the frame with as much of the photo as it can; then red and blue
+   are each taken from a little further out or in than green (lateral
+   colour, which fringes edges towards the corners), and the light is
+   lifted where the lens darkened it (vignetting).
    The canvas is the picture after its quarter turns. Straightening and
    perspective zoom in just enough that no empty corners show, as cameras'
    own straightening does.
@@ -30,6 +36,17 @@ typedef struct
   double kv, kh;                       /* perspective */
   double zoom;
   double x0, y0, x1, y1;               /* crop, fractions of the canvas */
+  /* lens correction (none when lens is 0) */
+  int lens;
+  double lcx, lcy, lhd;                /* the source's centre and half diagonal */
+  double ls;                           /* corrected place -> where it is undistorted (the fill) */
+  int dm;                              /* distortion model (LENS_D_*), its terms, how much */
+  double d[3], damt, man;
+  int tm;                              /* lateral colour */
+  double t[6], tamt;
+  int vm;                              /* vignetting */
+  double k[3], vamt;
+  double rh, rv;
 } geom_plan;
 
 /* Plans a source of sw x sh. with_crop 0 shows the whole canvas (the crop
@@ -42,6 +59,12 @@ void geom_rows (const geom_plan *g, const uint16_t *src, uint16_t *dst, int y0, 
 
 /* Where output pixel (x, y) comes from in the source, in pixels. */
 void geom_to_source (const geom_plan *g, double x, double y, double *sx, double *sy);
+/* As geom_to_source, for red, green and blue (lateral colour moves red
+   and blue), with the gain (1 or more) that undoes vignetting there. */
+void geom_to_source_rgb (const geom_plan *g, double x, double y, double sx[3], double sy[3], double *gain);
+/* Only straightening, perspective, quarter turns and crop: 1 if the plan
+   does nothing but (perhaps) resize. */
+int geom_plan_is_simple (const geom_plan *g);
 /* The other way: where source pixel (sx, sy) is in the output (perhaps outside it). */
 void geom_from_source (const geom_plan *g, double sx, double sy, double *x, double *y);
 
