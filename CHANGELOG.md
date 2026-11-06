@@ -1,5 +1,25 @@
 # Lumen changelog
 
+## 0.0.38.5 (6 November 2026): NEON for developing and layers
+
+- Developing (develop_rows) has a NEON version: tone, saturation,
+  vibrancy, the vignette, Highlights & Shadows and glow four pixels at
+  a time (Hue Saturation and Lightness, black and white and split
+  toning stay with the plain code). The tables it looks in (the tone
+  curves, linear to sRGB) are still looked up a pixel at a time, as
+  NEON has no way to gather them.
+- Layers have a NEON version, on 16-bit (the Viewer's copies) and 8-bit
+  (the full size) pictures: exposure, temperature and tint, tone
+  (contrast, highlights, shadows, clarity, sharpness) and saturation
+  four pixels at a time, in the same order as the plain code. The square
+  root and the division in tone are still worked out a pixel at a time,
+  so the results are exact.
+- Both give exactly the plain code's pixels (and the develop's
+  histogram); the tests compare them adjustment by adjustment, on ARM
+  with NEON on and off.
+- LumenBench times developing (9 adjustments) and a layer with every
+  slider, at half size and on 12 MP, plain and NEON.
+
 ## 0.0.38.4 (6 November 2026): quicker opening and developing
 
 - Opening a JPEG: the box filter that scales the decoded photo to the

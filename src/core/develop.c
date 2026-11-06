@@ -9,6 +9,7 @@
 #include "develop.h"
 #include "retouch.h"
 #include "geometry.h"
+#include "simd.h"
 
 static uint16_t s2l[256];
 static uint8_t l2s[65536];
@@ -742,10 +743,154 @@ static float row_ny2 (int fh, int y)
   return ny * ny;
 }
 
+/* One pixel of a row, the plain way: hsg its H&S gain (NULL: none), glw
+   the glow's red, green and blue for the row (w apart; NULL: none), vx/vy
+   the vignette's parts (vx NULL: none). */
+static inline __attribute__ ((always_inline))
+void row_pixel (const develop *d, const uint16_t *s, int x, int w, const unsigned *hsg, const unsigned *glw,
+                const int *vx, int vy, uint32_t *o, dev_hist *hist)
+{
+  int R, G, B;
+  unsigned r, g, b;
+  if (hsg)
+    {
+      unsigned gn = hsg[x];
+      uint16_t t[3];
+      int c;
+      for (c = 0; c < 3; c++)
+        {
+          unsigned v = (s[c] * gn) >> 12;
+          t[c] = (uint16_t) (v > 65535 ? 65535 : v);
+        }
+      pixel (d, t, &R, &G, &B);
+    }
+  else
+    pixel (d, s, &R, &G, &B);
+  if (glw)
+    {
+      /* Screen: out = 1 - (1 - out)(1 - glow * amount). */
+      R += (int) (((unsigned) (65535 - R) * glw[x]) >> 16);
+      G += (int) (((unsigned) (65535 - G) * glw[(size_t) w + x]) >> 16);
+      B += (int) (((unsigned) (65535 - B) * glw[(size_t) w * 2 + x]) >> 16);
+    }
+  if (vx)
+    vignette_q (d, vx[x], vy, &R, &G, &B);
+  r = l2s[R]; g = l2s[G]; b = l2s[B];
+  o[x] = r | g << 8 | b << 16;
+  if (hist)
+    {
+      hist->c[HIST_R][r]++;
+      hist->c[HIST_G][g]++;
+      hist->c[HIST_B][b]++;
+      hist->c[HIST_LUM][(r * 54 + g * 183 + b * 19) >> 8]++;
+    }
+}
+
+#if defined(__arm__)
+#pragma GCC push_options
+#pragma GCC target ("fpu=neon")
+#include <arm_neon.h>
+/* The same four pixels at a time: the arithmetic in NEON's lanes, the
+   tables (tone curves, vibrancy's reciprocals, the vignette's gains,
+   linear to sRGB) looked up a lane at a time, as NEON has no gather. For
+   rows without Hue, Saturation and Lightness, black and white or split
+   toning (row_pixel does those). Exactly the plain way's pixels. How many
+   pixels it did. */
+static int row_neon (const develop *d, const uint16_t *s, int w, const unsigned *hsg, const unsigned *glw,
+                     const int *vx, int vy, uint32_t *o, dev_hist *hist)
+{
+  int x, k, c, satvib = d->sat != 65536 || d->vib != 0;
+  const uint32x4_t top = vdupq_n_u32 (65535);
+  const int32x4_t zero = vdupq_n_s32 (0), top_s = vdupq_n_s32 (65535);
+  const int32x4_t f0 = vdupq_n_s32 (d->sat >> 8);
+  for (x = 0; x + 4 <= w; x += 4, s += 12)
+    {
+      uint16x4x3_t px = vld3_u16 (s);
+      uint32_t idx[3][4] __attribute__ ((aligned (16))), lv[3][4] __attribute__ ((aligned (16)));
+      int32x4_t R, G, B;
+      for (c = 0; c < 3; c++)
+        {
+          uint32x4_t v = vmovl_u16 (px.val[c]);
+          if (hsg)
+            v = vminq_u32 (vshrq_n_u32 (vmulq_u32 (v, vld1q_u32 (hsg + x)), 12), top);
+          vst1q_u32 (idx[c], vshrq_n_u32 (v, 16 - DEV_LUT_BITS));
+        }
+      for (c = 0; c < 3; c++)
+        for (k = 0; k < 4; k++)
+          lv[c][k] = d->tone[c][idx[c][k]];
+      R = vreinterpretq_s32_u32 (vld1q_u32 (lv[0]));
+      G = vreinterpretq_s32_u32 (vld1q_u32 (lv[1]));
+      B = vreinterpretq_s32_u32 (vld1q_u32 (lv[2]));
+      if (satvib)
+        {
+          uint32x4_t Yu = vmulq_n_u32 (vreinterpretq_u32_s32 (R), 13933u);
+          int32x4_t Y, f = f0;
+          Yu = vmlaq_n_u32 (Yu, vreinterpretq_u32_s32 (G), 46871u);
+          Yu = vmlaq_n_u32 (Yu, vreinterpretq_u32_s32 (B), 4732u);
+          Y = vreinterpretq_s32_u32 (vshrq_n_u32 (Yu, 16));
+          if (d->vib)
+            {
+              int32x4_t mx = vmaxq_s32 (vmaxq_s32 (R, G), B), mn = vminq_s32 (vminq_s32 (R, G), B), spread;
+              int32_t hi[4] __attribute__ ((aligned (16))), rc[4] __attribute__ ((aligned (16)));
+              vst1q_s32 (hi, vshrq_n_s32 (mx, 8));
+              for (k = 0; k < 4; k++)
+                rc[k] = recip[hi[k]];
+              spread = vshrq_n_s32 (vmulq_s32 (vshrq_n_s32 (vsubq_s32 (mx, mn), 8), vld1q_s32 (rc)), 8);
+              spread = vminq_s32 (spread, vdupq_n_s32 (256));
+              f = vaddq_s32 (f, vshrq_n_s32 (vmulq_s32 (vdupq_n_s32 (d->vib >> 8), vsubq_s32 (vdupq_n_s32 (256), spread)), 8));
+            }
+          R = vaddq_s32 (Y, vshrq_n_s32 (vmulq_s32 (vsubq_s32 (R, Y), f), 8));
+          G = vaddq_s32 (Y, vshrq_n_s32 (vmulq_s32 (vsubq_s32 (G, Y), f), 8));
+          B = vaddq_s32 (Y, vshrq_n_s32 (vmulq_s32 (vsubq_s32 (B, Y), f), 8));
+          R = vminq_s32 (vmaxq_s32 (R, zero), top_s);
+          G = vminq_s32 (vmaxq_s32 (G, zero), top_s);
+          B = vminq_s32 (vmaxq_s32 (B, zero), top_s);
+        }
+      if (glw)
+        {
+          uint32x4_t ur = vreinterpretq_u32_s32 (R), ug = vreinterpretq_u32_s32 (G), ub = vreinterpretq_u32_s32 (B);
+          ur = vaddq_u32 (ur, vshrq_n_u32 (vmulq_u32 (vsubq_u32 (top, ur), vld1q_u32 (glw + x)), 16));
+          ug = vaddq_u32 (ug, vshrq_n_u32 (vmulq_u32 (vsubq_u32 (top, ug), vld1q_u32 (glw + w + x)), 16));
+          ub = vaddq_u32 (ub, vshrq_n_u32 (vmulq_u32 (vsubq_u32 (top, ub), vld1q_u32 (glw + 2 * w + x)), 16));
+          R = vreinterpretq_s32_u32 (ur); G = vreinterpretq_s32_u32 (ug); B = vreinterpretq_s32_u32 (ub);
+        }
+      if (vx)
+        {
+          int32_t gi[4] __attribute__ ((aligned (16))), gv[4] __attribute__ ((aligned (16)));
+          int32x4_t gn;
+          vst1q_s32 (gi, vminq_s32 (vshrq_n_s32 (vaddq_s32 (vld1q_s32 (vx + x), vdupq_n_s32 (vy)), 16), vdupq_n_s32 (256)));
+          for (k = 0; k < 4; k++)
+            gv[k] = d->vig_gain[gi[k]];
+          gn = vld1q_s32 (gv);
+          R = vminq_s32 (vshrq_n_s32 (vmulq_s32 (R, gn), 12), top_s);
+          G = vminq_s32 (vshrq_n_s32 (vmulq_s32 (G, gn), 12), top_s);
+          B = vminq_s32 (vshrq_n_s32 (vmulq_s32 (B, gn), 12), top_s);
+        }
+      vst1q_s32 ((int32_t *) lv[0], R);
+      vst1q_s32 ((int32_t *) lv[1], G);
+      vst1q_s32 ((int32_t *) lv[2], B);
+      for (k = 0; k < 4; k++)
+        {
+          unsigned r = l2s[lv[0][k]], g = l2s[lv[1][k]], b = l2s[lv[2][k]];
+          o[x + k] = r | g << 8 | b << 16;
+          if (hist)
+            {
+              hist->c[HIST_R][r]++;
+              hist->c[HIST_G][g]++;
+              hist->c[HIST_B][b]++;
+              hist->c[HIST_LUM][(r * 54 + g * 183 + b * 19) >> 8]++;
+            }
+        }
+    }
+  return x;
+}
+#pragma GCC pop_options
+#endif
+
 void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
                    uint32_t *dst, dev_hist *hist)
 {
-  int y, x;
+  int y, x, glow = d->glow && d->ggw;
   static unsigned *rowbuf;             /* a row's H&S gains, then the glow's red, green and blue */
   static int roww;
   static int *vcol;                    /* the vignette's part for each column (vignette_q) */
@@ -769,43 +914,54 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
           vcol[x] = f > 300 * 65536.0f ? 300 * 65536 : (int) f;
         }
     }
+  if ((d->hs || glow) && (!rowbuf || roww < w))
+    {
+      free (rowbuf);
+      roww = w;
+      if (!(rowbuf = malloc (sizeof *rowbuf * (size_t) w * 4)))
+        {
+          roww = 0;
+          return;
+        }
+    }
   for (y = y0; y < y1; y++)
     {
       const uint16_t *s = src + (size_t) y * w * 3;
       uint32_t *o = dst + (size_t) y * w;
       float ny2 = d->vig ? row_ny2 (d->fh, y + d->ry) : 0;
       int vrow = ny2 * 128 * 65536 > 300 * 65536.0f ? 300 * 65536 : (int) (ny2 * 128 * 65536);
-      if (d->hs || (d->glow && d->ggw))
+      const unsigned *hsg = NULL, *glw = NULL;
+      const int *vx = d->vig ? vcol : NULL;
+      if (d->identity)
         {
-          /* Highlights & Shadows: each pixel scaled by its place's gain,
-             then the rest as usual; then the glow laid over it. */
+          for (x = 0; x < w; x++, s += 3)
+            {
+              unsigned r = l2s[s[0]], g = l2s[s[1]], b = l2s[s[2]];
+              o[x] = r | g << 8 | b << 16;
+              if (hist)
+                {
+                  hist->c[HIST_R][r]++;
+                  hist->c[HIST_G][g]++;
+                  hist->c[HIST_B][b]++;
+                  hist->c[HIST_LUM][(r * 54 + g * 183 + b * 19) >> 8]++;
+                }
+            }
+          continue;
+        }
+      if (d->hs || glow)
+        {
+          /* Highlights & Shadows' gains and the glow along the row, worked
+             out first in 16.16 fixed point (where each pixel falls between
+             two cells, and the blend, in integers), so the pixels only
+             look them up. */
           float row[HS_GRID], grow[GLOW_GRID * 3];
           double step = d->hs ? (double) d->gw / d->fw : 0, fx = d->hs ? (d->rx + 0.5) * step - 0.5 : 0;
           double gstep = d->ggw ? (double) d->ggw / d->fw : 0, gx = d->ggw ? (d->rx + 0.5) * gstep - 0.5 : 0;
-          int glow = d->glow && d->ggw;
-          if (d->hs)
-            gain_row (d, y + d->ry, row);
-          if (glow)
-            glow_row (d, y + d->ry, grow);
-          /* The gains and the glow along the row, worked out first (and
-             in single precision: ARM's double is slower), so the pixels'
-             loop only looks them up. */
-          if (!rowbuf || roww < w)
-            {
-              free (rowbuf);
-              roww = w;
-              if (!(rowbuf = malloc (sizeof *rowbuf * (size_t) w * 4)))
-                {
-                  roww = 0;
-                  return;
-                }
-            }
-          /* Along the row in 16.16 fixed point: where each pixel falls
-             between two cells, and the blend, in integers. */
           if (d->hs)
             {
               int ir[HS_GRID], gwm = d->gw - 1;
               long long F = (long long) (fx * 65536), dF = (long long) (step * 65536);
+              gain_row (d, y + d->ry, row);
               for (x = 0; x <= gwm; x++)
                 ir[x] = (int) row[x];
               for (x = 0; x < w; x++, F += dF)
@@ -815,11 +971,13 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
                     i = gwm, a = 0;
                   rowbuf[x] = (unsigned) (ir[i] + (int) (((long long) (ir[i < gwm ? i + 1 : i] - ir[i]) * a) >> 16));
                 }
+              hsg = rowbuf;
             }
           if (glow)
             {
               int ig[GLOW_GRID * 3], gwm = d->ggw - 1, c;
               long long F = (long long) (gx * 65536), dF = (long long) (gstep * 65536);
+              glow_row (d, y + d->ry, grow);
               for (x = 0; x < d->ggw * 3; x++)
                 {
                   int v = ((int) grow[x] * d->glow) >> 8;
@@ -834,77 +992,16 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
                   for (c = 0; c < 3; c++)
                     rowbuf[(size_t) w * (c + 1) + x] = (unsigned) (ig[i * 3 + c] + (((ig[j * 3 + c] - ig[i * 3 + c]) * (a >> 1)) >> 15));
                 }
-            }
-          for (x = 0; x < w; x++, s += 3)
-            {
-              int R, G, B;
-              unsigned r, g, b;
-              if (d->hs)
-                {
-                  unsigned gn = rowbuf[x];
-                  int c;
-                  uint16_t t[3];
-                  for (c = 0; c < 3; c++)
-                    {
-                      unsigned v = (s[c] * gn) >> 12;
-                      t[c] = (uint16_t) (v > 65535 ? 65535 : v);
-                    }
-                  pixel (d, t, &R, &G, &B);
-                }
-              else
-                pixel (d, s, &R, &G, &B);
-              if (glow)
-                {
-                  /* Screen: out = 1 - (1 - out)(1 - glow * amount). */
-                  unsigned gr = rowbuf[(size_t) w + x], gg = rowbuf[(size_t) w * 2 + x], gb = rowbuf[(size_t) w * 3 + x];
-                  R += (int) (((unsigned) (65535 - R) * (unsigned) gr) >> 16);
-                  G += (int) (((unsigned) (65535 - G) * (unsigned) gg) >> 16);
-                  B += (int) (((unsigned) (65535 - B) * (unsigned) gb) >> 16);
-                }
-              if (d->vig)
-                vignette_q (d, vcol[x], vrow, &R, &G, &B);
-              r = l2s[R]; g = l2s[G]; b = l2s[B];
-              o[x] = r | g << 8 | b << 16;
-              if (hist)
-                {
-                  hist->c[HIST_R][r]++;
-                  hist->c[HIST_G][g]++;
-                  hist->c[HIST_B][b]++;
-                  hist->c[HIST_LUM][(r * 54 + g * 183 + b * 19) >> 8]++;
-                }
+              glw = rowbuf + w;
             }
         }
-      else if (d->identity)
-        for (x = 0; x < w; x++, s += 3)
-          {
-            unsigned r = l2s[s[0]], g = l2s[s[1]], b = l2s[s[2]];
-            o[x] = r | g << 8 | b << 16;
-            if (hist)
-              {
-                hist->c[HIST_R][r]++;
-                hist->c[HIST_G][g]++;
-                hist->c[HIST_B][b]++;
-                hist->c[HIST_LUM][(r * 54 + g * 183 + b * 19) >> 8]++;
-              }
-          }
-      else
-        for (x = 0; x < w; x++, s += 3)
-          {
-            int R, G, B;
-            unsigned r, g, b;
-            pixel (d, s, &R, &G, &B);
-            if (d->vig)
-              vignette_q (d, vcol[x], vrow, &R, &G, &B);
-            r = l2s[R]; g = l2s[G]; b = l2s[B];
-            o[x] = r | g << 8 | b << 16;
-            if (hist)
-              {
-                hist->c[HIST_R][r]++;
-                hist->c[HIST_G][g]++;
-                hist->c[HIST_B][b]++;
-                hist->c[HIST_LUM][(r * 54 + g * 183 + b * 19) >> 8]++;
-              }
-          }
+      x = 0;
+#if defined(__arm__)
+      if (simd_neon () && !d->hsl && !d->bw && !d->toning)
+        x = row_neon (d, s, w, hsg, glw, vx, vrow, o, hist);
+#endif
+      for (; x < w; x++)
+        row_pixel (d, s + (size_t) x * 3, x, w, hsg, glw, vx, vrow, o, hist);
     }
 }
 

@@ -4,8 +4,9 @@
 /* simd: whether Lumen's NEON routines are used.
 
    Lumen is built for ARMv7 with VFPv3, so it runs on every ARMv7
-   processor; the few routines that gain most from NEON (resample32 and
-   sharpen32) have NEON versions as well, chosen when Lumen starts if the
+   processor; the routines that gain most from NEON (resample32,
+   sharpen32, noise reduction, develop_rows and the layers in retouch.c)
+   have NEON versions as well, chosen when Lumen starts if the
    processor has NEON (fsys_neon). Both give exactly the same pixels.
    Lumen$NEON (LUMEN_NEON on Linux) set to 0 or 1 overrides the choice. */
 #ifndef LUMEN_SIMD_H

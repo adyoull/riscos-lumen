@@ -1,4 +1,4 @@
-Lumen 0.0.38.4 (06 Nov 2026)
+Lumen 0.0.38.5 (06 Nov 2026)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -455,8 +455,9 @@ and writing), once they take a second or more.
 
 Lumen runs on any ARMv7 processor with VFPv3. When the processor has
 NEON (every Raspberry Pi from the Pi 2 on does), JPEGs are read and
-written with it, and Lumen's own scaling of the photo to the screen and
-its sharpening use it too; without NEON the plain code gives exactly the
+written with it, and Lumen's own scaling of the photo to the screen, its
+sharpening, noise reduction, developing and layers use it too; without
+NEON the plain code gives exactly the
 same pictures. Bench says which is in use and times both. To compare:
 *Set JSIMD_FORCENONE 1 (JPEGs) and *Set Lumen$NEON 0 (Lumen's own) before
 running Bench or Lumen use the plain code; *Unset them to put NEON back.

@@ -18,7 +18,8 @@
        with the other adjustments added one at a time;
      - layers: an oval, a turned one, a gradient, a brush stroke and an
        oval with every slider, at half size, proxy and 12 MP;
-     - smoothing, enlarging and sharpening, plain and NEON;
+     - smoothing, enlarging and sharpening, developing (9 adjustments)
+       and a layer with every slider, plain and NEON;
      - a frame while dragging (develop + enlarge + plot) against 50 ms. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -453,6 +454,47 @@ int main (int argc, char **argv)
               sharpen32 (cp, proxy.w, proxy.h, 80, 1.0);
             }
           printf ("Sharpening the proxy (%s):            %5.1f ms\n", which, ms_since (t0) / 3);
+          /* Developing the half size with tone, saturation, vibrancy,
+             vignette, Highlights & Shadows and glow (what NEON does), and
+             a layer with every slider, at half size and on 12 MP. */
+          {
+            develop *dn = malloc (sizeof *dn);
+            recipe rn, lr;
+            dev_lummap mp;
+            int hw = proxy.w / 2, hh = proxy.h / 2, fw = 4256, fh = 2832;
+            uint16_t *lw = malloc ((size_t) hw * hh * 6);
+            unsigned char *f8 = malloc ((size_t) fw * fh * 3);
+            if (dn && lw)
+              {
+                recipe_default (&rn);
+                recipe_set (&rn, P_TEMP, 12); recipe_set (&rn, P_EV, 0.35f); recipe_set (&rn, P_CONTRAST, 15);
+                recipe_set (&rn, P_SATURATION, 20); recipe_set (&rn, P_VIBRANCE, 20); recipe_set (&rn, P_VIG_AMOUNT, -30);
+                recipe_set (&rn, P_HIGHLIGHTS, -30); recipe_set (&rn, P_SHADOWS, 30); recipe_set (&rn, P_GLOW_AMOUNT, 30);
+                develop_prepare (dn, &rn);
+                dev_lummap_lin (&mp, src, hw, hh);
+                develop_mask (dn, &mp, NULL, hw, hh);
+                printf ("Developing the half size, 9 adjustments (%s): %5.1f ms\n", which, time_develop (dn, src, hw, hh, dst, 10));
+                recipe_parse (&lr, "mask k=radial x0=0.5 y0=0.5 x1=0.3 y1=0.3 f=0.5 ev=0.5 contrast=20 highlights=-20 shadows=20 "
+                                   "temp=10 saturation=10 clarity=30 sharpness=20\n");
+                t0 = clock ();
+                for (k = 0; k < 5; k++)
+                  {
+                    memcpy (lw, src, (size_t) hw * hh * 6);
+                    retouch_lin (lw, hw, hh, &lr);
+                  }
+                printf ("A layer, every slider, half size (%s): %5.1f ms\n", which, ms_since (t0) / 5);
+                if (f8)
+                  {
+                    memset (f8, 100, (size_t) fw * fh * 3);
+                    t0 = clock ();
+                    retouch_rgb8 (f8, fw, fh, &lr);
+                    printf ("A layer, every slider, 12 MP (%s):    %5.0f ms\n", which, ms_since (t0));
+                  }
+              }
+            free (dn);
+            free (lw);
+            free (f8);
+          }
         }
     simd_force (-1);
     free (sm);

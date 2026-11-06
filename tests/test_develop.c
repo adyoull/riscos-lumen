@@ -2891,6 +2891,90 @@ static void test_simd (void)
         same = 0;
     }
   CHECK (same, "sharpen32: NEON gives the plain code's pixels at every radius");
+  /* develop_rows: the adjustments NEON does (and those it leaves to the
+     plain code), at widths four doesn't divide, with the histogram. */
+  {
+    static const struct { int p; float v; } steps[] = {
+      { P_EV, 0.4f }, { P_CONTRAST, 25 }, { P_SATURATION, 35 }, { P_VIBRANCE, -40 }, { P_VIBRANCE, 45 },
+      { P_VIG_AMOUNT, -40 }, { P_VIG_AMOUNT, 35 }, { P_HIGHLIGHTS, -50 }, { P_SHADOWS, 60 }, { P_GLOW_AMOUNT, 40 },
+      { P_SATURATION, -60 }, { HSL_PARAM (2, 1), 30 }, { P_BW_AMOUNT, 100 },
+    };
+    static uint16_t lin[W * H * 3];
+    static dev_hist ha, hb;
+    develop *dv = malloc (sizeof *dv);
+    recipe rr;
+    dev_lummap map;
+    int widths[] = { W, 201, 6, 1 }, wi;
+    same = 1;
+    for (i = 0; i < W * H * 3; i++)
+      {
+        seed = seed * 1103515245u + 12345u;
+        lin[i] = (uint16_t) (seed >> 16);
+      }
+    recipe_default (&rr);
+    for (k = 0; dv && k < (int) (sizeof steps / sizeof steps[0]); k++)
+      {
+        recipe_set (&rr, steps[k].p, steps[k].v);
+        develop_prepare (dv, &rr);
+        if (develop_needs_mask (dv))
+          {
+            dev_lummap_lin (&map, lin, W, H);
+            develop_mask (dv, &map, NULL, W, H);
+          }
+        for (wi = 0; wi < 4; wi++)
+          {
+            int ww = widths[wi], hh = W * H / ww > H ? H : W * H / ww;
+            memset (&ha, 0, sizeof ha);
+            memset (&hb, 0, sizeof hb);
+            simd_force (0);
+            develop_rows (dv, lin, ww, 0, hh, a, &ha);
+            simd_force (1);
+            develop_rows (dv, lin, ww, 0, hh, b, &hb);
+            if (memcmp (a, b, sizeof (uint32_t) * (size_t) ww * hh) || memcmp (&ha, &hb, sizeof ha))
+              same = 0;
+          }
+      }
+    free (dv);
+    CHECK (same, "develop_rows: NEON gives the plain code's pixels and histogram, adjustment by adjustment");
+  }
+  /* Layers: every slider, the shapes and a brush, inverted, on 16-bit and
+     8-bit pictures, at widths four doesn't divide. */
+  {
+    static const char *const layers =
+      "mask k=radial x0=0.4000 y0=0.5000 x1=0.3000 y1=0.4000 f=0.60 angle=25.0 ev=0.80 contrast=30 highlights=-40 shadows=35 "
+      "temp=20 tint=-10 saturation=25 clarity=40 sharpness=50\n"
+      "mask k=gradient x0=0.5000 y0=0.0000 x1=0.5000 y1=0.7000 f=0.50 ev=-0.60 saturation=-30\n"
+      "mask k=radial x0=0.6000 y0=0.4000 x1=0.2000 y1=0.2000 f=0.30 invert=1 contrast=-25 clarity=-30\n"
+      "mask k=brush ev=0.50 sharpness=-40\n"
+      "paint m=3 k=add a=1.00 r=0.0800 f=0.50 p=1000,1000;5000,6000;9000,3000\n";
+    static uint16_t l16a[W * H * 3], l16b[W * H * 3];
+    static unsigned char r8a[W * H * 3], r8b[W * H * 3];
+    recipe rr;
+    int widths[] = { W, 201, 7 }, wi, same16 = 1, same8 = 1;
+    recipe_parse (&rr, layers);
+    for (wi = 0; wi < 3; wi++)
+      {
+        int ww = widths[wi], hh = W * H / ww > H ? H : W * H / ww;
+        for (i = 0; i < ww * hh * 3; i++)
+          {
+            seed = seed * 1103515245u + 12345u;
+            l16a[i] = l16b[i] = (uint16_t) (seed >> 16);
+            r8a[i] = r8b[i] = (unsigned char) (seed >> 24);
+          }
+        simd_force (0);
+        retouch_lin (l16a, ww, hh, &rr);
+        retouch_rgb8 (r8a, ww, hh, &rr);
+        simd_force (1);
+        retouch_lin (l16b, ww, hh, &rr);
+        retouch_rgb8 (r8b, ww, hh, &rr);
+        if (memcmp (l16a, l16b, sizeof (uint16_t) * (size_t) ww * hh * 3))
+          same16 = 0;
+        if (memcmp (r8a, r8b, (size_t) ww * hh * 3))
+          same8 = 0;
+      }
+    CHECK (same16, "layers: NEON gives the plain code's pixels (16-bit)");
+    CHECK (same8, "layers: NEON gives the plain code's pixels (8-bit)");
+  }
   simd_force (-1);
 }
 

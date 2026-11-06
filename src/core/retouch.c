@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "retouch.h"
+#include "simd.h"
 
 #define PI 3.14159265358979
 #define MASK_GRID_MAX 2048             /* a mask's coverage: cells across the longer side, at most */
@@ -920,6 +921,157 @@ static void light_row (const pic *p, int y, int x0, int bw, float *out)
     }
 }
 
+/* A layer's settings, for its NEON row. */
+typedef struct
+{
+  float kc, kh, ks, kl, kp, ksat;
+  int tone;
+  const float (*gain)[1025];
+} mask_k;
+
+#if defined(__arm__)
+#pragma GCC push_options
+#pragma GCC target ("fpu=neon")
+#include <arm_neon.h>
+/* apply_mask's pixels four at a time, x0 on (to x1): the arithmetic in
+   NEON's lanes, done in the same order as the plain code, so the pixels
+   are exactly its own; the tables (the gains, 8-bit sRGB and back), the
+   square root and the division a lane at a time, as NEON has none it
+   could use that are exact. u, c, d: the rows of lightness above, on and
+   below (sharpness), NULL without tone. Where it got to. */
+static int mask_row_neon (const pic *p, int y, int x0, int x1, const float *mrow, const float *pb_row,
+                          const float *u, const float *c, const float *d, const mask_k *K)
+{
+  int x, i, k;
+  const float32x4_t zero = vdupq_n_f32 (0), one = vdupq_n_f32 (1);
+  for (x = x0; x + 3 <= x1; x += 4)
+    {
+      float32x4_t m = vld1q_f32 (mrow + x - x0), ch[3];
+      uint32x4_t skip = vcleq_f32 (m, vdupq_n_f32 (1.0f / 65535));
+      uint32_t sk[4] __attribute__ ((aligned (16)));
+      int32_t gi[4] __attribute__ ((aligned (16)));
+      float gv[3][4] __attribute__ ((aligned (16)));
+      size_t at = ((size_t) y * p->w + x) * 3;
+      uint16x4x3_t raw16;
+      vst1q_u32 (sk, skip);
+      if (sk[0] && sk[1] && sk[2] && sk[3])
+        continue;
+      if (p->maxv == 255)
+        {
+          const unsigned char *b = (const unsigned char *) p->img + at;
+          for (i = 0; i < 3; i++)
+            for (k = 0; k < 4; k++)
+              gv[i][k] = lin_of8[b[k * 3 + i]];
+          for (i = 0; i < 3; i++)
+            ch[i] = vld1q_f32 (gv[i]);
+        }
+      else
+        {
+          raw16 = vld3_u16 ((const uint16_t *) p->img + at);
+          for (i = 0; i < 3; i++)
+            ch[i] = vmulq_f32 (vcvtq_f32_u32 (vmovl_u16 (raw16.val[i])), vdupq_n_f32 (1.0f / 65535));
+        }
+      vst1q_s32 (gi, vminq_s32 (vcvtq_s32_f32 (vaddq_f32 (vmulq_n_f32 (m, 1024), vdupq_n_f32 (0.5f))), vdupq_n_s32 (1024)));
+      for (i = 0; i < 3; i++)
+        {
+          for (k = 0; k < 4; k++)
+            gv[i][k] = K->gain[i][gi[k]];
+          ch[i] = vmulq_f32 (ch[i], vld1q_f32 (gv[i]));
+        }
+      if (K->tone)
+        {
+          float32x4_t L = vaddq_f32 (vaddq_f32 (vmulq_n_f32 (ch[0], 0.2126f), vmulq_n_f32 (ch[1], 0.7152f)), vmulq_n_f32 (ch[2], 0.0722f));
+          float32x4_t pl, q, omq, np, L2, t;
+          float lv[4] __attribute__ ((aligned (16))), fv[4] __attribute__ ((aligned (16)));
+          int a = x - x0 + 1;
+          uint32x4_t big;
+          vst1q_f32 (lv, L);
+          for (k = 0; k < 4; k++)
+            fv[k] = lv[k] > 0 ? sqrtf (lv[k]) : 0;
+          pl = vld1q_f32 (fv);
+          q = vminq_f32 (pl, one);
+          omq = vsubq_f32 (one, q);
+          np = pl;
+          if (K->kc != 0)
+            {
+              t = vmulq_f32 (vmulq_f32 (vmulq_f32 (vmulq_n_f32 (m, K->kc), vsubq_f32 (q, vdupq_n_f32 (0.5f))), vdupq_n_f32 (2)), q);
+              np = vaddq_f32 (np, vmulq_f32 (t, omq));
+            }
+          if (K->kh != 0)
+            np = vaddq_f32 (np, vmulq_f32 (vmulq_f32 (vmulq_f32 (vmulq_f32 (vmulq_n_f32 (m, K->kh), q), q), q), omq));
+          if (K->ks != 0)
+            np = vaddq_f32 (np, vmulq_f32 (vmulq_f32 (vmulq_f32 (vmulq_f32 (vmulq_n_f32 (m, K->ks), q), omq), omq), omq));
+          if (pb_row)
+            {
+              float32x4_t p0 = vld1q_f32 (c + a), pb = vld1q_f32 (pb_row + x - x0);
+              t = vmulq_f32 (vmulq_n_f32 (vmulq_f32 (vmulq_n_f32 (m, K->kl), vsubq_f32 (p0, pb)), 4), q);
+              np = vaddq_f32 (np, vmulq_f32 (t, omq));
+            }
+          if (K->kp != 0)
+            {
+              float32x4_t p0 = vld1q_f32 (c + a), near;
+              near = vaddq_f32 (vld1q_f32 (u + a - 1), vld1q_f32 (u + a));
+              near = vaddq_f32 (near, vld1q_f32 (u + a + 1));
+              near = vaddq_f32 (near, vld1q_f32 (c + a - 1));
+              near = vaddq_f32 (near, p0);
+              near = vaddq_f32 (near, vld1q_f32 (c + a + 1));
+              near = vaddq_f32 (near, vld1q_f32 (d + a - 1));
+              near = vaddq_f32 (near, vld1q_f32 (d + a));
+              near = vaddq_f32 (near, vld1q_f32 (d + a + 1));
+              near = vmulq_n_f32 (near, 1.0f / 9);
+              np = vaddq_f32 (np, vmulq_f32 (vmulq_n_f32 (m, K->kp), vsubq_f32 (p0, near)));
+            }
+          np = vmaxq_f32 (np, zero);
+          L2 = vmulq_f32 (np, np);
+          big = vcgtq_f32 (L, vdupq_n_f32 (1e-7f));
+          {
+            float l2v[4] __attribute__ ((aligned (16)));
+            float32x4_t f;
+            vst1q_f32 (l2v, L2);
+            for (k = 0; k < 4; k++)
+              fv[k] = lv[k] > 1e-7f ? l2v[k] / lv[k] : 0;
+            f = vld1q_f32 (fv);
+            for (i = 0; i < 3; i++)
+              ch[i] = vbslq_f32 (big, vmulq_f32 (ch[i], f), L2);
+          }
+        }
+      if (K->ksat != 0)
+        {
+          float32x4_t lum = vaddq_f32 (vaddq_f32 (vmulq_n_f32 (ch[0], 0.2126f), vmulq_n_f32 (ch[1], 0.7152f)), vmulq_n_f32 (ch[2], 0.0722f));
+          float32x4_t f = vaddq_f32 (one, vmulq_n_f32 (m, K->ksat));
+          for (i = 0; i < 3; i++)
+            ch[i] = vaddq_f32 (lum, vmulq_f32 (vsubq_f32 (ch[i], lum), f));
+        }
+      for (i = 0; i < 3; i++)
+        ch[i] = vminq_f32 (vmaxq_f32 (ch[i], zero), one);
+      if (p->maxv == 255)
+        {
+          unsigned char *b = (unsigned char *) p->img + at;
+          for (i = 0; i < 3; i++)
+            {
+              int32_t ix[4] __attribute__ ((aligned (16)));
+              vst1q_s32 (ix, vcvtq_s32_f32 (vaddq_f32 (vmulq_n_f32 (ch[i], SRGB8_STEPS), vdupq_n_f32 (0.5f))));
+              for (k = 0; k < 4; k++)
+                if (!sk[k])
+                  b[k * 3 + i] = srgb8[ix[k]];
+            }
+        }
+      else
+        {
+          uint16x4x3_t out;
+          for (i = 0; i < 3; i++)
+            {
+              uint16x4_t v = vmovn_u32 (vcvtq_u32_f32 (vaddq_f32 (vmulq_n_f32 (ch[i], 65535), vdupq_n_f32 (0.5f))));
+              out.val[i] = vbsl_u16 (vmovn_u32 (skip), raw16.val[i], v);
+            }
+          vst3_u16 ((uint16_t *) p->img + at, out);
+        }
+    }
+  return x;
+}
+#pragma GCC pop_options
+#endif
+
 static void apply_mask (const pic *p, const recipe *r, int mi)
 {
   const recipe_mask *mk = &r->mask[mi];
@@ -977,7 +1129,16 @@ static void apply_mask (const pic *p, const recipe *r, int mi)
       cover_row (&V, y, mrow);
       if (cmap)
         gs_rowf (&cs, cmap, y, pb_row);
-      for (x = x0; x <= x1; x++)
+      x = x0;
+#if defined(__arm__)
+      if (simd_neon ())
+        {
+          mask_k K = { kc, kh, ks, kl, kp, ksat, tone, (const float (*)[1025]) gain };
+          x = mask_row_neon (p, y, x0, x1, mrow, pb_row, rows ? ROW (y - 1) : NULL, rows ? ROW (y) : NULL,
+                             rows ? ROW (y + 1) : NULL, &K);
+        }
+#endif
+      for (; x <= x1; x++)
         {
           float m = mrow[x - x0], c[3];
           size_t at = ((size_t) y * p->w + x) * 3;
