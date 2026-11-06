@@ -34,6 +34,9 @@ for f in "${samples[@]}"; do
   pw=${dims%x*}; ph=${dims#*x}
   # Half size when that is still >= 1000 on the longer side (within a few pixels: LibRaw trims odd edges).
   check "[ $(( (w > h ? w : h) / 2 >= 1000 )) -eq 0 ] || [ \$(( ($pw > $ph ? $pw : $ph) - (w > h ? w : h) / 2 )) -le 4 ]" "$f: half size ($dims from ${w}x$h)"
+  # With the noise reduction argument (API: a 6th, 1 or 2): the same size, a different picture.
+  out=$(eval $wrap "$helper" decode "\"$f\"" "\"$b.nr.ppm\"" "\"$b.nr.info\"" 1000 2 2>&1); rc=$?
+  check "[ $rc -eq 0 ] && [ -z \"\$out\" ] && [ \"\$(head -c 20 \"$b.nr.ppm\" | tr '\\n' ' ' | awk '{print \$2\"x\"\$3}')\" = \"$dims\" ] && ! cmp -s \"$b.ppm\" \"$b.nr.ppm\"" "$f: decode with noise reduction (2): same size, a different picture"
 done
 # Not a raw file: an error line, no picture, nothing printed.
 echo "not a raw file" > "$work/plain.txt"

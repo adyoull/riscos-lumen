@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see the LICENSE file. SPDX-License-Identifier: MIT -->
 <html lang="en-GB">
 <head>
 <meta charset="utf-8">
@@ -55,12 +54,13 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 </style>
 </head>
 <body>
+<!-- Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see the LICENSE file. SPDX-License-Identifier: MIT -->
 <header class="cover">
 <div>
 <h1>LumenRaw User Guide</h1>
 <p>Camera raw files in Lumen, on RISC OS</p>
 <p>Everything about the plug-in that lets Lumen open, show, adjust and export the raw files from your camera, and a list of every camera it knows.</p>
-<span class="badge">LumenRaw 1.1 &middot; LibRaw 0.22.3</span>
+<span class="badge">LumenRaw 1.2 &middot; LibRaw 0.22.3</span>
 </div>
 </header>
 <main>
@@ -98,6 +98,8 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>This guide is about the plug-in. Everything else about Lumen (the library, the adjustments, exporting) is in the <b>Lumen User Guide</b>, which comes with Lumen: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
 <p>The pictures are screenshots of Lumen 0.0.26 with LumenRaw on RISC OS 5. The raw photos in them are by the author, Andrew Youll, straight from his Nikon D700.</p>
 
+<h4>New in LumenRaw 1.2</h4>
+<p>LumenRaw 1.2 can reduce noise on the raw data itself, before it's made into a picture, where it does most good: <b>FBDD</b> noise reduction, which stops colour noise being smeared into blotches when the colours are worked out, and dcraw's <b>wavelet</b> noise reduction for the grain. Choose it in Lumen's Choices (<b>Raw noise</b>: Off, Light or Strong; it needs Lumen 0.0.38). It's off to begin with.</p>
 <h4>New in LumenRaw 1.1</h4>
 <p>LumenRaw 1.1 is built on LibRaw 0.22.3, the newest LibRaw (October 2026), in place of 0.21.4. It knows 77 more cameras, mostly from 2023 and 2024: among them the Canon EOS R8, R50, R6 Mark II and R5 Mark II, the Nikon Z 8, Z f and Z 6 III, the Sony A7R V, A7C II and A6700, the Fujifilm X-T5, X-H2 and X100VI, the OM System OM-5, Panasonic's GH6 and GH7, and iPhones up to the 15 Pro Max. LibRaw's 0.22 releases also fix many ways a damaged or deliberately broken raw file could upset it.</p>
 
@@ -163,7 +165,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>Lumen's <b>Add plug-in</b> window has an <b>Open PackMan</b> button that starts PackMan for you.</p>
 
 <h4>By hand, from the zip file</h4>
-<p>LumenRaw also comes as a zip file, <code>LumenRaw-1.1.zip</code>. Inside it, the plug-in is laid out as it goes into Lumen: <code>!Lumen.Plugins.LibRaw</code>.</p>
+<p>LumenRaw also comes as a zip file, <code>LumenRaw-1.2.zip</code>. Inside it, the plug-in is laid out as it goes into Lumen: <code>!Lumen.Plugins.LibRaw</code>.</p>
 <ol class="steps">
 <li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
 <li>Open the <code>!Lumen</code> directory inside it: hold <kbd>Shift</kbd> and double-click it, then double-click <code>Plugins</code>. You'll see a directory called <code>LibRaw</code>.</li>
@@ -174,7 +176,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>You can also drag the <code>LibRaw</code> directory straight onto Lumen's main window.</p>
 
 <h4>Checking it's working</h4>
-<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenRaw is listed as <b>Camera raw (LibRaw) 1.1</b>, with a tick when it's on.</p>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenRaw is listed as <b>Camera raw (LibRaw) 1.2</b>, with a tick when it's on.</p>
 <figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw installed and on.</figcaption></figure>
 
 <div class="box try"><b class="label">TRY IT</b>Find a raw file from your camera (its name usually ends in <code>/NEF</code>, <code>/CR2</code>, <code>/CR3</code>, <code>/ARW</code>, <code>/RAF</code>, <code>/ORF</code>, <code>/RW2</code> or <code>/DNG</code>) and drag it into Lumen's window. A thumbnail should appear within a second or two. Double-click it: after a moment the photo sharpens as LumenRaw develops it.</div>
@@ -274,7 +276,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <h3 class="chapter" id="ch8"><span>8</span> Which cameras work</h3>
 
-<p>LumenRaw 1.1 uses LibRaw 0.22.3, which lists <b>1,258 cameras</b> from about 80 makers, from early digital cameras to models released in 2024. The whole list is in <a href="#appA">Appendix A</a>. Here's a summary of the makers with the most:</p>
+<p>LumenRaw 1.2 uses LibRaw 0.22.3, which lists <b>1,258 cameras</b> from about 80 makers, from early digital cameras to models released in 2024. The whole list is in <a href="#appA">Appendix A</a>. Here's a summary of the makers with the most:</p>
 <table>
 <tr><th>Maker</th><th>Models</th><th>For example</th></tr>
 <tr><td>Canon</td><td>171</td><td>EOS R1, EOS R5 Mark II, EOS R6 Mark II, EOS R8, EOS R50, EOS R10, EOS 5D Mark IV, EOS 90D; many PowerShots</td></tr>
@@ -298,7 +300,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <p>Camera makers bring out new models, and new raw formats, every year, and LibRaw 0.22.3's list stops at cameras from 2024. A camera that's newer than the list, or a format this build of LibRaw doesn't include, may not open at all, or may open with colours that look wrong.</p>
 
-<h4>Known not to work in LumenRaw 1.1</h4>
+<h4>Known not to work in LumenRaw 1.2</h4>
 <ul>
 <li><b>Newer cameras</b>, for example the Nikon Z50 II and Z5 II, Sony A1 II, Fujifilm X-M5, X-E5 and GFX100RF, Panasonic S1R II, OM System OM-3 and the iPhone 16. If your camera came out late in 2024 or later, it may not be in the list.</li>
 <li><b>Nikon's High Efficiency raw</b> (the HE and HE* settings on the Z 9, Z 8, Z f and Z 6 III). Set the camera to <b>lossless compressed</b> raw instead.</li>
@@ -352,7 +354,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <!-- ======================================================================= -->
 <h2 class="part" id="appA">Appendix A: Every camera LumenRaw knows</h2>
-<p>This is LibRaw 0.22.3's own list, as built into LumenRaw 1.1: 1,258 entries, under their makers' names as LibRaw gives them. Where a camera is sold under several names, they're listed together. Notes in brackets are LibRaw's: <i>CHDK hack</i> means the camera saves raw files only with the free CHDK firmware add-on; <i>secret menu hack</i> is the same for some old Casio cameras.</p>
+<p>This is LibRaw 0.22.3's own list, as built into LumenRaw 1.2: 1,258 entries, under their makers' names as LibRaw gives them. Where a camera is sold under several names, they're listed together. Notes in brackets are LibRaw's: <i>CHDK hack</i> means the camera saves raw files only with the free CHDK firmware add-on; <i>secret menu hack</i> is the same for some old Casio cameras.</p>
 <p class="small">Jump to: <a href="#cam-DNG">DNG</a> &middot; <a href="#cam-AgfaPhoto">AgfaPhoto</a> &middot; <a href="#cam-Alcatel">Alcatel</a> &middot; <a href="#cam-Apple">Apple</a> &middot; <a href="#cam-ASUS">ASUS</a> &middot; <a href="#cam-AutelRobotics">AutelRobotics</a> &middot; <a href="#cam-AVT">AVT</a> &middot; <a href="#cam-Baumer">Baumer</a> &middot; <a href="#cam-BlackMagic">BlackMagic</a> &middot; <a href="#cam-BQ">BQ</a> &middot; <a href="#cam-Canon">Canon</a> &middot; <a href="#cam-Casio">Casio</a> &middot; <a href="#cam-CLAUSS">CLAUSS</a> &middot; <a href="#cam-Contax">Contax</a> &middot; <a href="#cam-Creative">Creative</a> &middot; <a href="#cam-DigitalBolex">Digital Bolex</a> &middot; <a href="#cam-DJI">DJI</a> &middot; <a href="#cam-DXO">DXO</a> &middot; <a href="#cam-Epson">Epson</a> &middot; <a href="#cam-Eyedeas">Eyedeas</a> &middot; <a href="#cam-Foculus">Foculus</a> &middot; <a href="#cam-FujiFilm">FujiFilm</a> &middot; <a href="#cam-Gione">Gione</a> &middot; <a href="#cam-GITUP">GITUP</a> &middot; <a href="#cam-Google">Google</a> &middot; <a href="#cam-Hasselblad">Hasselblad</a> &middot; <a href="#cam-HTC">HTC</a> &middot; <a href="#cam-Huawei">Huawei</a> &middot; <a href="#cam-Ikonoskop">Ikonoskop</a> &middot; <a href="#cam-Imacon">Imacon</a> &middot; <a href="#cam-ISG">ISG</a> &middot; <a href="#cam-JaiPulnix">JaiPulnix</a> &middot; <a href="#cam-Kandao">Kandao</a> &middot; <a href="#cam-Kinefinity">Kinefinity</a> &middot; <a href="#cam-Kodak">Kodak</a> &middot; <a href="#cam-Konica">Konica</a> &middot; <a href="#cam-Leaf">Leaf</a> &middot; <a href="#cam-Leica">Leica</a> &middot; <a href="#cam-Lenovo">Lenovo</a> &middot; <a href="#cam-LG">LG</a> &middot; <a href="#cam-Logitech">Logitech</a> &middot; <a href="#cam-Mamiya">Mamiya</a> &middot; <a href="#cam-Matrix">Matrix</a> &middot; <a href="#cam-Meizy">Meizy</a> &middot; <a href="#cam-Micron">Micron</a> &middot; <a href="#cam-Minolta">Minolta</a> &middot; <a href="#cam-Motorola">Motorola</a> &middot; <a href="#cam-Nikon">Nikon</a> &middot; <a href="#cam-Nokia">Nokia</a> &middot; <a href="#cam-Olympus">Olympus</a> &middot; <a href="#cam-OMDigitalSolutions">OM Digital Solutions</a> &middot; <a href="#cam-OmniVision">OmniVision</a> &middot; <a href="#cam-OnePlus">OnePlus</a> &middot; <a href="#cam-Panasonic">Panasonic</a> &middot; <a href="#cam-PARROT">PARROT</a> &middot; <a href="#cam-Pentax">Pentax</a> &middot; <a href="#cam-PhaseOne">PhaseOne</a> &middot; <a href="#cam-Photron">Photron</a> &middot; <a href="#cam-Pixelink">Pixelink</a> &middot; <a href="#cam-PtGrey">PtGrey</a> &middot; <a href="#cam-RaspberryPi">RaspberryPi</a> &middot; <a href="#cam-Realme">Realme</a> &middot; <a href="#cam-Ricoh">Ricoh</a> &middot; <a href="#cam-Rollei">Rollei</a> &middot; <a href="#cam-RoverShot">RoverShot</a> &middot; <a href="#cam-Samsung">Samsung</a> &middot; <a href="#cam-Sarnoff">Sarnoff</a> &middot; <a href="#cam-Seitz">Seitz</a> &middot; <a href="#cam-Sigma">Sigma</a> &middot; <a href="#cam-Sinar">Sinar</a> &middot; <a href="#cam-Skydio">Skydio</a> &middot; <a href="#cam-SMaL">SMaL</a> &middot; <a href="#cam-Sony">Sony</a> &middot; <a href="#cam-STV680">STV680</a> &middot; <a href="#cam-SVS">SVS</a> &middot; <a href="#cam-Vivo">Vivo</a> &middot; <a href="#cam-Xiaomi">Xiaomi</a> &middot; <a href="#cam-Xiaoyi">Xiaoyi</a> &middot; <a href="#cam-Yi">Yi</a> &middot; <a href="#cam-YUNEEC">YUNEEC</a> &middot; <a href="#cam-Zeiss">Zeiss</a> &middot; <a href="#cam-Zenit">Zenit</a></p>
 <h4 id="cam-DNG">Adobe DNG <span class="count">1</span></h4>
 <p class="cams">Adobe Digital Negative (DNG)</p>
@@ -541,7 +543,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <tr><td>KDC, DCR</td><td>Kodak</td></tr>
 <tr><td>MRW</td><td>Minolta and Konica Minolta</td></tr>
 <tr><td>RAW</td><td>Various (Panasonic and Leica compacts, and others)</td></tr>
-<tr><td>X3F, GPR</td><td>Sigma Foveon, GoPro: recognised, but not readable by LumenRaw 1.1 (<a href="#ch9">Chapter 9</a>)</td></tr>
+<tr><td>X3F, GPR</td><td>Sigma Foveon, GoPro: recognised, but not readable by LumenRaw 1.2 (<a href="#ch9">Chapter 9</a>)</td></tr>
 </table>
 
 <!-- ======================================================================= -->

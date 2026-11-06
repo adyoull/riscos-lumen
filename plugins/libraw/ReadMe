@@ -1,4 +1,4 @@
-LibRaw plug-in for Lumen 1.1
+LibRaw plug-in for Lumen 1.2
 ============================
 
 Lets Lumen import, show, adjust and export camera raw files: Canon (CR2,
@@ -19,6 +19,10 @@ thumbnails of any raw files that it couldn't before.
 The LumenRaw User Guide is in Guide, beside this ReadMe: open
 Guide.index/html in a web browser. It explains installing and using the
 plug-in and lists every camera it knows (1,181, from LibRaw).
+
+It can also reduce noise on the raw data, before it is made into a
+picture (FBDD, and dcraw's wavelet noise reduction): Lumen's Choices,
+Raw noise (Lumen 0.0.38 and later). It is off unless chosen.
 
 Raw files need memory while they are developed: a 24 megapixel one takes
 about 300 MB for a few seconds.

@@ -1969,7 +1969,37 @@ static void test_hsl_vignette_noise (const char *work)
     CHECK (cvar1 < cvar0 * 0.4, "colour noise: much less");
     {
       int left = (int) (px[32 * w + 29] & 255), right = (int) (px[32 * w + 34] & 255);
+      int l31 = (int) (px[32 * w + 31] & 255), r32 = (int) (px[32 * w + 32] & 255);
       CHECK (left < 90 && right > 170, "the edge between 70 and 190 is kept");
+      CHECK (l31 < 95 && r32 > 165, "and sharp: the pixels either side of it stay apart");
+    }
+    /* Auto: the noise measured, amounts to suit it; none on a clean picture. */
+    {
+      int al, ac;
+      denoise_estimate (orig, w, h, 1, &al, &ac);
+      CHECK (al >= 25 && al <= 80 && ac >= 25 && ac <= 80, "Auto: a noisy picture gets amounts to suit it");
+      fprintf (stderr, "(auto: luminance %d, colour %d)\n", al, ac);
+      for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++)
+          px[y * w + x] = x < 32 ? 0x464646u : 0xBEBEBEu;
+      denoise_estimate (px, w, h, 1, &al, &ac);
+      CHECK (al == 0 && ac == 0, "and a clean one none");
+      /* Smaller (a quarter): the same noise needs less. */
+      memcpy (px, orig, (size_t) w * h * 4);
+      CHECK (denoise_margin (60, 80, 0.25) < denoise_margin (60, 80, 1), "smaller: fewer layers, a smaller margin");
+      /* NEON and the plain code: the same pixels. */
+      {
+        uint32_t *p2 = malloc ((size_t) w * h * 4);
+        memcpy (p2, orig, (size_t) w * h * 4);
+        memcpy (px, orig, (size_t) w * h * 4);
+        simd_force (1);
+        denoise32 (px, w, h, 55, 65, 1);
+        simd_force (0);
+        denoise32 (p2, w, h, 55, 65, 1);
+        simd_force (-1);
+        CHECK (!memcmp (px, p2, (size_t) w * h * 4), "noise reduction: NEON gives the plain code's pixels");
+        free (p2);
+      }
     }
     free (px);
     free (orig);

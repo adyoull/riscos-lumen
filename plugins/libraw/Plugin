@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 # Lumen plug-in description (see Lumen's !Help, Plug-ins)
 Name: Camera raw (LibRaw)
-Version: 1.1
+Version: 1.2
 Kind: raw
 Program: LumenRaw
 Package: LumenRaw

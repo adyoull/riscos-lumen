@@ -161,8 +161,9 @@ int main (int argc, char **argv)
       || (strcmp (argv[1], "decode") == 0 && argc < 6))
     {
       fprintf (stderr, "LumenRaw %s (LibRaw %s)\n"
-               "  LumenRaw thumb SRC IMAGE INFO\n  LumenRaw decode SRC IMAGE INFO MAXSIDE\n",
-               "1.1", libraw_version ());
+               "  LumenRaw thumb SRC IMAGE INFO\n  LumenRaw decode SRC IMAGE INFO MAXSIDE [NOISE]\n"
+               "  (NOISE: 0 none, 1 light, 2 strong noise reduction before demosaicing)\n",
+               "1.2", libraw_version ());
       return 2;
     }
   const char *src = argv[2], *image = argv[3], *info = argv[4];
@@ -204,6 +205,19 @@ int main (int argc, char **argv)
     int longer = r.imgdata.sizes.width > r.imgdata.sizes.height ? r.imgdata.sizes.width : r.imgdata.sizes.height;
     if (maxside > 0 && longer / 2 >= maxside)
       r.imgdata.params.half_size = 1;
+    /* Noise reduction on the raw data, before demosaicing (API: an
+       optional sixth argument, 0-2): FBDD (light or full) for the colour
+       noise demosaicing would smear into blotches, and dcraw's wavelet
+       noise reduction (the threshold) for the grain. */
+    if (argc > 6)
+      {
+        int nr = atoi (argv[6]);
+        if (nr >= 1)
+          {
+            r.imgdata.params.fbdd_noiserd = nr >= 2 ? 2 : 1;
+            r.imgdata.params.threshold = nr >= 2 ? 300.0f : 120.0f;
+          }
+      }
     if (write_info (info, t))
       return 1;
     return develop (r, image, info);

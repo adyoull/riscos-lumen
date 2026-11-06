@@ -165,7 +165,7 @@ $(OUT)/lumenraw-arm: $(RAW_SRC)
 	arm-linux-gnueabihf-g++ -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard -mno-unaligned-access -no-pie $(RAW_FLAGS) \
 	  -I$(DEPS)/linuxarm/include -o $@ $(RAW_SRC) $(DEPS)/linuxarm/lib/libraw.a $(DEPS)/linuxarm/lib/libjpeg.a \
 	  $(DEPS)/linuxarm/lib/libz.a -lm
-RAW_VERSION := 1.1
+RAW_VERSION := 1.2
 LIBRAW_VERSION := 0.22.3
 # The plug-in's release zip, laid out as it goes into Lumen (PackMan's
 # LumenRaw package maps it into Apps.Graphics.!Lumen.Plugins.LibRaw), and

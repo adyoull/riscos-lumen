@@ -83,7 +83,7 @@ enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TO
 #define LABEL_X0 250                   /* the panel's colour label dots: the first's centre */
 #define LABEL_DX 24
 enum { TOOL_AUTO, TOOL_CROP, TOOL_GRID, TOOL_PRESETS, TOOL_RETOUCH, TOOL_BRUSH, TOOL_COUNT };
-enum { LINK_RESET, LINK_PICK, LINK_AUTO_WB, LINK_LEFT, LINK_RIGHT };
+enum { LINK_RESET, LINK_PICK, LINK_AUTO_WB, LINK_LEFT, LINK_RIGHT, LINK_AUTO_NR };
 /* Crop drags: which edges move (or all of it). */
 enum { E_L = 1, E_R = 2, E_T = 4, E_B = 8, E_MOVE = 16, E_NEW = 32 };
 #define DRAG_CROP (-2)
@@ -596,6 +596,10 @@ static int group_links (int g, int ids[3], const char *names[3])
     {
       ids[n] = LINK_AUTO_WB; names[n++] = "Auto";
       ids[n] = LINK_PICK; names[n++] = "Pick";
+    }
+  else if (recipe_groups[g].first == P_NOISE_LUM)
+    {
+      ids[n] = LINK_AUTO_NR; names[n++] = "Auto";
     }
   else if (recipe_groups[g].first == P_ROTATE)
     {
@@ -2285,6 +2289,24 @@ static void auto_wb (void)
   changed_everything ();
 }
 
+/* Noise Reduction's Auto: the photo's noise measured on it developed
+   (before noise reduction), at the proxy's size. */
+static void auto_nr (void)
+{
+  uint32_t *px;
+  int lum, col;
+  if (!src || !geo || gw <= 0 || gh <= 0 || !(px = malloc ((size_t) gw * gh * 4)))
+    return;
+  develop_region (dev, gw, gh, 0, 0);
+  develop_rows (dev, geo, gw, 0, gh, px, NULL);
+  denoise_estimate (px, gw, gh, photo_long > 0 ? (double) (gw > gh ? gw : gh) / photo_long : 1, &lum, &col);
+  free (px);
+  recipe_set (&current, P_NOISE_LUM, (float) lum);
+  recipe_set (&current, P_NOISE_COL, (float) col);
+  commit ();
+  changed_everything ();
+}
+
 void viewer_pick_white (void)
 {
   if (!src || crop_mode)
@@ -2583,6 +2605,7 @@ static void link_click (int g, int id)
       break;
     case LINK_PICK: viewer_pick_white (); break;
     case LINK_AUTO_WB: auto_wb (); break;
+    case LINK_AUTO_NR: auto_nr (); break;
     case LINK_LEFT: viewer_rotate (0); break;
     case LINK_RIGHT: viewer_rotate (1); break;
     }

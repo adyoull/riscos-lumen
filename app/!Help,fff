@@ -206,8 +206,10 @@ typical uses.
 
 Noise Reduction: Colour takes out the coloured speckles of photos taken
 in poor light (it smooths the colour, not the detail); Luminance smooths
-the grain while keeping edges. Look at 100% (Z) to judge them; too much
-Luminance makes skin and foliage look waxy.
+the grain while keeping edges. Auto measures the photo's noise and sets
+both. Look at 100% (Z) to judge them; too much Luminance makes skin and
+foliage look waxy. (Lumen takes the noise out of each layer of detail,
+fine to coarse, of a wavelet transform: edges stay.)
 
 Vignette darkens the photo towards the corners (a negative Amount) or
 lightens them (positive); Midpoint is how far out from the middle it
@@ -530,6 +532,9 @@ Choices... on the icon bar menu sets:
               running Lumen overrides it.
   Export      the format, size and JPEG quality the Export box starts with
   Thumbnails  the size Lumen starts with
+  Raw noise   noise reduction in the raw plug-in (LumenRaw 1.2), on the
+              raw data: Off, Light or Strong; for raw photos opened
+              from now on
   Previews    which photos get previews: Raw files, All photos or None;
               Discard removes them (made again unless None)
   Check the photos' files are still there when Lumen opens: switch off

@@ -1303,6 +1303,34 @@ static void test_raw (void)
               coloured++;
           }
       CHECK (coloured * 20 > total, "in colour: over 5% of it strongly coloured (the camera's colour matrix)");
+      /* Again with the plug-in's strong noise reduction: smoother pixel to pixel (ISO 3200). */
+      {
+        rgb_image nr;
+        thumbgen *t2;
+        int r2 = 0;
+        long d0 = 0, d1 = 0;
+        rawjob_set_raw_noise (2);
+        t2 = thumbgen_start (nef, NULL, 1600, 1, err, sizeof err);
+        while (t2 && (r2 = thumbgen_step (t2, 256)) == 0)
+          ;
+        rawjob_set_raw_noise (0);
+        if (t2 && r2 == 1 && thumbgen_take (t2, &nr) == 0)
+          {
+            int x, y;
+            for (y = 10; y < img.h - 10 && y < nr.h - 10; y += 3)
+              for (x = 10; x < img.w - 11; x += 3)
+                {
+                  const unsigned char *a0 = img.rgb + (y * img.w + x) * 3, *a1 = nr.rgb + (y * nr.w + x) * 3;
+                  d0 += abs (a0[1] - a0[4]);
+                  d1 += abs (a1[1] - a1[4]);
+                }
+            CHECK (nr.w == 1600 && d1 < d0, "raw noise reduction (strong): smoother from pixel to pixel");
+            free (nr.rgb);
+          }
+        else
+          CHECK (0, "raw noise reduction (strong): developed");
+        thumbgen_free (t2);
+      }
       free (img.rgb);
     }
   thumbgen_free (t);
@@ -1529,6 +1557,8 @@ static void test_prefs (void)
          && p.library[0] == '\0' && p.export_format == 0 && p.export_size == 0, "prefs: defaults with no file");
   snprintf (p.library, sizeof p.library, "SDFS::Pi.$.My Photos.Library");
   p.export_format = 1; p.export_quality = 75; p.export_size = 2048; p.thumb_size = 0; p.verify = 0;
+  CHECK (p.raw_noise == 0, "prefs: raw noise reduction off to start with");
+  p.raw_noise = 2;
   CHECK (prefs_save (path, &p) == 0, "prefs: saved (its directory made)");
   CHECK (prefs_load (path, &q) == 0 && !memcmp (&p, &q, sizeof p), "prefs: read back the same (a space in the path too)");
   f = fopen (path, "w");

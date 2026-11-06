@@ -51,6 +51,19 @@
   them (watched ones too) are looked through more quickly.
 - The guide says how Lumen knows photos.
 
+- Noise Reduction is new inside: wavelet shrinkage (the a trous
+  transform, four layers of detail for luminance and five for colour,
+  each softly thresholded), so grain and colour blotches go and edges
+  and texture stay. It's faster too, and uses NEON where the processor has it
+  (exactly the same pixels). The group has an Auto link: it measures
+  the photo's noise and sets Luminance and Colour to suit it. Photos
+  that already had noise reduction look a little different (cleaner,
+  with sharper edges).
+- Raw noise, in Choices: Off, Light or Strong noise reduction in the
+  LumenRaw plug-in, on the raw data before demosaicing (LibRaw's FBDD
+  and wavelet noise reduction). Needs LumenRaw 1.2; the plug-in API's
+  decode gains an optional NOISE argument (older plug-ins ignore it).
+
 - Layers: adjustments of their own on part of the photo (Exposure,
   Contrast, Highlights, Shadows, Temperature, Tint, Saturation, Clarity,
   Sharpness), each where its mask is: painted (brush), a graduated

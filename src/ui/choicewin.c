@@ -25,12 +25,13 @@ enum
   C_FULL, C_3840, C_2048, C_1024, C_THUMB_LABEL, C_SMALL, C_MEDIUM, C_LARGE, C_VERIFY, C_CANCEL, C_SAVE,
   C_FOLDERS_LABEL, C_WATCH_NEW, C_ALBUMS_NEW, C_EVERY, C_MINUTES, C_MINUTES_LABEL,
   C_PREVIEWS_LABEL, C_PV_RAW, C_PV_ALL, C_PV_OFF, C_PV_DISCARD, C_TIFF,
+  C_RAWNR_LABEL, C_RAWNR_OFF, C_RAWNR_LIGHT, C_RAWNR_STRONG, C_RAWNR_NOTE,
   C_COUNT
 };
 static const int size_choice[4] = { 0, 3840, 2048, 1024 };
 
 #define W 1120
-#define H 754
+#define H 818
 #define T_LABEL   0x17000311u          /* text, vcentred, indirected, right-justified */
 #define T_NOTE    0x17000111u          /* text, vcentred, indirected */
 #define T_WRITE   0x0700F135u          /* writable, white */
@@ -116,8 +117,18 @@ int choicewin_create (void)
     icon_at (ic + 8 * C_MINUTES, 650, -656, 750, -604, T_WRITE, minutes_text, v_num, (int) sizeof minutes_text);
     icon_at (ic + 8 * C_MINUTES_LABEL, 760, -652, 960, -608, T_NOTE, t_minutes, NULL, (int) sizeof t_minutes);
   }
-  icon_at (ic + 8 * C_CANCEL, W - 384, -730, W - 220, -674, T_BUTTON, t_cancel, v_cancel, (int) sizeof t_cancel);
-  icon_at (ic + 8 * C_SAVE, W - 200, -734, W - 24, -670, T_BUTTON, t_savebtn, v_save, (int) sizeof t_savebtn);
+  {
+    /* Camera raw noise reduction, in the raw plug-in (before demosaicing). */
+    static char t_rawnr[] = "Raw noise", t_off[] = "Off", t_light[] = "Light", t_strong[] = "Strong";
+    static char t_rawnote[] = "In the raw plug-in";
+    LABEL (C_RAWNR_LABEL, -674, t_rawnr);
+    icon_at (ic + 8 * C_RAWNR_OFF, 240, -718, 370, -674, T_RADIO | (5u << 16), t_off, v_radio, (int) sizeof t_off);
+    icon_at (ic + 8 * C_RAWNR_LIGHT, 390, -718, 530, -674, T_RADIO | (5u << 16), t_light, v_radio, (int) sizeof t_light);
+    icon_at (ic + 8 * C_RAWNR_STRONG, 550, -718, 710, -674, T_RADIO | (5u << 16), t_strong, v_radio, (int) sizeof t_strong);
+    icon_at (ic + 8 * C_RAWNR_NOTE, 730, -718, W - 24, -674, T_NOTE, t_rawnote, NULL, (int) sizeof t_rawnote);
+  }
+  icon_at (ic + 8 * C_CANCEL, W - 384, -794, W - 220, -738, T_BUTTON, t_cancel, v_cancel, (int) sizeof t_cancel);
+  icon_at (ic + 8 * C_SAVE, W - 200, -798, W - 24, -734, T_BUTTON, t_savebtn, v_save, (int) sizeof t_savebtn);
   return _swix (Wimp_CreateWindow, _IN (1) | _OUT (0), b, &win) ? -1 : 0;
 }
 
@@ -155,6 +166,9 @@ static void show (const prefs *p)
   set_on (C_PV_RAW, p->previews == 1);
   set_on (C_PV_ALL, p->previews == 2);
   set_on (C_PV_OFF, p->previews == 0);
+  set_on (C_RAWNR_OFF, p->raw_noise == 0);
+  set_on (C_RAWNR_LIGHT, p->raw_noise == 1);
+  set_on (C_RAWNR_STRONG, p->raw_noise == 2);
   set_on (C_VERIFY, p->verify);
   set_on (C_WATCH_NEW, p->watch_new);
   set_on (C_ALBUMS_NEW, p->albums_new);
@@ -214,6 +228,7 @@ static void save (void)
     if (is_on (C_SMALL + k))
       p.thumb_size = k;
   p.previews = is_on (C_PV_ALL) ? 2 : is_on (C_PV_OFF) ? 0 : 1;
+  p.raw_noise = is_on (C_RAWNR_STRONG) ? 2 : is_on (C_RAWNR_LIGHT) ? 1 : 0;
   p.verify = is_on (C_VERIFY);
   p.watch_new = is_on (C_WATCH_NEW);
   p.albums_new = is_on (C_ALBUMS_NEW);

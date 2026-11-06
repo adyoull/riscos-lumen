@@ -93,6 +93,9 @@ void rawjob_hurry (rawjob *j);
 /* From the front end: the program started with tag has ended. */
 void rawjob_ended (int tag);
 int rawjob_busy (void);
+/* The raw plug-in's own noise reduction for photos developed from now on
+   (before demosaicing): 0 off, 1 light, 2 strong. */
+void rawjob_set_raw_noise (int level);
 /* The plug-in at work (or next): its title ("LumenRaw", "LumenHEIF"). */
 const char *rawjob_busy_title (void);                /* any job waiting or running */
 

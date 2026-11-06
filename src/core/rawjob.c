@@ -271,6 +271,10 @@ static const char *plugin_name (int kind)
 
 int rawjob_busy (void) { return queue || running; }
 
+static int raw_noise;                  /* the raw plug-in's noise reduction, 0-2 */
+
+void rawjob_set_raw_noise (int level) { raw_noise = level < 0 ? 0 : level > 2 ? 2 : level; }
+
 const char *rawjob_busy_title (void)
 {
   const rawjob *j = running ? running : queue;
@@ -314,7 +318,11 @@ static void run_next (void)
   j->state = J_RUNNING;
   remove (j->image);
   remove (j->details);
-  if (j->info.format == 1)             /* develop */
+  if (j->info.format == 1 && j->kind == RAWJOB_RAW && raw_noise > 0)
+    /* develop, with the raw plug-in's noise reduction (API: a 6th argument) */
+    snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d %d", helper[j->kind], j->src, j->image, j->details, j->info.width,
+              raw_noise);
+  else if (j->info.format == 1)        /* develop */
     snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d", helper[j->kind], j->src, j->image, j->details, j->info.width);
   else
     snprintf (cmd, sizeof cmd, "%s thumb %s %s %s", helper[j->kind], j->src, j->image, j->details);

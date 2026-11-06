@@ -137,6 +137,10 @@ const char *help_text (int window, int icon, int x, int y)
       case 9: case 10: case 11: case 12: return "The size the Export box starts with.";
       case 14: case 15: case 16: return "The thumbnail size Lumen starts with.";
       case 17: return "Ticked: Lumen checks that every photo's file is still there when it opens.";
+      case 32: case 33: case 34: case 35: case 36:
+        return "Noise reduction in the camera raw plug-in, on the raw data before it's made into a picture (LibRaw's "
+               "FBDD and wavelet noise reduction). For raw photos opened and exported from now on; the Adjustments "
+               "tab's Noise Reduction works on top of it.";
       case 18: return "Closes the window without saving. Adjust: puts back what is saved.";
       case 19: return "Saves these choices.";
       case 21: return "Ticked: folders you drag in from now on are watched: Lumen brings in new photos put in them.";
