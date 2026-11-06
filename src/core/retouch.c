@@ -379,26 +379,34 @@ static void tables (void)
     }
 }
 
-static double to_lin (const pic *p, double v)
+/* A pixel's channel in linear light, 0..1, and back (the photo as 8-bit
+   sRGB or 16-bit linear): straight from the pixels, no calls through
+   the pic's functions (this is where the time goes). */
+static inline float lin_px (const pic *p, size_t i)
 {
-  return p->maxv == 255 ? lin_of8[(int) v] : v / 65535;
+  return p->maxv == 255 ? lin_of8[((const unsigned char *) p->img)[i]] : ((const uint16_t *) p->img)[i] * (1.0f / 65535);
 }
 
-static double from_lin (const pic *p, double v)
+static inline void put_px (const pic *p, size_t i, float v)
 {
   v = v < 0 ? 0 : v > 1 ? 1 : v;
   if (p->maxv != 255)
-    return v * 65535;
-  if (v < 0.0031308)
-    return 255 * 12.92 * v;            /* the straight part, exactly */
-  {
-    double f = v * 4096;
-    int i = (int) f;
-    if (i >= 4096)
-      return srgb_of[4096];
-    return srgb_of[i] + (srgb_of[i + 1] - srgb_of[i]) * (f - i);
-  }
+    ((uint16_t *) p->img)[i] = (uint16_t) (v * 65535 + 0.5f);
+  else
+    {
+      float o;
+      if (v < 0.0031308f)
+        o = 255 * 12.92f * v;
+      else
+        {
+          float f = v * 4096;
+          int k = (int) f;
+          o = k >= 4096 ? srgb_of[4096] : srgb_of[k] + (srgb_of[k + 1] - srgb_of[k]) * (f - k);
+        }
+      ((unsigned char *) p->img)[i] = (unsigned char) (o > 255 ? 255 : o + 0.5f);
+    }
 }
+
 
 /* The mask's shape alone at pixel (x, y) of a w x h photo, 0..1. */
 static double shape_at (const recipe_mask *mk, int w, int h, double x, double y)
@@ -415,10 +423,18 @@ static double shape_at (const recipe_mask *mk, int w, int h, double x, double y)
       double rx = mk->x1 * w, ry = mk->y1 * h, ex, ey, e, in = 1 - (mk->f < 0.02f ? 0.02 : mk->f);
       if (rx > 0.5 && ry > 0.5)
         {
-          ex = (x - mk->x0 * w) / rx;
-          ey = (y - mk->y0 * h) / ry;
-          e = sqrt (ex * ex + ey * ey);
-          m = e <= in ? 1 : e >= 1 ? 0 : smooth ((1 - e) / (1 - in));
+          double dx = x - mk->x0 * w, dy = y - mk->y0 * h;
+          if (mk->angle != 0)
+            {
+              /* turned clockwise by angle: back into the oval's own axes */
+              double a = mk->angle * 3.14159265358979323846 / 180, cs = cos (a), sn = sin (a), t = dx * cs + dy * sn;
+              dy = -dx * sn + dy * cs;
+              dx = t;
+            }
+          ex = dx / rx;
+          ey = dy / ry;
+          e = ex * ex + ey * ey;       /* squared: the square root only in the fading part */
+          m = e <= in * in ? 1 : e >= 1 ? 0 : smooth ((1 - sqrt (e)) / (1 - in));
         }
     }
   return mk->invert ? 1 - m : m;
@@ -487,17 +503,50 @@ static int mask_grid (mgrid *G, const recipe *r, int mi, int w, int h)
         }
       c0 = clampi ((int) floor ((mx0 - R) / G->g), 0, G->gw - 1); c1 = clampi ((int) ceil ((mx1 + R) / G->g), 0, G->gw - 1);
       r0 = clampi ((int) floor ((my0 - R) / G->g), 0, G->gh - 1); r1 = clampi ((int) ceil ((my1 + R) / G->g), 0, G->gh - 1);
-      for (j = r0; j <= r1; j++)
-        for (i = c0; i <= c1; i++)
+      {
+        /* The distance to the path at each cell: each segment only where
+           it reaches (within R), the nearest kept. */
+        int bw = c1 - c0 + 1, bh = r1 - r0 + 1, nseg = st->n > 1 ? st->n - 1 : 1, sgi;
+        double inner = R * (1 - (st->f < 0.02f ? 0.02 : st->f));
+        float *dist = malloc (sizeof *dist * (size_t) bw * bh);
+        if (!dist)
+          continue;
+        for (q = 0; q < bw * bh; q++)
+          dist[q] = 1e30f;
+        for (sgi = 0; sgi < nseg; sgi++)
           {
-            double s = st->amount * stroke_at (r, st, w, h, (i + 0.5) * G->g, (j + 0.5) * G->g), m;
-            uint16_t *gp = &G->v[(size_t) j * G->gw + i];
-            if (s <= 0)
-              continue;
-            m = *gp / 65535.0;
-            m = st->kind == BRUSH_ERASE ? m * (1 - s) : (s > m ? s : m);
-            *gp = (uint16_t) lround (m * 65535);
+            int kk = st->n > 1 ? sgi + 1 : sgi, s0, s1, t0, t1;
+            double ax = r->pt[st->first + sgi][0] / 10000.0 * w, ay = r->pt[st->first + sgi][1] / 10000.0 * h;
+            double bx = r->pt[st->first + kk][0] / 10000.0 * w, by = r->pt[st->first + kk][1] / 10000.0 * h;
+            s0 = clampi ((int) floor (((ax < bx ? ax : bx) - R) / G->g), c0, c1);
+            s1 = clampi ((int) ceil (((ax > bx ? ax : bx) + R) / G->g), c0, c1);
+            t0 = clampi ((int) floor (((ay < by ? ay : by) - R) / G->g), r0, r1);
+            t1 = clampi ((int) ceil (((ay > by ? ay : by) + R) / G->g), r0, r1);
+            for (j = t0; j <= t1; j++)
+              for (i = s0; i <= s1; i++)
+                {
+                  double d = seg_dist ((i + 0.5) * G->g, (j + 0.5) * G->g, ax, ay, bx, by);
+                  float *dp = &dist[(size_t) (j - r0) * bw + (i - c0)];
+                  if (d < *dp)
+                    *dp = (float) d;
+                }
           }
+        for (j = r0; j <= r1; j++)
+          for (i = c0; i <= c1; i++)
+            {
+              double best = dist[(size_t) (j - r0) * bw + (i - c0)], s, m;
+              uint16_t *gp = &G->v[(size_t) j * G->gw + i];
+              if (best >= R)
+                continue;
+              s = st->amount * smooth (best <= inner ? 1 : (R - best) / (R - inner));
+              if (s <= 0)
+                continue;
+              m = *gp / 65535.0;
+              m = st->kind == BRUSH_ERASE ? m * (1 - s) : (s > m ? s : m);
+              *gp = (uint16_t) lround (m * 65535);
+            }
+        free (dist);
+      }
     }
   return 0;
 }
@@ -522,14 +571,6 @@ static double grid_at (const mgrid *G, int x, int y)
   return ((a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy) / 65535.0;
 }
 
-/* Lightness as seen (near enough: the square root of luminance). */
-static double light_at (const pic *p, int x, int y)
-{
-  double l = 0.2126 * to_lin (p, p->get (p->img, p->w, x, y, 0)) + 0.7152 * to_lin (p, p->get (p->img, p->w, x, y, 1))
-             + 0.0722 * to_lin (p, p->get (p->img, p->w, x, y, 2));
-  return l > 0 ? sqrt (l) : 0;
-}
-
 /* The surroundings' lightness for clarity: the grid's cells' lightness,
    blurred (three box passes) by about 1.5% of the longer side. */
 static float *clarity_map (const pic *p, const mgrid *G)
@@ -551,7 +592,9 @@ static float *clarity_map (const pic *p, const mgrid *G)
         for (y = y0; y < y0 + G->g && y < p->h; y += step)
           for (x = x0; x < x0 + G->g && x < p->w; x += step)
             {
-              s += light_at (p, x, y);
+              size_t at = ((size_t) y * p->w + x) * 3;
+              float l = 0.2126f * lin_px (p, at) + 0.7152f * lin_px (p, at + 1) + 0.0722f * lin_px (p, at + 2);
+              s += l > 0 ? sqrtf (l) : 0;
               n++;
             }
         a[(size_t) j * G->gw + i] = (float) (n ? s / n : 0);
@@ -593,14 +636,29 @@ static int tone_used (const recipe_mask *mk)
          || mk->v[M_SHARPNESS] != 0;
 }
 
+/* Lightness as seen of a row's pixels x0-1 .. x0+bw (clamped), into out. */
+static void light_row (const pic *p, int y, int x0, int bw, float *out)
+{
+  int x;
+  y = clampi (y, 0, p->h - 1);
+  for (x = -1; x <= bw; x++)
+    {
+      size_t i = ((size_t) y * p->w + clampi (x0 + x, 0, p->w - 1)) * 3;
+      float l = 0.2126f * lin_px (p, i) + 0.7152f * lin_px (p, i + 1) + 0.0722f * lin_px (p, i + 2);
+      out[x + 1] = l > 0 ? sqrtf (l) : 0;
+    }
+}
+
 static void apply_mask (const pic *p, const recipe *r, int mi)
 {
   const recipe_mask *mk = &r->mask[mi];
-  mgrid G;
-  float *cmap = NULL, *rows = NULL;
+  mgrid G, C;
+  float *cmap = NULL, *rows = NULL, *mrow = NULL;
   int x, y, i, x0, x1, y0, y1, tone = tone_used (mk), bw;
   double T = mk->v[M_TEMP] / 100.0, N = mk->v[M_TINT] / 100.0;
   double wb[3] = { 0.5 * T + 0.25 * N, -0.5 * N, -0.5 * T + 0.25 * N };
+  float kc = mk->v[M_CONTRAST] / 100.0f, kh = mk->v[M_HIGHLIGHTS] / 100.0f * 1.2f, ks = mk->v[M_SHADOWS] / 100.0f * 1.2f;
+  float kl = mk->v[M_CLARITY] / 100.0f * 0.8f, kp = mk->v[M_SHARPNESS] / 100.0f * 1.2f, ksat = mk->v[M_SATURATION] / 100.0f;
   int k;
   static float gain[3][1025];          /* by coverage, 1024ths */
   for (k = 0; k < M_COUNT && mk->v[k] == 0; k++)
@@ -624,91 +682,112 @@ static void apply_mask (const pic *p, const recipe *r, int mi)
   x0 = clampi ((x0 - 1) * G.g, 0, p->w - 1); x1 = clampi ((x1 + 2) * G.g, 0, p->w - 1);
   y0 = clampi ((y0 - 1) * G.g, 0, p->h - 1); y1 = clampi ((y1 + 2) * G.g, 0, p->h - 1);
   bw = x1 - x0 + 1;
-  if (tone && mk->v[M_CLARITY] != 0 && !(cmap = clarity_map (p, &G)))
+  /* Clarity's surroundings (a blur of about 1.5% of the longer side) on
+     a grid of its own, at most 512 cells across: no finer is needed. */
+  {
+    int longer = p->w > p->h ? p->w : p->h, cg = (longer + 511) / 512;
+    C.g = cg > G.g ? cg : G.g;
+    C.gw = (p->w + C.g - 1) / C.g;
+    C.gh = (p->h + C.g - 1) / C.g;
+    C.v = NULL;
+  }
+  if (tone && mk->v[M_CLARITY] != 0 && !(cmap = clarity_map (p, &C)))
     goto out;
   /* Sharpness looks at the next pixels as they were: three rows of their
      lightness, kept ahead of the changes (bw + 2 wide). */
   if (tone && !(rows = malloc (sizeof *rows * 3 * (size_t) (bw + 2))))
     goto out;
+  if (!(mrow = malloc (sizeof *mrow * (size_t) bw * (cmap ? 2 : 1))))
+    goto out;
 #define ROW(yy) (rows + (size_t) (((yy) % 3 + 3) % 3) * (bw + 2))
   if (rows)
     for (y = y0 - 1; y <= y0; y++)
-      {
-        int yy = clampi (y, 0, p->h - 1);
-        for (x = -1; x <= bw; x++)
-          ROW (y)[x + 1] = (float) light_at (p, clampi (x0 + x, 0, p->w - 1), yy);
-      }
+      light_row (p, y, x0, bw, ROW (y));
   for (y = y0; y <= y1; y++)
     {
+      float *pb_row = cmap ? mrow + bw : NULL;
       if (rows)
+        light_row (p, y + 1, x0, bw, ROW (y + 1));
+      /* This row's coverage (and surroundings, for clarity), from the grid. */
+      for (x = x0; x <= x1; x++)
+        mrow[x - x0] = (float) grid_at (&G, x, y);
+      if (cmap)
         {
-          int yy = clampi (y + 1, 0, p->h - 1);
-          for (x = -1; x <= bw; x++)
-            ROW (y + 1)[x + 1] = (float) light_at (p, clampi (x0 + x, 0, p->w - 1), yy);
+          double gy = (y + 0.5) / C.g - 0.5, fy;
+          int cj, cj1;
+          gy = gy < 0 ? 0 : gy;
+          cj = (int) gy;
+          cj = cj >= C.gh ? C.gh - 1 : cj;
+          cj1 = cj + 1 < C.gh ? cj + 1 : cj;
+          fy = gy - cj;
+          fy = fy > 1 ? 1 : fy;
+          for (x = x0; x <= x1; x++)
+            {
+              double gx = (x + 0.5) / C.g - 0.5, fx;
+              int ci, ci1;
+              gx = gx < 0 ? 0 : gx;
+              ci = (int) gx;
+              ci = ci >= C.gw ? C.gw - 1 : ci;
+              ci1 = ci + 1 < C.gw ? ci + 1 : ci;
+              fx = gx - ci;
+              fx = fx > 1 ? 1 : fx;
+              pb_row[x - x0] = (float) ((cmap[(size_t) cj * C.gw + ci] * (1 - fx) + cmap[(size_t) cj * C.gw + ci1] * fx) * (1 - fy)
+                                        + (cmap[(size_t) cj1 * C.gw + ci] * (1 - fx) + cmap[(size_t) cj1 * C.gw + ci1] * fx) * fy);
+            }
         }
       for (x = x0; x <= x1; x++)
         {
-          double m = grid_at (&G, x, y), c[3], lum;
-          if (m <= 1.0 / 65535)
+          float m = mrow[x - x0], c[3];
+          size_t at = ((size_t) y * p->w + x) * 3;
+          if (m <= 1.0f / 65535)
             continue;
           {
-            double gi = m * 1024;
+            float gi = m * 1024, gf;
             int g0 = (int) gi;
-            double gf = gi - g0;
+            gf = gi - g0;
             g0 = g0 > 1023 ? 1023 : g0;
             for (i = 0; i < 3; i++)
-              c[i] = to_lin (p, p->get (p->img, p->w, x, y, i)) * (gain[i][g0] + (gain[i][g0 + 1] - gain[i][g0]) * gf);
+              c[i] = lin_px (p, at + i) * (gain[i][g0] + (gain[i][g0 + 1] - gain[i][g0]) * gf);
           }
           if (tone)
             {
-              double L = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], pl = L > 0 ? sqrt (L) : 0, q = pl > 1 ? 1 : pl, np = pl, L2;
-              double p0 = ROW (y)[x - x0 + 1];
-              np += m * mk->v[M_CONTRAST] / 100.0 * (q - 0.5) * 2 * q * (1 - q);
-              np += m * mk->v[M_HIGHLIGHTS] / 100.0 * 1.2 * q * q * q * (1 - q);
-              np += m * mk->v[M_SHADOWS] / 100.0 * 1.2 * q * (1 - q) * (1 - q) * (1 - q);
-              if (cmap)
+              float L = 0.2126f * c[0] + 0.7152f * c[1] + 0.0722f * c[2], pl = L > 0 ? sqrtf (L) : 0, q = pl > 1 ? 1 : pl, np = pl, L2;
+              int a = x - x0 + 1;
+              float p0 = ROW (y)[a];
+              np += m * kc * (q - 0.5f) * 2 * q * (1 - q);
+              np += m * kh * q * q * q * (1 - q);
+              np += m * ks * q * (1 - q) * (1 - q) * (1 - q);
+              if (pb_row)
+                np += m * kl * (p0 - pb_row[x - x0]) * 4 * q * (1 - q);
+              if (kp != 0)
                 {
-                  /* The surroundings: the blurred map, between its cells. */
-                  double gx = (x + 0.5) / G.g - 0.5, gy = (y + 0.5) / G.g - 0.5, fx, fy, pb;
-                  int ci, cj, ci1, cj1;
-                  gx = gx < 0 ? 0 : gx; gy = gy < 0 ? 0 : gy;
-                  ci = (int) gx; cj = (int) gy;
-                  ci = ci >= G.gw ? G.gw - 1 : ci; cj = cj >= G.gh ? G.gh - 1 : cj;
-                  ci1 = ci + 1 < G.gw ? ci + 1 : ci; cj1 = cj + 1 < G.gh ? cj + 1 : cj;
-                  fx = gx - ci; fy = gy - cj;
-                  fx = fx > 1 ? 1 : fx; fy = fy > 1 ? 1 : fy;
-                  pb = (cmap[(size_t) cj * G.gw + ci] * (1 - fx) + cmap[(size_t) cj * G.gw + ci1] * fx) * (1 - fy)
-                       + (cmap[(size_t) cj1 * G.gw + ci] * (1 - fx) + cmap[(size_t) cj1 * G.gw + ci1] * fx) * fy;
-                  np += m * mk->v[M_CLARITY] / 100.0 * 0.8 * (p0 - pb) * 4 * q * (1 - q);
-                }
-              if (mk->v[M_SHARPNESS] != 0)
-                {
-                  int a = x - x0 + 1;
-                  double near = (ROW (y - 1)[a - 1] + ROW (y - 1)[a] + ROW (y - 1)[a + 1] + ROW (y)[a - 1] + ROW (y)[a]
-                                 + ROW (y)[a + 1] + ROW (y + 1)[a - 1] + ROW (y + 1)[a] + ROW (y + 1)[a + 1]) / 9;
-                  np += m * mk->v[M_SHARPNESS] / 100.0 * 1.2 * (p0 - near);
+                  const float *u = ROW (y - 1), *c0 = ROW (y), *d = ROW (y + 1);
+                  float near = (u[a - 1] + u[a] + u[a + 1] + c0[a - 1] + c0[a] + c0[a + 1] + d[a - 1] + d[a] + d[a + 1]) * (1.0f / 9);
+                  np += m * kp * (p0 - near);
                 }
               np = np < 0 ? 0 : np;
               L2 = np * np;
-              if (L > 1e-7)
-                for (i = 0; i < 3; i++)
-                  c[i] *= L2 / L;
+              if (L > 1e-7f)
+                {
+                  float f = L2 / L;
+                  c[0] *= f; c[1] *= f; c[2] *= f;
+                }
               else
-                for (i = 0; i < 3; i++)
-                  c[i] = L2;
+                c[0] = c[1] = c[2] = L2;
             }
-          if (mk->v[M_SATURATION] != 0)
+          if (ksat != 0)
             {
-              lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+              float lum = 0.2126f * c[0] + 0.7152f * c[1] + 0.0722f * c[2], f = 1 + ksat * m;
               for (i = 0; i < 3; i++)
-                c[i] = lum + (c[i] - lum) * (1 + mk->v[M_SATURATION] / 100.0 * m);
+                c[i] = lum + (c[i] - lum) * f;
             }
           for (i = 0; i < 3; i++)
-            p->put (p->img, p->w, x, y, i, from_lin (p, c[i]));
+            put_px (p, at + i, c[i]);
         }
     }
 #undef ROW
 out:
+  free (mrow);
   free (rows);
   free (cmap);
   free (G.v);

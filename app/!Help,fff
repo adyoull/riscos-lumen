@@ -1,5 +1,5 @@
-Lumen 0.0.38 (04 Nov 2026)
-==========================
+Lumen 0.0.38.1 (06 Nov 2026)
+============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
 
@@ -286,7 +286,8 @@ Adjustments tab shows them while the tool is on:
   New layer     Brush (paint it: with no layer chosen, painting makes
                 one), Gradient (drag from strongest to none, as for a
                 sky) or Radial (drag from the middle out); drag their
-                handles on the photo to change them
+                handles on the photo to change them, and the round
+                one on a stalk to turn it
   Brush         Add or Erase the mask; Size, Feather, Flow
   the sliders   the chosen layer's (Adjust: back to 0); none chosen,
                 what a new layer starts with

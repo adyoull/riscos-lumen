@@ -414,6 +414,12 @@ static thumbgen *start_full (char *e, size_t en)
 
 static thumbgen *zgen;
 static rgb_image zfull;
+/* The full size as decoded, before the spots and layers, once it has any:
+   when they change it is retouched again from this, not read from the
+   file again (a raw developed again by the plug-in). zfull_stale: zfull
+   is behind the recipe, made right when next it's looked at. */
+static unsigned char *zfull_orig;
+static int zfull_retouched, zfull_stale;
 static geom_plan zplan;
 static double zcx, zcy, zfx = 0.5, zfy = 0.5;
 static sprite32 zspr;
@@ -509,6 +515,9 @@ static void free_zoom (void)
   zgen = NULL;
   free (zfull.rgb);
   zfull.rgb = NULL;
+  free (zfull_orig);
+  zfull_orig = NULL;
+  zfull_retouched = zfull_stale = 0;
   free (zlin);
   zlin = NULL;
   sprite_free (&zspr);
@@ -1487,6 +1496,30 @@ static void zoom_view (int *w, int *h)
   *h = (r[3] - r[1] - 2 * PAD) >> draw_yeig ();
 }
 
+/* The full size with the spots and layers as they are now: retouched
+   again from the full size as decoded (not read again). 0 if it can't
+   be (no copy: read again). */
+static int zfull_update (void)
+{
+  recipe r;
+  size_t nb;
+  if (!zfull.rgb || !zfull_stale)
+    return 1;
+  nb = (size_t) zfull.w * zfull.h * 3;
+  if (!zfull_orig)
+    return 0;
+  effective (&r);
+  _swix (Hourglass_On, 0);
+  memcpy (zfull.rgb, zfull_orig, nb);
+  retouch_rgb8 (zfull.rgb, zfull.w, zfull.h, &r);
+  _swix (Hourglass_Off, 0);
+  zfull_retouched = r.nspots || r.nmasks;
+  zfull_stale = 0;
+  lplan_ok = 0;
+  loupe_dirty = 1;
+  return 1;
+}
+
 /* Plans the full-size output (geometry as now) and lays the region out
    round zcx, zcy; starts rendering it. */
 static void zoom_layout (int replan)
@@ -1494,6 +1527,11 @@ static void zoom_layout (int replan)
   int vw, vh, w, h;
   if (zoom != 2 || !zfull.rgb)
     return;
+  if (dragging == -1 && !zfull_update ())   /* (while dragging: as it was, till let go) */
+    {
+      free_zoom ();
+      return;
+    }
   if (replan)
     {
       recipe r;
@@ -1625,8 +1663,13 @@ static void zoom_idle (unsigned deadline)
       zgen = NULL;
       {
         recipe r;
+        size_t nb = (size_t) zfull.w * zfull.h * 3;
         effective (&r);
-        retouch_rgb8 (zfull.rgb, zfull.w, zfull.h, &r);   /* the spots, at full size */
+        zfull_stale = 0;
+        zfull_retouched = r.nspots || r.nmasks;
+        if (zfull_retouched && (zfull_orig = malloc (nb)) != NULL)
+          memcpy (zfull_orig, zfull.rgb, nb);
+        retouch_rgb8 (zfull.rgb, zfull.w, zfull.h, &r);   /* the spots and layers, at full size */
       }
       lplan_ok = 0;
       loupe_dirty = 1;
@@ -1701,6 +1744,8 @@ static void loupe_render (void)
   loupe_dirty = 0;
   if (loupe_make ())
     return;
+  if (zfull.rgb && dragging == -1 && !zfull_update ())
+    free_zoom ();
   if (!zfull.rgb)
     {
       /* Still reading the full size (a raw takes a while): the picture on
@@ -1910,8 +1955,13 @@ static void refresh (int full)
       redevelop ();
       return;
     }
-  if (retouch_sync ())
-    full = 1;
+  {
+    int rs = retouch_sync ();
+    if (rs == 1)
+      full = 1;
+    else if (rs == 2)
+      full = 0;                        /* only the half size, while dragging */
+  }
   if (geometry_changed () && geometry_apply ())
     {
       force_image ();
@@ -1932,7 +1982,13 @@ static void refresh (int full)
 }
 
 /* Half size: the mean of each 2x2 block of src, in linear light. */
+static void make_half_from (const uint16_t *src);
 static void make_half (void)
+{
+  make_half_from (src);
+}
+
+static void make_half_from (const uint16_t *src)
 {
   int x, y;
   for (y = 0; y < hh; y++)
@@ -1949,14 +2005,27 @@ static void make_half (void)
 
 /* The proxy with the spots the recipe has now (src from src_orig): 1 if
    it changed, and then everything made from it is made again. */
+/* While a layer's slider or handle is dragged: the spots and layers on
+   the half-size copy only (a quarter of the work), the rest when it's
+   let go. */
+static int live_retouch (void)
+{
+  return dragging == DRAG_HANDLE || (dragging <= DRAG_MASK_SLIDER && dragging > DRAG_MASK_SLIDER - M_COUNT);
+}
+
+static int applied_full;               /* src has applied's retouching (not only half: while dragging) */
+
+/* The proxy with the spots and layers the recipe has now (src from
+   src_orig): 1 if it changed (everything made from it is made again), 2
+   if only the half-size copy was (while dragging), 0 if nothing. */
 static int retouch_sync (void)
 {
   recipe r;
   size_t bytes = (size_t) sw * sh * 6;
-  int show = retouching && brushing && mk_show && !before ? mk_sel : -1;
+  int show = retouching && brushing && mk_show && !before ? mk_sel : -1, live = live_retouch ();
   effective (&r);
   if (!src || (applied_n >= 0 && recipe_spots_equal (&applied, &r) && recipe_masks_equal (&applied, &r)
-               && recipe_strokes_equal (&applied, &r) && show == applied_show))
+               && recipe_strokes_equal (&applied, &r) && show == applied_show && (applied_full || live)))
     return 0;
   applied_show = show;
   if (!src_orig)
@@ -1965,22 +2034,46 @@ static int retouch_sync (void)
         {
           applied = r;
           applied_n = 0;
+          applied_full = 1;
           return 0;
         }
       if (!(src_orig = malloc (bytes)))
         return 0;
       memcpy (src_orig, src, bytes);
     }
-  else
-    memcpy (src, src_orig, bytes);
+  if (live)
+    {
+      make_half_from (src_orig);
+      retouch_lin_show (half, hw, hh, &r, show);
+      applied = r;
+      applied_n = 1;
+      applied_full = 0;
+      geo_key_valid = 0;
+      return 2;
+    }
+  memcpy (src, src_orig, bytes);
   retouch_lin_show (src, sw, sh, &r, show);
   make_half ();
   applied = r;
   applied_n = 1;
+  applied_full = 1;
   geo_key_valid = 0;
   lummap_ok = 0;
-  if (zfull.rgb || zgen)
-    free_zoom ();                      /* the full size is read again, with them */
+  /* The full size: retouched again when next looked at (a decode under
+     way takes the recipe as it is when it ends). */
+  if (zfull.rgb)
+    {
+      if (!zfull_orig && !zfull_retouched)
+        {
+          size_t nb = (size_t) zfull.w * zfull.h * 3;
+          if ((zfull_orig = malloc (nb)) != NULL)
+            memcpy (zfull_orig, zfull.rgb, nb);   /* as decoded: nothing was on it */
+        }
+      if (zfull_orig)
+        zfull_stale = 1;
+      else
+        free_zoom ();                  /* no copy (memory): read again */
+    }
   return 1;
 }
 
@@ -4086,22 +4179,63 @@ static void mask_pin (int i, float *u, float *v)
 
 /* The chosen mask's handles on the photo: gradient 0 start, 1 end, 2 the
    middle (moves both); radial 0 centre, 1 width, 2 height. */
+/* An oval's point at (lx, ly) photo pixels in its own axes (turned by
+   its angle), as fractions of the photo. */
+static void oval_point (const recipe_mask *m, double lx, double ly, float *u, float *v)
+{
+  double a = m->angle * M_PI / 180, cs = cos (a), sn = sin (a);
+  *u = m->x0 + (float) ((lx * cs - ly * sn) / sw);
+  *v = m->y0 + (float) ((lx * sn + ly * cs) / sh);
+}
+
+/* How far the turning handle is from the shape (photo pixels). */
+static double turn_reach (double half)
+{
+  double longer = sw > sh ? sw : sh;
+  return half + (half * 0.3 > 0.05 * longer ? half * 0.3 : 0.05 * longer);
+}
+
+/* The chosen mask's handles: a gradient's start (0), end (1), middle (2)
+   and turning handle (3, off to the side of the middle); an oval's
+   centre (0), width (1), height (2) and turning handle (3, beyond the
+   top). */
 static int mask_handle (int h, float *u, float *v)
 {
   const recipe_mask *m;
-  if (mk_sel < 0 || mk_sel >= current.nmasks)
+  if (mk_sel < 0 || mk_sel >= current.nmasks || h < 0 || h > 3)
     return 0;
   m = &current.mask[mk_sel];
   if (m->kind == MASK_GRADIENT)
     {
-      *u = h == 0 ? m->x0 : h == 1 ? m->x1 : (m->x0 + m->x1) / 2;
-      *v = h == 0 ? m->y0 : h == 1 ? m->y1 : (m->y0 + m->y1) / 2;
+      double mu = (m->x0 + m->x1) / 2, mv = (m->y0 + m->y1) / 2;
+      if (h == 3)
+        {
+          double dx = (m->x1 - m->x0) * sw, dy = (m->y1 - m->y0) * sh, l = sqrt (dx * dx + dy * dy), r;
+          if (l < 1)
+            return 0;
+          r = turn_reach (l / 2) - l / 2;   /* across the line, from the middle */
+          *u = (float) (mu + -dy / l * r / sw);
+          *v = (float) (mv + dx / l * r / sh);
+          return 1;
+        }
+      *u = h == 0 ? m->x0 : h == 1 ? m->x1 : (float) mu;
+      *v = h == 0 ? m->y0 : h == 1 ? m->y1 : (float) mv;
       return 1;
     }
   if (m->kind == MASK_RADIAL)
     {
-      *u = h == 1 ? m->x0 + m->x1 : m->x0;
-      *v = h == 2 ? m->y0 + m->y1 : m->y0;
+      double rx = m->x1 * sw, ry = m->y1 * sh;
+      if (h == 0)
+        {
+          *u = m->x0;
+          *v = m->y0;
+        }
+      else if (h == 1)
+        oval_point (m, rx, 0, u, v);
+      else if (h == 2)
+        oval_point (m, 0, ry, u, v);
+      else
+        oval_point (m, 0, -turn_reach (ry), u, v);
       return 1;
     }
   return 0;
@@ -4181,14 +4315,15 @@ static int spot_points (int i, float du, float dv, float *xy)
 }
 
 /* An oval on the photo (centre, half-widths as fractions), through the geometry. */
-static void draw_oval (const int out[4], float cu, float cv, float ru, float rv, unsigned colour)
+static void draw_oval (const int out[4], float cu, float cv, float ru, float rv, float angle, unsigned colour)
 {
   int k, px = 0, py = 0, ok = 0;
+  double t = angle * M_PI / 180, cs = cos (t), sn = sin (t);
   for (k = 0; k <= 48; k++)
     {
-      double a = 2 * 3.14159265358979 * k / 48;
+      double a = 2 * 3.14159265358979 * k / 48, lx = cos (a) * ru * sw, ly = sin (a) * rv * sh;
       int x, y;
-      if (!photo_to_screen (out, cu + (float) (cos (a) * ru), cv + (float) (sin (a) * rv), &x, &y))
+      if (!photo_to_screen (out, cu + (float) ((lx * cs - ly * sn) / sw), cv + (float) ((lx * sn + ly * cs) / sh), &x, &y))
         return;
       if (ok)
         {
@@ -4251,12 +4386,42 @@ static void draw_masks (const int out[4])
         }
       else if (m->kind == MASK_RADIAL)
         {
-          draw_oval (out, m->x0, m->y0, m->x1, m->y1, COL_KNOB);
+          draw_oval (out, m->x0, m->y0, m->x1, m->y1, m->angle, COL_KNOB);
           draw_oval (out, m->x0, m->y0, m->x1 * (1 - (m->f < 0.02f ? 0.02f : m->f)), m->y1 * (1 - (m->f < 0.02f ? 0.02f : m->f)),
-                     0xA0A0A000u);
+                     m->angle, 0xA0A0A000u);
         }
       for (i = 0; i < 3 && mask_handle (i, &u, &v); i++)
         draw_handle (out, u, v, dragging == DRAG_HANDLE && mk_handle == i);
+      if (mask_handle (3, &u, &v))
+        {
+          /* The turning handle: round, on a stalk from the middle or the top. */
+          float au, av;
+          int ax, ay, hx, hy, k;
+          if (m->kind == MASK_RADIAL)
+            oval_point (m, 0, -m->y1 * sh, &au, &av);
+          else
+            {
+              au = (m->x0 + m->x1) / 2;
+              av = (m->y0 + m->y1) / 2;
+            }
+          if (photo_to_screen (out, au, av, &ax, &ay) && photo_to_screen (out, u, v, &hx, &hy))
+            {
+              unsigned col = dragging == DRAG_HANDLE && mk_handle == 3 ? COL_ACCENT : COL_KNOB;
+              draw_line_in (out, ax, ay - 2, hx, hy - 2, COL_FRAME);
+              draw_line_in (out, ax, ay, hx, hy, COL_KNOB);
+              for (k = 13; k >= 0; k--)
+                {
+                  /* a filled ring: dark edge, then light */
+                  int rr = k, j;
+                  unsigned c = k > 10 ? COL_FRAME : col;
+                  for (j = -rr; j <= rr; j++)
+                    {
+                      int half = (int) sqrt ((double) (rr * rr - j * j));
+                      draw_rect (hx - half, hy + j, hx + half, hy + j + 1, c);
+                    }
+                }
+            }
+        }
     }
   for (i = 0; i < current.nmasks; i++)
     {
@@ -4281,7 +4446,7 @@ static void draw_masks (const int out[4])
         }
       else
         draw_oval (out, mk_du0, mk_dv0, fabsf (rt_dx - mk_du0) > 0.005f ? fabsf (rt_dx - mk_du0) : 0.005f,
-                   fabsf (rt_dy - mk_dv0) > 0.005f ? fabsf (rt_dy - mk_dv0) : 0.005f, COL_KNOB);
+                   fabsf (rt_dy - mk_dv0) > 0.005f ? fabsf (rt_dy - mk_dv0) : 0.005f, 0, COL_KNOB);
     }
 }
 
@@ -5065,6 +5230,18 @@ static void handle_follow (float u, float v)
     {
       if (mk_handle == 0) { m->x0 = u; m->y0 = v; }
       else if (mk_handle == 1) { m->x1 = u; m->y1 = v; }
+      else if (mk_handle == 3)
+        {
+          /* Turned round its middle, its length kept: the handle stays across it. */
+          double mu = (m->x0 + m->x1) / 2, mv = (m->y0 + m->y1) / 2, px = (u - mu) * sw, py = (v - mv) * sh;
+          double dx = (m->x1 - m->x0) * sw, dy = (m->y1 - m->y0) * sh, half = sqrt (dx * dx + dy * dy) / 2, l = sqrt (px * px + py * py);
+          if (l > 1)
+            {
+              double tx = py / l, ty = -px / l;   /* along the line, from the handle across it */
+              m->x0 = (float) (mu - tx * half / sw); m->y0 = (float) (mv - ty * half / sh);
+              m->x1 = (float) (mu + tx * half / sw); m->y1 = (float) (mv + ty * half / sh);
+            }
+        }
       else
         {
           float du = u - (m->x0 + m->x1) / 2, dv = v - (m->y0 + m->y1) / 2;
@@ -5073,9 +5250,27 @@ static void handle_follow (float u, float v)
     }
   else if (m->kind == MASK_RADIAL)
     {
+      double a = m->angle * M_PI / 180, cs = cos (a), sn = sin (a), px = (u - m->x0) * sw, py = (v - m->y0) * sh;
       if (mk_handle == 0) { m->x0 = u; m->y0 = v; }
-      else if (mk_handle == 1) m->x1 = fabsf (u - m->x0) > 0.005f ? fabsf (u - m->x0) : 0.005f;
-      else m->y1 = fabsf (v - m->y0) > 0.005f ? fabsf (v - m->y0) : 0.005f;
+      else if (mk_handle == 1)
+        {
+          double lx = fabs (px * cs + py * sn) / sw;   /* along its own width */
+          m->x1 = lx > 0.005 ? (float) lx : 0.005f;
+        }
+      else if (mk_handle == 2)
+        {
+          double ly = fabs (-px * sn + py * cs) / sh;
+          m->y1 = ly > 0.005 ? (float) ly : 0.005f;
+        }
+      else if (px * px + py * py > 1)
+        {
+          /* The handle is above the top: the angle the pointer is round from straight up. */
+          double deg = atan2 (px, -py) * 180 / M_PI;
+          deg = floor (deg * 10 + 0.5) / 10;
+          if (deg < 0)
+            deg += 360;
+          m->angle = (float) (deg >= 360 ? 0 : deg);
+        }
     }
   before = 0;
   refresh (0);
@@ -5182,7 +5377,7 @@ static void retouch_click (const int *b, int wx, int wy)
               return;
             }
         }
-      for (i = 0; i < 3 && b[2] == Button_Select && mk_new < 0; i++)
+      for (i = 3; i >= 0 && b[2] == Button_Select && mk_new < 0; i--)
         {
           float hu, hv;
           int hx, hy;

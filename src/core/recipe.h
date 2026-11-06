@@ -120,6 +120,7 @@ typedef struct { float x, y, r, sx, sy; int clone; float f; int first, n; } reci
    Places are fractions of the photo upright (as spots).
    Text form, a line for each mask, then a line for each stroke on one:
      mask k=radial x0=0.5000 y0=0.4000 x1=0.2000 y1=0.3000 f=0.50 invert=1 ev=0.50 shadows=30
+     (angle=30.0 after f=: an oval turned 30 degrees clockwise)
      (off=1 after k=: switched off, there but not applied)
      paint m=0 k=add a=1.00 r=0.0300 f=0.50 p=4120,3310;4180,3325;...
    Strokes: under a brush of radius r (a fraction of the longer side)
@@ -133,7 +134,7 @@ extern const char *const recipe_mask_keys[MASK_KINDS];     /* "brush", "gradient
 enum { M_EV, M_CONTRAST, M_HIGHLIGHTS, M_SHADOWS, M_TEMP, M_TINT, M_SATURATION, M_CLARITY, M_SHARPNESS, M_COUNT };
 extern const recipe_param recipe_mask_params[M_COUNT];      /* key, label, range; group unused */
 #define RECIPE_MASKS 32
-typedef struct { int kind, invert, off; float v[M_COUNT]; float x0, y0, x1, y1, f; } recipe_mask;   /* off: switched off (kept, not applied) */
+typedef struct { int kind, invert, off; float v[M_COUNT]; float x0, y0, x1, y1, f, angle; } recipe_mask;   /* off: switched off (kept, not applied); angle: an oval's turn, degrees clockwise */
 
 enum { BRUSH_ADD, BRUSH_ERASE, BRUSH_KINDS };
 extern const char *const recipe_brush_keys[BRUSH_KINDS];   /* "add", "erase" */

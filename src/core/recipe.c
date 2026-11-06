@@ -561,6 +561,7 @@ int recipe_parse (recipe *r, const char *text)
               else if (!strcmp (tok, "f")) mk.f = clamp_unit (v);
               else if (!strcmp (tok, "invert")) mk.invert = v != 0;
               else if (!strcmp (tok, "off")) mk.off = v != 0;
+              else if (!strcmp (tok, "angle")) mk.angle = (float) fmod (v, 360.0);
               else
                 for (k = 0; k < M_COUNT; k++)
                   if (!strcmp (tok, recipe_mask_params[k].key))
@@ -886,7 +887,7 @@ int recipe_masks_equal (const recipe *a, const recipe *b)
     {
       const recipe_mask *m = &a->mask[i], *n = &b->mask[i];
       if (m->kind != n->kind || m->invert != n->invert || m->off != n->off || !same (m->x0, n->x0) || !same (m->y0, n->y0)
-          || !same (m->x1, n->x1) || !same (m->y1, n->y1) || !same (m->f, n->f))
+          || !same (m->x1, n->x1) || !same (m->y1, n->y1) || !same (m->f, n->f) || !same (m->angle, n->angle))
         return 0;
       for (p = 0; p < M_COUNT; p++)
         if (!same (m->v[p], n->v[p]))
@@ -1094,8 +1095,15 @@ int recipe_format (const recipe *r, char *out, size_t n)
         used += (size_t) k;
         if (m->kind != MASK_BRUSH)
           {
-            k = snprintf (out + used, n - used, " x0=%.4f y0=%.4f x1=%.4f y1=%.4f f=%.2f%s", (double) m->x0, (double) m->y0,
-                          (double) m->x1, (double) m->y1, (double) m->f, m->invert ? " invert=1" : "");
+            k = snprintf (out + used, n - used, " x0=%.4f y0=%.4f x1=%.4f y1=%.4f f=%.2f", (double) m->x0, (double) m->y0,
+                          (double) m->x1, (double) m->y1, (double) m->f);
+            if (k < 0 || used + (size_t) k >= n)
+              return -1;
+            used += (size_t) k;
+            if (m->kind == MASK_RADIAL && !same (m->angle, 0))
+              k = snprintf (out + used, n - used, " angle=%.1f%s", (double) m->angle, m->invert ? " invert=1" : "");
+            else
+              k = snprintf (out + used, n - used, "%s", m->invert ? " invert=1" : "");
             if (k < 0 || used + (size_t) k >= n)
               return -1;
             used += (size_t) k;

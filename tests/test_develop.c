@@ -2201,6 +2201,27 @@ static void test_brush (void)
       CHECK (img[((size_t) 50 * w + 100) * 3] < 100, "a stroke on it adds the middle");
     }
   }
+  /* A turned oval: long across, then turned a quarter so it's long down. */
+  {
+    recipe_mask mk;
+    recipe_default (&r);
+    recipe_mask_init (&mk, MASK_RADIAL);
+    mk.x1 = 0.4f; mk.y1 = 0.1f; mk.f = 0.1f;   /* 80 px across, 10 px down */
+    recipe_mask_set (&mk, M_EV, 1);
+    recipe_mask_add (&r, &mk);
+    CHECK (retouch_mask_at (&r, 0, w, h, 0.65f, 0.50f) > 0.9f && retouch_mask_at (&r, 0, w, h, 0.50f, 0.80f) < 0.01f,
+           "an oval long across");
+    r.mask[0].angle = 90;
+    CHECK (retouch_mask_at (&r, 0, w, h, 0.65f, 0.50f) < 0.01f && retouch_mask_at (&r, 0, w, h, 0.50f, 0.80f) > 0.9f,
+           "turned a quarter: long down");
+    r.mask[0].angle = 30;
+    recipe_format (&r, t, sizeof t);
+    recipe_parse (&back, t);
+    CHECK (strstr (t, "mask k=radial x0=0.5000 y0=0.5000 x1=0.4000 y1=0.1000 f=0.10 angle=30.0 ev=1.00\n")
+           && recipe_equal (&r, &back) && fabsf (back.mask[0].angle - 30) < 0.01f, "the turn written and read back");
+    back.mask[0].angle = 31;
+    CHECK (!recipe_equal (&r, &back), "a different turn is a different recipe");
+  }
   /* Tone: shadows lift dark parts more than light ones; temperature warms. */
   {
     unsigned char *g = malloc ((size_t) w * h * 3), *g0 = malloc ((size_t) w * h * 3);

@@ -1,5 +1,27 @@
 # Lumen changelog
 
+## 0.0.38.1: faster layers, and turning ovals and gradients
+
+- Layers are faster. Dragging a layer's slider or a gradient's or
+  oval's handle shows the change on the half-size copy as you go, and
+  the full photo is done once you let go. A change to a layer no longer
+  sends a raw photo back to LumenRaw: the full-size picture (at 100%
+  and in the loupe) is kept as it came and the layers done again on a
+  copy of it. Brush layers are worked out a stroke at a time, only near
+  the stroke, and the layers' own pixel work (exposure, tone, colour,
+  clarity and sharpness) is done in a single pass with tables.
+- A turning handle on gradients and ovals: the round handle on a stalk
+  (across the line from a gradient's middle, above an oval's top)
+  turns it; drag it round. A gradient turns about its middle, keeping
+  its length; an oval turns about its centre (recipe "angle=", degrees
+  clockwise; Lumens before 0.0.38.1 show it unturned). The oval's other
+  two handles stretch it along its own turned axes.
+- Lens Correction: a raw photo's lens details are fetched from LumenRaw
+  only when Auto or the lens menu wants them, not each time it opens.
+- Raw noise reduction: the photo's noise-reduced picture is kept as a
+  preview, so a photo with Light or Strong opens at once instead of
+  going back to LumenRaw each time.
+
 ## 0.0.38: TIFF, and photos known by their fingerprint
 
 - TIFF photos are imported, shown, adjusted and exported, built into
