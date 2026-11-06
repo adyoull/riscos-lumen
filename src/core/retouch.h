@@ -37,6 +37,12 @@ void retouch_lin (uint16_t *lin, int w, int h, const recipe *r);
    red, as much as it covers it (the Viewer's Show mask). */
 void retouch_lin_show (uint16_t *lin, int w, int h, const recipe *r, int show);
 
+/* Part of that: the spots (if spots), masks m0..m1-1, then mask show (if
+   >= 0) in red. The Viewer keeps a copy with the layers below the one
+   being dragged, and while it's dragged does only that one and those
+   above it. */
+void retouch_lin_part (uint16_t *lin, int w, int h, const recipe *r, int spots, int m0, int m1, int show);
+
 /* A source for a spot at (x, y), radius r (as recipe_spot): the place
    round it whose surroundings look most like the spot's own. For a
    painted one, along n points (xy, fractions): the offset of its source

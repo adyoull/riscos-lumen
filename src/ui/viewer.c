@@ -143,6 +143,7 @@ static int rt_sel_auto;
 static int rt_hover, rt_hx, rt_hy, rt_hr;  /* the brush under the pointer: centre (work area), radius */
 static void rt_brush_follow (void);                /* and its source was found for it (found again when it is resized) */
 static uint16_t *src_orig;
+static void below_forget (void);
 static recipe applied;                 /* the spots and strokes src has */
 static int applied_n = -1;             /* -1: not yet looked */
 static int rt_drag = -1, rt_drag_src;  /* the spot being moved, and whether its source */
@@ -551,6 +552,7 @@ static void free_photo (void)
   src = half = NULL;
   free (src_orig);
   src_orig = NULL;
+  below_forget ();
   applied_n = -1;
   applied_show = -1;
   retouching = 0;
@@ -2015,6 +2017,47 @@ static int live_retouch (void)
 
 static int applied_full;               /* src has applied's retouching (not only half: while dragging) */
 
+/* While a layer is dragged: the half-size copy with the spots and the
+   layers below it (below_k of them, as below_r had them), made once, so
+   each step of the drag does only that layer and those above it. */
+static uint16_t *half_below;
+static int below_k = -1, below_w, below_h;
+static recipe below_r;
+
+static void below_forget (void)
+{
+  free (half_below);
+  half_below = NULL;
+  below_k = -1;
+}
+
+/* Whether a and b have the same spots, first k layers and strokes on them. */
+static int below_same (const recipe *a, const recipe *b, int k)
+{
+  int i = 0, j = 0;
+  if (!recipe_spots_equal (a, b) || a->nmasks < k || b->nmasks < k)
+    return 0;
+  for (i = 0; i < k; i++)
+    if (memcmp (&a->mask[i], &b->mask[i], sizeof a->mask[i]))
+      return 0;
+  i = 0;
+  for (;;)
+    {
+      const recipe_stroke *p, *q;
+      while (i < a->nstrokes && a->stroke[i].mask >= k)
+        i++;
+      while (j < b->nstrokes && b->stroke[j].mask >= k)
+        j++;
+      if (i == a->nstrokes || j == b->nstrokes)
+        return i == a->nstrokes && j == b->nstrokes;
+      p = &a->stroke[i++];
+      q = &b->stroke[j++];
+      if (p->mask != q->mask || p->kind != q->kind || p->n != q->n || p->r != q->r || p->f != q->f || p->amount != q->amount
+          || memcmp (a->pt[p->first], b->pt[q->first], sizeof a->pt[0] * (size_t) p->n))
+        return 0;
+    }
+}
+
 /* The proxy with the spots and layers the recipe has now (src from
    src_orig): 1 if it changed (everything made from it is made again), 2
    if only the half-size copy was (while dragging), 0 if nothing. */
@@ -2040,11 +2083,34 @@ static int retouch_sync (void)
       if (!(src_orig = malloc (bytes)))
         return 0;
       memcpy (src_orig, src, bytes);
+      below_forget ();
     }
   if (live)
     {
-      make_half_from (src_orig);
-      retouch_lin_show (half, hw, hh, &r, show);
+      int k = mk_sel >= 0 && mk_sel < r.nmasks ? mk_sel : 0;
+      size_t hb = (size_t) hw * hh * 6;
+      if (!half_below || below_k != k || below_w != hw || below_h != hh || !below_same (&below_r, &r, k))
+        {
+          below_forget ();
+          if ((half_below = malloc (hb)) != NULL)
+            {
+              make_half_from (src_orig);
+              retouch_lin_part (half, hw, hh, &r, 1, 0, k, -1);
+              memcpy (half_below, half, hb);
+              below_k = k; below_w = hw; below_h = hh;
+              below_r = r;
+            }
+        }
+      if (half_below)
+        {
+          memcpy (half, half_below, hb);
+          retouch_lin_part (half, hw, hh, &r, 0, k, r.nmasks, show);
+        }
+      else
+        {
+          make_half_from (src_orig);
+          retouch_lin_show (half, hw, hh, &r, show);
+        }
       applied = r;
       applied_n = 1;
       applied_full = 0;

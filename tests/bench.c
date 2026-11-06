@@ -15,6 +15,8 @@
        (at 1/2, and at 3/8 as Lumen$JPEGEighths allows), and the rest;
      - developing the proxy, and the half-size copy used while dragging,
        with tone only and with saturation and vibrancy;
+     - layers: an oval, a turned one, a gradient, a brush stroke and an
+       oval with every slider, at half size, proxy and 12 MP;
      - smoothing, enlarging and sharpening, plain and NEON;
      - a frame while dragging (develop + enlarge + plot) against 50 ms. */
 #include <stdio.h>
@@ -26,6 +28,7 @@
 #include "sharpen.h"
 #include "simd.h"
 #include "recipe.h"
+#include "retouch.h"
 #include "thumbgen.h"
 #include <jpeglib.h>
 #include "export.h"
@@ -340,6 +343,54 @@ int main (int argc, char **argv)
   printf ("Proxy, tone only:              %6.1f ms\n", tone);
   printf ("Proxy, with saturation:        %6.1f ms\n", full);
   printf ("Half size (while dragging):    %6.1f ms tone, %.1f ms with saturation\n", half_tone, half_full);
+  /* Layers (retouch.c): an oval, a turned oval, a gradient, a brush
+     stroke, and an oval with every slider, on the half size (each step
+     of a drag), the proxy (when it's let go) and a 12 MP full size (100%
+     and the loupe). */
+  {
+    static const char *const layer[][2] = {
+      { "oval, Exposure", "mask k=radial x0=0.5 y0=0.5 x1=0.3 y1=0.3 f=0.5 ev=0.5\n" },
+      { "oval turned", "mask k=radial x0=0.5 y0=0.5 x1=0.3 y1=0.15 f=0.5 angle=30.0 ev=0.5\n" },
+      { "gradient", "mask k=gradient x0=0.5 y0=0 x1=0.5 y1=0.5 f=0.5 ev=0.5\n" },
+      { "brush stroke", "mask k=brush ev=1.00\npaint m=0 k=add a=1.00 r=0.0500 f=0.50 p=1000,2000;3000,3000;5000,4000;7000,5000;9000,6000;7000,8000;5000,8500;3000,7500;1000,5500\n" },
+      { "oval, all sliders", "mask k=radial x0=0.5 y0=0.5 x1=0.3 y1=0.3 f=0.5 ev=0.5 contrast=20 highlights=-20 shadows=20 temp=10 saturation=10 clarity=30 sharpness=20\n" },
+    };
+    int fw = 4256, fh = 2832, li;
+    uint16_t *lw = malloc ((size_t) proxy.w * proxy.h * 6);
+    unsigned char *f8 = malloc ((size_t) fw * fh * 3);
+    printf ("Layers (half size / proxy / 12 MP full size):\n");
+    for (li = 0; lw && li < (int) (sizeof layer / sizeof layer[0]); li++)
+      {
+        recipe lr;
+        double th, tp, tf = -1;
+        int k;
+        recipe_parse (&lr, layer[li][1]);
+        t0 = clock ();
+        for (k = 0; k < 10; k++)
+          {
+            memcpy (lw, src, (size_t) (proxy.w / 2) * (proxy.h / 2) * 6);
+            retouch_lin (lw, proxy.w / 2, proxy.h / 2, &lr);
+          }
+        th = ms_since (t0) / 10;
+        t0 = clock ();
+        for (k = 0; k < 4; k++)
+          {
+            memcpy (lw, src, (size_t) proxy.w * proxy.h * 6);
+            retouch_lin (lw, proxy.w, proxy.h, &lr);
+          }
+        tp = ms_since (t0) / 4;
+        if (f8)
+          {
+            memset (f8, 100, (size_t) fw * fh * 3);
+            t0 = clock ();
+            retouch_rgb8 (f8, fw, fh, &lr);
+            tf = ms_since (t0);
+          }
+        printf ("  %-18s %6.1f / %6.1f / %6.0f ms\n", layer[li][0], th, tp, tf);
+      }
+    free (lw);
+    free (f8);
+  }
   /* Smoothing the renders to the size shown (a 1080p desktop), and
      sharpening the proxy: with the plain code and, where the processor
      has it, with NEON. */

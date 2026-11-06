@@ -1,5 +1,26 @@
 # Lumen changelog
 
+## 0.0.38.2: layers faster again
+
+- Gradients and ovals are worked out along each row of the photo, from
+  their shape, instead of on a grid of up to 2048 cells and read back
+  from it: an oval only where it crosses each row. With brush strokes
+  on a layer the grid stays, but its cells are as coarse as the
+  narrowest fading edge allows (a quarter of it), and it's read a row
+  at a time. A turned oval no longer works out its turn at every pixel.
+- While a layer's slider or handle is dragged, the layers below it (and
+  the spots) are kept from the start of the drag: each step redoes only
+  that layer and those above it.
+- 8-bit pictures (the full size, at 100% and in the loupe) are written
+  back in one look in a finer table; what a layer leaves alone comes
+  back exactly as it was.
+- LumenBench times layers: an oval, a turned one, a gradient, a brush
+  stroke and an oval with every slider, at half size, on the working
+  copy and on a 12 MP full size. On the test bed (emulated), an oval at
+  half size went from 86 to 47 ms, a gradient from 154 to 40, a brush
+  stroke from 115 to 35, and the 12 MP full size two to five times
+  quicker.
+
 ## 0.0.38.1: faster layers, and turning ovals and gradients
 
 - Layers are faster. Dragging a layer's slider or a gradient's or

@@ -1,4 +1,4 @@
-Lumen 0.0.38.1 (06 Nov 2026)
+Lumen 0.0.38.2 (06 Nov 2026)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -442,7 +442,10 @@ in a task window (Ctrl-F12):  *Run <Lumen$Dir>.Bench
 With a JPEG's pathname after it (type *Run <Lumen$Dir>.Bench and a
 space, then Shift-drag the photo into the task window - an ordinary drag
 types the file's contents instead - or type the pathname), Bench exports
-that photo at full size and says where the time goes.
+that photo at full size and says where the time goes. It also times
+layers: an oval, a turned one, a gradient, a brush stroke and an oval
+with every slider, at half size (each step of a drag), on the working
+copy and on a 12 MP full size.
 
 Exports say how long they took in the Activity history (for a raw
 file: LumenRaw developing it, its picture being read, and the adjusting

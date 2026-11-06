@@ -2222,6 +2222,58 @@ static void test_brush (void)
     back.mask[0].angle = 31;
     CHECK (!recipe_equal (&r, &back), "a different turn is a different recipe");
   }
+  /* Ovals and gradients are found at each pixel from their shape; with a
+     stroke on them, from a grid: the two agree. And a layer done in parts
+     (the ones below kept while one is dragged) is the same. */
+  {
+    static const char *const shapes[] = {
+      "mask k=radial x0=0.4000 y0=0.6000 x1=0.3000 y1=0.2000 f=0.60 angle=35.0 ev=1.00\n",
+      "mask k=radial x0=0.5000 y0=0.5000 x1=0.2500 y1=0.3000 f=0.40 invert=1 ev=-1.00 saturation=-40\n",
+      "mask k=gradient x0=0.2000 y0=0.1000 x1=0.7000 y1=0.8000 f=0.50 ev=0.80 contrast=30\n",
+    };
+    int s, worst = 0, same_parts = 1;
+    uint16_t *a = malloc ((size_t) w * h * 6), *b = malloc ((size_t) w * h * 6), *src16 = malloc ((size_t) w * h * 6);
+    for (x = 0; x < w * h * 3; x++)
+      src16[x] = (uint16_t) (6000 + (x * 7919) % 40000);
+    for (s = 0; s < 3; s++)
+      {
+        recipe g;
+        float far[2] = { 0.99f, 0.01f };
+        recipe_parse (&r, shapes[s]);
+        g = r;
+        recipe_stroke_add (&g, 0, BRUSH_ADD, 0.001f, 0.5f, 0.001f, far, 1);   /* next to nothing, in a corner */
+        memcpy (a, src16, (size_t) w * h * 6);
+        memcpy (b, src16, (size_t) w * h * 6);
+        retouch_lin (a, w, h, &r);
+        retouch_lin (b, w, h, &g);
+        for (x = 0; x < w * h * 3; x++)
+          if ((x / 3) % w < w - 4 && abs (a[x] - b[x]) > worst)
+            worst = abs (a[x] - b[x]);
+      }
+    CHECK (worst < 200, "a shape found directly agrees with its grid (within 0.3%)");
+    recipe_parse (&r, "mask k=radial x0=0.3000 y0=0.5000 x1=0.2000 y1=0.3000 f=0.50 ev=1.00\n"
+                      "mask k=gradient x0=0.5000 y0=0.0000 x1=0.5000 y1=0.6000 f=0.50 contrast=40\n"
+                      "mask k=radial x0=0.7000 y0=0.5000 x1=0.2000 y1=0.3000 f=0.50 angle=20.0 saturation=50\n");
+    memcpy (a, src16, (size_t) w * h * 6);
+    memcpy (b, src16, (size_t) w * h * 6);
+    retouch_lin_show (a, w, h, &r, 1);
+    retouch_lin_part (b, w, h, &r, 1, 0, 1, -1);
+    retouch_lin_part (b, w, h, &r, 0, 1, r.nmasks, 1);
+    same_parts = !memcmp (a, b, (size_t) w * h * 6);
+    CHECK (same_parts, "the layers below kept, then the rest: the same as all at once");
+    free (a); free (b); free (src16);
+  }
+  /* 8-bit: what a layer leaves alone comes back exactly. */
+  {
+    unsigned char row8[256 * 3];
+    recipe_parse (&r, "mask k=gradient x0=0.5000 y0=2.0000 x1=0.5000 y1=3.0000 f=0.50 saturation=1\n");
+    for (x = 0; x < 256 * 3; x++)
+      row8[x] = (unsigned char) (x / 3);
+    retouch_rgb8 (row8, 256, 1, &r);
+    for (x = 0; x < 256 * 3 && row8[x] == x / 3; x++)
+      ;
+    CHECK (x == 256 * 3, "grey through a layer that changes nothing in grey: every level as it was");
+  }
   /* Tone: shadows lift dark parts more than light ones; temperature warms. */
   {
     unsigned char *g = malloc ((size_t) w * h * 3), *g0 = malloc ((size_t) w * h * 3);

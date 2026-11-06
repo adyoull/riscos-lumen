@@ -360,7 +360,13 @@ out:
 /* --- masks */
 
 static float lin_of8[256];             /* sRGB 8-bit to linear 0..1 */
-static float srgb_of[4097];            /* linear 0..1 (4096ths) to sRGB 0..255 */
+#define SRGB8_STEPS 16384
+static unsigned char srgb8[SRGB8_STEPS + 1];   /* linear 0..1 (16384ths) to sRGB 0..255 */
+
+static double srgb_encode (double v)
+{
+  return 255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * pow (v, 1 / 2.4) - 0.055);
+}
 
 static void tables (void)
 {
@@ -372,16 +378,20 @@ static void tables (void)
       double v = i / 255.0;
       lin_of8[i] = (float) (v <= 0.04045 ? v / 12.92 : pow ((v + 0.055) / 1.055, 2.4));
     }
-  for (i = 0; i <= 4096; i++)
+  for (i = 0; i <= SRGB8_STEPS; i++)
     {
-      double v = i / 4096.0;
-      srgb_of[i] = (float) (255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * pow (v, 1 / 2.4) - 0.055));
+      double o = srgb_encode ((double) i / SRGB8_STEPS);
+      srgb8[i] = (unsigned char) (o > 255 ? 255 : o < 0 ? 0 : o + 0.5);
     }
+  /* A pixel a layer leaves as it was comes back as it was. */
+  for (i = 0; i < 256; i++)
+    srgb8[(int) (lin_of8[i] * SRGB8_STEPS + 0.5f)] = (unsigned char) i;
 }
 
 /* A pixel's channel in linear light, 0..1, and back (the photo as 8-bit
    sRGB or 16-bit linear): straight from the pixels, no calls through
-   the pic's functions (this is where the time goes). */
+   the pic's functions (this is where the time goes); back to 8 bits in
+   one look in a table fine enough to be within half a level. */
 static inline float lin_px (const pic *p, size_t i)
 {
   return p->maxv == 255 ? lin_of8[((const unsigned char *) p->img)[i]] : ((const uint16_t *) p->img)[i] * (1.0f / 65535);
@@ -393,51 +403,129 @@ static inline void put_px (const pic *p, size_t i, float v)
   if (p->maxv != 255)
     ((uint16_t *) p->img)[i] = (uint16_t) (v * 65535 + 0.5f);
   else
-    {
-      float o;
-      if (v < 0.0031308f)
-        o = 255 * 12.92f * v;
-      else
-        {
-          float f = v * 4096;
-          int k = (int) f;
-          o = k >= 4096 ? srgb_of[4096] : srgb_of[k] + (srgb_of[k + 1] - srgb_of[k]) * (f - k);
-        }
-      ((unsigned char *) p->img)[i] = (unsigned char) (o > 255 ? 255 : o + 0.5f);
-    }
+    ((unsigned char *) p->img)[i] = srgb8[(int) (v * SRGB8_STEPS + 0.5f)];
 }
 
-
-/* The mask's shape alone at pixel (x, y) of a w x h photo, 0..1. */
-static double shape_at (const recipe_mask *mk, int w, int h, double x, double y)
+/* A gradient's or oval's shape, worked out once for a w x h photo (and
+   the oval's turn), to be found at any pixel. */
+typedef struct
 {
-  double m = 0;
+  int kind, invert, none;              /* none: nothing (a brush mask's shape, or too small) */
+  double ax, ay, dx, dy, l;            /* gradient: from (ax, ay) along (dx, dy); l: its length squared */
+  double cx, cy, rx, ry, cs, sn;       /* oval: its centre, half sizes and turn */
+  double irx2, iry2, in2, fin;         /* 1 / rx^2, 1 / ry^2, the inner part's e, 1 / the fading part */
+} shape;
+
+static void shape_prep (shape *S, const recipe_mask *mk, int w, int h)
+{
+  memset (S, 0, sizeof *S);
+  S->kind = mk->kind;
+  S->invert = mk->invert;
+  S->none = 1;
   if (mk->kind == MASK_GRADIENT)
     {
-      double ax = mk->x0 * w, ay = mk->y0 * h, dx = mk->x1 * w - ax, dy = mk->y1 * h - ay, l = dx * dx + dy * dy;
-      if (l > 1)
-        m = 1 - smooth (((x - ax) * dx + (y - ay) * dy) / l);
+      S->ax = mk->x0 * w; S->ay = mk->y0 * h;
+      S->dx = mk->x1 * w - S->ax; S->dy = mk->y1 * h - S->ay;
+      S->l = S->dx * S->dx + S->dy * S->dy;
+      S->none = !(S->l > 1);
     }
   else if (mk->kind == MASK_RADIAL)
     {
-      double rx = mk->x1 * w, ry = mk->y1 * h, ex, ey, e, in = 1 - (mk->f < 0.02f ? 0.02 : mk->f);
-      if (rx > 0.5 && ry > 0.5)
+      double in = 1 - (mk->f < 0.02f ? 0.02 : mk->f), a = mk->angle * PI / 180;
+      S->cx = mk->x0 * w; S->cy = mk->y0 * h;
+      S->rx = mk->x1 * w; S->ry = mk->y1 * h;
+      /* turned clockwise by angle: (u, v) in the oval's own axes */
+      S->cs = mk->angle != 0 ? cos (a) : 1;
+      S->sn = mk->angle != 0 ? sin (a) : 0;
+      S->in2 = in * in;
+      S->fin = 1 / (1 - in);
+      if (S->rx > 0.5 && S->ry > 0.5)
         {
-          double dx = x - mk->x0 * w, dy = y - mk->y0 * h;
-          if (mk->angle != 0)
-            {
-              /* turned clockwise by angle: back into the oval's own axes */
-              double a = mk->angle * 3.14159265358979323846 / 180, cs = cos (a), sn = sin (a), t = dx * cs + dy * sn;
-              dy = -dx * sn + dy * cs;
-              dx = t;
-            }
-          ex = dx / rx;
-          ey = dy / ry;
-          e = ex * ex + ey * ey;       /* squared: the square root only in the fading part */
-          m = e <= in * in ? 1 : e >= 1 ? 0 : smooth ((1 - sqrt (e)) / (1 - in));
+          S->none = 0;
+          S->irx2 = 1 / (S->rx * S->rx);
+          S->iry2 = 1 / (S->ry * S->ry);
         }
     }
-  return mk->invert ? 1 - m : m;
+}
+
+/* The oval's coverage from e, its (u/rx)^2 + (v/ry)^2: the square root
+   only in the fading part. */
+static inline float oval_of (const shape *S, float e)
+{
+  float t;
+  if (e <= S->in2)
+    return 1;
+  if (e >= 1)
+    return 0;
+  t = (1 - sqrtf (e)) * (float) S->fin;
+  return t * t * (3 - 2 * t);
+}
+
+static double shape_eval (const shape *S, double x, double y)
+{
+  double m = 0;
+  if (!S->none)
+    {
+      if (S->kind == MASK_GRADIENT)
+        m = 1 - smooth (((x - S->ax) * S->dx + (y - S->ay) * S->dy) / S->l);
+      else
+        {
+          double dx = x - S->cx, dy = y - S->cy, u = dx * S->cs + dy * S->sn, v = -dx * S->sn + dy * S->cs;
+          m = oval_of (S, (float) (u * u * S->irx2 + v * v * S->iry2));
+        }
+    }
+  return S->invert ? 1 - m : m;
+}
+
+/* The shape along row y, pixels x0..x0+n-1 (their centres), into out:
+   a gradient is a straight line's distance, an oval's e a quadratic
+   along the row, outside the part of the row it crosses nothing. */
+static void shape_row (const shape *S, int y, int x0, int n, float *out)
+{
+  int x;
+  float outside = S->invert ? 1.0f : 0.0f;
+  double py = y + 0.5;
+  if (S->none)
+    {
+      for (x = 0; x < n; x++)
+        out[x] = outside;
+      return;
+    }
+  if (S->kind == MASK_GRADIENT)
+    {
+      float t0 = (float) (((x0 + 0.5 - S->ax) * S->dx + (py - S->ay) * S->dy) / S->l), dt = (float) (S->dx / S->l);
+      for (x = 0; x < n; x++)
+        {
+          float t = t0 + dt * x, m = t <= 0 ? 1 : t >= 1 ? 0 : 1 - t * t * (3 - 2 * t);
+          out[x] = S->invert ? 1 - m : m;
+        }
+      return;
+    }
+  {
+    /* e = a d^2 + b d + c, d the distance along the row from the centre */
+    double dy = py - S->cy, a = S->cs * S->cs * S->irx2 + S->sn * S->sn * S->iry2;
+    double b = 2 * dy * S->cs * S->sn * (S->irx2 - S->iry2);
+    double c = dy * dy * (S->sn * S->sn * S->irx2 + S->cs * S->cs * S->iry2), disc = b * b - 4 * a * (c - 1);
+    int s0 = n, s1 = -1;
+    if (disc > 0)
+      {
+        double q = sqrt (disc), lo = (-b - q) / (2 * a) + S->cx - 0.5 - x0, hi = (-b + q) / (2 * a) + S->cx - 0.5 - x0;
+        s0 = lo <= 0 ? 0 : lo >= n ? n : (int) lo;
+        s1 = hi < 0 ? -1 : hi >= n - 1 ? n - 1 : (int) hi + 1;
+      }
+    for (x = 0; x < s0 && x < n; x++)
+      out[x] = outside;
+    {
+      float fa = (float) a, fb = (float) b, fc = (float) c, d = (float) (x0 + s0 + 0.5 - S->cx);
+      for (x = s0; x <= s1; x++, d += 1)
+        {
+          float m = oval_of (S, (fa * d + fb) * d + fc);
+          out[x] = S->invert ? 1 - m : m;
+        }
+    }
+    for (x = s1 + 1 > s0 ? s1 + 1 : s0; x < n; x++)
+      out[x] = outside;
+  }
 }
 
 /* A stroke's own coverage at pixel (x, y) (its brush along its path). */
@@ -462,7 +550,11 @@ float retouch_mask_at (const recipe *r, int mi, int w, int h, float u, float v)
   int i;
   if (mi < 0 || mi >= r->nmasks || w <= 0 || h <= 0)
     return 0;
-  m = shape_at (&r->mask[mi], w, h, x, y);
+  {
+    shape S;
+    shape_prep (&S, &r->mask[mi], w, h);
+    m = shape_eval (&S, x, y);
+  }
   for (i = 0; i < r->nstrokes; i++)
     if (r->stroke[i].mask == mi)
       {
@@ -479,14 +571,35 @@ static int mask_grid (mgrid *G, const recipe *r, int mi, int w, int h)
 {
   const recipe_mask *mk = &r->mask[mi];
   int longer = w > h ? w : h, i, j, k;
+  shape S;
+  double band = 1e30;                  /* the narrowest part that fades, in pixels */
+  shape_prep (&S, mk, w, h);
+  /* Cells a quarter of that across are fine enough to blend between. */
+  if (!S.none)
+    band = S.kind == MASK_GRADIENT ? sqrt (S.l) : (1 - sqrt (S.in2)) * (S.rx < S.ry ? S.rx : S.ry);
+  for (k = 0; k < r->nstrokes; k++)
+    if (r->stroke[k].mask == mi && r->stroke[k].n > 0 && r->stroke[k].amount > 0)
+      {
+        double R = r->stroke[k].r * longer * (r->stroke[k].f < 0.02f ? 0.02 : r->stroke[k].f);
+        band = R < band ? R : band;
+      }
   G->g = (longer + MASK_GRID_MAX - 1) / MASK_GRID_MAX;
+  if (band < 1e29 && (int) (band / 4) > G->g)
+    G->g = (int) (band / 4);
   G->gw = (w + G->g - 1) / G->g;
   G->gh = (h + G->g - 1) / G->g;
   if (!(G->v = malloc (sizeof *G->v * (size_t) G->gw * G->gh)))
     return -1;
-  for (j = 0; j < G->gh; j++)
-    for (i = 0; i < G->gw; i++)
-      G->v[(size_t) j * G->gw + i] = (uint16_t) lround (65535 * shape_at (mk, w, h, (i + 0.5) * G->g, (j + 0.5) * G->g));
+  if (S.none)
+    {
+      uint16_t v = S.invert ? 65535 : 0;
+      for (i = 0; i < G->gw * G->gh; i++)
+        G->v[i] = v;
+    }
+  else
+    for (j = 0; j < G->gh; j++)
+      for (i = 0; i < G->gw; i++)
+        G->v[(size_t) j * G->gw + i] = (uint16_t) (65535 * shape_eval (&S, (i + 0.5) * G->g, (j + 0.5) * G->g) + 0.5);
   /* The strokes on it, in the order painted. */
   for (k = 0; k < r->nstrokes; k++)
     {
@@ -543,7 +656,7 @@ static int mask_grid (mgrid *G, const recipe *r, int mi, int w, int h)
                 continue;
               m = *gp / 65535.0;
               m = st->kind == BRUSH_ERASE ? m * (1 - s) : (s > m ? s : m);
-              *gp = (uint16_t) lround (m * 65535);
+              *gp = (uint16_t) (m * 65535 + 0.5);
             }
         free (dist);
       }
@@ -551,24 +664,182 @@ static int mask_grid (mgrid *G, const recipe *r, int mi, int w, int h)
   return 0;
 }
 
-static double grid_at (const mgrid *G, int x, int y)
+/* Reading a grid along rows: for each pixel of x0..x0+n-1 its two cells
+   across and how far between (found once), and for each row the two
+   rows of cells blended (once a row), so a pixel is one blend. */
+typedef struct
 {
-  double gx, gy, fx, fy, a, b, c, d;
-  int i, j, i1, j1;
-  if (G->g == 1)
-    return G->v[(size_t) y * G->gw + x] / 65535.0;
-  gx = (x + 0.5) / G->g - 0.5;
-  gy = (y + 0.5) / G->g - 0.5;
-  gx = gx < 0 ? 0 : gx;
+  int g, gw, gh, n;
+  int *i0, *i1;
+  float *fx, *line;
+} gsampler;
+
+static int gs_init (gsampler *s, int g, int gw, int gh, int x0, int n)
+{
+  int x;
+  s->g = g; s->gw = gw; s->gh = gh; s->n = n;
+  s->i0 = malloc (sizeof *s->i0 * (size_t) n);
+  s->i1 = malloc (sizeof *s->i1 * (size_t) n);
+  s->fx = malloc (sizeof *s->fx * (size_t) n);
+  s->line = malloc (sizeof *s->line * (size_t) gw);
+  if (!s->i0 || !s->i1 || !s->fx || !s->line)
+    return -1;
+  for (x = 0; x < n; x++)
+    {
+      double gx = (x0 + x + 0.5) / g - 0.5, f;
+      int i;
+      gx = gx < 0 ? 0 : gx;
+      i = (int) gx;
+      i = i >= gw ? gw - 1 : i;
+      f = gx - i;
+      s->i0[x] = i;
+      s->i1[x] = i + 1 < gw ? i + 1 : i;
+      s->fx[x] = (float) (f > 1 ? 1 : f);
+    }
+  return 0;
+}
+
+static void gs_free (gsampler *s)
+{
+  free (s->i0); free (s->i1); free (s->fx); free (s->line);
+  s->i0 = s->i1 = NULL; s->fx = s->line = NULL;
+}
+
+/* Row y's two rows of cells and how far between. */
+static void gs_rows (const gsampler *s, int y, int *j0, int *j1, float *fy)
+{
+  double gy = (y + 0.5) / s->g - 0.5, f;
+  int j;
   gy = gy < 0 ? 0 : gy;
-  i = (int) gx; j = (int) gy;
-  i = i >= G->gw ? G->gw - 1 : i; j = j >= G->gh ? G->gh - 1 : j;
-  i1 = i + 1 < G->gw ? i + 1 : i; j1 = j + 1 < G->gh ? j + 1 : j;
-  fx = gx - i; fy = gy - j;
-  fx = fx > 1 ? 1 : fx; fy = fy > 1 ? 1 : fy;
-  a = G->v[(size_t) j * G->gw + i]; b = G->v[(size_t) j * G->gw + i1];
-  c = G->v[(size_t) j1 * G->gw + i]; d = G->v[(size_t) j1 * G->gw + i1];
-  return ((a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy) / 65535.0;
+  j = (int) gy;
+  j = j >= s->gh ? s->gh - 1 : j;
+  f = gy - j;
+  *j0 = j;
+  *j1 = j + 1 < s->gh ? j + 1 : j;
+  *fy = (float) (f > 1 ? 1 : f);
+}
+
+static void gs_across (const gsampler *s, float *out)
+{
+  int x;
+  for (x = 0; x < s->n; x++)
+    {
+      float a = s->line[s->i0[x]];
+      out[x] = a + (s->line[s->i1[x]] - a) * s->fx[x];
+    }
+}
+
+/* A mask's grid (65535 = all) along row y, 0..1. */
+static void gs_row16 (const gsampler *s, const uint16_t *v, int y, float *out)
+{
+  int i, j0, j1;
+  float fy;
+  gs_rows (s, y, &j0, &j1, &fy);
+  for (i = 0; i < s->gw; i++)
+    {
+      float a = v[(size_t) j0 * s->gw + i];
+      s->line[i] = (a + (v[(size_t) j1 * s->gw + i] - a) * fy) * (1.0f / 65535);
+    }
+  gs_across (s, out);
+}
+
+static void gs_rowf (const gsampler *s, const float *v, int y, float *out)
+{
+  int i, j0, j1;
+  float fy;
+  gs_rows (s, y, &j0, &j1, &fy);
+  for (i = 0; i < s->gw; i++)
+    {
+      float a = v[(size_t) j0 * s->gw + i];
+      s->line[i] = a + (v[(size_t) j1 * s->gw + i] - a) * fy;
+    }
+  gs_across (s, out);
+}
+
+/* A mask's coverage of a w x h picture, a row at a time: a gradient or
+   oval without strokes found at each pixel from its shape, anything else
+   from its grid. x0..x1, y0..y1: the part it covers (none if x1 < x0). */
+typedef struct
+{
+  int direct, x0, x1, y0, y1;
+  shape S;
+  mgrid G;
+  gsampler s;
+} cover;
+
+static void cover_free (cover *C)
+{
+  free (C->G.v);
+  C->G.v = NULL;
+  gs_free (&C->s);
+}
+
+static int cover_make (cover *C, const recipe *r, int mi, int w, int h)
+{
+  const recipe_mask *mk = &r->mask[mi];
+  int i, x, y;
+  memset (C, 0, sizeof *C);
+  C->x0 = 0; C->x1 = w - 1; C->y0 = 0; C->y1 = h - 1;
+  C->direct = mk->kind == MASK_GRADIENT || mk->kind == MASK_RADIAL;
+  for (i = 0; i < r->nstrokes && C->direct; i++)
+    if (r->stroke[i].mask == mi && r->stroke[i].n > 0 && r->stroke[i].amount > 0)
+      C->direct = 0;
+  if (C->direct)
+    {
+      shape_prep (&C->S, mk, w, h);
+      if (C->S.none && !C->S.invert)
+        C->x1 = -1;
+      else if (!C->S.none && !C->S.invert && C->S.kind == MASK_RADIAL)
+        {
+          /* the turned oval's box */
+          double hx = sqrt (C->S.rx * C->S.cs * C->S.rx * C->S.cs + C->S.ry * C->S.sn * C->S.ry * C->S.sn);
+          double hy = sqrt (C->S.rx * C->S.sn * C->S.rx * C->S.sn + C->S.ry * C->S.cs * C->S.ry * C->S.cs);
+          C->x0 = clampi ((int) floor (C->S.cx - hx) - 1, 0, w - 1); C->x1 = clampi ((int) ceil (C->S.cx + hx) + 1, 0, w - 1);
+          C->y0 = clampi ((int) floor (C->S.cy - hy) - 1, 0, h - 1); C->y1 = clampi ((int) ceil (C->S.cy + hy) + 1, 0, h - 1);
+          if (C->S.cx + hx < 0 || C->S.cx - hx > w || C->S.cy + hy < 0 || C->S.cy - hy > h)
+            C->x1 = -1;
+        }
+      return 0;
+    }
+  if (mask_grid (&C->G, r, mi, w, h))
+    return -1;
+  {
+    mgrid *G = &C->G;
+    int gx0 = G->gw, gx1 = -1, gy0 = G->gh, gy1 = -1;
+    for (y = 0; y < G->gh; y++)
+      for (x = 0; x < G->gw; x++)
+        if (G->v[(size_t) y * G->gw + x])
+          {
+            gx0 = x < gx0 ? x : gx0; gx1 = x > gx1 ? x : gx1;
+            gy0 = y < gy0 ? y : gy0; gy1 = y > gy1 ? y : gy1;
+          }
+    if (gx1 < 0)
+      {
+        C->x1 = -1;
+        return 0;
+      }
+    C->x0 = clampi ((gx0 - 1) * G->g, 0, w - 1); C->x1 = clampi ((gx1 + 2) * G->g, 0, w - 1);
+    C->y0 = clampi ((gy0 - 1) * G->g, 0, h - 1); C->y1 = clampi ((gy1 + 2) * G->g, 0, h - 1);
+    if (G->g > 1 && gs_init (&C->s, G->g, G->gw, G->gh, C->x0, C->x1 - C->x0 + 1))
+      return -1;
+  }
+  return 0;
+}
+
+/* Row y's coverage, x0..x1, into out. */
+static void cover_row (const cover *C, int y, float *out)
+{
+  int n = C->x1 - C->x0 + 1, x;
+  if (C->direct)
+    shape_row (&C->S, y, C->x0, n, out);
+  else if (C->G.g == 1)
+    {
+      const uint16_t *v = C->G.v + (size_t) y * C->G.gw + C->x0;
+      for (x = 0; x < n; x++)
+        out[x] = v[x] * (1.0f / 65535);
+    }
+  else
+    gs_row16 (&C->s, C->G.v, y, out);
 }
 
 /* The surroundings' lightness for clarity: the grid's cells' lightness,
@@ -652,7 +923,9 @@ static void light_row (const pic *p, int y, int x0, int bw, float *out)
 static void apply_mask (const pic *p, const recipe *r, int mi)
 {
   const recipe_mask *mk = &r->mask[mi];
-  mgrid G, C;
+  cover V;
+  mgrid C;
+  gsampler cs;
   float *cmap = NULL, *rows = NULL, *mrow = NULL;
   int x, y, i, x0, x1, y0, y1, tone = tone_used (mk), bw;
   double T = mk->v[M_TEMP] / 100.0, N = mk->v[M_TINT] / 100.0;
@@ -661,38 +934,30 @@ static void apply_mask (const pic *p, const recipe *r, int mi)
   float kl = mk->v[M_CLARITY] / 100.0f * 0.8f, kp = mk->v[M_SHARPNESS] / 100.0f * 1.2f, ksat = mk->v[M_SATURATION] / 100.0f;
   int k;
   static float gain[3][1025];          /* by coverage, 1024ths */
+  memset (&cs, 0, sizeof cs);
   for (k = 0; k < M_COUNT && mk->v[k] == 0; k++)
     ;
+  if (k == M_COUNT)
+    return;
   for (i = 0; i < 3; i++)
     for (x = 0; x <= 1024; x++)
       gain[i][x] = (float) pow (2.0, x / 1024.0 * (mk->v[M_EV] + wb[i]));
-  if (k == M_COUNT || mask_grid (&G, r, mi, p->w, p->h))
-    return;
-  /* Where it covers anything. */
-  x0 = G.gw; x1 = -1; y0 = G.gh; y1 = -1;
-  for (y = 0; y < G.gh; y++)
-    for (x = 0; x < G.gw; x++)
-      if (G.v[(size_t) y * G.gw + x])
-        {
-          x0 = x < x0 ? x : x0; x1 = x > x1 ? x : x1;
-          y0 = y < y0 ? y : y0; y1 = y > y1 ? y : y1;
-        }
-  if (x1 < 0)
+  if (cover_make (&V, r, mi, p->w, p->h) || V.x1 < 0)
     goto out;
-  x0 = clampi ((x0 - 1) * G.g, 0, p->w - 1); x1 = clampi ((x1 + 2) * G.g, 0, p->w - 1);
-  y0 = clampi ((y0 - 1) * G.g, 0, p->h - 1); y1 = clampi ((y1 + 2) * G.g, 0, p->h - 1);
+  x0 = V.x0; x1 = V.x1; y0 = V.y0; y1 = V.y1;
   bw = x1 - x0 + 1;
   /* Clarity's surroundings (a blur of about 1.5% of the longer side) on
-     a grid of its own, at most 512 cells across: no finer is needed. */
-  {
-    int longer = p->w > p->h ? p->w : p->h, cg = (longer + 511) / 512;
-    C.g = cg > G.g ? cg : G.g;
-    C.gw = (p->w + C.g - 1) / C.g;
-    C.gh = (p->h + C.g - 1) / C.g;
-    C.v = NULL;
-  }
-  if (tone && mk->v[M_CLARITY] != 0 && !(cmap = clarity_map (p, &C)))
-    goto out;
+     a grid of their own, at most 512 cells across: no finer is needed. */
+  if (tone && mk->v[M_CLARITY] != 0)
+    {
+      int longer = p->w > p->h ? p->w : p->h, cg = (longer + 511) / 512;
+      C.g = cg;
+      C.gw = (p->w + C.g - 1) / C.g;
+      C.gh = (p->h + C.g - 1) / C.g;
+      C.v = NULL;
+      if (!(cmap = clarity_map (p, &C)) || gs_init (&cs, C.g, C.gw, C.gh, x0, bw))
+        goto out;
+    }
   /* Sharpness looks at the next pixels as they were: three rows of their
      lightness, kept ahead of the changes (bw + 2 wide). */
   if (tone && !(rows = malloc (sizeof *rows * 3 * (size_t) (bw + 2))))
@@ -708,33 +973,10 @@ static void apply_mask (const pic *p, const recipe *r, int mi)
       float *pb_row = cmap ? mrow + bw : NULL;
       if (rows)
         light_row (p, y + 1, x0, bw, ROW (y + 1));
-      /* This row's coverage (and surroundings, for clarity), from the grid. */
-      for (x = x0; x <= x1; x++)
-        mrow[x - x0] = (float) grid_at (&G, x, y);
+      /* This row's coverage (and surroundings, for clarity). */
+      cover_row (&V, y, mrow);
       if (cmap)
-        {
-          double gy = (y + 0.5) / C.g - 0.5, fy;
-          int cj, cj1;
-          gy = gy < 0 ? 0 : gy;
-          cj = (int) gy;
-          cj = cj >= C.gh ? C.gh - 1 : cj;
-          cj1 = cj + 1 < C.gh ? cj + 1 : cj;
-          fy = gy - cj;
-          fy = fy > 1 ? 1 : fy;
-          for (x = x0; x <= x1; x++)
-            {
-              double gx = (x + 0.5) / C.g - 0.5, fx;
-              int ci, ci1;
-              gx = gx < 0 ? 0 : gx;
-              ci = (int) gx;
-              ci = ci >= C.gw ? C.gw - 1 : ci;
-              ci1 = ci + 1 < C.gw ? ci + 1 : ci;
-              fx = gx - ci;
-              fx = fx > 1 ? 1 : fx;
-              pb_row[x - x0] = (float) ((cmap[(size_t) cj * C.gw + ci] * (1 - fx) + cmap[(size_t) cj * C.gw + ci1] * fx) * (1 - fy)
-                                        + (cmap[(size_t) cj1 * C.gw + ci] * (1 - fx) + cmap[(size_t) cj1 * C.gw + ci1] * fx) * fy);
-            }
-        }
+        gs_rowf (&cs, cmap, y, pb_row);
       for (x = x0; x <= x1; x++)
         {
           float m = mrow[x - x0], c[3];
@@ -742,12 +984,10 @@ static void apply_mask (const pic *p, const recipe *r, int mi)
           if (m <= 1.0f / 65535)
             continue;
           {
-            float gi = m * 1024, gf;
-            int g0 = (int) gi;
-            gf = gi - g0;
-            g0 = g0 > 1023 ? 1023 : g0;
+            int g = (int) (m * 1024 + 0.5f);
+            g = g > 1024 ? 1024 : g;
             for (i = 0; i < 3; i++)
-              c[i] = lin_px (p, at + i) * (gain[i][g0] + (gain[i][g0 + 1] - gain[i][g0]) * gf);
+              c[i] = lin_px (p, at + i) * gain[i][g];
           }
           if (tone)
             {
@@ -790,16 +1030,19 @@ out:
   free (mrow);
   free (rows);
   free (cmap);
-  free (G.v);
+  gs_free (&cs);
+  cover_free (&V);
 }
 
-static void apply_all (pic *p, const recipe *r)
+/* The spots (if spots), then masks m0..m1-1 that are on. */
+static void apply_part (pic *p, const recipe *r, int spots, int m0, int m1)
 {
   int i;
-  for (i = 0; i < r->nspots; i++)
-    apply_spot (p, r, &r->spot[i]);
+  if (spots)
+    for (i = 0; i < r->nspots; i++)
+      apply_spot (p, r, &r->spot[i]);
   tables ();
-  for (i = 0; i < r->nmasks; i++)
+  for (i = m0 < 0 ? 0 : m0; i < m1 && i < r->nmasks; i++)
     if (!r->mask[i].off)
       apply_mask (p, r, i);
 }
@@ -808,35 +1051,52 @@ void retouch_rgb8 (unsigned char *rgb, int w, int h, const recipe *r)
 {
   pic p = { w, h, 255, get8, put8, rgb };
   if ((r->nspots || r->nmasks) && w > 0 && h > 0)
-    apply_all (&p, r);
+    apply_part (&p, r, 1, 0, r->nmasks);
 }
 
 void retouch_lin (uint16_t *lin, int w, int h, const recipe *r)
 {
   pic p = { w, h, 65535, get16, put16, lin };
   if ((r->nspots || r->nmasks) && w > 0 && h > 0)
-    apply_all (&p, r);
+    apply_part (&p, r, 1, 0, r->nmasks);
+}
+
+void retouch_lin_part (uint16_t *lin, int w, int h, const recipe *r, int spots, int m0, int m1, int show)
+{
+  pic p = { w, h, 65535, get16, put16, lin };
+  cover V;
+  float *row;
+  int x, y;
+  if (w <= 0 || h <= 0)
+    return;
+  if ((spots && r->nspots) || m0 < m1)
+    apply_part (&p, r, spots, m0, m1);
+  if (show < 0 || show >= r->nmasks || cover_make (&V, r, show, w, h))
+    return;
+  if (V.x1 >= 0 && (row = malloc (sizeof *row * (size_t) (V.x1 - V.x0 + 1))) != NULL)
+    {
+      for (y = V.y0; y <= V.y1; y++)
+        {
+          cover_row (&V, y, row);
+          for (x = V.x0; x <= V.x1; x++)
+            {
+              float m = row[x - V.x0] * 0.6f;
+              uint16_t *px = &lin[((size_t) y * w + x) * 3];
+              if (m <= 0)
+                continue;
+              px[0] = (uint16_t) (px[0] * (1 - m) + 60000 * m + 0.5f);
+              px[1] = (uint16_t) (px[1] * (1 - m) + 1500 * m + 0.5f);
+              px[2] = (uint16_t) (px[2] * (1 - m) + 1500 * m + 0.5f);
+            }
+        }
+      free (row);
+    }
+  cover_free (&V);
 }
 
 void retouch_lin_show (uint16_t *lin, int w, int h, const recipe *r, int show)
 {
-  mgrid G;
-  int x, y;
-  retouch_lin (lin, w, h, r);
-  if (show < 0 || show >= r->nmasks || w <= 0 || h <= 0 || mask_grid (&G, r, show, w, h))
-    return;
-  for (y = 0; y < h; y++)
-    for (x = 0; x < w; x++)
-      {
-        double m = grid_at (&G, x, y) * 0.6;
-        uint16_t *px = &lin[((size_t) y * w + x) * 3];
-        if (m <= 0)
-          continue;
-        px[0] = (uint16_t) lround (px[0] * (1 - m) + 60000 * m);
-        px[1] = (uint16_t) lround (px[1] * (1 - m) + 1500 * m);
-        px[2] = (uint16_t) lround (px[2] * (1 - m) + 1500 * m);
-      }
-  free (G.v);
+  retouch_lin_part (lin, w, h, r, 1, 0, r->nmasks, show);
 }
 
 /* --- finding a source */
