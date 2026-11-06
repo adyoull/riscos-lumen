@@ -260,16 +260,7 @@ int app_set_prefs (const prefs *p)
       app_report ("Lumen couldn't save its Choices.");
       return -1;
     }
-  if (lib && p->raw_noise != the_prefs.raw_noise)
-    {
-      /* The previews were developed with the old noise reduction: made again. */
-      long long bytes = 0;
-      int n = lib_discard_previews (lib, &bytes);
-      if (n)
-        activity_log (ACT_OTHER, "Raw noise changed: %d preview%s made again", n, n == 1 ? "" : "s");
-    }
   the_prefs = *p;
-  rawjob_set_raw_noise (p->raw_noise);
   lib_set_new_folders (lib, p->watch_new, p->albums_new);
   lib_set_previews (lib, p->previews);
   browser_set_size (p->thumb_size);
@@ -626,7 +617,6 @@ int app_init (const char *library_path, const char *start_file)
   lib_set_lazy_thumbs (lib, 1);        /* thumbnails for what is on screen first */
   lib_set_new_folders (lib, the_prefs.watch_new, the_prefs.albums_new);
   lib_set_previews (lib, the_prefs.previews);
-  rawjob_set_raw_noise (the_prefs.raw_noise);
   app_plugins_rescan ();               /* also retries raw files imported before the plug-in was installed */
   mainwin_open (NULL);
   if (start_file && *start_file)

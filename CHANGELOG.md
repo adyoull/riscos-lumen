@@ -59,10 +59,13 @@
   the photo's noise and sets Luminance and Colour to suit it. Photos
   that already had noise reduction look a little different (cleaner,
   with sharper edges).
-- Raw noise, in Choices: Off, Light or Strong noise reduction in the
-  LumenRaw plug-in, on the raw data before demosaicing (LibRaw's FBDD
-  and wavelet noise reduction). Needs LumenRaw 1.2; the plug-in API's
-  decode gains an optional NOISE argument (older plug-ins ignore it).
+- Raw, in Noise Reduction for camera raw files: Off, Light or Strong
+  noise reduction in the LumenRaw plug-in, on the raw data before
+  demosaicing (LibRaw's FBDD and wavelet noise reduction), for that
+  photo only (recipe "noise raw="). Imports are as before; a photo with
+  it set is developed again with it, in the Viewer and its exports. Needs
+  LumenRaw 1.2; the plug-in API's decode gains an optional NOISE argument
+  (older plug-ins ignore it).
 
 - Layers: adjustments of their own on part of the photo (Exposure,
   Contrast, Highlights, Shadows, Temperature, Tint, Saturation, Clarity,

@@ -1107,8 +1107,9 @@ int main (int argc, char **argv)
       ntexts = 0;
       b[0] = INSP;
       app_event (Redraw_Window_Request, b, 0);
-      CHECK (text_drawn ("Green") && text_drawn ("Saturation") && text_drawn ("Noise Reduction") && text_drawn ("Vignette"),
-             "drawn: the band's name and sliders; Noise Reduction and Vignette groups");
+      CHECK (text_drawn ("Green") && text_drawn ("Saturation") && text_drawn ("Noise Reduction") && text_drawn ("Vignette")
+           && !text_drawn ("Raw"),
+             "drawn: the band's name and sliders; Noise Reduction and Vignette groups (no Raw: a JPEG)");
       key (0x1A);
       CHECK (viewer_recipe ()->v[HSL_PARAM (HSL_GREEN, HSL_SAT)] == 0, "undone");
     }

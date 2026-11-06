@@ -104,9 +104,9 @@ in one of two ways:
 - `decode` asks for the photo itself, no bigger than `MAXSIDE` pixels on
   its longer side. 0 means full size. The Viewer asks for 1600 pixels;
   100%, the loupe and exports ask for 0.
-- `NOISE` (Lumen 0.0.38 and later, raw plug-ins only, and only when the
-  Choices ask for it): noise reduction before demosaicing, 1 light or 2
-  strong. A plug-in that doesn't do any ignores it; when it's missing,
+- `NOISE` (Lumen 0.0.38 and later, raw plug-ins only, and only for a
+  photo whose recipe asks for it): noise reduction before demosaicing, 1
+  light or 2 strong. A plug-in that doesn't do any ignores it; when it's missing,
   do none.
 - `IMAGE` is where to write the picture. Write a binary PPM (`P6`, 8 bits a
   sample), or a baseline JPEG. Use sRGB, turned the right way up, and

@@ -13,7 +13,7 @@
      tone shadow_hue=210 shadows=30 highlight_hue=40 highlights=25
      hsl blue_hue=-20 blue_saturation=30 green_luminance=-15
      bw amount=100 red=60 green=30 blue=10
-     noise luminance=30 colour=50
+     noise luminance=30 colour=50 raw=1
      sharpen amount=40 radius=1.0
      vignette amount=-40 midpoint=50
      glow amount=25 spread=40 highlights=60 warmth=20
@@ -44,6 +44,7 @@ enum
   P_BW_AMOUNT, P_BW_RED, P_BW_GREEN, P_BW_BLUE,   /* black & white: the mix of channels, and how much */
   P_TONE_SH_HUE, P_TONE_SH, P_TONE_HI_HUE, P_TONE_HI,   /* split toning: after saturation, so it tints black and white too */
   P_NOISE_LUM, P_NOISE_COL,            /* noise reduction (after develop, before sharpening) */
+  P_NOISE_RAW,                         /* a raw photo's own, in the raw plug-in (0 off, 1 light, 2 strong) */
   P_SHARPEN, P_SHARP_RADIUS,           /* sharpen (applied after develop, at the output's size) */
   P_VIG_AMOUNT, P_VIG_MID,             /* vignette: darker (or lighter) towards the corners */
   P_GLOW_AMOUNT, P_GLOW_SPREAD, P_GLOW_HIGH, P_GLOW_WARM,   /* glow: light from the bright parts spread round them */

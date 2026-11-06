@@ -13,6 +13,7 @@
 #include "colour.h"
 #include "develop.h"
 #include "export.h"
+#include "rawjob.h"
 #include "exifout.h"
 #include "xmp.h"
 #include "fsys.h"
@@ -237,7 +238,9 @@ exporter *export_start (const char *src, int src_w, int src_h, int orientation,
     }
   if (decode_side < 1)
     decode_side = 1 << 30;
+  rawjob_set_raw_noise ((int) r->v[P_NOISE_RAW]);   /* a raw photo's own noise reduction, in the plug-in */
   e->tg = thumbgen_start (src, NULL, decode_side, orientation, err, errlen);
+  rawjob_set_raw_noise (0);
   if (!e->tg)
     {
       free (e->dev);

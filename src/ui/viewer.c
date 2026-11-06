@@ -200,6 +200,27 @@ static cat_id photo_original;          /* its original (for its preview, library
 static int photo_is_raw;               /* the original is read by a plug-in (a camera raw or HEIF photo) */
 static int photo_kind;                 /* and which (rawjob.h's RAWJOB_*) */
 static int from_kept;                  /* opened from the library's preview, not the file */
+
+/* A camera raw file's own noise reduction (in the plug-in, before
+   demosaicing) is in its recipe: the picture is developed again when it
+   changes. What the picture on screen was developed with: */
+static int loaded_noise;
+
+static int raw_nr_photo (void)
+{
+  return src && photo_is_raw && photo_kind == RAWJOB_RAW;
+}
+
+/* Starts developing the full size, with the photo's raw noise reduction. */
+static thumbgen *start_full (char *e, size_t en)
+{
+  thumbgen *t;
+  rawjob_set_raw_noise (loaded_noise);
+  t = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, en);
+  rawjob_set_raw_noise (0);
+  return t;
+}
+
 static thumbgen *zgen;
 static rgb_image zfull;
 static geom_plan zplan;
@@ -404,13 +425,21 @@ static int masks_height (void)
 #define MAX_GROUPS 16
 static int folded[MAX_GROUPS], folded_by_hand[MAX_GROUPS];
 
+/* A parameter with no slider: hidden ones, and Raw (noise reduction in
+   the raw plug-in) unless the photo is a camera raw file. */
+static int raw_nr_photo (void);
+static int param_hidden (int p)
+{
+  return recipe_params[p].hidden || (p == P_NOISE_RAW && !raw_nr_photo ());
+}
+
 static int group_rows (int g)
 {
   int p, n = 0;
   if (g < MAX_GROUPS && folded[g])
     return 0;
   for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
-    if (!recipe_params[p].hidden)
+    if (!param_hidden (p))
       n++;
   return n;
 }
@@ -461,7 +490,7 @@ static int row_top (int p)
                  : group_top (g) - GROUP_H - HSL_SEL_H - ROW_H * ((p - P_HSL) % 3);
       return 0;
     }
-  if (recipe_params[p].hidden)
+  if (param_hidden (p))
     return 0;
   for (g = 0; g < recipe_ngroups; g++)
     if (p >= recipe_groups[g].first && p <= recipe_groups[g].last)
@@ -469,7 +498,7 @@ static int row_top (int p)
         if (!group_shown (g) || (g < MAX_GROUPS && folded[g]))
           return 0;
         for (i = 0, q = recipe_groups[g].first; q < p; q++)
-          if (!recipe_params[q].hidden)
+          if (!param_hidden (q))
             i++;
         return group_top (g) - GROUP_H - ROW_H * i;
       }
@@ -1284,7 +1313,7 @@ static void zoom_to (double fx, double fy)
       zplan.ow = zplan.oh = 0;
       zoom_layout (1);
     }
-  else if (!zgen && !(zgen = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, sizeof e)))
+  else if (!zgen && !(zgen = start_full (e, sizeof e)))
     {
       zoom = 0;
       app_report (e);
@@ -1539,7 +1568,7 @@ static void loupe_need_full (void)
   char e[200];
   if (zfull.rgb || zgen)
     return;
-  if (!(zgen = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, sizeof e)))
+  if (!(zgen = start_full (e, sizeof e)))
     {
       loupe_on = 0;
       app_report (e);
@@ -1599,10 +1628,19 @@ static void draw_loupe (int ox, int oy)
   }
 }
 
+static void redevelop (void);
+
 static void refresh (int full)
 {
   if (!src)
     return;
+  /* Raw noise reduction changed (not while its slider is held): the
+     picture is developed again by the plug-in. */
+  if (raw_nr_photo () && (int) current.v[P_NOISE_RAW] != loaded_noise && dragging != P_NOISE_RAW)
+    {
+      redevelop ();
+      return;
+    }
   if (retouch_sync ())
     full = 1;
   if (geometry_changed () && geometry_apply ())
@@ -1725,7 +1763,8 @@ static void load_recipe (void)
 
 /* The picture to work on: the library's preview of the photo if it has an
    up-to-date one (a raw opens at once rather than being developed again),
-   else the file. */
+   else the file. A raw with noise reduction of its own is developed with
+   it (the preview has none). */
 static thumbgen *open_proxy (const cat_details *d, char *e, size_t en)
 {
   cat_origin o;
@@ -1735,6 +1774,15 @@ static thumbgen *open_proxy (const cat_details *d, char *e, size_t en)
   photo_is_raw = cat_origin_of (lib_cat (app_library ()), d->original, &o) == 1 && img_is_plugin_format (o.format);
   photo_kind = photo_is_raw ? rawjob_kind_for (o.format, o.path, NULL, 0) : 0;
   from_kept = 0;
+  loaded_noise = photo_is_raw && photo_kind == RAWJOB_RAW ? (int) current.v[P_NOISE_RAW] : 0;
+  if (loaded_noise > 0)
+    {
+      rawjob_set_raw_noise (loaded_noise);
+      t = thumbgen_start (d->path, NULL, PROXY_SIDE, d->orientation, e, en);
+      rawjob_set_raw_noise (0);
+      thumbgen_hurry (t);
+      return t;
+    }
   if (!d->missing && lib_preview_find (app_library (), d->original, kept, sizeof kept)
       && (t = thumbgen_start (kept, NULL, PROXY_SIDE, 1, e, en)))
     {
@@ -1750,6 +1798,24 @@ static thumbgen *open_proxy (const cat_details *d, char *e, size_t en)
   t = thumbgen_start (d->path, NULL, PROXY_SIDE, d->orientation, e, en);
   thumbgen_hurry (t);                  /* ahead of thumbnails and previews waiting for the plug-in */
   return t;
+}
+
+/* The photo developed again from its file (its recipe and undo kept). */
+static void redevelop (void)
+{
+  cat_details d;
+  char e[200];
+  free_photo ();
+  state = V_LOADING;
+  err[0] = '\0';
+  if (cat_get_details (lib_cat (app_library ()), item.id, &d) || !(tg = open_proxy (&d, e, sizeof e)))
+    {
+      state = V_FAILED;
+      snprintf (err, sizeof err, "%s", d.path[0] ? e : "This photo is no longer in the library.");
+    }
+  update_title ();
+  force_all ();
+  fit_panel ();
 }
 
 void viewer_show (int i)
@@ -2071,7 +2137,7 @@ void viewer_idle (void)
   else if (photo_raw && state == V_READY && full_y < 0 && !zfull.rgb && !crop_mode && !comparing && dragging == -1)
     {
       char e[200];
-      zgen = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, sizeof e);   /* quietly: asked for again if it fails */
+      zgen = start_full (e, sizeof e);   /* quietly: asked for again if it fails */
     }
   loupe_track ();
   rt_brush_follow ();
@@ -2936,6 +3002,11 @@ void viewer_drag_end (void)
         force_image ();                /* the straightening grid goes */
       if (!crop_mode || p < P_FIRST_GEOMETRY)
         commit ();
+      if (p == P_NOISE_RAW)
+        {
+          refresh (1);                 /* developed again with it */
+          return;
+        }
     }
   restart_full ();
 }
@@ -3151,6 +3222,12 @@ static void draw_slider (int p, int ox, int oy)
   draw_rect (kx - 7, mid - 15, kx + 7, mid + 15, p == dragging ? COL_ACCENT : COL_KNOB);
   snprintf (value, sizeof value, "%s%.*f", current.v[p] > 0 && d->min < 0 ? "+" : "",
             d->decimals, (double) current.v[p]);
+  if (p == P_NOISE_RAW)
+    {
+      static const char *const levels[3] = { "Off", "Light", "Strong" };
+      int k = (int) current.v[p];
+      snprintf (value, sizeof value, "%s", levels[k < 0 ? 0 : k > 2 ? 2 : k]);
+    }
   draw_text (ox + PANEL_W - PAD - draw_text_width (value), mid - 9, value, COL_TEXT, COL_PANEL);
 }
 
@@ -3486,7 +3563,7 @@ static void draw_panel (int ox, int oy)
         }
       if (!(g < MAX_GROUPS && folded[g]))
         for (p = recipe_groups[g].first; p <= recipe_groups[g].last; p++)
-          if (!recipe_params[p].hidden)
+          if (!param_hidden (p))
             draw_slider (p, ox, oy);
     }
   draw_button (0, "Undo", viewer_can_undo (), ox, oy);

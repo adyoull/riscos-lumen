@@ -1875,11 +1875,19 @@ static void test_hsl_vignette_noise (const char *work)
   {
     recipe dst, src;
     recipe_default (&src);
-    recipe_parse (&src, "hsl aqua_hue=20\nnoise luminance=40 colour=60\nvignette amount=-50 midpoint=30\ncrop x0=0.1\n");
+    recipe_parse (&src, "hsl aqua_hue=20\nnoise luminance=40 colour=60 raw=1\nvignette amount=-50 midpoint=30\ncrop x0=0.1\n");
     recipe_default (&dst);
     recipe_copy_look (&dst, &src);
     CHECK (dst.v[HSL_PARAM (HSL_AQUA, HSL_HUE)] == 20 && dst.v[P_NOISE_COL] == 60 && dst.v[P_VIG_AMOUNT] == -50
-           && dst.v[P_VIG_MID] == 30 && dst.v[P_CROP_X0] == 0, "a look: colour, noise, vignette (no crop)");
+           && dst.v[P_VIG_MID] == 30 && dst.v[P_CROP_X0] == 0 && dst.v[P_NOISE_RAW] == 1,
+           "a look: colour, noise (raw too), vignette (no crop)");
+    {
+      char t2[RECIPE_TEXT_MAX];
+      recipe back;
+      recipe_format (&src, t2, sizeof t2);
+      recipe_parse (&back, t2);
+      CHECK (strstr (t2, "noise luminance=40 colour=60 raw=1\n") && back.v[P_NOISE_RAW] == 1, "noise raw=1 written and read back");
+    }
   }
 
   /* Vignette: corners darker than the middle, by about 2 stops at -100. */

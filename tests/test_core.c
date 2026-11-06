@@ -1198,6 +1198,13 @@ static int run_now (const char *cmd, int tag)
   return r < 0 ? -1 : 0;
 }
 
+static char last_cmd[2400];
+static int run_and_keep (const char *cmd, int tag)
+{
+  snprintf (last_cmd, sizeof last_cmd, "%s", cmd);
+  return run_now (cmd, tag);
+}
+
 static int ran_nothing (const char *cmd, int tag)
 {
   (void) cmd;
@@ -1309,11 +1316,26 @@ static void test_raw (void)
         thumbgen *t2;
         int r2 = 0;
         long d0 = 0, d1 = 0;
+        rawjob_setup (helper, scratch, run_and_keep);
         rawjob_set_raw_noise (2);
         t2 = thumbgen_start (nef, NULL, 1600, 1, err, sizeof err);
+        rawjob_set_raw_noise (0);      /* the job keeps what it started with */
         while (t2 && (r2 = thumbgen_step (t2, 256)) == 0)
           ;
-        rawjob_set_raw_noise (0);
+        CHECK (strstr (last_cmd, " decode ") && !strcmp (last_cmd + strlen (last_cmd) - 2, " 2"),
+               "raw noise reduction: the plug-in's decode is given 2 (its sixth argument)");
+        {
+          thumbgen *t3;
+          rawjob_set_raw_noise (2);
+          t3 = thumbgen_start (nef, NULL, 256, 1, err, sizeof err);   /* a thumbnail: the camera's preview */
+          rawjob_set_raw_noise (0);
+          while (t3 && thumbgen_step (t3, 64) == 0)
+            ;
+          CHECK (strstr (last_cmd, " thumb ") && strcmp (last_cmd + strlen (last_cmd) - 2, " 2"),
+                 "but not for the camera's preview");
+          thumbgen_free (t3);
+        }
+        rawjob_setup (helper, scratch, run_now);
         if (t2 && r2 == 1 && thumbgen_take (t2, &nr) == 0)
           {
             int x, y;
@@ -1557,8 +1579,6 @@ static void test_prefs (void)
          && p.library[0] == '\0' && p.export_format == 0 && p.export_size == 0, "prefs: defaults with no file");
   snprintf (p.library, sizeof p.library, "SDFS::Pi.$.My Photos.Library");
   p.export_format = 1; p.export_quality = 75; p.export_size = 2048; p.thumb_size = 0; p.verify = 0;
-  CHECK (p.raw_noise == 0, "prefs: raw noise reduction off to start with");
-  p.raw_noise = 2;
   CHECK (prefs_save (path, &p) == 0, "prefs: saved (its directory made)");
   CHECK (prefs_load (path, &q) == 0 && !memcmp (&p, &q, sizeof p), "prefs: read back the same (a space in the path too)");
   f = fopen (path, "w");

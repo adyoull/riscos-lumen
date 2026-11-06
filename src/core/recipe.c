@@ -54,6 +54,7 @@ const recipe_param recipe_params[P_COUNT] = {
   { "tone",     "highlights", "Highlights",     0, 100, 0, 1, 0, 0 },
   { "noise",    "luminance",  "Luminance",      0, 100, 0, 1, 0, 0 },
   { "noise",    "colour",     "Colour",         0, 100, 0, 1, 0, 0 },
+  { "noise",    "raw",        "Raw",            0,   2, 0, 1, 0, 0 },
   { "sharpen",  "amount",     "Amount",         0, 200, 0, 1, 0, 0 },
   { "sharpen",  "radius",     "Radius",       0.3,   3, 1, 0.1f, 1, 0 },
   { "vignette", "amount",     "Amount",      -100, 100, 0, 1, 0, 0 },
@@ -82,7 +83,7 @@ const recipe_group recipe_groups[] = {
   { "Colour", P_HSL, P_HSL_END, 1, 0, 1 },   /* a band's three sliders at a time */
   { "Black & White", P_BW_AMOUNT, P_BW_BLUE, 1, 0, 0 },
   { "Split Toning", P_TONE_SH_HUE, P_TONE_HI, 1, 0, 0 },
-  { "Noise Reduction", P_NOISE_LUM, P_NOISE_COL, 1, 0, 0 },
+  { "Noise Reduction", P_NOISE_LUM, P_NOISE_RAW, 1, 0, 0 },
   { "Sharpen", P_SHARPEN, P_SHARP_RADIUS, 1, 0, 0 },
   { "Vignette", P_VIG_AMOUNT, P_VIG_MID, 1, 0, 0 },
   { "Glow", P_GLOW_AMOUNT, P_GLOW_WARM, 1, 0, 0 },

@@ -87,8 +87,6 @@ int prefs_load (const char *path, prefs *p)
             p->watch_minutes = clamp ((int) n, 0, 1440);
           else if (!strcmp (line, "previews"))
             p->previews = clamp ((int) n, 0, 2);
-          else if (!strcmp (line, "raw_noise"))
-            p->raw_noise = clamp ((int) n, 0, 2);
           else if (!strcmp (line, "open_mode"))
             p->open_mode = clamp ((int) n, 0, 2);
           else if (!strcmp (line, "open_data"))
@@ -126,7 +124,6 @@ int prefs_save (const char *path, const prefs *p)
            p->export_format, p->export_quality, p->export_size, p->thumb_size, p->verify);
   fprintf (f, "watch_new %d\nalbums_new %d\nwatch_minutes %d\n", p->watch_new, p->albums_new, p->watch_minutes);
   fprintf (f, "previews %d\n", p->previews);
-  fprintf (f, "raw_noise %d\n", p->raw_noise);
   fprintf (f, "export_box_w %d\nexport_box_h %d\nexport_colour %d\nexport_sharpen %d\n", p->export_box_w,
            p->export_box_h, p->export_colour, p->export_sharpen);
   if (p->export_names[0])

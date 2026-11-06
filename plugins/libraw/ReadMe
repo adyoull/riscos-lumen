@@ -21,8 +21,9 @@ Guide.index/html in a web browser. It explains installing and using the
 plug-in and lists every camera it knows (1,181, from LibRaw).
 
 It can also reduce noise on the raw data, before it is made into a
-picture (FBDD, and dcraw's wavelet noise reduction): Lumen's Choices,
-Raw noise (Lumen 0.0.38 and later). It is off unless chosen.
+picture (FBDD, and dcraw's wavelet noise reduction), for the photos
+that need it: Raw, in the Noise Reduction group of Lumen's Adjustments
+tab (Lumen 0.0.38 and later). It is off unless chosen.
 
 Raw files need memory while they are developed: a 24 megapixel one takes
 about 300 MB for a few seconds.

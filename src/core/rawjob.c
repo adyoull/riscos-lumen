@@ -10,9 +10,11 @@
 
 enum { J_QUEUED, J_RUNNING, J_ENDED, J_DONE, J_FAILED };
 
+static int raw_noise;                  /* for raw jobs started from now on (rawjob_set_raw_noise) */
+
 struct rawjob
 {
-  int state, tag, kind;
+  int state, tag, kind, noise;
   char src[1024], image[300], details[300], err[300];
   img_info info;
   rawjob *next;                        /* in the queue */
@@ -271,8 +273,6 @@ static const char *plugin_name (int kind)
 
 int rawjob_busy (void) { return queue || running; }
 
-static int raw_noise;                  /* the raw plug-in's noise reduction, 0-2 */
-
 void rawjob_set_raw_noise (int level) { raw_noise = level < 0 ? 0 : level > 2 ? 2 : level; }
 
 const char *rawjob_busy_title (void)
@@ -318,10 +318,10 @@ static void run_next (void)
   j->state = J_RUNNING;
   remove (j->image);
   remove (j->details);
-  if (j->info.format == 1 && j->kind == RAWJOB_RAW && raw_noise > 0)
+  if (j->info.format == 1 && j->noise > 0)
     /* develop, with the raw plug-in's noise reduction (API: a 6th argument) */
     snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d %d", helper[j->kind], j->src, j->image, j->details, j->info.width,
-              raw_noise);
+              j->noise);
   else if (j->info.format == 1)        /* develop */
     snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d", helper[j->kind], j->src, j->image, j->details, j->info.width);
   else
@@ -355,6 +355,7 @@ rawjob *rawjob_start_kind (int kind, const char *src, int develop, int max_side,
     }
   j->tag = next_tag++;
   j->kind = kind;
+  j->noise = kind == RAWJOB_RAW && develop ? raw_noise : 0;
   snprintf (j->src, sizeof j->src, "%s", src);
   {
     char leaf[24];
