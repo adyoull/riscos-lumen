@@ -794,6 +794,7 @@ static menu *build_lens_menu (int cameras)
   lens_ticked = -1;
   if (!db || !viewer_lens_photo (&ph))
     return NULL;
+  viewer_lens_want_info ();
   free (lens_order);
   total = cameras ? lens_db_cameras (db) : lens_db_count (db);
   if (!(lens_order = malloc ((size_t) (total ? total : 1) * sizeof *lens_order)))

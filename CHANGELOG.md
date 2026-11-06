@@ -112,7 +112,8 @@
   from the maker's notes when the EXIF hasn't it, lensspec= its focal
   lengths and widest aperture, focal35= the focal length in 35 mm
   terms), for Auto. A raw photo opened from its preview asks LumenRaw for
-  them in the background.
+  them only when Auto or the Lens menu needs them (Auto then finishes by
+  itself), not each time it's opened.
 - Presets are files: each a Text file named after it in
   <Choices$Write>.Lumen.Presets, used by every library. To share one,
   copy it into another Lumen's Presets directory, or drop it on Lumen's

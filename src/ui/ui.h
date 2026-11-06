@@ -284,6 +284,7 @@ void viewer_lens_camera (int c);
 int viewer_lens_photo (lens_photo *ph);
 const recipe_lens *viewer_lens_profile (void);
 void viewer_lens_auto (void);
+void viewer_lens_want_info (void);       /* a raw's lens details asked for from the plug-in (the Lens menu) */
 /* The Lens and Camera menus (from the group's Lens and Camera links). */
 void menus_open_lens_menu (int x, int y, int cameras);
 void viewer_toggle_zoom (void);        /* fit, or 100% of the original */

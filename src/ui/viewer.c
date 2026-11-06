@@ -222,6 +222,8 @@ static img_info raw_info;               /* a raw's details from the plug-in (len
 static int raw_info_ok;
 static thumbgen *info_gen;             /* opened from its preview: the plug-in's quick look, for them */
 static int info_tried;
+static int info_asked;                 /* wanted (Auto, or the Lens menu): fetched only then, not at every opening */
+static int auto_after_info;            /* Auto again once they're here */
 
 int viewer_lens_photo (lens_photo *ph)
 {
@@ -262,6 +264,9 @@ int viewer_lens_photo (lens_photo *ph)
 }
 
 const recipe_lens *viewer_lens_profile (void) { return &current.lens; }
+
+/* The Lens menu opened: a raw's lens details, if not had yet, for the next time. */
+void viewer_lens_want_info (void) { info_asked = 1; }
 
 /* The camera the profile is scaled for: the one chosen for it, by name. */
 static int lens_chosen_camera (lens_db *db)
@@ -379,9 +384,16 @@ void viewer_lens_auto (void)
     }
   viewer_lens_photo (&ph);
   i = lens_db_match (db, &ph);
+  if (i < 0 && photo_is_raw && !raw_info_ok && from_kept && !info_tried)
+    {
+      /* Opened from its preview: the plug-in's quick look at the raw for
+         the lens's details, then Auto again by itself. */
+      info_asked = auto_after_info = 1;
+      return;
+    }
   if (i < 0)
     {
-      if (photo_is_raw && !raw_info_ok)
+      if (photo_is_raw && !raw_info_ok && info_gen)
         app_inform ("Lumen is still reading this raw file's details from the plug-in. Try Auto again in a moment.");
       else
         app_report ("Lumen couldn't tell which lens this photo was taken with. Choose it from the Lens menu.");
@@ -516,7 +528,7 @@ static void free_photo (void)
 {
   thumbgen_free (info_gen);
   info_gen = NULL;
-  info_tried = 0;
+  info_tried = info_asked = auto_after_info = 0;
   raw_info_ok = 0;
   vlens_id = 0;
   previewing = 0;
@@ -2287,7 +2299,7 @@ int viewer_loading (void)
    is to be had (Lens Correction). */
 static int info_wanted (void)
 {
-  return state == V_READY && from_kept && photo_is_raw && photo_kind == RAWJOB_RAW && !raw_info_ok
+  return info_asked && state == V_READY && from_kept && photo_is_raw && photo_kind == RAWJOB_RAW && !raw_info_ok
          && !info_tried && app_has_lens_db () && rawjob_available_kind (photo_kind);
 }
 
@@ -2414,6 +2426,11 @@ void viewer_idle (void)
             }
           thumbgen_free (info_gen);
           info_gen = NULL;
+          if (auto_after_info)
+            {
+              auto_after_info = 0;
+              viewer_lens_auto ();
+            }
         }
     }
   else if (info_wanted ())

@@ -143,7 +143,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 </ul>
 <p>A compact camera's lens can't be changed, so its profile is found from the camera alone.</p>
 <p>If Lumen can't tell which lens it was (no lens details in the file, or two lenses as likely as each other), it says so: choose the lens from the Lens menu (<a href="#ch4">Chapter 4</a>).</p>
-<div class="box rem"><b class="label">REMEMBER</b>For a raw file opened from its preview, Lumen asks LumenRaw for the lens's details in the background the moment the photo opens. If you click Auto in the first second or two, Lumen may ask you to try again in a moment.</div>
+<div class="box rem"><b class="label">REMEMBER</b>A raw photo usually opens from the preview Lumen keeps of it, which has no lens details. The first time you click Auto (or open the Lens menu) on such a photo, Lumen asks LumenRaw for them, which takes a moment, and Auto finishes by itself. Lumen asks only then, not every time a photo is opened.</div>
 
 <h3 class="chapter" id="ch4"><span>4</span> Choosing the lens yourself</h3>
 <p><b>Lens</b> opens a menu of lenses. At the top are the <b>likeliest</b>: lenses that fit the photo's camera and have its focal length, the most likely first. A tick shows the one in use.</p>
@@ -186,7 +186,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <tr><th>Problem</th><th>What to do</th></tr>
 <tr><td>Lens Correction has no Auto or Lens</td><td>LumenLens isn't installed, or is switched off (<a href="#ch7">Chapter 7</a>).</td></tr>
 <tr><td>"Lumen couldn't tell which lens this photo was taken with"</td><td>The file doesn't say, or two lenses are as likely as each other. Choose it from <b>Lens</b>.</td></tr>
-<tr><td>"Lumen is still reading this raw file's details"</td><td>Wait a moment and click Auto again.</td></tr>
+<tr><td>"Lumen is still reading this raw file's details"</td><td>LumenRaw is still working on them: wait a moment and click Auto again.</td></tr>
 <tr><td>A raw photo's lens isn't found, but its JPEGs' are</td><td>Install LumenRaw 1.3 or later: it reads the lens from the camera's own notes.</td></tr>
 <tr><td>The wrong lens was found</td><td>Choose the right one from <b>Lens</b>. A lens with versions (the same lens, revised) may be found as another version: they're much alike.</td></tr>
 <tr><td>"camera not known"</td><td>Choose the camera, or one like it, from <b>Camera</b> (<a href="#ch5">Chapter 5</a>).</td></tr>
