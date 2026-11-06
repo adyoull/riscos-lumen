@@ -1,9 +1,11 @@
 # Lumen changelog
 
-## 0.0.37 (4 November 2026): format plug-ins, menus and the loupe
+## 0.0.37 (4 November 2026): the plug-in API, menus and the loupe
 
 ### The plug-in API
-- Format plug-ins (API 1, docs/plugin-api.md): a plug-in's Plugin file
+The plug-in API LumenRaw used is expanded and formalised: versioned
+(API 1) and written down in docs/plugin-api.md.
+- Format plug-ins (Kind: format): a plug-in's Plugin file
   says which files are its own (Kind: format, API, Format, Extensions,
   Signature lines), and Lumen imports what the installed plug-ins claim
   and runs them to read them, as it runs LumenRaw. The plug-in says

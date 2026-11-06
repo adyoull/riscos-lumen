@@ -120,8 +120,9 @@ with and without NEON); `make guide` the two user guides as zips.
 
 ## Status
 
-0.0.36 was the first public release. 0.0.37 adds format plug-ins (the
-first is LumenHEIF, for HEIF and AVIF photos) and simpler menus. Lumen has
+0.0.36 was the first public release. 0.0.37 expands and formalises the
+plug-in API, so plug-ins can add photo formats (the first is LumenHEIF,
+for HEIF and AVIF photos), and has simpler menus. Lumen has
 been tested on RISC OS 5.31 on a Raspberry Pi 4, and on RISC OS running on
 Linux (RISC OS 5.31-5 under QEMU); its automated tests run on Linux
 (x86-64, and ARM under QEMU with and without NEON).
