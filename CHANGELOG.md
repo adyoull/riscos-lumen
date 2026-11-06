@@ -63,7 +63,9 @@
   noise reduction in the LumenRaw plug-in, on the raw data before
   demosaicing (LibRaw's FBDD and wavelet noise reduction), for that
   photo only (recipe "noise raw="). Imports are as before; a photo with
-  it set is developed again with it, in the Viewer and its exports. Needs
+  it set is developed again with it, in the Viewer and its exports, and
+  a preview developed with it is kept beside the plain one, so the photo
+  opens at once next time rather than going through LumenRaw again. Needs
   LumenRaw 1.2; the plug-in API's decode gains an optional NOISE argument
   (older plug-ins ignore it).
 

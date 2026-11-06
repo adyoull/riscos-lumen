@@ -2007,7 +2007,7 @@ static int proxy_ready (void)
   /* Opened from the file: kept as its preview, if previews are made for
      photos like it, so it opens straight away next time. */
   if (!from_kept && photo_original > 0)
-    lib_preview_save (app_library (), photo_original, &img);
+    lib_preview_save_noise (app_library (), photo_original, loaded_noise, &img);
   dev_to_linear (img.rgb, src, (size_t) sw * sh);
   free (img.rgb);
   (void) x; (void) y;
@@ -2047,6 +2047,12 @@ static thumbgen *open_proxy (const cat_details *d, char *e, size_t en)
   photo_kind = photo_is_raw ? rawjob_kind_for (o.format, o.path, NULL, 0) : 0;
   from_kept = 0;
   loaded_noise = photo_is_raw && photo_kind == RAWJOB_RAW ? (int) current.v[P_NOISE_RAW] : 0;
+  if (loaded_noise > 0 && !d->missing && lib_preview_find_noise (app_library (), d->original, loaded_noise, kept, sizeof kept)
+      && (t = thumbgen_start (kept, NULL, PROXY_SIDE, 1, e, en)))
+    {
+      from_kept = 1;                   /* developed with it before, and kept */
+      return t;
+    }
   if (loaded_noise > 0)
     {
       rawjob_set_raw_noise (loaded_noise);

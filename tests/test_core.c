@@ -2656,6 +2656,29 @@ static void test_previews (void)
   lib_set_previews (l, PREVIEWS_ALL);
   CHECK (lib_preview_save (l, first, &img) == 1 && lib_preview_find (l, first, pv, sizeof pv) == 1
          && preview_count (libdir) == 3, "previews: the Viewer's picture kept, in place of the old");
+  /* Developed with the raw's own noise reduction: kept beside the plain one. */
+  CHECK (lib_preview_find_noise (l, first, 1, pv2, sizeof pv2) == 0, "previews: none with noise reduction yet");
+  CHECK (lib_preview_save_noise (l, first, 1, &img) == 1 && lib_preview_find_noise (l, first, 1, pv2, sizeof pv2) == 1
+         && lib_preview_find (l, first, pv, sizeof pv) == 1 && strcmp (pv, pv2) && preview_count (libdir) == 4
+         && lib_preview_find_noise (l, first, 2, pv2, sizeof pv2) == 0, "previews: one with Light noise reduction, beside it");
+  CHECK (lib_preview_save (l, first, &img) == 1 && lib_preview_find_noise (l, first, 1, pv2, sizeof pv2) == 1,
+         "previews: the plain one made again keeps it");
+  {
+    libcheck *k = libcheck_start (l);
+    clock_cs = 0;
+    while (!libcheck_step (k, fake_now, clock_cs + 3))
+      ;
+    CHECK (libcheck_result (k)->previews == 4 && libcheck_result (k)->previews_unused == 0,
+           "previews: Check library knows it for one in use");
+    libcheck_free (k);
+  }
+  {
+    char sql[120];
+    snprintf (sql, sizeof sql, "UPDATE original SET mtime = mtime + 100 WHERE id = %lld", (long long) first);
+    sqlite3_exec (cat_sqlite (lib_cat (l)), sql, NULL, NULL, NULL);
+  }
+  CHECK (lib_preview_save (l, first, &img) == 1 && lib_preview_find_noise (l, first, 1, pv2, sizeof pv2) == 0
+         && preview_count (libdir) == 3, "previews: out of date: the noise-reduced one goes with the old");
   free (img.rgb);
   /* A photo removed from the library: its preview goes too. */
   {

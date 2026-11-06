@@ -133,6 +133,11 @@ int lib_preview_find (library *l, cat_id original, char *out, size_t n);
 /* Keeps img (at most PREVIEW_SIDE, upright) as the original's preview, if
    one is wanted for it: 1 if kept, 0 if not wanted, -1 on error. */
 int lib_preview_save (library *l, cat_id original, const struct rgb_image *img);
+/* The same for a raw developed with its own noise reduction (the
+   recipe's "noise raw=", 1 or 2; 0 is the plain preview), kept beside
+   it, so a photo with it opens at once too. */
+int lib_preview_find_noise (library *l, cat_id original, int noise, char *out, size_t n);
+int lib_preview_save_noise (library *l, cat_id original, int noise, const struct rgb_image *img);
 /* The leaf name an original's preview has now (for Check library). 1 if
    the original is there. */
 int lib_preview_leaf (library *l, cat_id original, char *leaf, size_t n);

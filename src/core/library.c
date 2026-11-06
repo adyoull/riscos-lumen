@@ -926,9 +926,20 @@ static void preview_dir (library *l, cat_id original, char *out, size_t n)
   fsys_join (out, n, dir, shard);
 }
 
+/* A raw developed with its own noise reduction (level 1 or 2, the
+   recipe's "noise raw=") is kept too, beside the plain one, its leaf
+   ending n1 or n2. */
+static void origin_leaf_noise (const cat_origin *o, int noise, char *leaf, size_t n)
+{
+  if (noise > 0)
+    snprintf (leaf, n, "%lld_%08xn%d", o->id, preview_key (o), noise);
+  else
+    snprintf (leaf, n, "%lld_%08x", o->id, preview_key (o));
+}
+
 static void origin_leaf (const cat_origin *o, char *leaf, size_t n)
 {
-  snprintf (leaf, n, "%lld_%08x", o->id, preview_key (o));
+  origin_leaf_noise (o, 0, leaf, n);
 }
 
 int lib_preview_leaf (library *l, cat_id original, char *leaf, size_t n)
@@ -940,22 +951,32 @@ int lib_preview_leaf (library *l, cat_id original, char *leaf, size_t n)
   return 1;
 }
 
-static int find_origin (library *l, const cat_origin *o, char *out, size_t n)
+static int find_origin_noise (library *l, const cat_origin *o, int noise, char *out, size_t n)
 {
   char dir[1100], leaf[40];
   fsys_entry e;
   preview_dir (l, o->id, dir, sizeof dir);
-  origin_leaf (o, leaf, sizeof leaf);
+  origin_leaf_noise (o, noise, leaf, sizeof leaf);
   fsys_join (out, n, dir, leaf);
   return fsys_stat (out, &e) == 0 && !e.is_dir && e.size > 0;
 }
 
+static int find_origin (library *l, const cat_origin *o, char *out, size_t n)
+{
+  return find_origin_noise (l, o, 0, out, n);
+}
+
 int lib_preview_find (library *l, cat_id original, char *out, size_t n)
+{
+  return lib_preview_find_noise (l, original, 0, out, n);
+}
+
+int lib_preview_find_noise (library *l, cat_id original, int noise, char *out, size_t n)
 {
   cat_origin o;
   if (cat_origin_of (l->db, original, &o) != 1)
     return 0;
-  return find_origin (l, &o, out, n);
+  return find_origin_noise (l, &o, noise, out, n);
 }
 
 /* Removes the original's previews other than keep (out of date). */
@@ -969,7 +990,7 @@ static void remove_others (cat_id original, const char *dir, const char *keep)
     return;
   snprintf (prefix, sizeof prefix, "%lld_", original);
   while (n < 8 && fsys_readdir (d, &e) == 1)
-    if (!e.is_dir && strncmp (e.name, prefix, strlen (prefix)) == 0 && strcmp (e.name, keep) != 0)
+    if (!e.is_dir && strncmp (e.name, prefix, strlen (prefix)) == 0 && !(keep[0] && strncmp (e.name, keep, strlen (keep)) == 0))
       snprintf (gone[n++], sizeof gone[0], "%s", e.name);
   fsys_closedir (d);
   for (k = 0; k < n; k++)
@@ -994,16 +1015,17 @@ static void remove_previews_of_gone (library *l, const cat_id *originals, int n)
     }
 }
 
-static int save_origin (library *l, const cat_origin *o, const rgb_image *img)
+static int save_origin_noise (library *l, const cat_origin *o, int noise, const rgb_image *img)
 {
-  char dir[1100], leaf[40], path[1300], tmp[1300], e[200];
+  char dir[1100], leaf[40], keep[40], path[1300], tmp[1300], e[200];
   preview_dir (l, o->id, dir, sizeof dir);
   if (!l->pv_shard_made[o->id & 0xFF])
     {
       fsys_mkdirs (dir);
       l->pv_shard_made[o->id & 0xFF] = 1;
     }
-  origin_leaf (o, leaf, sizeof leaf);
+  origin_leaf_noise (o, noise, leaf, sizeof leaf);
+  origin_leaf (o, keep, sizeof keep);
   fsys_join (path, sizeof path, dir, leaf);
   fsys_join (tmp, sizeof tmp, dir, "new");
   /* Written under another name, then renamed: a preview half written (a
@@ -1023,16 +1045,26 @@ static int save_origin (library *l, const cat_origin *o, const rgb_image *img)
       return -1;
     }
   fsys_settype (path, FT_JPEG);
-  remove_others (o->id, dir, leaf);
+  remove_others (o->id, dir, keep);    /* out of date ones (other noise levels of this one are kept) */
   return 1;
+}
+
+static int save_origin (library *l, const cat_origin *o, const rgb_image *img)
+{
+  return save_origin_noise (l, o, 0, img);
 }
 
 int lib_preview_save (library *l, cat_id original, const rgb_image *img)
 {
+  return lib_preview_save_noise (l, original, 0, img);
+}
+
+int lib_preview_save_noise (library *l, cat_id original, int noise, const rgb_image *img)
+{
   cat_origin o;
   if (cat_origin_of (l->db, original, &o) != 1 || !lib_preview_wanted (l, o.format, o.path))
     return 0;
-  return save_origin (l, &o, img);
+  return save_origin_noise (l, &o, noise, img);
 }
 
 /* One step: 1 a preview made, 0 working, -1 nothing left (or held). */

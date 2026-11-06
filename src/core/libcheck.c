@@ -200,8 +200,12 @@ static void keep_path (char ***list, int *n, int *cap, const char *path)
 static int preview_in_use (library *l, const char *leaf)
 {
   char want[40];
-  return is_number_prefix (leaf) && lib_preview_leaf (l, strtoll (leaf, NULL, 10), want, sizeof want)
-         && strcmp (want, leaf) == 0;
+  size_t k;
+  if (!is_number_prefix (leaf) || !lib_preview_leaf (l, strtoll (leaf, NULL, 10), want, sizeof want))
+    return 0;
+  k = strlen (want);
+  /* the plain one, or one with the raw's own noise reduction (n1, n2) */
+  return strncmp (want, leaf, k) == 0 && (leaf[k] == '\0' || (leaf[k] == 'n' && (leaf[k + 1] == '1' || leaf[k + 1] == '2') && !leaf[k + 2]));
 }
 
 /* One Previews subdirectory: files no original uses as its preview now. */

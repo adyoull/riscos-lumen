@@ -211,7 +211,8 @@ both. Look at 100% (Z) to judge them; too much Luminance makes skin and
 foliage look waxy. (Lumen takes the noise out of each layer of detail,
 fine to coarse, of a wavelet transform: edges stay.) A camera raw file
 also has Raw: Off, Light or Strong noise reduction in LumenRaw 1.2, on
-the raw data, for that photo only (it's developed again with it).
+the raw data, for that photo only (it's developed again with it, and a
+preview developed with it is kept, so it opens at once the next time).
 
 Vignette darkens the photo towards the corners (a negative Amount) or
 lightens them (positive); Midpoint is how far out from the middle it
