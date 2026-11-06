@@ -38,15 +38,17 @@ were written with Anthropic's Claude as a coding assistant.
 
 1. Install SharedUnixLibrary and ARMEABISupport with PackMan, if you
    haven't already.
-2. Unzip `Lumen-0.0.37.zip` and copy `!Lumen` to where you keep your
+2. Unzip `Lumen-0.0.38.2.zip` and copy `!Lumen` to where you keep your
    applications, for example `$.Apps.Graphics`.
-3. For camera raw files, unzip `LumenRaw-1.1.zip`: it holds
+3. For camera raw files, unzip `LumenRaw-1.3.zip`: it holds
    `!Lumen.Plugins.LibRaw`. Drag that `LibRaw` directory into Lumen's
    Plug-ins > Add plug-in window, or copy it into your
    `!Lumen.Plugins`.
 4. For HEIF and AVIF photos, likewise unzip `LumenHEIF-1.2.zip` and add its
    `!Lumen.Plugins.HEIF` directory.
-5. Double-click `!Lumen`, and drag a folder of photos into its window.
+5. For Lens Correction's lens profiles, likewise unzip `LumenLens-1.0.zip`
+   and add its `!Lumen.Plugins.Lens` directory.
+6. Double-click `!Lumen`, and drag a folder of photos into its window.
 
 ## What it does
 
@@ -61,6 +63,13 @@ were written with Anthropic's Claude as a coding assistant.
 - Adjustments in 16-bit linear light, with undo, before and after, Auto,
   presets, styles shown on the photo as you move down the list, and
   copying adjustments between photos.
+- Layers: adjustments of their own on part of the photo, painted with a
+  brush or set by a gradient or an oval (which can be turned), and
+  retouching that paints out spots, wires and scratches.
+- Lens correction (distortion, fringing and vignetting) from the
+  LumenLens plug-in's 1,533 lens profiles, found from the photo; wavelet
+  noise reduction with Auto.
+- Double-clicking a photo in the Filer can open it in Lumen.
 - Exports JPEG, PNG or TIFF at any size, in sRGB, Adobe RGB or Display P3,
   sharpened for the size, with EXIF, caption and keywords; prints to any
   RISC OS printer.
@@ -123,7 +132,10 @@ with and without NEON); `make guide` the two user guides as zips.
 
 0.0.36 was the first public release. 0.0.37 expands and formalises the
 plug-in API, so plug-ins can add photo formats (the first is LumenHEIF,
-for HEIF and AVIF photos), and has simpler menus. Lumen has
+for HEIF and AVIF photos), and has simpler menus. 0.0.38.2 adds layers
+(local adjustments with brushes, gradients and ovals), lens correction
+(with the LumenLens plug-in's profiles), wavelet noise reduction, TIFF,
+and double-clicking photos to open them in Lumen. Lumen has
 been tested on RISC OS 5.31 on a Raspberry Pi 4, and on RISC OS running on
 Linux (RISC OS 5.31-5 under QEMU); its automated tests run on Linux
 (x86-64, and ARM under QEMU with and without NEON).

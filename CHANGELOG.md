@@ -1,6 +1,6 @@
 # Lumen changelog
 
-## 0.0.38.2: layers faster again
+## 0.0.38.2 (6 November 2026): layers faster again
 
 - Gradients and ovals are worked out along each row of the photo, from
   their shape, instead of on a grid of up to 2048 cells and read back
@@ -21,7 +21,7 @@
   stroke from 115 to 35, and the 12 MP full size two to five times
   quicker.
 
-## 0.0.38.1: faster layers, and turning ovals and gradients
+## 0.0.38.1 (6 November 2026, not released on its own): faster layers, and turning ovals and gradients
 
 - Layers are faster. Dragging a layer's slider or a gradient's or
   oval's handle shows the change on the half-size copy as you go, and
@@ -43,7 +43,7 @@
   preview, so a photo with Light or Strong opens at once instead of
   going back to LumenRaw each time.
 
-## 0.0.38: TIFF, and photos known by their fingerprint
+## 0.0.38 (not released on its own): TIFF, and photos known by their fingerprint
 
 - TIFF photos are imported, shown, adjusted and exported, built into
   Lumen (libtiff 4.7.1): 8 or 16 bits a channel (worked on at 8, as PNGs

@@ -10,18 +10,20 @@ Maintainer: Andrew Youll <adyoull@users.noreply.github.com>
 Standards-Version: 0.4.0
 Environment: arm32, vfpv3
 Depends: SharedUnixLibrary (>= 1.16), ARMEABISupport
-Suggests: LumenRaw
+Suggests: LumenRaw, LumenHEIF, LumenLens
 Components: Apps.Graphics.!Lumen (Movable LookAt)
 Description: Photo library and non-destructive editor
  Lumen imports, browses, rates, flags and adjusts photos without
  changing them: white balance, exposure, highlights and shadows,
- levels, curves, contrast, saturation, sharpening, crop, straighten and
- perspective, with presets, undo, a loupe and a 100% view; then exports
- them as JPEG or PNG. One window with a browser, viewer, split view
- and full screen.
+ levels, curves, contrast, saturation, sharpening, noise reduction,
+ lens correction, crop, straighten and perspective, layers (brushes,
+ gradients and ovals) and retouching, with presets, undo, a loupe and
+ a 100% view; then exports them as JPEG, PNG or TIFF. One window with a
+ browser, viewer, split view and full screen.
  .
- Camera raw files need the LibRaw plug-in, a separate package
- (LumenRaw).
+ Camera raw files need the LibRaw plug-in (LumenRaw), HEIF and AVIF
+ photos the LumenHEIF plug-in, and lens profiles the LumenLens plug-in:
+ separate packages.
 Build-Map: !Lumen -> Apps/Graphics/!Lumen
 Build-Notice: Lumen, packaged for PackMan from its release zip.
  .
