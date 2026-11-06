@@ -14,7 +14,8 @@
        and where that time goes: reading the file, libjpeg-turbo's decoding
        (at 1/2, and at 3/8 as Lumen$JPEGEighths allows), and the rest;
      - developing the proxy, and the half-size copy used while dragging,
-       with tone only and with saturation and vibrancy;
+       with tone only and with saturation and vibrancy; then at half size
+       with the other adjustments added one at a time;
      - layers: an oval, a turned one, a gradient, a brush stroke and an
        oval with every slider, at half size, proxy and 12 MP;
      - smoothing, enlarging and sharpening, plain and NEON;
@@ -343,6 +344,35 @@ int main (int argc, char **argv)
   printf ("Proxy, tone only:              %6.1f ms\n", tone);
   printf ("Proxy, with saturation:        %6.1f ms\n", full);
   printf ("Half size (while dragging):    %6.1f ms tone, %.1f ms with saturation\n", half_tone, half_full);
+  /* The other adjustments, added one after another, at half size (each
+     step of a drag): what each adds. */
+  {
+    static const struct { const char *name; int p; float v; } more[] = {
+      { "vignette", P_VIG_AMOUNT, -30 }, { "highlights & shadows", P_HIGHLIGHTS, -30 }, { "", P_SHADOWS, 30 },
+      { "glow", P_GLOW_AMOUNT, 30 }, { "hue, saturation, lightness", HSL_PARAM (2, 1), 30 },
+      { "black & white", P_BW_AMOUNT, 100 }, { "split toning", P_TONE_SH, 30 }, { "", P_TONE_HI, 30 },
+    };
+    int k;
+    double before = half_full;
+    dev_lummap map;
+    printf ("Half size, adding (each on the ones before):\n");
+    for (k = 0; k < (int) (sizeof more / sizeof more[0]); k++)
+      {
+        double t;
+        recipe_set (&r, more[k].p, more[k].v);
+        if (!more[k].name[0])
+          continue;
+        develop_prepare (d, &r);
+        if (develop_needs_mask (d))
+          {
+            dev_lummap_lin (&map, src, proxy.w / 2, proxy.h / 2);
+            develop_mask (d, &map, NULL, proxy.w / 2, proxy.h / 2);
+          }
+        t = time_develop (d, src, proxy.w / 2, proxy.h / 2, dst, 10);
+        printf ("  %-28s %6.1f ms (+%.1f)\n", more[k].name, t, t - before);
+        before = t;
+      }
+  }
   /* Layers (retouch.c): an oval, a turned oval, a gradient, a brush
      stroke, and an oval with every slider, on the half size (each step
      of a drag), the proxy (when it's let go) and a 12 MP full size (100%

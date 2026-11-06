@@ -13,6 +13,7 @@
 static uint16_t s2l[256];
 static uint8_t l2s[65536];
 static int recip[256];                 /* 65536 / (i + 1): vibrancy's relative spread without dividing */
+static uint32_t inv_span[256];         /* 2^32 / i rounded up: n / i as (n * inv_span[i]) >> 32, exactly, for n below 2^24 */
 static int tables_made;
 
 static double srgb_decode (double v)  /* sRGB-encoded 0-1 to linear */
@@ -36,6 +37,8 @@ static void make_tables (void)
     l2s[i] = (uint8_t) lround (srgb_encode (i / 65535.0) * 255);
   for (i = 0; i < 256; i++)
     recip[i] = 65536 / (i + 1);
+  for (i = 1; i < 256; i++)
+    inv_span[i] = (uint32_t) (((1ull << 32) + i - 1) / i);
   tables_made = 1;
 }
 
@@ -257,13 +260,15 @@ static inline void hsl_step (const develop *d, int *pr, int *pg, int *pb)
   int span = mx - mn, h, chroma, m, dr, dg, db, cs, sn, f, gn;
   if (span < 2)
     return;
-  /* Hue in degrees: six sectors of 60. */
-  if (mx == r8)
-    h = (g8 - b8) * 60 / span;
-  else if (mx == g8)
-    h = 120 + (b8 - r8) * 60 / span;
-  else
-    h = 240 + (r8 - g8) * 60 / span;
+  /* Hue in degrees: six sectors of 60 (the division by the span done by
+     multiplying: ARMv7 has no divide instruction). */
+  {
+    int n = mx == r8 ? g8 - b8 : mx == g8 ? b8 - r8 : r8 - g8, q;
+    unsigned an = (unsigned) (n < 0 ? -n : n) * 60u;
+    q = (int) (((uint64_t) an * inv_span[span]) >> 32);
+    q = n < 0 ? -q : q;
+    h = mx == r8 ? q : mx == g8 ? 120 + q : 240 + q;
+  }
   if (h < 0)
     h += 360;
   if (h >= 360)
@@ -296,7 +301,7 @@ static inline void hsl_step (const develop *d, int *pr, int *pg, int *pb)
   *pb = B < 0 ? 0 : B > 65535 ? 65535 : B;
 }
 
-static inline void pixel (const develop *d, const uint16_t *s, int *r, int *g, int *b)
+static inline __attribute__ ((always_inline)) void pixel (const develop *d, const uint16_t *s, int *r, int *g, int *b)
 {
   int R = d->tone[0][s[0] >> (16 - DEV_LUT_BITS)];
   int G = d->tone[1][s[1] >> (16 - DEV_LUT_BITS)];
@@ -431,7 +436,7 @@ static void make_map (dev_lummap *m, const unsigned char *rgb, const uint16_t *l
         {
           int x0 = (int) ((long long) cx * w / m->w), x1 = (int) ((long long) (cx + 1) * w / m->w);
           int x, y, step = (x1 - x0) * (y1 - y0) > 4096 ? 2 : 1;   /* big cells: every other pixel */
-          double sum = 0;
+          unsigned long long sum = 0;   /* luminance, 65535ths: in integers, not a double division for each pixel */
           long n = 0;
           if (y1 <= y0) y1 = y0 + 1;
           if (x1 <= x0) x1 = x0 + 1;
@@ -448,10 +453,10 @@ static void make_map (dev_lummap *m, const unsigned char *rgb, const uint16_t *l
                   {
                     R = lin[i]; G = lin[i + 1]; B = lin[i + 2];
                   }
-                sum += (R * 0.2126 + G * 0.7152 + B * 0.0722) / 65535.0;
+                sum += (R * 13933u + G * 46871u + B * 4732u) >> 16;
                 n++;
               }
-          m->l[cy * m->w + cx] = (float) srgb_encode (n ? sum / n : 0);
+          m->l[cy * m->w + cx] = (float) srgb_encode (n ? (double) sum / n / 65535.0 : 0);
         }
     }
   blur_map (m);
@@ -704,10 +709,25 @@ static void glow_row (const develop *d, int y, float *row)
    the centre as a share of the half height; x its column in a picture fw wide. */
 static inline void vignette (const develop *d, int fw, float ny2, int x, int *R, int *G, int *B)
 {
-  float cx = (float) x + 0.5f - fw * 0.5f, nx = cx / (fw * 0.5f);
+  float cx = (float) x + 0.5f - fw * 0.5f, nx = cx * (2.0f / fw);
   float f = (nx * nx + ny2) * 128;
   int i = f > 256 ? 256 : f < 0 ? 0 : (int) f, g;
   g = d->vig_gain[i];
+  *R = (*R * g) >> 12;
+  *G = (*G * g) >> 12;
+  *B = (*B * g) >> 12;
+  *R = *R > 65535 ? 65535 : *R;
+  *G = *G > 65535 ? 65535 : *G;
+  *B = *B > 65535 ? 65535 : *B;
+}
+
+/* The same with the row's part worked out once: vx[x] is the column's
+   (nx^2 * 128) and vy the row's, in 65536ths, so a pixel is an add, a
+   shift and a look in the table. */
+static inline void vignette_q (const develop *d, int vx, int vy, int *R, int *G, int *B)
+{
+  int i = (vx + vy) >> 16, g;
+  g = d->vig_gain[i > 256 ? 256 : i];
   *R = (*R * g) >> 12;
   *G = (*G * g) >> 12;
   *B = (*B * g) >> 12;
@@ -726,12 +746,35 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
                    uint32_t *dst, dev_hist *hist)
 {
   int y, x;
+  static unsigned *rowbuf;             /* a row's H&S gains, then the glow's red, green and blue */
+  static int roww;
+  static int *vcol;                    /* the vignette's part for each column (vignette_q) */
+  static int vcolw;
   make_tables ();
+  if (d->vig)
+    {
+      if (!vcol || vcolw < w)
+        {
+          free (vcol);
+          vcolw = w;
+          if (!(vcol = malloc (sizeof *vcol * (size_t) w)))
+            {
+              vcolw = 0;
+              return;
+            }
+        }
+      for (x = 0; x < w; x++)
+        {
+          float cx = (float) (x + d->rx) + 0.5f - d->fw * 0.5f, nx = cx * (2.0f / d->fw), f = nx * nx * 128 * 65536;
+          vcol[x] = f > 300 * 65536.0f ? 300 * 65536 : (int) f;
+        }
+    }
   for (y = y0; y < y1; y++)
     {
       const uint16_t *s = src + (size_t) y * w * 3;
       uint32_t *o = dst + (size_t) y * w;
       float ny2 = d->vig ? row_ny2 (d->fh, y + d->ry) : 0;
+      int vrow = ny2 * 128 * 65536 > 300 * 65536.0f ? 300 * 65536 : (int) (ny2 * 128 * 65536);
       if (d->hs || (d->glow && d->ggw))
         {
           /* Highlights & Shadows: each pixel scaled by its place's gain,
@@ -744,15 +787,62 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
             gain_row (d, y + d->ry, row);
           if (glow)
             glow_row (d, y + d->ry, grow);
-          for (x = 0; x < w; x++, s += 3, fx += step, gx += gstep)
+          /* The gains and the glow along the row, worked out first (and
+             in single precision: ARM's double is slower), so the pixels'
+             loop only looks them up. */
+          if (!rowbuf || roww < w)
+            {
+              free (rowbuf);
+              roww = w;
+              if (!(rowbuf = malloc (sizeof *rowbuf * (size_t) w * 4)))
+                {
+                  roww = 0;
+                  return;
+                }
+            }
+          /* Along the row in 16.16 fixed point: where each pixel falls
+             between two cells, and the blend, in integers. */
+          if (d->hs)
+            {
+              int ir[HS_GRID], gwm = d->gw - 1;
+              long long F = (long long) (fx * 65536), dF = (long long) (step * 65536);
+              for (x = 0; x <= gwm; x++)
+                ir[x] = (int) row[x];
+              for (x = 0; x < w; x++, F += dF)
+                {
+                  int i = F <= 0 ? 0 : (int) (F >> 16), a = F <= 0 ? 0 : (int) (F & 0xffff);
+                  if (i >= gwm)
+                    i = gwm, a = 0;
+                  rowbuf[x] = (unsigned) (ir[i] + (int) (((long long) (ir[i < gwm ? i + 1 : i] - ir[i]) * a) >> 16));
+                }
+            }
+          if (glow)
+            {
+              int ig[GLOW_GRID * 3], gwm = d->ggw - 1, c;
+              long long F = (long long) (gx * 65536), dF = (long long) (gstep * 65536);
+              for (x = 0; x < d->ggw * 3; x++)
+                {
+                  int v = ((int) grow[x] * d->glow) >> 8;
+                  ig[x] = v > 65535 ? 65535 : v < 0 ? 0 : v;
+                }
+              for (x = 0; x < w; x++, F += dF)
+                {
+                  int i = F <= 0 ? 0 : (int) (F >> 16), a = F <= 0 ? 0 : (int) (F & 0xffff), j;
+                  if (i >= gwm)
+                    i = gwm, a = 0;
+                  j = i < gwm ? i + 1 : i;
+                  for (c = 0; c < 3; c++)
+                    rowbuf[(size_t) w * (c + 1) + x] = (unsigned) (ig[i * 3 + c] + (((ig[j * 3 + c] - ig[i * 3 + c]) * (a >> 1)) >> 15));
+                }
+            }
+          for (x = 0; x < w; x++, s += 3)
             {
               int R, G, B;
               unsigned r, g, b;
               if (d->hs)
                 {
-                  double f = fx < 0 ? 0 : fx > d->gw - 1 ? d->gw - 1 : fx;
-                  int i = (int) f, j = i + 1 < d->gw ? i + 1 : i, c;
-                  unsigned gn = (unsigned) (row[i] + (row[j] - row[i]) * (f - i));
+                  unsigned gn = rowbuf[x];
+                  int c;
                   uint16_t t[3];
                   for (c = 0; c < 3; c++)
                     {
@@ -766,20 +856,13 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
               if (glow)
                 {
                   /* Screen: out = 1 - (1 - out)(1 - glow * amount). */
-                  double f = gx < 0 ? 0 : gx > d->ggw - 1 ? d->ggw - 1 : gx;
-                  int i = (int) f, j = i + 1 < d->ggw ? i + 1 : i;
-                  float a = (float) (f - i);
-                  int gr = (int) (grow[i * 3] + (grow[j * 3] - grow[i * 3]) * a);
-                  int gg = (int) (grow[i * 3 + 1] + (grow[j * 3 + 1] - grow[i * 3 + 1]) * a);
-                  int gb = (int) (grow[i * 3 + 2] + (grow[j * 3 + 2] - grow[i * 3 + 2]) * a);
-                  gr = (gr * d->glow) >> 8; gg = (gg * d->glow) >> 8; gb = (gb * d->glow) >> 8;
-                  gr = gr > 65535 ? 65535 : gr; gg = gg > 65535 ? 65535 : gg; gb = gb > 65535 ? 65535 : gb;
+                  unsigned gr = rowbuf[(size_t) w + x], gg = rowbuf[(size_t) w * 2 + x], gb = rowbuf[(size_t) w * 3 + x];
                   R += (int) (((unsigned) (65535 - R) * (unsigned) gr) >> 16);
                   G += (int) (((unsigned) (65535 - G) * (unsigned) gg) >> 16);
                   B += (int) (((unsigned) (65535 - B) * (unsigned) gb) >> 16);
                 }
               if (d->vig)
-                vignette (d, d->fw, ny2, x + d->rx, &R, &G, &B);
+                vignette_q (d, vcol[x], vrow, &R, &G, &B);
               r = l2s[R]; g = l2s[G]; b = l2s[B];
               o[x] = r | g << 8 | b << 16;
               if (hist)
@@ -811,7 +894,7 @@ void develop_rows (const develop *d, const uint16_t *src, int w, int y0, int y1,
             unsigned r, g, b;
             pixel (d, s, &R, &G, &B);
             if (d->vig)
-              vignette (d, d->fw, ny2, x + d->rx, &R, &G, &B);
+              vignette_q (d, vcol[x], vrow, &R, &G, &B);
             r = l2s[R]; g = l2s[G]; b = l2s[B];
             o[x] = r | g << 8 | b << 16;
             if (hist)

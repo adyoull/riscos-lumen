@@ -1,4 +1,4 @@
-Lumen 0.0.38.3 (06 Nov 2026)
+Lumen 0.0.38.4 (06 Nov 2026)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -446,6 +446,8 @@ that photo at full size and says where the time goes. It also times
 layers: an oval, a turned one, a gradient, a brush stroke and an oval
 with every slider, at half size (each step of a drag), on the working
 copy and on a 12 MP full size.
+And the other adjustments at half size, added one after another, with
+what each adds.
 
 Exports say how long they took in the Activity history (for a raw
 file: LumenRaw developing it, its picture being read, and the adjusting

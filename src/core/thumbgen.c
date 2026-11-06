@@ -29,6 +29,8 @@ typedef struct
   int *col;                    /* sw: the target column of each source column */
   int cur;                     /* target row being built */
   unsigned char *out;          /* tw * th * 3 */
+  uint32_t *inv;               /* by pixel count (2 and up): 2^32 / count rounded up, 0 not yet found */
+  unsigned ninv;
 } scaler;
 
 static int scaler_init (scaler *s, int sw, int sh, int max_side)
@@ -55,6 +57,10 @@ static int scaler_init (scaler *s, int sw, int sh, int max_side)
      64-bit division for every pixel is a library call on ARM, and was most
      of the time taken. */
   s->col = malloc ((size_t) sw * sizeof *s->col);
+  /* The counts a target pixel can have: up to as many source pixels as
+     the widest column times the tallest row of them. */
+  s->ninv = (unsigned) ((sw / s->tw + 2) * (sh / s->th + 2));
+  s->inv = s->ninv <= 65536 ? calloc (s->ninv, sizeof *s->inv) : NULL;
   if (!s->sum || !s->cnt || !s->out || !s->col)
     return -1;
   {
@@ -75,9 +81,31 @@ static void scaler_flush (scaler *s)
   for (x = 0; x < s->tw; x++)
     {
       unsigned c = s->cnt[x] ? s->cnt[x] : 1;
-      o[3 * x] = (unsigned char) ((s->sum[3 * x] + c / 2) / c);
-      o[3 * x + 1] = (unsigned char) ((s->sum[3 * x + 1] + c / 2) / c);
-      o[3 * x + 2] = (unsigned char) ((s->sum[3 * x + 2] + c / 2) / c);
+      if (c == 1)
+        {
+          o[3 * x] = (unsigned char) s->sum[3 * x];
+          o[3 * x + 1] = (unsigned char) s->sum[3 * x + 1];
+          o[3 * x + 2] = (unsigned char) s->sum[3 * x + 2];
+        }
+      else if (c < 4096 && c < s->ninv && s->inv)
+        {
+          /* Dividing by multiplying (ARMv7 has no divide instruction, and
+             a division is a library call): with m = 2^32 / c rounded up,
+             (n * m) >> 32 is exactly n / c for n below 2^32 / c, and the
+             sums are at most 255 * c. */
+          uint64_t m = s->inv[c];
+          if (!m)
+            m = s->inv[c] = (uint32_t) (((1ull << 32) + c - 1) / c);
+          o[3 * x] = (unsigned char) (((s->sum[3 * x] + c / 2) * m) >> 32);
+          o[3 * x + 1] = (unsigned char) (((s->sum[3 * x + 1] + c / 2) * m) >> 32);
+          o[3 * x + 2] = (unsigned char) (((s->sum[3 * x + 2] + c / 2) * m) >> 32);
+        }
+      else
+        {
+          o[3 * x] = (unsigned char) ((s->sum[3 * x] + c / 2) / c);
+          o[3 * x + 1] = (unsigned char) ((s->sum[3 * x + 1] + c / 2) / c);
+          o[3 * x + 2] = (unsigned char) ((s->sum[3 * x + 2] + c / 2) / c);
+        }
     }
   memset (s->sum, 0, (size_t) s->tw * 3 * sizeof *s->sum);
   memset (s->cnt, 0, (size_t) s->tw * sizeof *s->cnt);
@@ -121,7 +149,8 @@ static void scaler_free (scaler *s)
   free (s->cnt);
   free (s->out);
   free (s->col);
-  s->sum = NULL; s->cnt = NULL; s->out = NULL; s->col = NULL;
+  free (s->inv);
+  s->sum = NULL; s->cnt = NULL; s->out = NULL; s->col = NULL; s->inv = NULL;
 }
 
 /* --- libjpeg error handling */

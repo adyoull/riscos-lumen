@@ -1,5 +1,23 @@
 # Lumen changelog
 
+## 0.0.38.4 (6 November 2026): quicker opening and developing
+
+- Opening a JPEG: the box filter that scales the decoded photo to the
+  working size (and thumbnails to theirs) divides by multiplying, as
+  ARMv7 has no divide instruction (exactly the same pixels). On the
+  test bed this part went from about 150-230 ms to 80-90 ms.
+- Developing: the pixel step is inlined into each loop; hue for Hue,
+  Saturation and Lightness is found without a division; Highlights &
+  Shadows and Glow work out their gains along each row once, in
+  integers, instead of in double precision at each pixel; the vignette
+  is an add and a look in a table; the Highlights & Shadows and glow
+  map is summed in integers. On the test bed the proxy with saturation
+  went from 83-95 ms to 50-58 ms, and the half size with every
+  adjustment from about 140 ms to 58 ms.
+- LumenBench also times the other adjustments at half size, added one
+  after another (vignette, Highlights & Shadows, glow, Hue Saturation
+  and Lightness, black and white, split toning), and what each adds.
+
 ## 0.0.38.3 (6 November 2026): the lens database read in the background
 
 - Lens Correction's database (the LumenLens plug-in's) is read in the
