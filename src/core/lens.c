@@ -127,26 +127,61 @@ static void name_range (const char *s, double *fmin, double *fmax, double *amin)
     }
 }
 
-lens_db *lens_db_open (const char *path)
+/* Reading the database a piece at a time (the desktop goes on in between):
+   its file, the database so far, the lens being read and whether any of
+   its measurements were. */
+struct lens_loading
 {
-  FILE *f = fopen (path, "r");
-  char line[2048];
+  FILE *f;
   lens_db *db;
-  lens_entry *cur = NULL;
-  int measured = 0;
+  int cur, measured, failed;
+  char *buf;
+};
+
+#define CUR (&db->L[L->cur])
+
+lens_loading *lens_db_start (const char *path)
+{
+  lens_loading *L;
+  char line[64];
+  FILE *f = fopen (path, "r");
   if (!f)
     return NULL;
-  if (!fgets (line, sizeof line, f) || strncmp (line, "LumenLens 1", 11) != 0 || !(db = calloc (1, sizeof *db)))
+  if (!(L = calloc (1, sizeof *L)) || !(L->db = calloc (1, sizeof *L->db)))
     {
+      free (L);
       fclose (f);
       return NULL;
     }
-  snprintf (db->path, sizeof db->path, "%s", path);
-  while (fgets (line, sizeof line, f))
+  /* 64 KB at a time (set before anything is read): the file is read
+     through once, and over a network or from an SD card many small reads
+     are the slow part. */
+  if ((L->buf = malloc (65536)) != NULL)
+    setvbuf (f, L->buf, _IOFBF, 65536);
+  L->f = f;
+  if (!fgets (line, sizeof line, f) || strncmp (line, "LumenLens 1", 11) != 0)
     {
-      size_t l = strlen (line);
+      lens_db_stop (L);
+      return NULL;
+    }
+  L->cur = -1;
+  snprintf (L->db->path, sizeof L->db->path, "%s", path);
+  return L;
+}
+
+/* The lines it has, up to `lines` of them. 1 when the file is all read. */
+static int load_lines (lens_loading *L, int lines)
+{
+  lens_db *db = L->db;
+  char line[2048];
+  while (!L->failed && lines-- > 0)
+    {
+      size_t l;
       char *fl[8];
       int n;
+      if (!fgets (line, sizeof line, L->f))
+        return 1;
+      l = strlen (line);
       while (l && (line[l - 1] == '\n' || line[l - 1] == '\r'))
         line[--l] = '\0';
       if (l < 2 || line[1] != ' ')
@@ -154,13 +189,13 @@ lens_db *lens_db_open (const char *path)
       if (line[0] == 'D' || line[0] == 'T' || line[0] == 'V')
         {
           double fo = strtod (line + 2, NULL);
-          measured++;
-          if (cur && fo > 0 && !cur->named)
+          L->measured++;
+          if (L->cur >= 0 && fo > 0 && !CUR->named)
             {
-              if (!cur->fmin || fo < cur->fmin)
-                cur->fmin = (float) fo;
-              if (fo > cur->fmax)
-                cur->fmax = (float) fo;
+              if (!CUR->fmin || fo < CUR->fmin)
+                CUR->fmin = (float) fo;
+              if (fo > CUR->fmax)
+                CUR->fmax = (float) fo;
             }
           continue;
         }
@@ -170,7 +205,10 @@ lens_db *lens_db_open (const char *path)
           char *bar;
           mount_entry *m;
           if (grow ((void **) &db->M, &db->roomM, db->nm, sizeof *db->M))
-            break;
+            {
+              L->failed = 1;
+              break;
+            }
           m = &db->M[db->nm];
           /* the rest of the fields, '|' again between them */
           for (bar = fl[0] + strlen (fl[0]); bar < line + l; bar++)
@@ -181,18 +219,27 @@ lens_db *lens_db_open (const char *path)
             *bar++ = '\0';
           if (add_names (db, fl[0], strlen (fl[0]), '|', &m->name)
               || add_names (db, bar ? bar : "", bar ? strlen (bar) : 0, '|', &m->compat))
-            break;
+            {
+              L->failed = 1;
+              break;
+            }
           db->nm++;
         }
       else if (line[0] == 'C' && n >= 4)
         {
           cam_entry *c;
           if (grow ((void **) &db->C, &db->roomC, db->nc, sizeof *db->C))
-            break;
+            {
+              L->failed = 1;
+              break;
+            }
           c = &db->C[db->nc];
           if (add_names (db, fl[0], strlen (fl[0]), '~', &c->maker) || add_names (db, fl[1], strlen (fl[1]), '~', &c->model)
               || add_names (db, fl[2], strlen (fl[2]), '\0', &c->mount))
-            break;
+            {
+              L->failed = 1;
+              break;
+            }
           c->crop = (float) strtod (fl[3], NULL);
           if (!(c->crop > 0.05f))
             c->crop = 1;
@@ -201,43 +248,88 @@ lens_db *lens_db_open (const char *path)
       else if (line[0] == 'L' && n >= 6)
         {
           double a, b, ap;
-          if (cur && !measured)
+          if (L->cur >= 0 && !L->measured)
             db->nl--;                  /* nothing measured: no use */
-          measured = 0;
+          L->measured = 0;
           if (grow ((void **) &db->L, &db->roomL, db->nl, sizeof *db->L))
-            break;
-          cur = &db->L[db->nl];
-          memset (cur, 0, sizeof *cur);
-          if (add_names (db, fl[0], strlen (fl[0]), '~', &cur->maker) || add_names (db, fl[1], strlen (fl[1]), '~', &cur->model)
-              || add_names (db, fl[2], strlen (fl[2]), ';', &cur->mounts))
-            break;
-          cur->crop = (float) strtod (fl[3], NULL);
-          cur->aspect = (float) strtod (fl[4], NULL);
-          if (!(cur->crop > 0.05f))
-            cur->crop = 1;
-          if (!(cur->aspect >= 1))
-            cur->aspect = 1.5f;
-          cur->type = fl[5][0] ? fl[5][0] : 'r';
-          cur->at = ftell (f);
-          name_range (STR (db, cur->model), &a, &b, &ap);
-          cur->amin = (float) ap;
+            {
+              L->failed = 1;
+              break;
+            }
+          L->cur = db->nl;
+          memset (CUR, 0, sizeof *CUR);
+          if (add_names (db, fl[0], strlen (fl[0]), '~', &CUR->maker) || add_names (db, fl[1], strlen (fl[1]), '~', &CUR->model)
+              || add_names (db, fl[2], strlen (fl[2]), ';', &CUR->mounts))
+            {
+              L->failed = 1;
+              break;
+            }
+          CUR->crop = (float) strtod (fl[3], NULL);
+          CUR->aspect = (float) strtod (fl[4], NULL);
+          if (!(CUR->crop > 0.05f))
+            CUR->crop = 1;
+          if (!(CUR->aspect >= 1))
+            CUR->aspect = 1.5f;
+          CUR->type = fl[5][0] ? fl[5][0] : 'r';
+          CUR->at = ftell (L->f);
+          name_range (STR (db, CUR->model), &a, &b, &ap);
+          CUR->amin = (float) ap;
           if (a > 0)
             {
-              /* the name's, not what was measured */
-              cur->fmin = (float) a;
-              cur->fmax = (float) b;
-              cur->named = 1;
+              /* the name's, not what was L->measured */
+              CUR->fmin = (float) a;
+              CUR->fmax = (float) b;
+              CUR->named = 1;
             }
           db->nl++;
         }
     }
-  fclose (f);
-  if (cur && !measured)
+  return L->failed;
+}
+
+int lens_db_step (lens_loading *L, unsigned (*now) (void), unsigned until, lens_db **out)
+{
+  lens_db *db;
+  *out = NULL;
+  for (;;)
+    {
+      if (load_lines (L, 200))
+        break;
+      if (now && (int) (now () - until) >= 0)
+        return 0;
+    }
+  db = L->db;
+  L->db = NULL;
+  fclose (L->f);
+  L->f = NULL;
+  if (L->cur >= 0 && !L->measured)
     db->nl--;
   if (!db->nl)
+    lens_db_close (db);
+  else
+    *out = db;
+  return 1;
+}
+
+void lens_db_stop (lens_loading *L)
+{
+  if (!L)
+    return;
+  if (L->f)
+    fclose (L->f);
+  lens_db_close (L->db);
+  free (L->buf);
+  free (L);
+}
+
+lens_db *lens_db_open (const char *path)
+{
+  lens_loading *L = lens_db_start (path);
+  lens_db *db = NULL;
+  if (L)
     {
-      lens_db_close (db);
-      return NULL;
+      lens_db_step (L, NULL, 0, &db);
+      lens_db_stop (L);
     }
   return db;
 }

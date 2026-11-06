@@ -1133,6 +1133,9 @@ int main (int argc, char **argv)
       snprintf (cmd, sizeof cmd, "cp plugins/lens/Plugin '%s' && cp plugins/lens/Lenses '%s/Lenses,fff'", f, d);
       CHECK (system (cmd) == 0, "the lens plug-in installed");
       app_plugins_rescan ();
+      CHECK (app_busy (), "a lens plug-in added: its database to read in the background");
+      nulls_until_idle ();
+      CHECK (!app_busy (), "the lens database read on null events");
       CHECK (app_has_lens_db () && app_lens_db () && lens_db_count (app_lens_db ()) > 1000, "the lens plug-in found, its database read");
       reported[0] = '\0';
       viewer_lens_auto ();

@@ -54,6 +54,16 @@ int lens_photo_read (lens_photo *ph, const char *path);
 lens_db *lens_db_open (const char *path);
 void lens_db_close (lens_db *db);
 
+/* The same a piece at a time, so the desktop goes on while it's read:
+   lens_db_start (NULL if the file can't be read or isn't one), then
+   lens_db_step until now() reaches until (now NULL: to the end), which
+   returns 1 when it's all read, the database in *out (NULL if it isn't
+   one); then lens_db_stop, which also abandons one part read. */
+typedef struct lens_loading lens_loading;
+lens_loading *lens_db_start (const char *path);
+int lens_db_step (lens_loading *L, unsigned (*now) (void), unsigned until, lens_db **out);
+void lens_db_stop (lens_loading *L);
+
 int lens_db_count (const lens_db *db);
 /* Lens i's maker and name, as the database gives them first. */
 const char *lens_db_maker (const lens_db *db, int i);

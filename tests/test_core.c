@@ -2985,6 +2985,12 @@ static void test_heif (void)
 }
 
 /* --- the lens database (the LumenLens plug-in's) */
+/* A clock that is always past the time: each step reads one slice. */
+static unsigned step_clock (void)
+{
+  return 1;
+}
+
 static lens_photo photo_of (const char *make, const char *model, const char *lens, double focal, double f)
 {
   lens_photo ph;
@@ -3111,6 +3117,25 @@ static void test_lensdb (void)
       CHECK (i >= 0 && !strcmp (lens_db_name (db, i), "Canon EF 24-105mm f/4L IS USM"), "lens db: the plug-in's: a Canon lens");
       c = lens_db_camera (db, "SONY", "ILCE-7M3", &mount, &crop);
       CHECK (c >= 0 && !strcmp (mount, "Sony E"), "lens db: the plug-in's: a Sony camera");
+      /* Read a piece at a time (as Lumen does in the background): the same. */
+      {
+        lens_loading *ld = lens_db_start ("plugins/lens/Lenses");
+        lens_db *db2 = NULL;
+        int steps = 0, same = 1, k;
+        while (ld && !lens_db_step (ld, step_clock, 0, &db2))
+          steps++;
+        lens_db_stop (ld);
+        same = db2 && lens_db_count (db2) == lens_db_count (db) && lens_db_cameras (db2) == lens_db_cameras (db);
+        for (k = 0; same && k < lens_db_count (db); k++)
+          same = !strcmp (lens_db_name (db, k), lens_db_name (db2, k));
+        ph = photo_of ("NIKON CORPORATION", "NIKON D700", "AF Zoom-Nikkor 80-200mm f/2.8D ED", 135, 4);
+        CHECK (steps > 5 && same && db2 && lens_db_match (db2, &ph) == lens_db_match (db, &ph)
+               && lens_db_profile (db2, lens_db_match (db2, &ph), &ph, &L) == 0 && L.dist,
+               "lens db: read in pieces, the same database");
+        lens_db_close (db2);
+        lens_db_stop (lens_db_start ("plugins/lens/Lenses"));   /* abandoned at once */
+        CHECK (!lens_db_start ("no/such/Lenses"), "lens db: no file, nothing to read");
+      }
       lens_db_close (db);
     }
   /* The raw samples' lenses, as their files say. */

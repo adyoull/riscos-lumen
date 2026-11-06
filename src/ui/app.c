@@ -370,18 +370,67 @@ int app_has_lens_db (void)
   return plugins_find (plugin_list, nplugins, "lens") != NULL;
 }
 
-lens_db *app_lens_db (void)
+/* The database is read in the background soon after Lumen starts (or a
+   lens plug-in is added), a slice at a time in idle(), so it's there by
+   the time a photo wants it; asked for before then, the rest is read at
+   once. */
+static lens_loading *lensdb_loading;
+
+static const char *lens_db_path (void)
 {
   const plugin_info *pi = plugins_find (plugin_list, nplugins, "lens");
-  const char *path = pi ? pi->data : "";
-  if (!lensdb_read || strcmp (path, lensdb_path))
+  return pi ? pi->data : "";
+}
+
+/* Whether the database (for the plug-in there is now) is still to read. */
+static int lens_db_due (void)
+{
+  const char *path = lens_db_path ();
+  if (!path[0])                        /* no lens plug-in: only one that has gone to forget */
+    return lensdb != NULL || lensdb_loading != NULL;
+  return !lensdb_read || strcmp (path, lensdb_path) != 0;
+}
+
+/* Reads on until `until` (0: to the end). */
+static void lens_db_load (unsigned until)
+{
+  const char *path = lens_db_path ();
+  lens_db *db;
+  if (lensdb_loading && strcmp (path, lensdb_path) != 0)
+    {
+      lens_db_stop (lensdb_loading);   /* the plug-in changed under it */
+      lensdb_loading = NULL;
+    }
+  if (!lensdb_loading)
     {
       lens_db_close (lensdb);
+      lensdb = NULL;
+      lensdb_read = 0;
       snprintf (lensdb_path, sizeof lensdb_path, "%s", path);
-      _swix (Hourglass_On, 0);
-      lensdb = path[0] ? lens_db_open (path) : NULL;
-      _swix (Hourglass_Off, 0);
+      if (!path[0] || !(lensdb_loading = lens_db_start (path)))
+        {
+          lensdb_read = 1;
+          return;
+        }
+    }
+  if (lens_db_step (lensdb_loading, until ? app_now : NULL, until, &db))
+    {
+      lens_db_stop (lensdb_loading);
+      lensdb_loading = NULL;
+      lensdb = db;
       lensdb_read = 1;
+    }
+}
+
+lens_db *app_lens_db (void)
+{
+  if (!lens_db_path ()[0] && !lensdb && !lensdb_loading)
+    return NULL;
+  if (lens_db_due ())
+    {
+      _swix (Hourglass_On, 0);
+      lens_db_load (0);
+      _swix (Hourglass_Off, 0);
     }
   return lensdb;
 }
@@ -660,11 +709,12 @@ void app_quit (void)
 }
 
 static int previews_due (void);
+static int lens_db_due (void);
 
 int app_busy (void)
 {
   return pending_open[0] || viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib)
-         || rawjob_busy () || printbox_busy () || libbox_busy () || previews_due ();
+         || rawjob_busy () || printbox_busy () || libbox_busy () || previews_due () || lens_db_due ();
 }
 
 /* Previews are made when nothing else is going on: not while the Viewer,
@@ -777,6 +827,9 @@ static void idle (void)
   /* What is on screen comes first. */
   if (thumbcache_pending ())
     thumbcache_work (app_now, start + 1, browser_thumb_loaded);
+  /* The lens database, a slice at a time, soon after starting. */
+  if (lens_db_due ())
+    lens_db_load (start + 1);
   if (printbox_busy ())
     printbox_idle (deadline);
   if (libbox_busy ())

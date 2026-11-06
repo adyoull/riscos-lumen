@@ -1,5 +1,15 @@
 # Lumen changelog
 
+## 0.0.38.3 (6 November 2026): the lens database read in the background
+
+- Lens Correction's database (the LumenLens plug-in's) is read in the
+  background soon after Lumen starts, or when the plug-in is added, a
+  slice at a time between other work, so it's there before the first
+  photo wants it. Asked for before it's all read, the rest is read at
+  once, as before.
+- It's read 64 KB at a time instead of in small pieces, which is quicker
+  from an SD card and much quicker over a network.
+
 ## 0.0.38.2 (6 November 2026): layers faster again
 
 - Gradients and ovals are worked out along each row of the photo, from
