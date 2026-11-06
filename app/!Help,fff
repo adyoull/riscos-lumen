@@ -163,7 +163,10 @@ The tools above the sliders:
                 fine grid shows anyway
   Presets       Styles, Lumen's own looks; then your presets: apply one,
                 save the current look by name, or delete one. A preset
-                or style keeps the look, not the crop
+                or style keeps the look, not the crop. Each preset is a
+                Text file in <Choices$Write>.Lumen.Presets, for every
+                library: copy one to another computer's Lumen.Presets,
+                or drop it on Lumen's icon bar icon there, to share it
   Retouch       paints out spots (R); see Retouch and Brush below
   Brush         paints on lightening, darkening or colour (B)
 

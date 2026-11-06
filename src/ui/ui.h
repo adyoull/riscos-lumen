@@ -86,6 +86,7 @@ int app_event (int reason, int *block, int sender);
 int app_busy (void);
 void app_quit (void);
 void app_report (const char *msg);
+void app_inform (const char *msg);   /* news, not a problem */
 /* Choices' Discard: removes the library's previews and says how many. */
 void app_discard_previews (void);
 int app_confirm (const char *msg, const char *button);   /* 1: the button was chosen */
@@ -352,7 +353,10 @@ void looks_apply_selection (const char *look);
 /* The presets, read again (freed by the next call). */
 int looks_presets (cat_preset **out);
 int looks_save_preset (const char *name);   /* the viewer's look */
-void looks_delete_preset (cat_id id);
+void looks_delete_preset (const char *name);
+void looks_presets_dir (void);             /* <Choices$Write>.Lumen.Presets, from the prefs' directory */
+int looks_preset_dropped (const char *path, int type);   /* 1 if it was a preset file (added) */
+
 
 /* --- exportbox.c: the Export save box and the queue of exports */
 int exportbox_create (void);

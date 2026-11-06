@@ -51,6 +51,13 @@
   them (watched ones too) are looked through more quickly.
 - The guide says how Lumen knows photos.
 
+- Presets are files: each a Text file named after it in
+  <Choices$Write>.Lumen.Presets, used by every library. To share one,
+  copy it into another Lumen's Presets directory, or drop it on Lumen's
+  icon bar icon. It holds the look only (no crop, retouching or brush
+  strokes). Presets kept in a library by earlier Lumens move there the
+  first time it's opened; exporting a library takes them with it.
+
 ## 0.0.37 (4 November 2026): the plug-in API, menus and the loupe
 
 ### The plug-in API

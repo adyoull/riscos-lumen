@@ -23,6 +23,7 @@
 #include "exif.h"
 #include "colour.h"
 #include "export.h"
+#include "presets.h"
 #include "ui.h"
 
 #define BROWSER 0x2a000
@@ -1272,10 +1273,22 @@ int main (int argc, char **argv)
       {
         cat_preset *ps;
         int np;
-        cat_presets (lib_cat (app_library ()), &ps, &np);
-        CHECK (np == 1 && strcmp (ps[0].name, "Bright") == 0 && strstr (ps[0].recipe, "crop") == NULL,
-               "saved as Bright: the look, no crop");
+        char f[1200], line[64];
+        FILE *pf;
+        presets_list (&ps, &np);
+        CHECK (np == 1 && strcmp (ps[0].name, "Bright") == 0 && strstr (ps[0].recipe, "crop") == NULL
+               && strstr (ps[0].recipe, "exposure") != NULL, "Save current as: Bright, the look, no crop");
         free (ps);
+        cat_presets (lib_cat (app_library ()), &ps, &np);
+        CHECK (np == 0, "not in the library's catalogue");
+        free (ps);
+        snprintf (f, sizeof f, "%s/Presets/Bright", work);
+        pf = fopen (f, "r");
+        CHECK (pf && fgets (line, sizeof line, pf) && !strcmp (line, "Lumen preset 1\n")
+               && fgets (line, sizeof line, pf) && !strcmp (line, "Name: Bright\n"),
+               "a Text file, Presets.Bright, beside the Choices");
+        if (pf)
+          fclose (pf);
       }
       viewer_reset_all ();
       app_event (Mouse_Click, b, 0);
@@ -1284,6 +1297,52 @@ int main (int argc, char **argv)
       choose (4, 1, -1);
       CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f && viewer_recipe ()->v[P_CROP_X0] == 0,
              "applying it brings the look back (not the crop)");
+      {
+        /* Sharing: a copy of Bright's file (as from another computer's
+           Choices), Bright deleted, then the copy dropped on the icon bar. */
+        int pb[64], k2;
+        char shared[1200], bright[2048];
+        cat_preset *ps;
+        int np;
+        presets_list (&ps, &np);
+        snprintf (bright, sizeof bright, "%s", np ? ps[0].recipe : "");
+        free (ps);
+        snprintf (shared, sizeof shared, "%s/Show day", work);
+        presets_write_file (shared, "Show day", bright);
+        /* Delete > Bright */
+        app_event (Mouse_Click, b, 0);
+        choose (4, 3, 0);
+        presets_list (&ps, &np);
+        CHECK (np == 0, "Delete > Bright: its file goes");
+        free (ps);
+        /* The copy dropped on the icon bar icon. */
+        memset (pb, 0, sizeof pb);
+        k2 = browser_count ();
+        pb[1] = 0x7777; pb[2] = 0x6000; pb[4] = 3; pb[5] = -2; pb[6] = 0; pb[10] = 0xFFF;
+        strcpy ((char *) &pb[11], shared);
+        pb[0] = 44 + (int) ((strlen (shared) + 4) & ~3u);
+        app_event (User_Message, pb, 0);
+        CHECK (sent_block[4] == 4 && sent_block[3] == 0x6000, "a preset file dropped on the icon bar: DataLoadAck");
+        presets_list (&ps, &np);
+        CHECK (np == 1 && !strcmp (ps[0].name, "Show day"), "and it's one of the presets");
+        free (ps);
+        nulls_until_idle ();
+        CHECK (browser_count () == k2, "(not imported as a photo)");
+        /* A library's presets from before (in its catalogue) move to the directory. */
+        cat_preset_save (lib_cat (app_library ()), "Old one", "exposure ev=0.5\n");
+        cat_preset_save (lib_cat (app_library ()), "show DAY", "exposure ev=0.9\n");
+        app_event (Mouse_Click, b, 0);
+        pm = submenu (menu_open, 4);
+        CHECK (!strcmp (item_text (pm, 1), "Old one") && !strcmp (item_text (pm, 2), "Show day"),
+               "the library's old presets join them (one of a name there already doesn't replace it)");
+        cat_presets (lib_cat (app_library ()), &ps, &np);
+        CHECK (np == 0, "and leave the catalogue");
+        free (ps);
+        presets_delete ("Old one");
+        presets_delete ("Show day");
+        presets_save ("Bright", bright);   /* for Selection > Apply preset, below */
+        ptr_window = -1;
+      }
       {
         /* A style, then Undo and Redo from the toolbar. */
         int sepia = -1, k;
@@ -2832,7 +2891,7 @@ int main (int argc, char **argv)
            "a type with no name gets MimeMap's");
     app_event (Mouse_Click, (memset (b, 0, sizeof b), b[0] = 1000, b[2] = Button_Menu, b[3] = -2, b), 0);
     {
-      int *fm = submenu (menu_open, 7);
+      const int *fm = submenu (menu_open, 7);
       CHECK (fm && !strcmp (item_text (fm, 0), "Never") && !strcmp (item_text (fm, 1), "While Lumen is running")
              && (item (fm, 1)[0] & 1) && !strcmp (item_text (fm, 3), "JPEG") && !(item (fm, 3)[0] & 1)
              && !strcmp (item_text (fm, 3 + n), "Data, by name"), "File types menu: the choices, the types, Data");

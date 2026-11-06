@@ -664,6 +664,11 @@ a { color:#1f5fa8; }
 <figure><img src="images/presets-menu.png" alt="The Presets menu"><figcaption>The Photo menu with its Presets submenu.</figcaption></figure>
 </div>
 <p>To use a preset on several photos at once, select them in the Browser and choose <b>Selection &rarr; Apply preset</b>. Like a style, a preset keeps each photo's crop and straightening.</p>
+<h4>Sharing presets</h4>
+<p>Each preset is a small text file, named after it, in the <b>Presets</b> directory in Lumen's Choices (<code>&lt;Choices$Write&gt;.Lumen.Presets</code>; on most computers that's <code>!Boot.Choices.Lumen.Presets</code>). Every library you open uses the same presets.</p>
+<p>To give a preset to another computer (or a friend), copy its file into the other computer's <code>Lumen.Presets</code> directory, or drop it on Lumen's icon bar icon there: Lumen adds it, and says so. It's on the Presets menu straight away. A preset with the same name is replaced.</p>
+<p>The file holds only the look (the sliders, curve and colour settings), never a photo's crop, retouching or brush strokes. It starts <code>Lumen preset 1</code>, then <code>Name:</code> and the preset's name, which is what the menu shows, whatever the file is called. Exporting a library (<a href="#ch15">Chapter 15</a>) takes your presets with it too.</p>
+<div class="box note"><b class="label">NOTE</b>Presets saved with Lumen 0.0.37 or earlier were kept inside each library. The first time Lumen opens such a library, it moves them into the Presets directory (one with the same name as a preset already there is left as that one).</div>
 
 <h3 class="chapter" id="ch13"><span>13</span> What the camera recorded: the Info tab</h3>
 

@@ -46,6 +46,16 @@ void app_report (const char *msg)
   _swix (Wimp_ReportError, _INR (0, 2), &e, 1, APP_NAME);
 }
 
+/* Something done that the user should know of (Wimp_ReportError, new
+   style: OK, the information category, Lumen's icon). Not a problem. */
+void app_inform (const char *msg)
+{
+  _kernel_oserror e;
+  e.errnum = 0;
+  snprintf (e.errmess, sizeof e.errmess, "%s", msg);
+  _swix (Wimp_ReportError, _INR (0, 5), &e, 1 | 0x10 | 0x100 | (1 << 9), APP_NAME, "!lumen", 1, 0);
+}
+
 /* A question with a button for yes (Wimp_ReportError, new style: the
    question category, Cancel and the given button). 1 if it was chosen. */
 int app_confirm (const char *msg, const char *button)
@@ -591,6 +601,7 @@ int app_init (const char *library_path, const char *start_file)
   if (!prefs_path[0])
     app_load_prefs ();
   activity_init ();
+  looks_presets_dir ();
   if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ()
       || plugwin_create () || choicewin_create () || activitywin_create () || printbox_create ()
       || tagbox_create () || smartbox_create () || libbox_create ())
@@ -801,6 +812,14 @@ static void data_load (int *b)
       && b[5] != mainwin_inspector () && b[5] != -2 && b[5] != plugwin_window () && b[5] != choicewin_window ()
       && b[5] != libbox_import_window ())
     return;
+  /* A preset file (a copy of one from another Lumen's Choices), anywhere. */
+  if (looks_preset_dropped (path, type))
+    {
+      b[3] = b[2];
+      b[4] = Message_DataLoadAck;
+      _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
+      return;
+    }
   if (b[5] == -2 && b[6] == -1 && type != FT_DIR && type != FT_APP)
     {
       /* From another Lumen started with this photo: open it. */

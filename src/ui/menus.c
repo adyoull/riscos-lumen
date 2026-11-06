@@ -203,7 +203,7 @@ static void presets_choice (const int *c)
         preset_name[0] = '\0';
     }
   else if (c[0] == first + 1 && c[1] >= 0 && c[1] < slot)
-    looks_delete_preset (presets[c[1]].id);
+    looks_delete_preset (presets[c[1]].name);
 }
 
 /* Selection > Apply preset: Styles >, then the user's presets. */
@@ -237,7 +237,13 @@ static const char *presets_help (const int *c, int apply)
     }
   if (apply || c[0] <= (npresets > MAX_LIST ? MAX_LIST : npresets))
     return "A look you saved: it replaces the photo's look; its crop and straightening stay.";
-  return "Save the photo's look as a preset, or delete one.";
+  {
+    int slot = npresets > MAX_LIST ? MAX_LIST : npresets;
+    if (c[0] == 1 + (slot ? slot : 1))
+      return "Type a name and press Return to keep the photo's look as a preset: a file in Lumen's Choices "
+             "(Presets), for every library. Copy it to another Lumen's Presets to share it.";
+  }
+  return "Deletes one of your presets.";
 }
 
 static menu *group_menu (const char *title, const cat_group *g, int ng, int kind, const char *none)

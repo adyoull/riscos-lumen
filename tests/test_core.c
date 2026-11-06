@@ -22,6 +22,7 @@
 #include "../src/core/fsys.h"
 #include "../src/core/library.h"
 #include "../src/core/libxfer.h"
+#include "../src/core/presets.h"
 #include "../src/core/libcheck.h"
 #include "sqlite3.h"
 #include "../src/core/thumbgen.h"
@@ -1881,6 +1882,75 @@ static cat_id version_named (library *l, const char *name)
   return id;
 }
 
+/* Presets as files (presets.h). */
+static void test_presets (void)
+{
+  char dir[1024], path[1024], name[48], look[2048], err[300];
+  cat_preset *ps;
+  int n;
+  FILE *f;
+  library *a;
+
+  p (dir, "Presets");
+  presets_set_dir (dir);
+  CHECK (presets_list (&ps, &n) == 0 && n == 0 && ps == NULL, "presets: none yet (no directory)");
+  CHECK (presets_save ("Show day", "exposure ev=0.35\nenhance contrast=20\n") == 0
+         && presets_save ("cool: blue/teal", "wb temp=-20") == 0
+         && presets_save ("", "wb temp=1") == -1, "presets: saved (a name is needed)");
+  p (path, "Presets/Show day");
+  CHECK (presets_read_file (path, name, sizeof name, look, sizeof look) == 0 && !strcmp (name, "Show day")
+         && !strcmp (look, "exposure ev=0.35\nenhance contrast=20\n"), "presets: a file named after it, read back");
+  p (path, "Presets/cool_ blue_teal");
+  CHECK (presets_read_file (path, name, sizeof name, look, sizeof look) == 0 && !strcmp (name, "cool: blue/teal")
+         && !strcmp (look, "wb temp=-20\n"), "presets: what a leaf can't have is _ (the name keeps it)");
+  f = fopen ((p (path, "Presets/Notes"), path), "w");
+  if (f)
+    {
+      fputs ("Not a preset\n", f);
+      fclose (f);
+    }
+  f = fopen ((p (path, "Presets/Renamed"), path), "w");
+  if (f)
+    {
+      fputs ("Lumen preset 1\r\nName:  Golden hour  \r\nwb temp=15\r\n", f);
+      fclose (f);
+    }
+  CHECK (presets_list (&ps, &n) == 0 && n == 3 && !strcmp (ps[0].name, "cool: blue/teal") && ps[0].id == 1
+         && !strcmp (ps[1].name, "Golden hour") && !strcmp (ps[1].recipe, "wb temp=15\n")
+         && !strcmp (ps[2].name, "Show day") && ps[2].id == 3,
+         "presets: listed by name, any case; its Name counts, not the file's; other files ignored; CR LF too");
+  free (ps);
+  CHECK (presets_save ("SHOW DAY", "exposure ev=1") == 0 && presets_list (&ps, &n) == 0 && n == 3
+         && !strcmp (ps[2].name, "SHOW DAY") && !strcmp (ps[2].recipe, "exposure ev=1\n"),
+         "presets: saving one of the same name (any case) replaces it");
+  free (ps);
+  CHECK (file_there ("Presets/Show day") && !file_there ("Presets/SHOW DAY"), "presets: ... in its file");
+  CHECK (presets_delete ("golden HOUR") == 0 && presets_delete ("Golden hour") == -1
+         && !file_there ("Presets/Renamed"), "presets: deleted by name (its file goes)");
+
+  /* A file from elsewhere (shared). */
+  p (path, "shared preset");
+  CHECK (presets_write_file (path, "Mono", "saturation=-100") == 0, "presets: a copy written anywhere");
+  CHECK (presets_add_file (path) == 0 && presets_list (&ps, &n) == 0 && n == 3 && !strcmp (ps[1].name, "Mono"),
+         "presets: and added from there");
+  free (ps);
+  CHECK (presets_add_file ((p (path, "Presets/Notes"), path)) == -1, "presets: not from a file that isn't one");
+
+  /* A library's presets (from before) move in. */
+  p (path, "PresetLib");
+  CHECK (lib_open (&a, path, err, sizeof err) == 0, "presets: a library");
+  cat_preset_save (lib_cat (a), "Old", "exposure ev=0.2");
+  cat_preset_save (lib_cat (a), "mono", "saturation=-50");
+  CHECK (presets_take_from (lib_cat (a)) == 1, "presets: one new one from the library");
+  CHECK (cat_presets (lib_cat (a), &ps, &n) == 0 && n == 0, "presets: the catalogue's are gone");
+  free (ps);
+  CHECK (presets_list (&ps, &n) == 0 && n == 4 && !strcmp (ps[1].name, "Mono") && !strcmp (ps[1].recipe, "saturation=-100\n")
+         && !strcmp (ps[2].name, "Old"), "presets: Old added; Mono (there already) kept as it was");
+  free (ps);
+  lib_close (a);
+  presets_set_dir ("");
+}
+
 static void test_libxfer (void)
 {
   library *a, *b;
@@ -1945,7 +2015,11 @@ static void test_libxfer (void)
   CHECK (libx_import_plan (&x, a, lib_root (a), &sv, err, sizeof err) == -1 && strstr (err, "open"),
          "import: not the library itself");
 
-  /* The whole library, with its originals. */
+  /* The whole library, with its originals (and the user's presets). */
+  p (path, "XferPresets");
+  presets_set_dir (path);
+  presets_save ("warm", "wb temp=99");
+  presets_save ("Cool", "wb temp=-10");
   p (dst, "ExportAll");
   CHECK (libx_export (&x, a, dst, NULL, -1, 1, err, sizeof err) == 0, "export: the whole library starts");
   CHECK (libx_started (x) && libx_is_export (x), "export: started");
@@ -1971,10 +2045,12 @@ static void test_libxfer (void)
   CHECK (sql1 (b, "SELECT watch FROM project") == 1, "export: the whole library keeps watching");
   CHECK (sql1 (b, "SELECT COUNT(*) FROM version_keyword") == 4 && sql1 (b, "SELECT COUNT(*) FROM keyword") == 2,
          "export: keywords");
-  CHECK (sql1 (b, "SELECT COUNT(*) FROM stack") == 1 && sql1 (b, "SELECT COUNT(*) FROM preset") == 1,
-         "export: stack and preset");
+  CHECK (sql1 (b, "SELECT COUNT(*) FROM stack") == 1 && sql1 (b, "SELECT COUNT(*) FROM preset") == 2
+         && sql1 (b, "SELECT COUNT(*) FROM preset WHERE name = 'Cool'") == 1,
+         "export: stack and presets (the library's, then the user's of other names)");
   CHECK (sql1 (b, "SELECT label FROM version WHERE caption = 'The harbour wall'") == 2, "export: caption and label");
   lib_close (b);
+  presets_set_dir ("");
 
   /* Moved: its originals are found in the new place. */
   {
@@ -2863,6 +2939,7 @@ int main (int argc, char **argv)
   test_lazy_thumbs ();
   test_previews ();
   test_heif ();
+  test_presets ();
   test_libxfer ();
   test_libcheck ();
   test_libxfer_more ();

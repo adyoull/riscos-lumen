@@ -11,6 +11,7 @@
 #include "sqlite3.h"
 #include "fsys.h"
 #include "libxfer.h"
+#include "presets.h"
 
 enum { PH_PLANNED, PH_ORIGS, PH_MERGE, PH_THUMBS, PH_DONE };
 
@@ -531,6 +532,27 @@ static int export_rows (libxfer *x, const cat_id *v, int n, const char *dst)
             all ? "1" : "id IN (SELECT keyword FROM main.version_keyword WHERE version IN (SELECT id FROM x.sel))");
   if (run (x, sql))
     return -1;
+  /* The user's presets (presets.h) go too, for the library's new home. */
+  {
+    cat_preset *ps;
+    int np = 0, k;
+    if (presets_dir ()[0] && presets_list (&ps, &np) == 0 && np > 0)
+      {
+        if ((s = prep (x, "INSERT INTO x.preset (name, recipe) SELECT ?1, ?2"
+                          " WHERE NOT EXISTS (SELECT 1 FROM x.preset WHERE name = ?1 COLLATE NOCASE)")))
+          {
+            for (k = 0; k < np; k++)
+              {
+                sqlite3_bind_text (s, 1, ps[k].name, -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text (s, 2, ps[k].recipe, -1, SQLITE_TRANSIENT);
+                sqlite3_step (s);
+                sqlite3_reset (s);
+              }
+            sqlite3_finalize (s);
+          }
+        free (ps);
+      }
+  }
   if ((s = prep (x, "INSERT OR REPLACE INTO x.meta VALUES ('home', ?1)")))
     {
       sqlite3_bind_text (s, 1, dst, -1, SQLITE_TRANSIENT);
