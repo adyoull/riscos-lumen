@@ -75,10 +75,11 @@
 #define COL_STAR_OFF 0x9A9A9A00u
 #define COL_GRID 0xC8C8C800u
 #define COL_CROP 0xFFFFFF00u
+#define COL_HEADER 0xC9C9C900u          /* a group's header bar (folds it) */
 
 enum { V_CLOSED, V_LOADING, V_READY, V_FAILED };
 enum { HIT_NONE, HIT_SLIDER, HIT_LINK, HIT_UNDO, HIT_REDO, HIT_RESET_ALL, HIT_TOOL, HIT_IMAGE, HIT_GROUP, HIT_CURVE, HIT_CURVE_TAB,
-       HIT_HSL_BAND, HIT_LABEL };
+       HIT_HSL_BAND, HIT_LABEL, HIT_MASK_LINE, HIT_MASK_TICK, HIT_MASK_BUTTON, HIT_MASK_SLIDER, HIT_MASK_BRUSH, HIT_MASK_RT, HIT_FOLD_ALL };
 #define LABEL_X0 250                   /* the panel's colour label dots: the first's centre */
 #define LABEL_DX 24
 enum { TOOL_AUTO, TOOL_CROP, TOOL_GRID, TOOL_PRESETS, TOOL_RETOUCH, TOOL_BRUSH, TOOL_COUNT };
@@ -119,8 +120,16 @@ static int crop_mode, crop_edges, crop_shape, grid_mode, picking;
 
 /* Retouch: spots painted out (retouch.h). The proxy is kept as decoded
    (src_orig) once a photo has spots; src is it with the spots applied. */
-static int retouching, rt_clone;       /* a local tool is on (Retouch, or Brush with brushing) */
-static int brushing, br_kind;
+static int retouching, rt_clone;       /* a local tool is on (Retouch, or Masks with brushing) */
+static int brushing, br_kind;          /* br_kind: BRUSH_ADD or BRUSH_ERASE */
+static int mk_sel = -1;                /* the chosen mask (-1: none; painting makes a new one) */
+static int mk_new = -1;                /* MASK_GRADIENT or MASK_RADIAL: the next drag draws one */
+static int mk_show, mk_handle;         /* Show mask; the handle being dragged */
+static recipe_mask mk_last;            /* the adjustments a new mask starts with */
+static int mk_last_set;
+static float mk_du0, mk_dv0;           /* where a new shape's drag began */
+static float rt_gu, rt_gv;             /* where a spot was taken hold of */
+static int applied_show = -1;          /* the mask src shows in red */
 static float br_pts[RECIPE_STROKE_MAX * 2];   /* the stroke being painted */
 static int br_n;
 static float rt_strength;              /* a stroke's amount */
@@ -140,8 +149,18 @@ static float rt_dx, rt_dy;             /* where it is being moved to (fractions)
 #define DRAG_RT_FEATHER (-7)
 #define DRAG_RT_STRENGTH (-8)
 #define DRAG_STROKE (-9)
+#define DRAG_HANDLE (-11)
+#define DRAG_SHAPE (-12)
+#define DRAG_MASK_SLIDER (-30)         /* - M_EV ... - M_SHARPNESS */
+static void handle_follow (float u, float v);
+static void shape_end (float u, float v);
+static void mask_value (int p, float v, int live);
+static float mb_slider_value (int p, int x);
+static recipe_mask *mb_mask (void);
 static void stroke_follow (int wx, int wy);
 static void stroke_end (void);
+static void draw_masks_panel (int ox, int oy);
+static void masks_panel_click (const int *b, int h, int what, int wx, const int *st);
 static float *rt_slider_var (int k);
 static float rt_size_max (void);
 void viewer_toggle_retouch (void);
@@ -307,10 +326,13 @@ static void free_photo (void)
   free (src_orig);
   src_orig = NULL;
   applied_n = -1;
+  applied_show = -1;
   retouching = 0;
   br_n = 0;
   rt_drag = -1;
   rt_sel = -1;
+  mk_sel = mk_new = -1;
+  mk_show = 0;
   sprite_free (&full_spr);
   sprite_free (&half_spr);
   full_y = -1;
@@ -334,9 +356,47 @@ static void image_rect (int r[4])
 static int hist_top (void) { return -PAD; }
 static int info_top (void) { return hist_top () - HIST_H - 16; }
 static int tools_top (void) { return info_top () - INFO_H; }
-static int groups_top (void) { return tools_top () - TOOLS_H; }
+/* Fold all and Open all, on a line of their own under the tools (for
+   the Layers section and the groups). */
+#define FOLD_LINKS_H 44
+static int fold_links_h (void);
+static int fold_links_top (void) { return tools_top () - TOOLS_H; }
+static int masks_top (void) { return fold_links_top () - fold_links_h (); }
+static int masks_height (void);
+static int groups_top (void) { return masks_top () - masks_height (); }
 
-static int group_shown (int g) { return recipe_groups[g].panel; }
+/* While the Masks tool is on, the panel is the masks' (the groups go). */
+static int group_shown (int g) { return recipe_groups[g].panel && !(retouching && brushing); }
+
+/* --- the panel's Masks section: a line for each mask (a tick to switch
+   it off and on), and while the Masks tool is on, buttons for new ones,
+   the chosen mask's sliders, and Invert, Show mask and Delete. Shown when
+   the photo has masks, or the tool is on. */
+#define MASK_LINE_H 52
+enum { MB_NEW_BRUSH, MB_NEW_GRADIENT, MB_NEW_RADIAL, MB_INVERT, MB_SHOW, MB_DELETE, MB_BUTTONS };
+static int masks_tool (void) { return retouching && brushing; }
+static int fold_links_h (void) { return retouching && brushing ? 0 : FOLD_LINKS_H; }
+static int masks_folded;               /* the list folded away (not while the tool is on) */
+static int masks_shown (void) { return src && (current.nmasks > 0 || masks_tool ()); }
+static int mask_lines (void) { return current.nmasks ? current.nmasks : 1; }
+
+static int mask_line_top (int i) { return masks_top () - GROUP_H - i * MASK_LINE_H; }
+static int mask_new_top (void) { return mask_line_top (mask_lines ()) - 52; }
+/* The brush: Add and Erase, then Size, Feather and Flow (RT_*). */
+static int mask_brush_top (void) { return mask_new_top () - BUTTON_H - 52; }
+static int mask_rt_top (int k) { return mask_brush_top () - BUTTON_H - 8 - k * ROW_H; }
+/* The chosen layer's adjustments. */
+static int mask_slider_top (int k) { return mask_rt_top (RT_SLIDERS) - 52 - k * ROW_H; }
+static int mask_buttons_top (void) { return mask_slider_top (M_COUNT) - 12; }
+
+static int masks_height (void)
+{
+  if (!masks_shown ())
+    return 0;
+  if (!masks_tool ())
+    return masks_folded ? GROUP_H + 8 : GROUP_H + mask_lines () * MASK_LINE_H + 24;
+  return masks_top () - (mask_buttons_top () - BUTTON_H) + 24;
+}
 
 /* Groups fold away: a click on a group's name. A
    group the person hasn't folded or opened themselves is folded
@@ -518,7 +578,7 @@ static void button_at (int k, int n, int top, int r[4])
 }
 
 static void button_rect (int k, int r[4]) { button_at (k, 3, buttons_top (), r); }
-/* Auto, Crop, Grid, Presets; then Retouch and Brush, a row lower. */
+/* Auto, Crop, Grid, Presets; then Retouch and Masks, a row lower. */
 static void tool_rect (int k, int r[4])
 {
   if (k < TOOL_RETOUCH)
@@ -628,6 +688,74 @@ static int hit (int wx, int wy, int *what, int panel)
         *what = k;
         return HIT_HSL_BAND;
       }
+  if (masks_shown ())
+    {
+      if (!masks_tool () && wy <= masks_top () && wy > masks_top () - GROUP_H && wx >= PANEL_W - PAD - 120)
+        {
+          *what = -1;                  /* Edit */
+          return HIT_MASK_LINE;
+        }
+      if (!masks_tool () && wy <= masks_top () && wy > masks_top () - GROUP_H && wx >= panel_x0 () + PAD)
+        {
+          *what = -2;                  /* fold or open */
+          return HIT_MASK_LINE;
+        }
+      for (k = 0; k < (masks_folded && !masks_tool () ? 0 : current.nmasks); k++)
+        if (wy <= mask_line_top (k) && wy > mask_line_top (k) - MASK_LINE_H && wx >= panel_x0 () + PAD && wx <= PANEL_W - PAD)
+          {
+            *what = k;
+            return wx < panel_x0 () + PAD + 52 ? HIT_MASK_TICK : HIT_MASK_LINE;
+          }
+      if (masks_tool ())
+        {
+          for (k = 0; k < MB_BUTTONS; k++)
+            {
+              button_at (k % 3, 3, k < 3 ? mask_new_top () : mask_buttons_top (), r);
+              if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
+                {
+                  *what = k;
+                  return HIT_MASK_BUTTON;
+                }
+            }
+          for (k = 0; k < M_COUNT; k++)
+            if (wy <= mask_slider_top (k) && wy > mask_slider_top (k) - ROW_H && wx >= track_x0 () - 24 && wx <= track_x1 () + 24)
+              {
+                *what = k;
+                return HIT_MASK_SLIDER;
+              }
+          for (k = 0; k < BRUSH_KINDS; k++)
+            {
+              button_at (k, 3, mask_brush_top (), r);
+              if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
+                {
+                  *what = k;
+                  return HIT_MASK_BRUSH;
+                }
+            }
+          for (k = 0; k < RT_SLIDERS; k++)
+            if (wy <= mask_rt_top (k) && wy > mask_rt_top (k) - ROW_H && wx >= track_x0 () - 24 && wx <= track_x1 () + 24)
+              {
+                *what = k;
+                return HIT_MASK_RT;
+              }
+        }
+    }
+  if (fold_links_h () && wy <= fold_links_top () && wy > fold_links_top () - FOLD_LINKS_H)
+    {
+      int x1 = PANEL_W - PAD, x0 = x1 - draw_text_width ("Open all");
+      if (wx >= x0 - 12 && wx <= x1 + 4)
+        {
+          *what = 1;                   /* Open all */
+          return HIT_FOLD_ALL;
+        }
+      x1 = x0 - 40;
+      x0 = x1 - draw_text_width ("Fold all");
+      if (wx >= x0 - 12 && wx <= x1 + 12)
+        {
+          *what = 0;
+          return HIT_FOLD_ALL;
+        }
+    }
   for (p = 0; p < P_COUNT; p++)
     {
       int top = row_top (p);
@@ -654,9 +782,9 @@ static int hit (int wx, int wy, int *what, int panel)
               return HIT_LINK;
             }
         }
-      if (wx < panel_x0 () + PAD + 44 + draw_text_width (recipe_groups[g].name) + 24)
+      if (wx >= panel_x0 () + PAD && wx <= PANEL_W - PAD)
         {
-          *what = g;
+          *what = g;                   /* anywhere on its header bar */
           return HIT_GROUP;
         }
     }
@@ -769,7 +897,7 @@ void viewer_title (char *out, size_t n)
     }
   snprintf (out, n, "%s (%d of %d)%s%s", item.name, index_in_list + 1,
             browser_count (), recipe_is_default (previewing ? &preview_saved : &current) ? "" : "  \xB7  edited",
-            crop_mode ? "  \xB7  cropping" : retouching ? (brushing ? "  \xB7  brushing" : "  \xB7  retouching") : "");
+            crop_mode ? "  \xB7  cropping" : retouching ? (brushing ? "  \xB7  layers" : "  \xB7  retouching") : "");
 }
 
 static void update_title (void)
@@ -1514,12 +1642,15 @@ static int retouch_sync (void)
 {
   recipe r;
   size_t bytes = (size_t) sw * sh * 6;
+  int show = retouching && brushing && mk_show && !before ? mk_sel : -1;
   effective (&r);
-  if (!src || (applied_n >= 0 && recipe_spots_equal (&applied, &r) && recipe_strokes_equal (&applied, &r)))
+  if (!src || (applied_n >= 0 && recipe_spots_equal (&applied, &r) && recipe_masks_equal (&applied, &r)
+               && recipe_strokes_equal (&applied, &r) && show == applied_show))
     return 0;
+  applied_show = show;
   if (!src_orig)
     {
-      if (!r.nspots && !r.nstrokes)
+      if (!r.nspots && !r.nmasks)
         {
           applied = r;
           applied_n = 0;
@@ -1531,7 +1662,7 @@ static int retouch_sync (void)
     }
   else
     memcpy (src, src_orig, bytes);
-  retouch_lin (src, sw, sh, &r);
+  retouch_lin_show (src, sw, sh, &r, show);
   make_half ();
   applied = r;
   applied_n = 1;
@@ -1864,6 +1995,32 @@ void viewer_idle (void)
             }
           else if (dragging == DRAG_STROKE)
             stroke_follow (ptr[0] - b[1], ptr[1] - b[4]);
+          else if (dragging <= DRAG_MASK_SLIDER && dragging > DRAG_MASK_SLIDER - M_COUNT)
+            {
+              int k = DRAG_MASK_SLIDER - dragging;
+              float v = mb_slider_value (k, ptr[0] - b[1]);
+              recipe_mask *m = mb_mask ();
+              if (fabsf (v - m->v[k]) >= recipe_mask_params[k].step / 2)
+                mask_value (k, v, 1);
+            }
+          else if (dragging == DRAG_HANDLE || dragging == DRAG_SHAPE)
+            {
+              int r[4];
+              float u, v;
+              if (photo_rect (r) && screen_to_photo (r, ptr[0] - b[1], ptr[1] - b[4], &u, &v))
+                {
+                  u = u < 0 ? 0 : u > 1 ? 1 : u;
+                  v = v < 0 ? 0 : v > 1 ? 1 : v;
+                  if (dragging == DRAG_HANDLE)
+                    handle_follow (u, v);
+                  else
+                    {
+                      rt_dx = u;
+                      rt_dy = v;
+                      force_image ();
+                    }
+                }
+            }
           else if (dragging == DRAG_SPOT)
             {
               int r[4];
@@ -2558,6 +2715,8 @@ static void click_in (int *b, int w, int panel)
       start_drag (b[0], b[1], st[1] + track_x0 () - 4, st[4] + row_top (what) - ROW_H + 4,
                   st[1] + track_x1 () + 4, st[4] + row_top (what) - 4, what);
     }
+  else if (h >= HIT_MASK_LINE && h <= HIT_MASK_RT)
+    masks_panel_click (b, h, what, wx, st);
   else if (h == HIT_IMAGE && retouching && (b[2] == Button_Select || b[2] == Button_Adjust))
     retouch_click (b, wx, wy);
   else if (h == HIT_IMAGE && b[2] == Button_Adjust && loupe_on)
@@ -2630,10 +2789,39 @@ static void click_in (int *b, int w, int panel)
     curve_click (b, st, wx, wy);
   else if (h == HIT_LINK && b[2] == Button_Select)
     link_click (what / 8, what % 8);
-  else if (h == HIT_GROUP && what < MAX_GROUPS && (b[2] == Button_Select || b[2] == Button_Adjust))
+  else if (h == HIT_GROUP && what < MAX_GROUPS && b[2] == Button_Select)
     {
       folded[what] = !folded[what];
       folded_by_hand[what] = 1;
+      fit_panel ();
+      force_panel ();
+    }
+  else if (h == HIT_GROUP && what < MAX_GROUPS && b[2] == Button_Adjust)
+    {
+      /* Adjust: like a concertina, this group open and the others folded
+         (on the only one open: all open again). */
+      int g, others = 0;
+      for (g = 0; g < recipe_ngroups && g < MAX_GROUPS; g++)
+        if (g != what && group_shown (g) && !folded[g])
+          others = 1;
+      for (g = 0; g < recipe_ngroups && g < MAX_GROUPS; g++)
+        {
+          folded[g] = others || folded[what] ? g != what : 0;
+          folded_by_hand[g] = 1;
+        }
+      masks_folded = others || folded[what] ? 1 : 0;
+      fit_panel ();
+      force_panel ();
+    }
+  else if (h == HIT_FOLD_ALL && b[2] == Button_Select)
+    {
+      int g;
+      for (g = 0; g < recipe_ngroups && g < MAX_GROUPS; g++)
+        {
+          folded[g] = !what;
+          folded_by_hand[g] = 1;
+        }
+      masks_folded = !what;
       fit_panel ();
       force_panel ();
     }
@@ -2672,6 +2860,22 @@ void viewer_drag_end (void)
       stroke_end ();
       return;
     }
+  if (p <= DRAG_MASK_SLIDER && p > DRAG_MASK_SLIDER - M_COUNT)
+    {
+      int k = DRAG_MASK_SLIDER - p;
+      mask_value (k, mb_mask ()->v[k], 0);
+      return;
+    }
+  if (p == DRAG_HANDLE)
+    {
+      spots_changed ();
+      return;
+    }
+  if (p == DRAG_SHAPE)
+    {
+      shape_end (rt_dx, rt_dy);
+      return;
+    }
   if (p == DRAG_RT_SIZE || p == DRAG_RT_FEATHER || p == DRAG_RT_STRENGTH)
     {
       rt_apply (0);
@@ -2681,22 +2885,9 @@ void viewer_drag_end (void)
     {
       if (rt_drag >= 0 && rt_drag < current.nspots)
         {
-          recipe_spot *sp = &current.spot[rt_drag];
-          if (rt_drag_src)
-            {
-              sp->sx = rt_dx;
-              sp->sy = rt_dy;
-            }
-          else
-            {
-              /* The spot moves; its source keeps its place beside it. */
-              sp->sx += rt_dx - sp->x;
-              sp->sy += rt_dy - sp->y;
-              sp->x = rt_dx;
-              sp->y = rt_dy;
-              sp->sx = sp->sx < 0 ? 0 : sp->sx > 1 ? 1 : sp->sx;
-              sp->sy = sp->sy < 0 ? 0 : sp->sy > 1 ? 1 : sp->sy;
-            }
+          /* The spot moves (its source keeps its place beside it), or
+             only its source. */
+          recipe_spot_move (&current, rt_drag, rt_dx - rt_gu, rt_dy - rt_gv, rt_drag_src);
           rt_drag = -1;
           spots_changed ();
         }
@@ -3195,7 +3386,7 @@ static void draw_panel (int ox, int oy)
   }
   /* Tools */
   {
-    static const char *const names[TOOL_COUNT] = { "Auto", "Crop", "Grid", "Presets", "Retouch", "Brush" };
+    static const char *const names[TOOL_COUNT] = { "Auto", "Crop", "Grid", "Presets", "Retouch", "Layers" };
     for (k = 0; k < TOOL_COUNT; k++)
       {
         int r[4];
@@ -3207,6 +3398,29 @@ static void draw_panel (int ox, int oy)
                           ox, oy);
       }
   }
+  draw_masks_panel (ox, oy);
+  if (fold_links_h ())
+    {
+      int y = oy + fold_links_top () - 32, x1 = ox + PANEL_W - PAD, x0 = x1 - draw_text_width ("Open all"), any_open = 0, any_folded = 0;
+      for (g = 0; g < recipe_ngroups && g < MAX_GROUPS; g++)
+        if (group_shown (g))
+          {
+            if (folded[g])
+              any_folded = 1;
+            else
+              any_open = 1;
+          }
+      if (masks_shown () && current.nmasks)
+        {
+          if (masks_folded)
+            any_folded = 1;
+          else
+            any_open = 1;
+        }
+      draw_text (x0, y, "Open all", any_folded ? COL_ACCENT : COL_STAR_OFF, COL_PANEL);
+      x1 = x0 - 40;
+      draw_text (x1 - draw_text_width ("Fold all"), y, "Fold all", any_open ? COL_ACCENT : COL_STAR_OFF, COL_PANEL);
+    }
   /* Groups of sliders */
   for (g = 0; g < recipe_ngroups; g++)
     {
@@ -3219,9 +3433,10 @@ static void draw_panel (int ox, int oy)
         for (p = P_CROP_X0; p <= P_CROP_Y1; p++)   /* its Reset takes the crop away too */
           if (current.v[p] != recipe_params[p].def)
             changed = 1;
-      draw_rect (px + PAD, top - 2, ox + PANEL_W - PAD, top, COL_TRACK);
-      draw_disclosure (px + PAD + 12, top - 26, g < MAX_GROUPS && folded[g]);
-      draw_text (px + PAD + 36, top - 36, recipe_groups[g].name, COL_TEXT, COL_PANEL);
+      /* Its header: a bar across the panel; a click on it folds the group. */
+      draw_rect (px + PAD, top - GROUP_H + 6, ox + PANEL_W - PAD, top, COL_HEADER);
+      draw_disclosure (px + PAD + 16, top - 24, g < MAX_GROUPS && folded[g]);
+      draw_text (px + PAD + 40, top - 36, recipe_groups[g].name, COL_TEXT, COL_HEADER);
       n = group_links (g, ids, names);
       for (k = 0; k < n; k++)
         {
@@ -3236,7 +3451,7 @@ static void draw_panel (int ox, int oy)
               draw_text (ox + x0, top - 36, names[k], COL_KNOB, COL_ACCENT);
               continue;
             }
-          draw_text (ox + x0, top - 36, names[k], src ? col : COL_STAR_OFF, COL_PANEL);
+          draw_text (ox + x0, top - 36, names[k], src ? (col == COL_STAR_OFF ? COL_QUIET : col) : COL_QUIET, COL_HEADER);
         }
       if (recipe_groups[g].curves && !(g < MAX_GROUPS && folded[g]))
         draw_curves (ox, oy);
@@ -3305,9 +3520,11 @@ static int radius_on_screen (const int out[4], float u, float v, float r)
 }
 
 /* The tools' controls, in a box across the top of the photo's area: the
-   tool's buttons (Repair and Clone; Dodge, Burn, Saturate, Desaturate)
-   and Done; below, sliders for a new spot's or stroke's size, feather
-   (and strength), which change the one last placed or moved too. */
+   tool's buttons (Repair and Clone; Add and Erase for masks) and Done;
+   below, sliders for a new spot's or stroke's size, feather (and, for
+   masks, flow), which change the one last placed or moved too. The
+   masks themselves (the list, new ones, the chosen one's sliders,
+   Invert, Show mask and Delete) are in the panel: masks_* above. */
 
 static int rt_nbuttons (void) { return brushing ? BRUSH_KINDS + 1 : 3; }
 static int rt_nsliders (void) { return brushing ? 3 : 2; }
@@ -3343,9 +3560,19 @@ static void rt_button (int k, int r[4])
 }
 
 /* A slider's track (the knob's travel); its label is to the left, its value to the right. */
+static int mask_rt_top (int k);
 static void rt_track (int k, int r[4])
 {
   int box[4];
+  if (brushing)
+    {
+      /* In the panel (the Layers section). */
+      r[0] = track_x0 ();
+      r[2] = track_x1 ();
+      r[3] = mask_rt_top (k);
+      r[1] = r[3] - ROW_H;
+      return;
+    }
   rt_box (box);
   r[0] = box[0] + 12 + k * RT_SLOT + RT_LABEL_W;
   r[2] = r[0] + RT_TRACK_W;
@@ -3380,7 +3607,96 @@ static int rt_slider_x (int k)
   return t[0] + (int) lround (f * (t[2] - t[0]));
 }
 
-static const unsigned brush_colours[BRUSH_KINDS] = { 0x40E0F000u, 0xF0904000u, 0x5050F000u, 0xC0C0C000u };
+/* The adjustments the sliders show: the chosen mask's, or (none chosen)
+   those a new one starts with. */
+static recipe_mask *mb_mask (void)
+{
+  return mk_sel >= 0 && mk_sel < current.nmasks ? &current.mask[mk_sel] : &mk_last;
+}
+
+static float mb_slider_value (int p, int x)
+{
+  const recipe_param *d = &recipe_mask_params[p];
+  float f = (float) (x - track_x0 ()) / (track_x1 () - track_x0 ());
+  f = f < 0 ? 0 : f > 1 ? 1 : f;
+  return d->min + f * (d->max - d->min);
+}
+
+/* A mask's pin: where it is shown on the photo, to choose it. */
+static void mask_pin (int i, float *u, float *v)
+{
+  const recipe_mask *m = &current.mask[i];
+  int k;
+  if (m->kind == MASK_GRADIENT)
+    {
+      *u = (m->x0 + m->x1) / 2;
+      *v = (m->y0 + m->y1) / 2;
+      return;
+    }
+  if (m->kind == MASK_RADIAL)
+    {
+      *u = m->x0;
+      *v = m->y0;
+      return;
+    }
+  *u = *v = 0.5f;
+  for (k = 0; k < current.nstrokes; k++)
+    if (current.stroke[k].mask == i && current.stroke[k].kind == BRUSH_ADD)
+      {
+        *u = current.pt[current.stroke[k].first][0] / 10000.0f;
+        *v = current.pt[current.stroke[k].first][1] / 10000.0f;
+        return;
+      }
+}
+
+/* The chosen mask's handles on the photo: gradient 0 start, 1 end, 2 the
+   middle (moves both); radial 0 centre, 1 width, 2 height. */
+static int mask_handle (int h, float *u, float *v)
+{
+  const recipe_mask *m;
+  if (mk_sel < 0 || mk_sel >= current.nmasks)
+    return 0;
+  m = &current.mask[mk_sel];
+  if (m->kind == MASK_GRADIENT)
+    {
+      *u = h == 0 ? m->x0 : h == 1 ? m->x1 : (m->x0 + m->x1) / 2;
+      *v = h == 0 ? m->y0 : h == 1 ? m->y1 : (m->y0 + m->y1) / 2;
+      return 1;
+    }
+  if (m->kind == MASK_RADIAL)
+    {
+      *u = h == 1 ? m->x0 + m->x1 : m->x0;
+      *v = h == 2 ? m->y0 + m->y1 : m->y0;
+      return 1;
+    }
+  return 0;
+}
+
+static const unsigned brush_colours[BRUSH_KINDS] = { 0x40E0F000u, 0xC0C0C000u };
+
+/* A line kept inside the photo (out); nothing if it misses it. */
+static void draw_line_in (const int out[4], int x0, int y0, int x1, int y1, unsigned colour)
+{
+  double t0 = 0, t1 = 1, dx = x1 - x0, dy = y1 - y0;
+  double p[4] = { -dx, dx, -dy, dy }, q[4] = { x0 - out[0], out[2] - x0, y0 - out[1], out[3] - y0 };
+  int k;
+  for (k = 0; k < 4; k++)
+    {
+      if (p[k] == 0)
+        {
+          if (q[k] < 0)
+            return;
+          continue;
+        }
+      {
+        double t = q[k] / p[k];
+        if (p[k] < 0) { if (t > t1) return; if (t > t0) t0 = t; }
+        else { if (t < t0) return; if (t < t1) t1 = t; }
+      }
+    }
+  draw_line ((int) lround (x0 + t0 * dx), (int) lround (y0 + t0 * dy), (int) lround (x0 + t1 * dx), (int) lround (y0 + t1 * dy),
+             colour);
+}
 
 /* A stroke's path on the screen (out: on the screen, as draw_overlays). */
 static void draw_path (const int out[4], const float *xy, int n, unsigned colour, int bold)
@@ -3415,51 +3731,358 @@ static void stroke_points (const recipe_stroke *st, float *xy)
     }
 }
 
+/* A painted spot's path (moved by du, dv), as fractions. */
+static int spot_points (int i, float du, float dv, float *xy)
+{
+  const recipe_spot *sp = &current.spot[i];
+  int j, n = sp->n >= 2 ? sp->n : 1;
+  for (j = 0; j < n; j++)
+    {
+      recipe_spot_point (&current, i, j, &xy[2 * j], &xy[2 * j + 1]);
+      xy[2 * j] += du;
+      xy[2 * j + 1] += dv;
+    }
+  return n;
+}
+
+/* An oval on the photo (centre, half-widths as fractions), through the geometry. */
+static void draw_oval (const int out[4], float cu, float cv, float ru, float rv, unsigned colour)
+{
+  int k, px = 0, py = 0, ok = 0;
+  for (k = 0; k <= 48; k++)
+    {
+      double a = 2 * 3.14159265358979 * k / 48;
+      int x, y;
+      if (!photo_to_screen (out, cu + (float) (cos (a) * ru), cv + (float) (sin (a) * rv), &x, &y))
+        return;
+      if (ok)
+        {
+          draw_line (px, py - 2, x, y - 2, COL_FRAME);
+          draw_line (px, py, x, y, colour);
+        }
+      px = x;
+      py = y;
+      ok = 1;
+    }
+}
+
+static void draw_handle (const int out[4], float u, float v, int on)
+{
+  int x, y;
+  if (!photo_to_screen (out, u, v, &x, &y))
+    return;
+  draw_rect (x - 12, y - 12, x + 12, y + 12, COL_FRAME);
+  draw_rect (x - 9, y - 9, x + 9, y + 9, on ? COL_ACCENT : COL_KNOB);
+}
+
+/* The chosen gradient's or oval's lines and handles; the masks' pins. */
+static void draw_masks (const int out[4])
+{
+  int i;
+  static float xy[RECIPE_STROKE_MAX * 2];
+  for (i = 0; i < current.nstrokes; i++)
+    if (current.stroke[i].mask == mk_sel)
+      {
+        stroke_points (&current.stroke[i], xy);
+        draw_path (out, xy, current.stroke[i].n, brush_colours[current.stroke[i].kind], i == rt_sel);
+      }
+  if (mk_sel >= 0 && mk_sel < current.nmasks)
+    {
+      const recipe_mask *m = &current.mask[mk_sel];
+      float u, v;
+      if (m->kind == MASK_GRADIENT)
+        {
+          /* The line from all of it to none, and across at each end. */
+          double du = m->x1 - m->x0, dv = m->y1 - m->y0, l;
+          int k;
+          {
+            float a[4] = { m->x0, m->y0, m->x1, m->y1 };
+            draw_path (out, a, 2, COL_KNOB, 0);
+          }
+          l = sqrt (du * du * sw * sw + dv * dv * sh * sh);
+          if (l > 0)
+            for (k = 0; k < 2; k++)
+              {
+                /* Perpendicular, in the photo's pixels, a long way each side. */
+                double px = -dv * sh / l, py = du * sw / l, cu = k ? m->x1 : m->x0, cv = k ? m->y1 : m->y0, len = 3.0 * (sw > sh ? sw : sh);
+                int ax, ay, bx, by;
+                if (photo_to_screen (out, (float) (cu + px * len / sw), (float) (cv + py * len / sh), &ax, &ay)
+                    && photo_to_screen (out, (float) (cu - px * len / sw), (float) (cv - py * len / sh), &bx, &by))
+                  {
+                    draw_line_in (out, ax, ay - 2, bx, by - 2, COL_FRAME);
+                    draw_line_in (out, ax, ay, bx, by, k ? 0xA0A0A000u : COL_KNOB);
+                  }
+              }
+        }
+      else if (m->kind == MASK_RADIAL)
+        {
+          draw_oval (out, m->x0, m->y0, m->x1, m->y1, COL_KNOB);
+          draw_oval (out, m->x0, m->y0, m->x1 * (1 - (m->f < 0.02f ? 0.02f : m->f)), m->y1 * (1 - (m->f < 0.02f ? 0.02f : m->f)),
+                     0xA0A0A000u);
+        }
+      for (i = 0; i < 3 && mask_handle (i, &u, &v); i++)
+        draw_handle (out, u, v, dragging == DRAG_HANDLE && mk_handle == i);
+    }
+  for (i = 0; i < current.nmasks; i++)
+    {
+      float u, v;
+      int x, y;
+      if (i == mk_sel && current.mask[i].kind != MASK_BRUSH)
+        continue;                      /* its handles show where it is */
+      mask_pin (i, &u, &v);
+      if (!photo_to_screen (out, u, v, &x, &y))
+        continue;
+      draw_circle (x, y, 15, COL_FRAME);
+      draw_circle (x, y, 12, i == mk_sel ? COL_ACCENT : COL_KNOB);
+      draw_circle (x, y, 6, i == mk_sel ? COL_KNOB : COL_ACCENT);
+    }
+  /* A new gradient or oval being drawn. */
+  if (dragging == DRAG_SHAPE)
+    {
+      if (mk_new == MASK_GRADIENT)
+        {
+          float a[4] = { mk_du0, mk_dv0, rt_dx, rt_dy };
+          draw_path (out, a, 2, COL_KNOB, 1);
+        }
+      else
+        draw_oval (out, mk_du0, mk_dv0, fabsf (rt_dx - mk_du0) > 0.005f ? fabsf (rt_dx - mk_du0) : 0.005f,
+                   fabsf (rt_dy - mk_dv0) > 0.005f ? fabsf (rt_dy - mk_dv0) : 0.005f, COL_KNOB);
+    }
+}
+
+/* A mask's name ("Gradient 2") and what it does ("-1.00 EV, Shadows +30"). */
+static void mask_words (int i, char *name, size_t nn, char *what, size_t wn)
+{
+  static const char *const kinds[MASK_KINDS] = { "Brush", "Gradient", "Radial" };
+  const recipe_mask *m = &current.mask[i];
+  size_t used = 0;
+  int k;
+  snprintf (name, nn, "%s %d", kinds[m->kind], i + 1);
+  what[0] = '\0';
+  for (k = 0; k < M_COUNT && used + 1 < wn; k++)
+    if (m->v[k] != 0)
+      {
+        int n = k == M_EV ? snprintf (what + used, wn - used, "%s%+.2f EV", used ? ", " : "", (double) m->v[k])
+                          : snprintf (what + used, wn - used, "%s%s %+d", used ? ", " : "", recipe_mask_params[k].label,
+                                      (int) lround (m->v[k]));
+        if (n < 0)
+          break;
+        used += (size_t) n;
+      }
+  if (!what[0])
+    snprintf (what, wn, "nothing yet");
+  if (m->invert && used + 12 < wn)
+    snprintf (what + strlen (what), wn - strlen (what), ", inverted");
+  /* Kept to the panel's width. */
+  {
+    int room = PANEL_W - 2 * PAD - 52 - 180;
+    size_t l = strlen (what);
+    if (draw_text_width (what) > room)
+      {
+        while (l > 4)
+          {
+            l--;
+            memcpy (what + l, "...", 4);
+            if (draw_text_width (what) <= room)
+              break;
+            what[l] = '\0';
+          }
+      }
+  }
+}
+
+static void draw_masks_panel (int ox, int oy)
+{
+  static const char *const buttons[MB_BUTTONS] = { "Brush", "Gradient", "Radial", "Invert", "Show mask", "Delete" };
+  int px = ox + panel_x0 (), top = oy + masks_top (), i, k, r[4], chosen = mk_sel >= 0 && mk_sel < current.nmasks;
+  char name[32], what[120], t[24];
+  if (!masks_shown ())
+    return;
+  draw_rect (px + PAD, top - GROUP_H + 6, ox + PANEL_W - PAD, top, COL_HEADER);
+  if (!masks_tool ())
+    draw_disclosure (px + PAD + 16, top - 24, masks_folded);
+  draw_text (px + PAD + 40, top - 36, "Layers", COL_TEXT, COL_HEADER);
+  if (!masks_tool ())
+    {
+      draw_text (ox + PANEL_W - PAD - 12 - draw_text_width ("Edit"), top - 36, "Edit", COL_ACCENT, COL_HEADER);
+      if (masks_folded)
+        {
+          char t[24];
+          snprintf (t, sizeof t, "(%d)", current.nmasks);
+          draw_text (px + PAD + 40 + draw_text_width ("Layers") + 16, top - 36, t, COL_QUIET, COL_HEADER);
+          return;
+        }
+    }
+  if (!current.nmasks)
+    draw_text (px + PAD + 12, oy + mask_line_top (0) - 34, "None yet: paint, or choose New layer", COL_QUIET, COL_PANEL);
+  for (i = 0; i < current.nmasks; i++)
+    {
+      int y = oy + mask_line_top (i), on = masks_tool () && i == mk_sel;
+      unsigned bg = on ? COL_ACCENT : COL_PANEL, fg = on ? COL_KNOB : COL_TEXT;
+      if (on)
+        draw_rect (px + PAD, y - MASK_LINE_H + 4, ox + PANEL_W - PAD, y - 2, COL_ACCENT);
+      /* The tick: on (applied) or off. */
+      draw_rect (px + PAD + 10, y - 40, px + PAD + 38, y - 12, COL_FRAME);
+      draw_rect (px + PAD + 13, y - 37, px + PAD + 35, y - 15, COL_BUTTON);
+      if (!current.mask[i].off)
+        {
+          draw_line (px + PAD + 17, y - 27, px + PAD + 23, y - 33, COL_TEXT);
+          draw_line (px + PAD + 23, y - 33, px + PAD + 32, y - 19, COL_TEXT);
+          draw_line (px + PAD + 17, y - 25, px + PAD + 23, y - 31, COL_TEXT);
+          draw_line (px + PAD + 23, y - 31, px + PAD + 32, y - 17, COL_TEXT);
+        }
+      mask_words (i, name, sizeof name, what, sizeof what);
+      draw_text (px + PAD + 52, y - 36, name, current.mask[i].off ? COL_STAR_OFF : fg, bg);
+      draw_text (px + PAD + 52 + 180, y - 36, what, on ? COL_KNOB : COL_QUIET, bg);
+    }
+  if (!masks_tool ())
+    return;
+  draw_text (px + PAD, oy + mask_line_top (mask_lines ()) - 36, "New layer", COL_QUIET, COL_PANEL);
+  for (k = 0; k < MB_BUTTONS; k++)
+    {
+      int enabled = 1, on = 0;
+      if (k == MB_INVERT)
+        {
+          enabled = chosen && current.mask[mk_sel].kind != MASK_BRUSH;
+          on = enabled && current.mask[mk_sel].invert;
+        }
+      else if (k == MB_SHOW)
+        {
+          enabled = chosen;
+          on = mk_show && chosen;
+        }
+      else if (k == MB_DELETE)
+        enabled = chosen;
+      else
+        on = k != MB_NEW_BRUSH ? mk_new == k - MB_NEW_BRUSH : !chosen && mk_new < 0;
+      button_at (k % 3, 3, k < 3 ? mask_new_top () : mask_buttons_top (), r);
+      draw_button_rect (r, buttons[k], enabled, on, ox, oy);
+    }
+  /* The brush */
+  draw_text (px + PAD, oy + mask_new_top () - BUTTON_H - 36, "Brush", COL_QUIET, COL_PANEL);
+  for (k = 0; k < BRUSH_KINDS; k++)
+    {
+      static const char *const kinds[BRUSH_KINDS] = { "Add", "Erase" };
+      button_at (k, 3, mask_brush_top (), r);
+      draw_button_rect (r, kinds[k], 1, br_kind == k, ox, oy);
+    }
+  for (k = 0; k < RT_SLIDERS; k++)
+    {
+      static const char *const labels[RT_SLIDERS] = { "Size", "Feather", "Flow" };
+      static const int drags[RT_SLIDERS] = { DRAG_RT_SIZE, DRAG_RT_FEATHER, DRAG_RT_STRENGTH };
+      int mid = oy + mask_rt_top (k) - ROW_H / 2, x0 = ox + track_x0 (), kx = ox + rt_slider_x (k);
+      draw_text (px + PAD, mid - 9, labels[k], COL_TEXT, COL_PANEL);
+      draw_rect (x0, mid - 4, ox + track_x1 (), mid + 4, COL_TRACK);
+      draw_rect (x0, mid - 4, kx, mid + 4, COL_ACCENT);
+      draw_rect (kx - 10, mid - 18, kx + 10, mid + 18, COL_FRAME);
+      draw_rect (kx - 7, mid - 15, kx + 7, mid + 15, dragging == drags[k] ? COL_ACCENT : COL_KNOB);
+      if (k == RT_SIZE)
+        snprintf (t, sizeof t, "%d", (int) lround (rt_size * 1000));
+      else
+        snprintf (t, sizeof t, "%d%%", (int) lround (*rt_slider_var (k) * 100));
+      draw_text (ox + PANEL_W - PAD - draw_text_width (t), mid - 9, t, COL_TEXT, COL_PANEL);
+    }
+  {
+    char head[60];
+    if (chosen)
+      {
+        char nm[32], wh[8];
+        mask_words (mk_sel, nm, sizeof nm, wh, sizeof wh);
+        snprintf (head, sizeof head, "%s: its adjustments", nm);
+      }
+    else
+      snprintf (head, sizeof head, "A new layer's adjustments");
+    draw_rect (px + PAD, oy + mask_rt_top (RT_SLIDERS) - 14, ox + PANEL_W - PAD, oy + mask_rt_top (RT_SLIDERS) - 12, COL_TRACK);
+    draw_text (px + PAD, oy + mask_rt_top (RT_SLIDERS) - 46, head, COL_QUIET, COL_PANEL);
+  }
+  /* The chosen mask's sliders (none chosen: what a new one starts with). */
+  for (k = 0; k < M_COUNT; k++)
+    {
+      const recipe_param *d = &recipe_mask_params[k];
+      float val = mb_mask ()->v[k];
+      int mid = oy + mask_slider_top (k) - ROW_H / 2, x0 = ox + track_x0 (), x1 = ox + track_x1 ();
+      int kx = x0 + (int) lround ((val - d->min) / (d->max - d->min) * (x1 - x0));
+      int zx = x0 + (int) lround ((0 - d->min) / (d->max - d->min) * (x1 - x0));
+      draw_text (px + PAD, mid - 9, d->label, COL_TEXT, COL_PANEL);
+      draw_rect (x0, mid - 4, x1, mid + 4, COL_TRACK);
+      if (kx != zx)
+        draw_rect (kx < zx ? kx : zx, mid - 4, kx < zx ? zx : kx, mid + 4, COL_ACCENT);
+      draw_rect (kx - 10, mid - 18, kx + 10, mid + 18, COL_FRAME);
+      draw_rect (kx - 7, mid - 15, kx + 7, mid + 15, dragging == DRAG_MASK_SLIDER - k ? COL_ACCENT : COL_KNOB);
+      if (val == 0)
+        snprintf (t, sizeof t, "0");
+      else if (k == M_EV)
+        snprintf (t, sizeof t, "%+.2f", (double) val);
+      else
+        snprintf (t, sizeof t, "%+d", (int) lround (val));
+      draw_text (ox + PANEL_W - PAD - draw_text_width (t), mid - 9, t, COL_TEXT, COL_PANEL);
+    }
+}
+
 static void draw_retouch (int ox, int oy, const int out[4])
 {
   int i, k, r[4];
   static const char *const spot_names[2] = { "Repair", "Clone" };
-  static const char *const brush_names[BRUSH_KINDS] = { "Dodge", "Burn", "Saturate", "Desaturate" };
-  static const char *const labels[RT_SLIDERS] = { "Size", "Feather", "Strength" };
+  static const char *const brush_names[BRUSH_KINDS] = { "Add", "Erase" };
+  static const char *const labels[RT_SLIDERS] = { "Size", "Feather", "Flow" };
+  static float xy[RECIPE_STROKE_MAX * 2];
   if (brushing)
     {
-      static float xy[RECIPE_STROKE_MAX * 2];
-      for (i = 0; i < current.nstrokes; i++)
+      draw_masks (out);
+      if (dragging == DRAG_STROKE)
+        draw_path (out, br_pts, br_n, brush_colours[br_kind], 1);
+    }
+  else
+    {
+      for (i = 0; i < current.nspots; i++)
         {
-          stroke_points (&current.stroke[i], xy);
-          draw_path (out, xy, current.stroke[i].n, brush_colours[current.stroke[i].kind], i == rt_sel);
+          const recipe_spot *sp = &current.spot[i];
+          float du = 0, dv = 0, su = 0, sv = 0;
+          int dx, dy, qx, qy, rad, inner, n;
+          if (i == rt_drag)
+            {
+              su = rt_dx - rt_gu;
+              sv = rt_dy - rt_gv;
+              if (!rt_drag_src)
+                {
+                  du = su;
+                  dv = sv;
+                }
+            }
+          /* The source: the shape moved by the spot's offset. */
+          n = spot_points (i, du + (sp->sx - sp->x) + (rt_drag_src && i == rt_drag ? su : 0),
+                           dv + (sp->sy - sp->y) + (rt_drag_src && i == rt_drag ? sv : 0), xy);
+          if (!photo_to_screen (out, xy[0], xy[1], &qx, &qy))
+            continue;
+          rad = radius_on_screen (out, xy[0], xy[1], sp->r);
+          if (rad < 4)
+            rad = 4;
+          if (n > 1)
+            draw_path (out, xy, n, 0xA0A0A000u, 0);
+          else
+            draw_circle (qx, qy, rad, 0xA0A0A000u);
+          n = spot_points (i, du, dv, xy);
+          if (!photo_to_screen (out, xy[0], xy[1], &dx, &dy))
+            continue;
+          draw_line (dx, dy, qx, qy, 0x80808000u);
+          if (n > 1)
+            {
+              draw_path (out, xy, n, i == rt_sel ? COL_ACCENT : COL_CROP, 1);
+              continue;
+            }
+          /* out is on the screen already (draw_overlays); the controls below are in the work area. */
+          draw_circle (dx, dy, rad, i == rt_sel ? COL_ACCENT : COL_CROP);
+          draw_circle (dx, dy, rad + 2, COL_FRAME);
+          /* The feather: inside this ring the spot is painted out fully. */
+          inner = (int) lround (rad * (1 - (sp->f < 0.02f ? 0.02f : sp->f)));
+          if (i == rt_sel && inner > 3 && inner < rad - 2)
+            draw_circle (dx, dy, inner, 0xA0A0A000u);
         }
       if (dragging == DRAG_STROKE)
         draw_path (out, br_pts, br_n, COL_KNOB, 1);
     }
-  else
-    for (i = 0; i < current.nspots; i++)
-      {
-        const recipe_spot *sp = &current.spot[i];
-        float x = sp->x, y = sp->y, sx = sp->sx, sy = sp->sy;
-        int dx, dy, qx, qy, rad, inner;
-        if (i == rt_drag)
-          {
-            if (rt_drag_src) { sx = rt_dx; sy = rt_dy; }
-            else { sx += rt_dx - x; sy += rt_dy - y; x = rt_dx; y = rt_dy; }
-          }
-        if (!photo_to_screen (out, x, y, &dx, &dy) || !photo_to_screen (out, sx, sy, &qx, &qy))
-          continue;
-        rad = radius_on_screen (out, x, y, sp->r);
-        if (rad < 4)
-          rad = 4;
-        /* out is on the screen already (draw_overlays); the controls below are in the work area. */
-        draw_line (dx, dy, qx, qy, 0x80808000u);
-        draw_circle (qx, qy, rad, 0xA0A0A000u);
-        draw_circle (dx, dy, rad, i == rt_sel ? COL_ACCENT : COL_CROP);
-        draw_circle (dx, dy, rad + 2, COL_FRAME);
-        /* The feather: inside this ring the spot is painted out fully. */
-        inner = (int) lround (rad * (1 - (sp->f < 0.02f ? 0.02f : sp->f)));
-        if (i == rt_sel && inner > 3 && inner < rad - 2)
-          draw_circle (dx, dy, inner, 0xA0A0A000u);
-      }
   /* The brush: a new spot's (stroke's) size and feather, under the pointer. */
-  if (rt_hover && (dragging == -1 || dragging == DRAG_STROKE))
+  if (rt_hover && (dragging == -1 || dragging == DRAG_STROKE) && !(brushing && mk_new > MASK_BRUSH))
     {
       int inner = (int) lround (rt_hr * (1 - (rt_feather < 0.02f ? 0.02f : rt_feather)));
       draw_circle (ox + rt_hx, oy + rt_hy, rt_hr + 2, COL_FRAME);
@@ -3467,6 +4090,8 @@ static void draw_retouch (int ox, int oy, const int out[4])
       if (inner > 3 && inner < rt_hr - 2)
         draw_circle (ox + rt_hx, oy + rt_hy, inner, 0xA0A0A000u);
     }
+  if (brushing)
+    return;                            /* the Layers tool's controls are in the panel */
   rt_box (r);
   draw_rect (ox + r[0], oy + r[1], ox + r[2], oy + r[3], 0x20202000u);
   for (k = 0; k < rt_nbuttons (); k++)
@@ -3491,8 +4116,6 @@ static void draw_retouch (int ox, int oy, const int out[4])
       draw_rect (ox + kx - 7, oy + mid - 15, ox + kx + 7, oy + mid + 15, dragging == drags[k] ? COL_ACCENT : COL_KNOB);
       if (k == RT_SIZE)
         snprintf (t, sizeof t, "%d", (int) lround (rt_size * 1000));
-      else if (k == RT_STRENGTH && (br_kind == BRUSH_DODGE || br_kind == BRUSH_BURN))
-        snprintf (t, sizeof t, "%.1f EV", 2.0 * rt_strength);   /* recipe.h: 2 stops at 1 */
       else
         snprintf (t, sizeof t, "%d%%", (int) lround (*rt_slider_var (k) * 100));
       draw_text (ox + r[2] + 20, oy + mid - 9, t, COL_LIGHT, 0x20202000u);
@@ -3505,9 +4128,19 @@ static void rt_hover_force (void)
   force (rt_hx - rt_hr - 8, rt_hy - rt_hr - 8, rt_hx + rt_hr + 8, rt_hy + rt_hr + 8);
 }
 
+/* Over one of the tools' boxes (work area)? */
+static int in_tool_boxes (int wx, int wy)
+{
+  int box[4];
+  if (brushing)
+    return 0;
+  rt_box (box);
+  return wx >= box[0] && wx <= box[2] && wy >= box[1] && wy <= box[3];
+}
+
 static void rt_brush_follow (void)
 {
-  int ptr[5], st[9], r[4], box[4], wx, wy, over = 0, rad = 0;
+  int ptr[5], st[9], r[4], wx, wy, over = 0, rad = 0;
   float u, v;
   if (!retouching || (dragging != -1 && dragging != DRAG_STROKE) || !src)
     {
@@ -3523,9 +4156,8 @@ static void rt_brush_follow (void)
     return;
   wx = ptr[0] - st[1] + st[5];
   wy = ptr[1] - st[4] + st[6];
-  rt_box (box);
   if ((ptr[3] == win || dragging == DRAG_STROKE) && photo_rect (r) && wx >= r[0] && wx < r[2] && wy >= r[1] && wy < r[3]
-      && !(wx >= box[0] && wx <= box[2] && wy >= box[1] && wy <= box[3]) && screen_to_photo (r, wx, wy, &u, &v))
+      && !in_tool_boxes (wx, wy) && screen_to_photo (r, wx, wy, &u, &v))
     {
       over = 1;
       rad = radius_on_screen (r, u, v, rt_size);
@@ -3544,11 +4176,27 @@ static void rt_brush_follow (void)
     rt_hover_force ();
 }
 
+/* A painted spot's source found again (its path's offset). */
+static void spot_auto_source (int i)
+{
+  static float xy[RECIPE_STROKE_MAX * 2];
+  recipe_spot *sp = &current.spot[i];
+  int n = spot_points (i, 0, 0, xy);
+  float dx, dy;
+  if (!src)
+    return;
+  retouch_auto_offset (src_orig ? src_orig : src, sw, sh, xy, n, sp->r, &dx, &dy);
+  sp->sx = sp->x + dx;
+  sp->sy = sp->y + dy;
+}
+
 /* The size, feather or strength changed (slider or keys): for new spots
    (strokes), and the chosen one too. live: only the overlay follows (a
    drag); the photo when let go. */
 static void rt_apply (int live)
 {
+  if (brushing)
+    force_panel ();                    /* its sliders are there */
   if (brushing && rt_sel >= 0 && rt_sel < current.nstrokes)
     {
       recipe_stroke *st = &current.stroke[rt_sel];
@@ -3569,7 +4217,7 @@ static void rt_apply (int live)
       if (!live)
         {
           if (rt_sel_auto && src)
-            retouch_auto_source (src_orig ? src_orig : src, sw, sh, sp->x, sp->y, sp->r, &sp->sx, &sp->sy);
+            spot_auto_source (rt_sel);
           spots_changed ();
           return;
         }
@@ -3577,13 +4225,14 @@ static void rt_apply (int live)
   force_image ();
 }
 
-/* --- retouch and brush: the tools */
+/* --- retouch and masks: the tools */
 
 /* The sliders' values are each tool's own. */
-static float tool_vals[2][3] = { { 0.015f, 0.3f, 0 }, { 0.03f, 0.5f, 0.25f } };
+static float tool_vals[2][3] = { { 0.015f, 0.3f, 0 }, { 0.03f, 0.5f, 1.0f } };
 
 static void local_tool (int brush)
 {
+  int showing = retouching && brushing && mk_show;
   if (!src && !retouching)
     return;
   if (retouching)
@@ -3596,6 +4245,8 @@ static void local_tool (int brush)
   rt_sel = -1;
   rt_hover = 0;
   br_n = 0;
+  mk_new = -1;
+  mk_show = 0;
   if (retouching && brushing == brush)
     retouching = 0;
   else
@@ -3614,8 +4265,26 @@ static void local_tool (int brush)
       rt_size = tool_vals[brush][0];
       rt_feather = tool_vals[brush][1];
       rt_strength = tool_vals[brush][2];
+      mk_sel = brush && current.nmasks ? current.nmasks - 1 : -1;
+      /* The masks' sliders are in the Adjustments tab: show it. */
+      if (brush)
+        {
+          if (!mainwin_inspector_on ())
+            mainwin_toggle_inspector ();
+          if (mainwin_tab () != TAB_ADJUST)
+            mainwin_set_tab (TAB_ADJUST);
+        }
+      if (!mk_last_set)
+        {
+          recipe_mask_init (&mk_last, MASK_BRUSH);
+          recipe_mask_set (&mk_last, M_EV, 0.5f);   /* something to see where it's painted */
+          mk_last_set = 1;
+        }
     }
+  if (showing)
+    refresh (1);                       /* the mask's red goes */
   update_title ();
+  fit_panel ();
   force_all ();
 }
 
@@ -3623,22 +4292,63 @@ void viewer_toggle_retouch (void) { local_tool (0); }
 void viewer_toggle_brush (void) { local_tool (1); }
 int viewer_retouching (void) { return retouching && !brushing; }
 int viewer_brushing (void) { return retouching && brushing; }
+int viewer_mask_chosen (void) { return retouching && brushing ? mk_sel : -1; }
+int viewer_mask_showing (void) { return retouching && brushing && mk_show && applied_show == mk_sel && mk_sel >= 0; }
 
-/* The spot whose circle (or, with source, its source's) is under (u, v), or -1. */
+/* Tests: the Masks box's button k (MB_*), or with k >= 100 the slider
+   for adjustment k - 100, in work area coordinates. */
+void viewer_mask_box_part (int k, int r[4])
+{
+  if (k >= 200)
+    {
+      /* line k - 200 (with k >= 300: its tick) */
+      int i = k >= 300 ? k - 300 : k - 200;
+      r[0] = panel_x0 () + PAD + (k >= 300 ? 10 : 100);
+      r[2] = k >= 300 ? panel_x0 () + PAD + 40 : PANEL_W - PAD;
+      r[3] = mask_line_top (i) - 4;
+      r[1] = mask_line_top (i) - MASK_LINE_H + 8;
+    }
+  else if (k >= 100)
+    {
+      r[0] = track_x0 ();
+      r[2] = track_x1 ();
+      r[3] = mask_slider_top (k - 100);
+      r[1] = r[3] - ROW_H;
+    }
+  else
+    button_at (k % 3, 3, k < 3 ? mask_new_top () : mask_buttons_top (), r);
+}
+
+/* The spot whose shape (or, with source, its source's) is under (u, v), or -1. */
 static int spot_at (float u, float v, int source)
 {
-  int i, longer = sw > sh ? sw : sh;
+  static float xy[RECIPE_STROKE_MAX * 2];
+  int i, j, longer = sw > sh ? sw : sh;
+  double kx = (double) sw / longer, ky = (double) sh / longer;
   for (i = current.nspots - 1; i >= 0; i--)
     {
       const recipe_spot *sp = &current.spot[i];
-      double dx = ((source ? sp->sx : sp->x) - u) * sw / longer, dy = ((source ? sp->sy : sp->y) - v) * sh / longer;
-      if (dx * dx + dy * dy <= (double) sp->r * sp->r * 1.2)
-        return i;
+      int n = spot_points (i, source ? sp->sx - sp->x : 0, source ? sp->sy - sp->y : 0, xy);
+      for (j = 0; j < n; j++)
+        {
+          int k = j + 1 < n ? j + 1 : j;
+          double ax = xy[2 * j] * kx, ay = xy[2 * j + 1] * ky, bx = xy[2 * k] * kx, by = xy[2 * k + 1] * ky;
+          double dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy, t = 0, px = u * kx, py = v * ky;
+          if (l > 0)
+            {
+              t = ((px - ax) * dx + (py - ay) * dy) / l;
+              t = t < 0 ? 0 : t > 1 ? 1 : t;
+            }
+          dx = ax + t * dx - px;
+          dy = ay + t * dy - py;
+          if (dx * dx + dy * dy <= (double) sp->r * sp->r * 1.2)
+            return i;
+        }
     }
   return -1;
 }
 
-/* The stroke whose brush covers (u, v) (the last painted first), or -1. */
+/* The chosen mask's stroke whose brush covers (u, v) (the last painted first), or -1. */
 static int stroke_at (float u, float v)
 {
   int i, j, longer = sw > sh ? sw : sh;
@@ -3646,6 +4356,8 @@ static int stroke_at (float u, float v)
   for (i = current.nstrokes - 1; i >= 0; i--)
     {
       const recipe_stroke *st = &current.stroke[i];
+      if (st->mask != mk_sel)
+        continue;
       for (j = 0; j < st->n; j++)
         {
           int k = j + 1 < st->n ? j + 1 : j;
@@ -3672,6 +4384,7 @@ static void spots_changed (void)
   commit ();
   refresh (1);
   force_image ();
+  fit_panel ();
   force_panel ();
 }
 
@@ -3697,31 +4410,291 @@ static void stroke_follow (int wx, int wy)
     force ((x0 < x1 ? x0 : x1) - 12, (y0 < y1 ? y0 : y1) - 12, (x0 > x1 ? x0 : x1) + 12, (y0 > y1 ? y0 : y1) + 12);
 }
 
+/* A new mask (the adjustments new ones start with); its index, or -1. */
+static int new_mask (int kind)
+{
+  recipe_mask m;
+  int i;
+  recipe_mask_init (&m, kind);
+  memcpy (m.v, mk_last.v, sizeof m.v);
+  if ((i = recipe_mask_add (&current, &m)) < 0)
+    app_report ("A photo can have 32 layers at most. Delete one to add another.");
+  return i;
+}
+
 static void stroke_end (void)
 {
-  if (br_n > 0)
+  if (br_n <= 0)
+    return;
+  if (!brushing)
     {
-      rt_sel = recipe_stroke_add (&current, br_kind, rt_size, rt_feather, rt_strength, br_pts, br_n);
+      /* Retouch: a click a round spot, a drag a painted one. */
+      recipe_spot sp;
+      int n = br_n;
       br_n = 0;
-      if (rt_sel < 0)
+      sp.x = br_pts[0];
+      sp.y = br_pts[1];
+      sp.r = rt_size;
+      sp.clone = rt_clone;
+      sp.f = rt_feather;
+      sp.first = sp.n = 0;
+      if (n == 1)
+        retouch_auto_source (src, sw, sh, sp.x, sp.y, rt_size, &sp.sx, &sp.sy);
+      else
         {
-          app_report ("There's no room for another stroke on this photo (32 strokes, 1024 points in all). "
+          float dx, dy;
+          retouch_auto_offset (src_orig ? src_orig : src, sw, sh, br_pts, n, rt_size, &dx, &dy);
+          sp.sx = sp.x + dx;
+          sp.sy = sp.y + dy;
+        }
+      rt_sel_auto = 1;
+      if ((rt_sel = recipe_spot_add_path (&current, &sp, br_pts, n)) < 0)
+        {
+          app_report ("There's no room for another spot on this photo (48 spots, 512 points painted in all). "
                       "Take some away (Adjust-click) to add more.");
           force_image ();
           return;
         }
       spots_changed ();
+      return;
+    }
+  if (mk_sel < 0 || mk_sel >= current.nmasks)
+    {
+      if (br_kind == BRUSH_ERASE)
+        {
+          br_n = 0;
+          force_image ();
+          return;                      /* nothing to erase */
+        }
+      if ((mk_sel = new_mask (MASK_BRUSH)) < 0)
+        {
+          br_n = 0;
+          force_image ();
+          return;
+        }
+    }
+  rt_sel = recipe_stroke_add (&current, mk_sel, br_kind, rt_size, rt_feather, rt_strength, br_pts, br_n);
+  br_n = 0;
+  if (rt_sel < 0)
+    {
+      app_report ("There's no room for another stroke on this photo (64 strokes, 1024 points in all). "
+                  "Take some away (Adjust-click) to add more.");
+      force_image ();
+      return;
+    }
+  spots_changed ();
+}
+
+/* The chosen mask changed: Show mask follows it. */
+static void mask_chosen (int i)
+{
+  mk_sel = i;
+  rt_sel = -1;
+  if (mk_show)
+    refresh (1);
+  force_image ();
+}
+
+static void mask_value (int p, float v, int live)
+{
+  recipe_mask *m = mb_mask ();
+  recipe_mask_set (m, p, v);
+  force_panel ();
+  if (m == &mk_last)
+    return;
+  mk_last = *m;                        /* new masks start like the one last changed */
+  if (live)
+    {
+      before = 0;
+      refresh (1);
+      force_image ();
+    }
+  else
+    spots_changed ();
+}
+
+/* A click on the panel's Masks section (hit's what). */
+static void masks_panel_click (const int *b, int h, int what, int wx, const int *st)
+{
+  int chosen = mk_sel >= 0 && mk_sel < current.nmasks;
+  if (h == HIT_MASK_TICK)
+    {
+      current.mask[what].off = !current.mask[what].off;
+      spots_changed ();
+      return;
+    }
+  if (h == HIT_MASK_LINE)
+    {
+      if (what == -2)
+        {
+          masks_folded = !masks_folded;
+          fit_panel ();
+          force_panel ();
+          return;
+        }
+      if (!masks_tool ())
+        local_tool (1);
+      if (what < 0)
+        return;
+      mk_new = -1;
+      mask_chosen (what);
+      force_panel ();
+      return;
+    }
+  if (h == HIT_MASK_BUTTON)
+    {
+      switch (what)
+        {
+        case MB_NEW_BRUSH:
+          /* The next stroke starts a new brush mask. */
+          mk_new = -1;
+          mask_chosen (-1);
+          break;
+        case MB_NEW_GRADIENT:
+        case MB_NEW_RADIAL:
+          mk_new = mk_new == what - MB_NEW_BRUSH ? -1 : what - MB_NEW_BRUSH;   /* drawn by the next drag */
+          break;
+        case MB_INVERT:
+          if (chosen && current.mask[mk_sel].kind != MASK_BRUSH)
+            {
+              current.mask[mk_sel].invert = !current.mask[mk_sel].invert;
+              spots_changed ();
+            }
+          break;
+        case MB_SHOW:
+          if (chosen)
+            {
+              mk_show = !mk_show;
+              refresh (1);
+              force_image ();
+            }
+          break;
+        case MB_DELETE:
+          if (chosen)
+            {
+              recipe_mask_remove (&current, mk_sel);
+              mk_sel = current.nmasks ? (mk_sel > 0 ? mk_sel - 1 : 0) : -1;
+              rt_sel = -1;
+              spots_changed ();
+            }
+          break;
+        }
+      force_panel ();
+      force_image ();
+      return;
+    }
+  if (h == HIT_MASK_BRUSH)
+    {
+      br_kind = what;
+      rt_sel = -1;                     /* a new kind starts a new stroke */
+      force_panel ();
+      return;
+    }
+  if (h == HIT_MASK_RT && b[2] == Button_Select)
+    {
+      static const int drags[RT_SLIDERS] = { DRAG_RT_SIZE, DRAG_RT_FEATHER, DRAG_RT_STRENGTH };
+      *rt_slider_var (what) = rt_slider_value (what, wx);
+      rt_apply (1);
+      force_panel ();
+      start_drag (b[0], b[1], st[1] + track_x0 () - 4, st[4] + mask_rt_top (what) - ROW_H + 4,
+                  st[1] + track_x1 () + 4, st[4] + mask_rt_top (what) - 4, drags[what]);
+      if (dragging != drags[what])
+        rt_apply (0);
+      return;
+    }
+  if (h == HIT_MASK_SLIDER)
+    {
+      if (b[2] == Button_Adjust)
+        {
+          mask_value (what, 0, 0);     /* Adjust: back to none */
+          return;
+        }
+      if (b[2] != Button_Select)
+        return;
+      mask_value (what, mb_slider_value (what, wx), 1);
+      start_drag (b[0], b[1], st[1] + track_x0 () - 4, st[4] + mask_slider_top (what) - ROW_H + 4,
+                  st[1] + track_x1 () + 4, st[4] + mask_slider_top (what) - 4, DRAG_MASK_SLIDER - what);
+      if (dragging != DRAG_MASK_SLIDER - what)
+        mask_value (what, mb_mask ()->v[what], 0);
     }
 }
 
-/* A click in the photo's area while retouching (brushing): the controls,
-   a spot to move or (Adjust) take away, or a new spot with a source found
-   for it; brushing, a stroke to paint, or (Adjust) take away. */
+/* While a handle is dragged: the chosen mask's shape follows. */
+static void handle_follow (float u, float v)
+{
+  recipe_mask *m;
+  if (mk_sel < 0 || mk_sel >= current.nmasks)
+    return;
+  m = &current.mask[mk_sel];
+  if (m->kind == MASK_GRADIENT)
+    {
+      if (mk_handle == 0) { m->x0 = u; m->y0 = v; }
+      else if (mk_handle == 1) { m->x1 = u; m->y1 = v; }
+      else
+        {
+          float du = u - (m->x0 + m->x1) / 2, dv = v - (m->y0 + m->y1) / 2;
+          m->x0 += du; m->x1 += du; m->y0 += dv; m->y1 += dv;
+        }
+    }
+  else if (m->kind == MASK_RADIAL)
+    {
+      if (mk_handle == 0) { m->x0 = u; m->y0 = v; }
+      else if (mk_handle == 1) m->x1 = fabsf (u - m->x0) > 0.005f ? fabsf (u - m->x0) : 0.005f;
+      else m->y1 = fabsf (v - m->y0) > 0.005f ? fabsf (v - m->y0) : 0.005f;
+    }
+  before = 0;
+  refresh (0);
+  force_image ();
+}
+
+/* A new gradient or oval drawn from (mk_du0, mk_dv0) to (u, v); a click
+   (no drag) gives the usual one there. */
+static void shape_end (float u, float v)
+{
+  int kind = mk_new, i;
+  recipe_mask *m;
+  mk_new = -1;
+  if ((i = new_mask (kind)) < 0)
+    return;
+  m = &current.mask[i];
+  if (fabsf (u - mk_du0) + fabsf (v - mk_dv0) > 0.01f)
+    {
+      if (kind == MASK_GRADIENT)
+        {
+          m->x0 = mk_du0; m->y0 = mk_dv0; m->x1 = u; m->y1 = v;
+        }
+      else
+        {
+          m->x0 = mk_du0; m->y0 = mk_dv0;
+          m->x1 = fabsf (u - mk_du0) > 0.005f ? fabsf (u - mk_du0) : 0.005f;
+          m->y1 = fabsf (v - mk_dv0) > 0.005f ? fabsf (v - mk_dv0) : 0.005f;
+        }
+    }
+  else if (kind == MASK_RADIAL)
+    {
+      m->x0 = mk_du0;
+      m->y0 = mk_dv0;
+    }
+  else
+    {
+      /* A gradient from the click, fading over a quarter of the height. */
+      m->x0 = mk_du0; m->y0 = mk_dv0; m->x1 = mk_du0; m->y1 = mk_dv0 + 0.25f > 1 ? 1 : mk_dv0 + 0.25f;
+    }
+  mk_sel = i;
+  rt_sel = -1;
+  spots_changed ();
+}
+
+/* A click in the photo's area while retouching (masks): the controls,
+   a spot to move or (Adjust) take away, or a new spot with a source
+   found for it (a drag: a painted one); masks, a pin to choose one, the
+   chosen one's handles, a new gradient or oval to draw, a stroke to
+   paint, or (Adjust) take away. */
 static void retouch_click (const int *b, int wx, int wy)
 {
   int out[4], k, r[4], i;
   float u, v;
-  for (k = 0; k < rt_nbuttons (); k++)
+  for (k = 0; k < (brushing ? 0 : rt_nbuttons ()); k++)
     {
       rt_button (k, r);
       if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
@@ -3742,7 +4715,7 @@ static void retouch_click (const int *b, int wx, int wy)
           return;
         }
     }
-  for (k = 0; k < rt_nsliders (); k++)
+  for (k = 0; k < (brushing ? 0 : rt_nsliders ()); k++)
     {
       rt_track (k, r);
       if (wx >= r[0] - 24 && wx <= r[2] + 24 && wy >= r[1] && wy <= r[3] && photo_rect (out))
@@ -3756,13 +4729,39 @@ static void retouch_click (const int *b, int wx, int wy)
           return;
         }
     }
-  rt_box (r);
-  if (wx >= r[0] && wx <= r[2] && wy >= r[1] && wy <= r[3])
+  if (in_tool_boxes (wx, wy))
     return;                            /* the controls' box, between them */
   if (!photo_rect (out) || !screen_to_photo (out, wx, wy, &u, &v) || u < 0 || u > 1 || v < 0 || v > 1)
     return;
   if (brushing)
     {
+      /* A pin, or the chosen mask's handles. */
+      for (i = current.nmasks - 1; i >= 0 && b[2] == Button_Select && mk_new < 0; i--)
+        {
+          float pu, pv;
+          int px, py;
+          mask_pin (i, &pu, &pv);
+          if (photo_to_screen (out, pu, pv, &px, &py) && abs (px - wx) <= 18 && abs (py - wy) <= 18 && i != mk_sel)
+            {
+              mask_chosen (i);
+              return;
+            }
+        }
+      for (i = 0; i < 3 && b[2] == Button_Select && mk_new < 0; i++)
+        {
+          float hu, hv;
+          int hx, hy;
+          if (mask_handle (i, &hu, &hv) && photo_to_screen (out, hu, hv, &hx, &hy) && abs (hx - wx) <= 16 && abs (hy - wy) <= 16)
+            {
+              mk_handle = i;
+              start_drag (b[0], b[1], b[0] - (wx - out[0]), b[1] - (wy - out[1]), b[0] + (out[2] - wx), b[1] + (out[3] - wy),
+                          DRAG_HANDLE);
+              if (dragging != DRAG_HANDLE)
+                spots_changed ();
+              force_image ();
+              return;
+            }
+        }
       if (b[2] == Button_Adjust)
         {
           if ((i = stroke_at (u, v)) >= 0)
@@ -3775,18 +4774,19 @@ static void retouch_click (const int *b, int wx, int wy)
         }
       if (b[2] != Button_Select)
         return;
-      br_pts[0] = u;
-      br_pts[1] = v;
-      br_n = 1;
-      start_drag (b[0], b[1], b[0] - (wx - out[0]), b[1] - (wy - out[1]), b[0] + (out[2] - wx), b[1] + (out[3] - wy),
-                  DRAG_STROKE);
-      if (dragging != DRAG_STROKE)
-        stroke_end ();                 /* a dab */
-      else
-        force_image ();
-      return;
+      if (mk_new > MASK_BRUSH)
+        {
+          /* Drawing a new gradient or oval. */
+          mk_du0 = rt_dx = u;
+          mk_dv0 = rt_dy = v;
+          start_drag (b[0], b[1], b[0] - (wx - out[0]), b[1] - (wy - out[1]), b[0] + (out[2] - wx), b[1] + (out[3] - wy),
+                      DRAG_SHAPE);
+          if (dragging != DRAG_SHAPE)
+            shape_end (u, v);
+          return;
+        }
     }
-  if ((i = spot_at (u, v, 0)) >= 0 || (i = spot_at (u, v, 1)) >= 0)
+  else if ((i = spot_at (u, v, 0)) >= 0 || (i = spot_at (u, v, 1)) >= 0)
     {
       int is_src = spot_at (u, v, 0) != i;
       if (b[2] == Button_Adjust)
@@ -3805,30 +4805,24 @@ static void retouch_click (const int *b, int wx, int wy)
       rt_feather = current.spot[i].f;
       rt_drag = i;
       rt_drag_src = is_src;
-      rt_dx = u;
-      rt_dy = v;
+      rt_gu = rt_dx = u;
+      rt_gv = rt_dy = v;
       start_drag (b[0], b[1], b[0] - (wx - out[0]), b[1] - (wy - out[1]), b[0] + (out[2] - wx), b[1] + (out[3] - wy),
                   DRAG_SPOT);
       return;
     }
   if (b[2] != Button_Select)
     return;
-  {
-    recipe_spot sp;
-    sp.x = u;
-    sp.y = v;
-    sp.r = rt_size;
-    sp.clone = rt_clone;
-    sp.f = rt_feather;
-    retouch_auto_source (src, sw, sh, u, v, rt_size, &sp.sx, &sp.sy);
-    rt_sel_auto = 1;
-    if ((rt_sel = recipe_spot_add (&current, &sp)) < 0)
-      {
-        app_report ("A photo can have 48 spots at most. Take some away (Adjust-click) to add more.");
-        return;
-      }
-    spots_changed ();
-  }
+  /* Paint: a stroke on the chosen mask (a new one if none), or a spot. */
+  br_pts[0] = u;
+  br_pts[1] = v;
+  br_n = 1;
+  start_drag (b[0], b[1], b[0] - (wx - out[0]), b[1] - (wy - out[1]), b[0] + (out[2] - wx), b[1] + (out[3] - wy),
+              DRAG_STROKE);
+  if (dragging != DRAG_STROKE)
+    stroke_end ();                     /* a dab, or a round spot */
+  else
+    force_image ();
 }
 
 static void draw_overlays (int ox, int oy, const int out[4])

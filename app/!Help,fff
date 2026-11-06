@@ -167,8 +167,8 @@ The tools above the sliders:
                 Text file in <Choices$Write>.Lumen.Presets, for every
                 library: copy one to another computer's Lumen.Presets,
                 or drop it on Lumen's icon bar icon there, to share it
-  Retouch       paints out spots (R); see Retouch and Brush below
-  Brush         paints on lightening, darkening or colour (B)
+  Retouch       paints out spots and lines (R); see Retouch and Layers
+  Layers        adjustments on part of the photo (B); see below
 
 Under the histogram: the photo's place, its flag, its colour label (the
 row of dots: click one to give the photo that label, its own again to
@@ -224,7 +224,9 @@ Highlights & Shadows: Shadows brightens the dark parts of the picture and
 Highlights darkens the bright parts, judged by their surroundings rather
 than pixel by pixel, so detail and contrast within them stay. Good for a dark foreground under a bright sky.
 
-Click a group's name (or its triangle) to fold it away or open it again.
+Click a group's header bar to fold it away or open it again; Adjust-
+click keeps only that group open (again: all open). Fold all and Open
+all, under the tool buttons, fold or open the Layers list and every group.
 The tab scrolls when it doesn't all fit.
 
 Curves: choose RGB (all three together) or Red, Green or Blue above the
@@ -246,26 +248,42 @@ Geometry: -90 and +90 turn the photo; Straighten (up to 15 degrees
 either way), Vertical and Horizontal (perspective) zoom in just enough
 that no empty corners show.
 
-Retouch and Brush
------------------
+Retouch and Layers
+------------------
 Retouch (R, or the Retouch button) paints out dust, a stray rock, a
-crisp packet: click on it. Repair fills the spot from a patch close by,
-chosen for you, matched to its surroundings; Clone copies the patch as
-it is. The circle under the pointer is the size a spot will be: make it
-a little bigger than the blemish (the Size slider, or [ and ]). Feather
-(or { and }) is how much of the edge fades in. The sliders change the
-spot placed or moved last too (a resized spot finds a new patch). Drag
-a spot, or its grey source circle, to move it; Adjust-click takes it
-away. Return, Escape or Done puts the tool away.
+crisp packet: click on it. For a wire, a hair or a scratch, drag along
+it. Repair fills the spot from a patch close by, chosen for you, its
+colour and light matched to what's round it all the way round, so no
+seam shows; Clone copies the patch as it is. The circle under the
+pointer is the size a spot will be: make it a little bigger than the
+blemish (the Size slider, or [ and ]). Feather (or { and }) is how much
+of the edge fades in. The sliders change the spot placed or moved last
+too (a resized spot finds a new patch). Drag a spot, or its grey
+source, to move it; Adjust-click takes it away. Return, Escape or Done
+puts the tool away.
 
-Brush (B, or the Brush button) paints Dodge (lighter), Burn (darker),
-Saturate or Desaturate where you drag. Strength is how much (for Dodge
-and Burn, up to 2 stops). One stroke over itself counts once; a second
-stroke adds to the first. The sliders change the stroke painted last;
-Adjust-click on a stroke's path takes it away.
+Layers (B, or the Layers button) are adjustments of their own on part
+of the photo: Exposure, Contrast, Highlights, Shadows, Temperature,
+Tint, Saturation, Clarity and Sharpness, where the layer's mask is. The
+Adjustments tab shows them while the tool is on:
+  New layer     Brush (paint it: with no layer chosen, painting makes
+                one), Gradient (drag from strongest to none, as for a
+                sky) or Radial (drag from the middle out); drag their
+                handles on the photo to change them
+  Brush         Add or Erase the mask; Size, Feather, Flow
+  the sliders   the chosen layer's (Adjust: back to 0); none chosen,
+                what a new layer starts with
+  Invert        a gradient or radial: everything else instead
+  Show mask     the chosen layer's mask in red on the photo
+  Delete        the chosen layer
+The list shows each layer and what it does; click one (or its pin on
+the photo) to choose it, and its tick to switch it off and on. Adjust-
+click on a stroke takes it away. With the tool put away the list stays
+in the tab, above the groups.
 
-Spots and strokes belong to the photo: they are not in presets, styles
+Spots and layers belong to the photo: they are not in presets, styles
 or copied adjustments. They are in exports, prints and thumbnails.
+Brush strokes from Lumen 0.0.37 and earlier open as brush layers.
 
 Comparing
 ---------
@@ -294,10 +312,10 @@ Keys in the Viewer and Split View
                 pin it in place, ` or Escape to put it away)
   A             Auto
   C             crop (Return to crop, Escape to cancel)
-  [ ]           turn 90 degrees anticlockwise, clockwise (retouching or
-                brushing: the brush smaller, larger; { } its feather)
+  [ ]           turn 90 degrees anticlockwise, clockwise (Retouch or
+                Layers on: the brush smaller, larger; { } its feather)
   R             Retouch: paint out spots
-  B             Brush: paint on adjustments
+  B             Layers: adjustments on part of the photo
   O             compare this photo with the next (Return: pin the
                 right one; O or Escape: stop)
   G             next grid

@@ -112,6 +112,17 @@ const char *help_text (int window, int icon, int x, int y)
   if (window == browser_window ())
     return "Click a photo to select it, Adjust to add to the selection, double-click to open it in the Viewer. "
            "Keys: 1-5 stars, 0 none, / flag, 9 reject, Delete removes from the library. Drag photos in to import.";
+  if (window == viewer_window () && viewer_brushing ())
+    return "Layers: adjustments on part of the photo, each where its mask is. Paint with Select to add to the chosen "
+           "layer's mask (a new brush layer if none is chosen), Erase to take it off, Adjust on a stroke to take it away. "
+           "New layer Gradient or Radial, then drag on the photo to draw one; drag its handles to change it. Click a pin, "
+           "or a line in the Adjustments tab's Layers list, to choose a layer; the tab has its sliders (Adjust: back to 0), "
+           "Invert, Show mask (in red) and Delete; its tick switches a layer off and on. "
+           "[ and ] size, { and } feather.";
+  if (window == viewer_window () && viewer_retouching ())
+    return "Retouch: click on a blemish to paint it out, or drag along a scratch, a wire or a hair. Repair matches the "
+           "source to what's round it, so it blends in; Clone copies it as it is. Drag a spot or its source to move it; "
+           "Adjust takes it away. [ and ] size, { and } feather.";
   if (window == viewer_window ())
     return "The photo, with its adjustments. Keys: arrows next or previous photo, Z 100%, M before and after, "
            "A auto, C crop, G grid, [ and ] turn, Escape back. Menu has the rest.";

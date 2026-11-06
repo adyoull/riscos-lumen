@@ -916,7 +916,7 @@ int main (int argc, char **argv)
   /* ---- The viewer ---- */
   {
     int px, tx0, tx1, ev_mid, sx, sy, k;
-    char text[256];
+    static char text[RECIPE_TEXT_MAX];
     cat_item it;
     browser_focus_on (0);
     browser_item (0, &it);
@@ -960,7 +960,7 @@ int main (int argc, char **argv)
 #define PX(x) (iox + (x))
 #define PY(y) (ioy + (y))
     tx0 = px + 232; tx1 = px + 640 - 132;
-    ev_mid = -24 - 150 - 16 - 52 - 156 - (52 + 2 * 56 + 8) - 52 - 28;
+    ev_mid = -24 - 150 - 16 - 52 - 156 - 44 - (52 + 2 * 56 + 8) - 52 - 28;
     sx = PX ((tx0 + tx1) / 2);
     sy = PY (ev_mid);
     memset (b, 0, sizeof b);
@@ -1013,7 +1013,7 @@ int main (int argc, char **argv)
     CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and undo it");
     /* Fold the White Balance group by clicking its name: Exposure moves up. */
     {
-      int wb_top = PY (-24 - 150 - 16 - 52 - 156);
+      int wb_top = PY (-24 - 150 - 16 - 52 - 156 - 44);
       memset (b, 0, sizeof b);
       b[0] = PX (px + 24 + 60); b[1] = wb_top - 26; b[2] = Button_Select; b[3] = INSP; b[4] = -1;
       app_event (Mouse_Click, b, 0);
@@ -1026,6 +1026,23 @@ int main (int argc, char **argv)
       b[0] = PX (px + 24 + 60); b[1] = wb_top - 26; b[2] = Button_Select; b[3] = INSP; b[4] = -1;
       app_event (Mouse_Click, b, 0);
       CHECK (viewer_recipe ()->v[P_EV] > 0.9f, "and unfolded again");
+      /* Adjust on its name: a concertina, only White Balance open; again, all open. */
+      b[2] = Button_Adjust;
+      app_event (Mouse_Click, b, 0);
+      ntexts = 0;
+      memset (b, 0, sizeof b);
+      b[0] = INSP;
+      app_event (Redraw_Window_Request, b, 0);
+      CHECK (text_drawn ("Temperature") && text_drawn ("Split Toning") && !text_drawn ("Highlights") && !text_drawn ("Vibrancy"),
+             "Adjust on a group's name: it open, the others folded (their names still there)");
+      memset (b, 0, sizeof b);
+      b[0] = PX (px + 24 + 60); b[1] = wb_top - 26; b[2] = Button_Adjust; b[3] = INSP; b[4] = -1;
+      app_event (Mouse_Click, b, 0);
+      ntexts = 0;
+      memset (b, 0, sizeof b);
+      b[0] = INSP;
+      app_event (Redraw_Window_Request, b, 0);
+      CHECK (text_drawn ("Temperature") && text_drawn ("Highlights") && text_drawn ("Vibrancy"), "Adjust again: all open");
     }
     /* Curves: click the middle of the graph and drag up. */
     {
@@ -1121,6 +1138,9 @@ int main (int argc, char **argv)
       const int *pm, *save;
       recipe kept;
       /* Where the photo sits (as viewer.c's photo_rect), in screen coordinates. */
+#define MB_SHOW_TEST 4
+#define MB_GRADIENT_TEST 1
+#define MB_DELETE_TEST 5
 #define PHOTO_RECT()                                                          \
       do {                                                                    \
         int bw = vw - 48, bh = vh - 48, mul, div, dw, dh;               \
@@ -1176,22 +1196,52 @@ int main (int argc, char **argv)
       CHECK (!viewer_crop_mode () && vclosed == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5f) < 0.01f,
              "Escape: the old crop back, the viewer still open");
 
-      /* Retouch: a click paints out a spot. Brush: a drag paints a stroke,
-         Adjust takes it away. All undone after. */
+      /* Retouch: a click paints out a spot, a drag a painted one. Masks:
+         a drag paints a stroke on a new mask, Adjust takes it away; a
+         gradient drawn; a slider; Show mask; Delete. All undone after. */
       {
-        int k0, mx, my;
+        int k0, mx, my, mr[4];
         key ('r');
         CHECK (viewer_retouching () && strstr (vtitle, "retouching") != NULL, "R: the Retouch tool");
         PHOTO_RECT ();
         mx = (pr[0] + pr[2]) / 2; my = (pr[1] + pr[3]) / 2;
         memset (b, 0, sizeof b);
         b[0] = mx; b[1] = my; b[2] = Button_Select; b[3] = VIEWER; b[4] = -1;
+        ptr_x = mx; ptr_y = my;
         app_event (Mouse_Click, b, 0);
+        app_event (User_Drag_Box, b, 0);
         cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
-        CHECK (viewer_recipe ()->nspots == 1 && strstr (text, "spot x=") != NULL, "a click: a spot, saved");
+        CHECK (viewer_recipe ()->nspots == 1 && viewer_recipe ()->spot[0].n == 0 && strstr (text, "spot x=") != NULL
+               && strstr (text, " p=") == NULL, "a click: a round spot, saved");
+        b[0] = pr[0] + (pr[2] - pr[0]) / 8; b[1] = pr[1] + (pr[3] - pr[1]) / 5;
+        ptr_x = b[0]; ptr_y = b[1];
+        app_event (Mouse_Click, b, 0);
+        ptr_x = mx;
+        app_event (Null_Reason, b, 0);
+        ptr_x = pr[2] - (pr[2] - pr[0]) / 8;
+        app_event (Null_Reason, b, 0);
+        app_event (User_Drag_Box, b, 0);
+        cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+        CHECK (viewer_recipe ()->nspots == 2 && viewer_recipe ()->spot[1].n == 3 && strstr (text, " p=") != NULL,
+               "a drag: a painted spot along the pointer's path, saved");
+        CHECK (fabsf (viewer_recipe ()->spot[1].sy - viewer_recipe ()->spot[1].y) > 0.01f
+               || fabsf (viewer_recipe ()->spot[1].sx - viewer_recipe ()->spot[1].x) > 0.01f, "with a source of its own");
+        /* Moved: taken hold of anywhere along it. */
+        {
+          float y0 = viewer_recipe ()->spot[1].y, sy0 = viewer_recipe ()->spot[1].sy;
+          b[0] = mx; ptr_x = mx; ptr_y = b[1];
+          app_event (Mouse_Click, b, 0);
+          ptr_y = b[1] + (pr[3] - pr[1]) / 10;
+          app_event (Null_Reason, b, 0);
+          app_event (User_Drag_Box, b, 0);
+          CHECK (viewer_recipe ()->spot[1].y < y0 - 0.03f && fabsf (viewer_recipe ()->spot[1].sy - sy0 - (viewer_recipe ()->spot[1].y - y0)) < 0.002f,
+                 "a painted spot dragged: it and its source move together");
+        }
         key ('b');
-        CHECK (viewer_brushing () && !viewer_retouching () && strstr (vtitle, "brushing") != NULL, "B: the Brush tool instead");
+        CHECK (viewer_brushing () && !viewer_retouching () && strstr (vtitle, "layers") != NULL && viewer_mask_chosen () == -1,
+               "B: the Layers tool instead, no layer chosen");
         b[0] = pr[0] + (pr[2] - pr[0]) / 8; b[1] = my; b[2] = Button_Select;
+        ptr_x = b[0]; ptr_y = my;
         k0 = drag_calls;
         app_event (Mouse_Click, b, 0);
         CHECK (drag_calls == k0 + 1 && viewer_recipe ()->nstrokes == 0, "a press starts a stroke");
@@ -1201,18 +1251,107 @@ int main (int argc, char **argv)
         app_event (Null_Reason, b, 0);
         app_event (User_Drag_Box, b, 0);
         cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
-        CHECK (viewer_recipe ()->nstrokes == 1 && viewer_recipe ()->stroke[0].n == 3
-               && viewer_recipe ()->stroke[0].kind == BRUSH_DODGE && strstr (text, "brush k=dodge") != NULL,
-               "let go: a dodge stroke along the pointer's path, saved");
-        b[0] = (mx + ptr_x) / 2; b[1] = my; b[2] = Button_Adjust;
+        CHECK (viewer_recipe ()->nmasks == 1 && viewer_recipe ()->nstrokes == 1 && viewer_recipe ()->stroke[0].n == 3
+               && viewer_recipe ()->stroke[0].kind == BRUSH_ADD && viewer_mask_chosen () == 0
+               && strstr (text, "mask k=brush ev=0.50\npaint m=0 k=add a=1.00") != NULL,
+               "let go: a new brush mask (+0.5 EV to start), the stroke along the pointer's path, saved");
+        /* The Adjustments tab is the masks' now: a line for the new mask,
+           its sliders. Its Exposure slider, at the right end: +4 EV. */
+        CHECK (mainwin_tab () == TAB_ADJUST && mainwin_inspector_on (), "the inspector shows the Adjustments tab");
+        ntexts = 0;
+        b[0] = INSP;
+        app_event (Redraw_Window_Request, b, 0);
+        CHECK (text_drawn ("Layers") && text_drawn ("Brush 1") && text_drawn ("+0.50 EV") && text_drawn ("Clarity")
+               && !text_drawn ("White Balance"), "drawn: Layers, Brush 1 (+0.50 EV), its sliders; not the photo's groups");
+#define IX(x) (iopened[1] - iopened[5] + (x))
+#define IY(y) (iopened[4] - iopened[6] + (y))
+        viewer_mask_box_part (100 + M_EV, mr);
+        memset (b, 0, sizeof b);
+        b[0] = IX (mr[2]); b[1] = IY ((mr[1] + mr[3]) / 2); b[2] = Button_Select; b[3] = INSP; b[4] = -1;
+        ptr_x = b[0]; ptr_y = b[1];
         app_event (Mouse_Click, b, 0);
-        CHECK (viewer_recipe ()->nstrokes == 0 && viewer_recipe ()->nspots == 1, "Adjust on it: taken away");
+        app_event (User_Drag_Box, b, 0);
+        CHECK (viewer_recipe ()->mask[0].v[M_EV] == 4, "the mask's Exposure slider: +4 EV");
+        b[2] = Button_Adjust;
+        app_event (Mouse_Click, b, 0);
+        CHECK (viewer_recipe ()->mask[0].v[M_EV] == 0, "Adjust on it: none");
+        b[2] = Button_Select;
+        viewer_mask_box_part (100 + M_SHADOWS, mr);
+        b[0] = IX ((3 * mr[0] + 5 * mr[2]) / 8); b[1] = IY ((mr[1] + mr[3]) / 2);
+        app_event (Mouse_Click, b, 0);
+        app_event (User_Drag_Box, b, 0);
+        CHECK (viewer_recipe ()->mask[0].v[M_SHADOWS] > 15 && viewer_recipe ()->mask[0].v[M_SHADOWS] < 35, "and Shadows, a quarter up");
+        /* Show mask: the chosen one in red. */
+        viewer_mask_box_part (MB_SHOW_TEST, mr);
+        b[0] = IX ((mr[0] + mr[2]) / 2); b[1] = IY ((mr[1] + mr[3]) / 2);
+        app_event (Mouse_Click, b, 0);
+        CHECK (viewer_mask_showing (), "Show mask: shown");
+        app_event (Mouse_Click, b, 0);
+        CHECK (!viewer_mask_showing (), "and not");
+        /* Its tick: switched off (kept), then on. */
+        viewer_mask_box_part (300, mr);
+        b[0] = IX ((mr[0] + mr[2]) / 2); b[1] = IY ((mr[1] + mr[3]) / 2);
+        app_event (Mouse_Click, b, 0);
+        cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+        CHECK (viewer_recipe ()->mask[0].off && strstr (text, "mask k=brush off=1") != NULL, "its tick: switched off, saved");
+        app_event (Mouse_Click, b, 0);
+        CHECK (!viewer_recipe ()->mask[0].off, "and on");
+        b[3] = VIEWER;
+        /* Adjust on the stroke: taken away (the mask stays). */
+        b[0] = (mx + pr[2] - (pr[2] - pr[0]) / 8) / 2; b[1] = my; b[2] = Button_Adjust;
+        app_event (Mouse_Click, b, 0);
+        CHECK (viewer_recipe ()->nstrokes == 0 && viewer_recipe ()->nmasks == 1 && viewer_recipe ()->nspots == 2,
+               "Adjust on the stroke: taken away");
+        /* New: a gradient, drawn from the top down to the middle. */
+        viewer_mask_box_part (MB_GRADIENT_TEST, mr);
+        b[0] = IX ((mr[0] + mr[2]) / 2); b[1] = IY ((mr[1] + mr[3]) / 2); b[2] = Button_Select; b[3] = INSP;
+        app_event (Mouse_Click, b, 0);
+        b[3] = VIEWER;
+        b[0] = mx; b[1] = pr[3] - 4;
+        ptr_x = mx; ptr_y = b[1];
+        app_event (Mouse_Click, b, 0);
+        ptr_y = my;
+        app_event (Null_Reason, b, 0);
+        app_event (User_Drag_Box, b, 0);
+        cat_get_recipe (lib_cat (app_library ()), it.id, text, sizeof text);
+        CHECK (viewer_recipe ()->nmasks == 2 && viewer_recipe ()->mask[1].kind == MASK_GRADIENT && viewer_mask_chosen () == 1
+               && fabsf (viewer_recipe ()->mask[1].y0 - 0.5f) < 0.02f && fabsf (viewer_recipe ()->mask[1].y1 - 0.75f) < 0.02f
+               && viewer_recipe ()->mask[1].v[M_SHADOWS] == viewer_recipe ()->mask[0].v[M_SHADOWS]
+               && strstr (text, "mask k=gradient") != NULL, "a gradient drawn (the photo is cropped to its lower right quarter), starting like the last mask changed");
+        /* Its end dragged lower. */
+        {
+          float y1 = viewer_recipe ()->mask[1].y1;
+          b[0] = mx; b[1] = my;
+          ptr_x = mx; ptr_y = my;
+          app_event (Mouse_Click, b, 0);
+          ptr_y = my - (pr[3] - pr[1]) / 5;
+          app_event (Null_Reason, b, 0);
+          app_event (User_Drag_Box, b, 0);
+          CHECK (viewer_recipe ()->mask[1].y1 > y1 + 0.05f && viewer_recipe ()->nstrokes == 0, "its end handle dragged");
+        }
+        /* Delete: the chosen mask goes. */
+        /* The list: Brush 1 chosen again from its line, then Gradient 2. */
+        viewer_mask_box_part (200, mr);
+        b[0] = IX ((mr[0] + mr[2]) / 2); b[1] = IY ((mr[1] + mr[3]) / 2); b[3] = INSP;
+        app_event (Mouse_Click, b, 0);
+        CHECK (viewer_mask_chosen () == 0, "a mask's line in the list: chosen");
+        viewer_mask_box_part (201, mr);
+        b[0] = IX ((mr[0] + mr[2]) / 2); b[1] = IY ((mr[1] + mr[3]) / 2);
+        app_event (Mouse_Click, b, 0);
+        CHECK (viewer_mask_chosen () == 1, "and the next");
+        viewer_mask_box_part (MB_DELETE_TEST, mr);
+        b[0] = IX ((mr[0] + mr[2]) / 2); b[1] = IY ((mr[1] + mr[3]) / 2);
+        app_event (Mouse_Click, b, 0);
+        b[3] = VIEWER;
+        CHECK (viewer_recipe ()->nmasks == 1 && viewer_recipe ()->mask[0].kind == MASK_BRUSH && viewer_mask_chosen () == 0,
+               "Delete: the gradient gone, the brush mask chosen");
         key (KEY_ESCAPE);
         CHECK (!viewer_brushing () && !viewer_retouching (), "Escape: the tool put away");
-        viewer_undo ();
-        viewer_undo ();
-        viewer_undo ();
-        CHECK (viewer_recipe ()->nspots == 0 && viewer_recipe ()->nstrokes == 0, "undone");
+        for (k0 = 0; k0 < 20 && (viewer_recipe ()->nspots || viewer_recipe ()->nmasks); k0++)
+          viewer_undo ();
+        CHECK (viewer_recipe ()->nspots == 0 && viewer_recipe ()->nmasks == 0 && viewer_recipe ()->nstrokes == 0, "undone");
+#undef IX
+#undef IY
       }
 
       /* Crop shape: Square, from the menu. */

@@ -227,8 +227,11 @@ void viewer_shutdown (void);           /* the main window closed */
 void viewer_list_changed (void);       /* the Browser's list was read again */
 void viewer_toggle_retouch (void);   /* R: the Retouch tool */
 int viewer_retouching (void);
-void viewer_toggle_brush (void);     /* B: the Brush tool */
+void viewer_toggle_brush (void);     /* B: the Masks tool */
 int viewer_brushing (void);
+int viewer_mask_chosen (void);       /* the Masks tool's chosen mask, -1 none (or not on) */
+int viewer_mask_showing (void);      /* Show mask: the chosen one in red on the photo */
+void viewer_mask_box_part (int k, int r[4]);   /* tests */
 void viewer_compare (void);            /* O: the photo shown pinned, the next beside it */
 void viewer_compare_pair (int a, int b);   /* Browser indexes: a pinned, b beside it */
 int viewer_comparing (void);

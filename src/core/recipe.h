@@ -28,9 +28,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/* The longest a recipe's text can be (with retouching spots and brush
-   strokes); buffers that hold one are this size. */
-#define RECIPE_TEXT_MAX 32768
+/* The longest a recipe's text can be (with retouching spots, masks and
+   their strokes); buffers that hold one are this size. */
+#define RECIPE_TEXT_MAX 49152
 
 enum
 {
@@ -88,36 +88,62 @@ typedef struct { int n; float x[CURVE_POINTS], y[CURVE_POINTS]; } recipe_curve;
 
 /* Retouching spots: a circle at (x, y), radius r, filled from a circle the
    same size at (sx, sy), healed (its colour and light matched to the
-   surroundings) or cloned (copied as it is). Positions are fractions of
-   the photo as it is turned upright (before any crop or straightening),
-   so spots stay on what they cover; r is a fraction of the longer side.
-   Text form, one line each:  spot x=0.4120 y=0.3310 r=0.0150 sx=0.4420 sy=0.3310 clone=0 f=0.30
+   surroundings, seamlessly) or cloned (copied as it is). Positions are
+   fractions of the photo as it is turned upright (before any crop or
+   straightening), so spots stay on what they cover; r is a fraction of
+   the longer side. A spot can also be painted: a path of points (n of
+   them from first in spt, 1/10000ths; the first is (x, y)), the brush of
+   radius r along it, its source the same shape moved by (sx - x, sy - y).
+   Text form, one line each:
+     spot x=0.4120 y=0.3310 r=0.0150 sx=0.4420 sy=0.3310 clone=0 f=0.30
+     spot x=... clone=0 f=0.30 p=4120,3310;4180,3325;...      (painted)
    (f, the feathered part of the radius, is 0.30 when missing). */
 #define RECIPE_SPOTS 48
-typedef struct { float x, y, r, sx, sy; int clone; float f; } recipe_spot;   /* f: feather, 0..1 */
+#define RECIPE_SPOT_POINTS 512         /* all painted spots' points together */
+typedef struct { float x, y, r, sx, sy; int clone; float f; int first, n; } recipe_spot;   /* f: feather, 0..1; n: 0 or 1 a circle */
 
-/* Brushed adjustments: strokes painted on the photo, each lightening
-   (dodge) or darkening (burn) it, or strengthening or weakening its
-   colour, under a brush of radius r (a fraction of the longer side) whose
-   outer part f fades. amount, 0..1: for dodge and burn, 2 stops at 1;
-   for the colour, double or none at 1. A stroke's points are fractions
-   of the photo upright (as spots), kept in 1/10000ths. Where one stroke
-   crosses itself it counts once; strokes over each other add up.
-   Text form, one line each:
-     brush k=dodge a=0.25 r=0.0300 f=0.50 p=4120,3310;4180,3325;... */
-enum { BRUSH_DODGE, BRUSH_BURN, BRUSH_SATURATE, BRUSH_DESATURATE, BRUSH_KINDS };
-extern const char *const recipe_brush_keys[BRUSH_KINDS];   /* "dodge", "burn", ... */
-#define RECIPE_STROKES 32
+/* Masks: adjustments of their own on part of the photo, like layers. A
+   mask is painted (brush), a graduated filter (gradient: all of it from
+   (x0, y0), fading to none at (x1, y1), and beyond) or an oval (radial:
+   centre (x0, y0), half-widths x1 of the width and y1 of the height, its
+   outer part f fading; inverted, everything but the oval). Any of them
+   can be painted on (add) or off (erase) with the brush. Each has its own
+   exposure, contrast, highlights, shadows, temperature, tint, saturation,
+   clarity and sharpness, applied where the mask is, as much as it is.
+   Places are fractions of the photo upright (as spots).
+   Text form, a line for each mask, then a line for each stroke on one:
+     mask k=radial x0=0.5000 y0=0.4000 x1=0.2000 y1=0.3000 f=0.50 invert=1 ev=0.50 shadows=30
+     (off=1 after k=: switched off, there but not applied)
+     paint m=0 k=add a=1.00 r=0.0300 f=0.50 p=4120,3310;4180,3325;...
+   Strokes: under a brush of radius r (a fraction of the longer side)
+   whose outer part f fades, amount 0..1 (flow); where strokes overlap on
+   a mask the most counts; erasing takes the mask away again.
+   (Before 0.0.38, "brush k=dodge|burn|saturate|desaturate a= r= f= p="
+   lines were each a stroke of its own kind: each is read as a brush mask
+   with the exposure or saturation it gave.) */
+enum { MASK_BRUSH, MASK_GRADIENT, MASK_RADIAL, MASK_KINDS };
+extern const char *const recipe_mask_keys[MASK_KINDS];     /* "brush", "gradient", "radial" */
+enum { M_EV, M_CONTRAST, M_HIGHLIGHTS, M_SHADOWS, M_TEMP, M_TINT, M_SATURATION, M_CLARITY, M_SHARPNESS, M_COUNT };
+extern const recipe_param recipe_mask_params[M_COUNT];      /* key, label, range; group unused */
+#define RECIPE_MASKS 32
+typedef struct { int kind, invert, off; float v[M_COUNT]; float x0, y0, x1, y1, f; } recipe_mask;   /* off: switched off (kept, not applied) */
+
+enum { BRUSH_ADD, BRUSH_ERASE, BRUSH_KINDS };
+extern const char *const recipe_brush_keys[BRUSH_KINDS];   /* "add", "erase" */
+#define RECIPE_STROKES 64
 #define RECIPE_STROKE_POINTS 1024      /* all strokes' points together */
-#define RECIPE_STROKE_MAX 256          /* one stroke's */
-typedef struct { int kind, first, n; float r, f, amount; } recipe_stroke;
+#define RECIPE_STROKE_MAX 256          /* one stroke's (or painted spot's) */
+typedef struct { int mask, kind, first, n; float r, f, amount; } recipe_stroke;
 
 typedef struct
 {
   float v[P_COUNT];
   recipe_curve curve[CURVE_COUNT];
-  int nspots;
+  int nspots, nspoints;
   recipe_spot spot[RECIPE_SPOTS];
+  uint16_t spt[RECIPE_SPOT_POINTS][2];   /* painted spots' paths, x, y in 1/10000ths */
+  int nmasks;
+  recipe_mask mask[RECIPE_MASKS];
   int nstrokes, npoints;
   recipe_stroke stroke[RECIPE_STROKES];
   uint16_t pt[RECIPE_STROKE_POINTS][2];   /* x, y in 1/10000ths */
@@ -151,13 +177,28 @@ int recipe_curve_add (recipe_curve *c, float x);
 void recipe_curve_remove (recipe_curve *c, int i);
 /* Moves point i, kept between its neighbours. */
 void recipe_curve_move (recipe_curve *c, int i, float x, float y);
-/* Spots: added (its index, -1 when full), and taken away. */
+/* Spots: added (its index, -1 when full), and taken away. A painted one
+   from n points (xy: x, y fractions; its x, y are the first, sx, sy its
+   source's first). Moved: by du, dv (its source too unless only_source),
+   kept on the photo. */
 int recipe_spot_add (recipe *r, const recipe_spot *sp);
+int recipe_spot_add_path (recipe *r, const recipe_spot *sp, const float *xy, int n);
 void recipe_spot_remove (recipe *r, int i);
+void recipe_spot_move (recipe *r, int i, float du, float dv, int only_source);
 int recipe_spots_equal (const recipe *a, const recipe *b);
-/* Strokes: added from n points (xy: x, y fractions), its index or -1
-   when there's no room; taken away; compared. */
-int recipe_stroke_add (recipe *r, int kind, float radius, float feather, float amount, const float *xy, int n);
+/* Point j of spot i (its path, or the centre), as fractions. */
+void recipe_spot_point (const recipe *r, int i, int j, float *u, float *v);
+/* Masks: added (its index, -1 when full; m's strokes aren't copied),
+   taken away with its strokes, compared (strokes too). A new mask:
+   recipe_mask_init. */
+void recipe_mask_init (recipe_mask *m, int kind);
+int recipe_mask_add (recipe *r, const recipe_mask *m);
+void recipe_mask_remove (recipe *r, int i);
+void recipe_mask_set (recipe_mask *m, int p, float value);   /* clamped and stepped */
+int recipe_masks_equal (const recipe *a, const recipe *b);
+/* Strokes on mask `mask`: added from n points (xy: x, y fractions), its
+   index or -1 when there's no room; taken away; compared. */
+int recipe_stroke_add (recipe *r, int mask, int kind, float radius, float feather, float amount, const float *xy, int n);
 void recipe_stroke_remove (recipe *r, int i);
 int recipe_strokes_equal (const recipe *a, const recipe *b);
 /* Formats only the look (no geometry lines): what a preset stores. */

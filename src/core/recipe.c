@@ -118,7 +118,7 @@ int recipe_is_default (const recipe *r)
   for (i = 0; i < CURVE_COUNT; i++)
     if (!recipe_curve_is_identity (&r->curve[i]))
       return 0;
-  if (r->nspots || r->nstrokes)
+  if (r->nspots || r->nstrokes || r->nmasks)
     return 0;
   return 1;
 }
@@ -145,7 +145,7 @@ int recipe_equal (const recipe *a, const recipe *b)
   for (i = 0; i < CURVE_COUNT; i++)
     if (!curve_equal (&a->curve[i], &b->curve[i]))
       return 0;
-  if (!recipe_spots_equal (a, b) || !recipe_strokes_equal (a, b))
+  if (!recipe_spots_equal (a, b) || !recipe_masks_equal (a, b) || !recipe_strokes_equal (a, b))
     return 0;
   return 1;
 }
@@ -285,12 +285,41 @@ void recipe_set (recipe *r, int p, float value)
   r->v[p] = value;
 }
 
+static float clamp_unit (float v)
+{
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+/* "4120,3310;4180,3325;..." (1/10000ths) into xy (fractions): how many. */
+static int parse_points (const char *q, float *xy, int max)
+{
+  int n = 0;
+  char *e;
+  while (*q && n < max)
+    {
+      long x = strtol (q, &e, 10), y;
+      if (e == q || *e != ',')
+        break;
+      q = e + 1;
+      y = strtol (q, &e, 10);
+      if (e == q)
+        break;
+      xy[2 * n] = (float) x / 10000;
+      xy[2 * n + 1] = (float) y / 10000;
+      n++;
+      if (*e != ';')
+        break;
+      q = e + 1;
+    }
+  return n;
+}
+
 int recipe_parse (recipe *r, const char *text)
 {
   recipe_default (r);
   while (text && *text)
     {
-      char line[4096], *tok, *save = NULL;   /* a stroke's line is the longest */
+      char line[4096], *tok, *save = NULL;   /* a stroke's (painted spot's) line is the longest */
       const char *end = strchr (text, '\n');
       size_t len = end ? (size_t) (end - text) : strlen (text);
       if (len >= sizeof line)
@@ -301,10 +330,11 @@ int recipe_parse (recipe *r, const char *text)
       tok = strtok_r (line, " \t\r", &save);
       if (!tok)
         continue;
-      if (strcmp (tok, "brush") == 0)
+      if (strcmp (tok, "brush") == 0 || strcmp (tok, "paint") == 0)
         {
-          int kind = BRUSH_DODGE, n = 0, k;
-          float rad = 0.03f, fe = 0.5f, amt = 0.25f, xy[RECIPE_STROKE_MAX * 2];
+          static const char *const old_keys[4] = { "dodge", "burn", "saturate", "desaturate" };
+          int paint = tok[0] == 'p', kind = paint ? BRUSH_ADD : 0, n = 0, k, m = -1;
+          float rad = 0.03f, fe = 0.5f, amt = paint ? 1.0f : 0.25f, xy[RECIPE_STROKE_MAX * 2];
           while ((tok = strtok_r (NULL, " \t\r", &save)) != NULL)
             {
               char *eq = strchr (tok, '=');
@@ -313,41 +343,43 @@ int recipe_parse (recipe *r, const char *text)
               *eq = '\0';
               if (!strcmp (tok, "k"))
                 {
-                  for (k = 0; k < BRUSH_KINDS; k++)
-                    if (!strcmp (eq + 1, recipe_brush_keys[k]))
+                  for (k = 0; k < (paint ? BRUSH_KINDS : 4); k++)
+                    if (!strcmp (eq + 1, paint ? recipe_brush_keys[k] : old_keys[k]))
                       kind = k;
                 }
+              else if (!strcmp (tok, "m")) m = (int) strtol (eq + 1, NULL, 10);
               else if (!strcmp (tok, "a")) amt = strtof (eq + 1, NULL);
               else if (!strcmp (tok, "r")) rad = strtof (eq + 1, NULL);
               else if (!strcmp (tok, "f")) fe = strtof (eq + 1, NULL);
               else if (!strcmp (tok, "p"))
-                {
-                  char *q = eq + 1, *e;
-                  while (*q && n < RECIPE_STROKE_MAX)
-                    {
-                      long x = strtol (q, &e, 10), y;
-                      if (e == q || *e != ',')
-                        break;
-                      q = e + 1;
-                      y = strtol (q, &e, 10);
-                      if (e == q)
-                        break;
-                      xy[2 * n] = (float) x / 10000;
-                      xy[2 * n + 1] = (float) y / 10000;
-                      n++;
-                      q = *e == ';' ? e + 1 : e;
-                      if (*e != ';')
-                        break;
-                    }
-                }
+                n = parse_points (eq + 1, xy, RECIPE_STROKE_MAX);
             }
-          if (n)
-            recipe_stroke_add (r, kind, rad, fe, amt, xy, n);
+          if (!n)
+            continue;
+          if (!paint)
+            {
+              /* A stroke from before masks: a brush mask of its own, giving
+                 what it gave (2 stops at 1; double or no colour at 1). */
+              recipe_mask mk;
+              recipe_mask_init (&mk, MASK_BRUSH);
+              if (kind <= 1)
+                recipe_mask_set (&mk, M_EV, (kind == 0 ? 2.0f : -2.0f) * clamp_unit (amt));
+              else
+                recipe_mask_set (&mk, M_SATURATION, (kind == 2 ? 100.0f : -100.0f) * clamp_unit (amt));
+              if ((m = recipe_mask_add (r, &mk)) < 0)
+                continue;
+              kind = BRUSH_ADD;
+              amt = 1;
+            }
+          if (m >= 0 && m < r->nmasks)
+            recipe_stroke_add (r, m, kind, rad, fe, amt, xy, n);
           continue;
         }
-      if (strcmp (tok, "spot") == 0)
+      if (strcmp (tok, "mask") == 0)
         {
-          recipe_spot sp = { 0.5f, 0.5f, 0.01f, 0.5f, 0.5f, 0, 0.3f };
+          recipe_mask mk;
+          int kind = MASK_BRUSH, k;
+          recipe_mask_init (&mk, MASK_BRUSH);
           while ((tok = strtok_r (NULL, " \t\r", &save)) != NULL)
             {
               char *eq = strchr (tok, '=');
@@ -355,6 +387,47 @@ int recipe_parse (recipe *r, const char *text)
               if (!eq)
                 continue;
               *eq = '\0';
+              v = strtof (eq + 1, NULL);
+              if (!strcmp (tok, "k"))
+                {
+                  for (k = 0; k < MASK_KINDS; k++)
+                    if (!strcmp (eq + 1, recipe_mask_keys[k]))
+                      kind = k;
+                  continue;
+                }
+              if (!strcmp (tok, "x0")) mk.x0 = v;
+              else if (!strcmp (tok, "y0")) mk.y0 = v;
+              else if (!strcmp (tok, "x1")) mk.x1 = v;
+              else if (!strcmp (tok, "y1")) mk.y1 = v;
+              else if (!strcmp (tok, "f")) mk.f = clamp_unit (v);
+              else if (!strcmp (tok, "invert")) mk.invert = v != 0;
+              else if (!strcmp (tok, "off")) mk.off = v != 0;
+              else
+                for (k = 0; k < M_COUNT; k++)
+                  if (!strcmp (tok, recipe_mask_params[k].key))
+                    recipe_mask_set (&mk, k, v);
+            }
+          mk.kind = kind;
+          recipe_mask_add (r, &mk);
+          continue;
+        }
+      if (strcmp (tok, "spot") == 0)
+        {
+          recipe_spot sp = { 0.5f, 0.5f, 0.01f, 0.5f, 0.5f, 0, 0.3f, 0, 0 };
+          float xy[RECIPE_STROKE_MAX * 2];
+          int n = 0;
+          while ((tok = strtok_r (NULL, " \t\r", &save)) != NULL)
+            {
+              char *eq = strchr (tok, '=');
+              float v;
+              if (!eq)
+                continue;
+              *eq = '\0';
+              if (!strcmp (tok, "p"))
+                {
+                  n = parse_points (eq + 1, xy, RECIPE_STROKE_MAX);
+                  continue;
+                }
               v = strtof (eq + 1, NULL);
               if (!strcmp (tok, "x")) sp.x = v;
               else if (!strcmp (tok, "y")) sp.y = v;
@@ -364,7 +437,10 @@ int recipe_parse (recipe *r, const char *text)
               else if (!strcmp (tok, "clone")) sp.clone = v != 0;
               else if (!strcmp (tok, "f")) sp.f = v;
             }
-          recipe_spot_add (r, &sp);
+          if (n >= 2)
+            recipe_spot_add_path (r, &sp, xy, n);
+          else
+            recipe_spot_add (r, &sp);
           continue;
         }
       if (strcmp (tok, "curves") == 0)
@@ -445,15 +521,12 @@ int recipe_spots_equal (const recipe *a, const recipe *b)
     {
       const recipe_spot *p = &a->spot[i], *q = &b->spot[i];
       if (!same (p->x, q->x) || !same (p->y, q->y) || !same (p->r, q->r) || !same (p->sx, q->sx) || !same (p->sy, q->sy)
-          || p->clone != q->clone || !same (p->f, q->f))
+          || p->clone != q->clone || !same (p->f, q->f) || p->n != q->n)
+        return 0;
+      if (p->n > 1 && memcmp (a->spt[p->first], b->spt[q->first], sizeof a->spt[0] * (size_t) p->n))
         return 0;
     }
   return 1;
-}
-
-static float clamp_unit (float v)
-{
-  return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
 int recipe_spot_add (recipe *r, const recipe_spot *sp)
@@ -469,22 +542,214 @@ int recipe_spot_add (recipe *r, const recipe_spot *sp)
   d->r = sp->r < 0.001f ? 0.001f : sp->r > 0.25f ? 0.25f : sp->r;
   d->clone = sp->clone ? 1 : 0;
   d->f = clamp_unit (sp->f);
+  d->first = r->nspoints;
+  d->n = 0;
   return r->nspots++;
 }
 
-/* --- strokes */
-const char *const recipe_brush_keys[BRUSH_KINDS] = { "dodge", "burn", "saturate", "desaturate" };
+int recipe_spot_add_path (recipe *r, const recipe_spot *sp, const float *xy, int n)
+{
+  recipe_spot s2 = *sp;
+  int i, j;
+  if (n > RECIPE_STROKE_MAX)
+    n = RECIPE_STROKE_MAX;
+  if (n < 2)
+    {
+      if (n == 1)
+        {
+          s2.sx += xy[0] - s2.x; s2.sy += xy[1] - s2.y;
+          s2.x = xy[0]; s2.y = xy[1];
+        }
+      return recipe_spot_add (r, &s2);
+    }
+  if (r->nspots >= RECIPE_SPOTS || r->nspoints + n > RECIPE_SPOT_POINTS)
+    return -1;
+  /* The source keeps its offset from the first point. */
+  s2.sx = xy[0] + (sp->sx - sp->x);
+  s2.sy = xy[1] + (sp->sy - sp->y);
+  s2.x = xy[0];
+  s2.y = xy[1];
+  if ((i = recipe_spot_add (r, &s2)) < 0)
+    return -1;
+  r->spot[i].first = r->nspoints;
+  r->spot[i].n = n;
+  for (j = 0; j < n; j++)
+    {
+      r->spt[r->nspoints + j][0] = (uint16_t) lroundf (clamp_unit (xy[2 * j]) * 10000);
+      r->spt[r->nspoints + j][1] = (uint16_t) lroundf (clamp_unit (xy[2 * j + 1]) * 10000);
+    }
+  r->nspoints += n;
+  r->spot[i].x = r->spt[r->spot[i].first][0] / 10000.0f;
+  r->spot[i].y = r->spt[r->spot[i].first][1] / 10000.0f;
+  return i;
+}
 
-int recipe_stroke_add (recipe *r, int kind, float radius, float feather, float amount, const float *xy, int n)
+void recipe_spot_point (const recipe *r, int i, int j, float *u, float *v)
+{
+  const recipe_spot *sp = &r->spot[i];
+  if (sp->n < 2)
+    {
+      *u = sp->x;
+      *v = sp->y;
+      return;
+    }
+  j = j < 0 ? 0 : j >= sp->n ? sp->n - 1 : j;
+  *u = r->spt[sp->first + j][0] / 10000.0f;
+  *v = r->spt[sp->first + j][1] / 10000.0f;
+}
+
+void recipe_spot_move (recipe *r, int i, float du, float dv, int only_source)
+{
+  recipe_spot *sp;
+  int j;
+  if (i < 0 || i >= r->nspots)
+    return;
+  sp = &r->spot[i];
+  sp->sx = clamp_unit (sp->sx + du);
+  sp->sy = clamp_unit (sp->sy + dv);
+  if (only_source)
+    return;
+  if (sp->n >= 2)
+    {
+      /* The whole path, kept on the photo (as a whole). */
+      float lo_u = 1, hi_u = 0, lo_v = 1, hi_v = 0;
+      for (j = 0; j < sp->n; j++)
+        {
+          float u = r->spt[sp->first + j][0] / 10000.0f, v = r->spt[sp->first + j][1] / 10000.0f;
+          lo_u = u < lo_u ? u : lo_u; hi_u = u > hi_u ? u : hi_u;
+          lo_v = v < lo_v ? v : lo_v; hi_v = v > hi_v ? v : hi_v;
+        }
+      du = lo_u + du < 0 ? -lo_u : hi_u + du > 1 ? 1 - hi_u : du;
+      dv = lo_v + dv < 0 ? -lo_v : hi_v + dv > 1 ? 1 - hi_v : dv;
+      for (j = 0; j < sp->n; j++)
+        {
+          r->spt[sp->first + j][0] = (uint16_t) lroundf (clamp_unit (r->spt[sp->first + j][0] / 10000.0f + du) * 10000);
+          r->spt[sp->first + j][1] = (uint16_t) lroundf (clamp_unit (r->spt[sp->first + j][1] / 10000.0f + dv) * 10000);
+        }
+      sp->x = r->spt[sp->first][0] / 10000.0f;
+      sp->y = r->spt[sp->first][1] / 10000.0f;
+      return;
+    }
+  sp->x = clamp_unit (sp->x + du);
+  sp->y = clamp_unit (sp->y + dv);
+}
+
+/* --- masks */
+const char *const recipe_mask_keys[MASK_KINDS] = { "brush", "gradient", "radial" };
+
+const recipe_param recipe_mask_params[M_COUNT] =
+{
+  { "mask", "ev",         "Exposure",    -4,   4, 0, 0.05f, 2, 0 },
+  { "mask", "contrast",   "Contrast",  -100, 100, 0, 1,     0, 0 },
+  { "mask", "highlights", "Highlights", -100, 100, 0, 1,    0, 0 },
+  { "mask", "shadows",    "Shadows",   -100, 100, 0, 1,     0, 0 },
+  { "mask", "temp",       "Temperature", -100, 100, 0, 1,   0, 0 },
+  { "mask", "tint",       "Tint",      -100, 100, 0, 1,     0, 0 },
+  { "mask", "saturation", "Saturation", -100, 100, 0, 1,    0, 0 },
+  { "mask", "clarity",    "Clarity",   -100, 100, 0, 1,     0, 0 },
+  { "mask", "sharpness",  "Sharpness", -100, 100, 0, 1,     0, 0 },
+};
+
+void recipe_mask_init (recipe_mask *m, int kind)
+{
+  memset (m, 0, sizeof *m);
+  m->kind = kind < 0 || kind >= MASK_KINDS ? MASK_BRUSH : kind;
+  m->f = 0.5f;
+  if (m->kind == MASK_GRADIENT)
+    {
+      m->x0 = 0.5f; m->y0 = 0.0f; m->x1 = 0.5f; m->y1 = 0.5f;   /* the top half, as for a sky */
+    }
+  else if (m->kind == MASK_RADIAL)
+    {
+      m->x0 = 0.5f; m->y0 = 0.5f; m->x1 = 0.25f; m->y1 = 0.25f;
+    }
+}
+
+void recipe_mask_set (recipe_mask *m, int p, float value)
+{
+  const recipe_param *d;
+  if (p < 0 || p >= M_COUNT)
+    return;
+  d = &recipe_mask_params[p];
+  if (value < d->min) value = d->min;
+  if (value > d->max) value = d->max;
+  value = d->min + roundf ((value - d->min) / d->step) * d->step;
+  if (value > d->max)
+    value = d->max;
+  if (same (value, 0))
+    value = 0;
+  m->v[p] = value;
+}
+
+int recipe_mask_add (recipe *r, const recipe_mask *m)
+{
+  recipe_mask *d;
+  int p;
+  if (r->nmasks >= RECIPE_MASKS)
+    return -1;
+  d = &r->mask[r->nmasks];
+  *d = *m;
+  d->kind = m->kind < 0 || m->kind >= MASK_KINDS ? MASK_BRUSH : m->kind;
+  d->invert = m->invert ? 1 : 0;
+  d->off = m->off ? 1 : 0;
+  d->f = clamp_unit (m->f);
+  for (p = 0; p < M_COUNT; p++)
+    recipe_mask_set (d, p, m->v[p]);
+  if (d->kind == MASK_RADIAL)
+    {
+      d->x1 = d->x1 < 0.005f ? 0.005f : d->x1 > 2 ? 2 : d->x1;
+      d->y1 = d->y1 < 0.005f ? 0.005f : d->y1 > 2 ? 2 : d->y1;
+    }
+  return r->nmasks++;
+}
+
+void recipe_mask_remove (recipe *r, int i)
+{
+  int j;
+  if (i < 0 || i >= r->nmasks)
+    return;
+  for (j = r->nstrokes - 1; j >= 0; j--)
+    if (r->stroke[j].mask == i)
+      recipe_stroke_remove (r, j);
+  for (j = 0; j < r->nstrokes; j++)
+    if (r->stroke[j].mask > i)
+      r->stroke[j].mask--;
+  memmove (&r->mask[i], &r->mask[i + 1], sizeof r->mask[0] * (size_t) (r->nmasks - i - 1));
+  r->nmasks--;
+}
+
+int recipe_masks_equal (const recipe *a, const recipe *b)
+{
+  int i, p;
+  if (a->nmasks != b->nmasks)
+    return 0;
+  for (i = 0; i < a->nmasks; i++)
+    {
+      const recipe_mask *m = &a->mask[i], *n = &b->mask[i];
+      if (m->kind != n->kind || m->invert != n->invert || m->off != n->off || !same (m->x0, n->x0) || !same (m->y0, n->y0)
+          || !same (m->x1, n->x1) || !same (m->y1, n->y1) || !same (m->f, n->f))
+        return 0;
+      for (p = 0; p < M_COUNT; p++)
+        if (!same (m->v[p], n->v[p]))
+          return 0;
+    }
+  return 1;
+}
+
+/* --- strokes */
+const char *const recipe_brush_keys[BRUSH_KINDS] = { "add", "erase" };
+
+int recipe_stroke_add (recipe *r, int mask, int kind, float radius, float feather, float amount, const float *xy, int n)
 {
   recipe_stroke *st;
   int j;
   if (n > RECIPE_STROKE_MAX)
     n = RECIPE_STROKE_MAX;
-  if (n <= 0 || r->nstrokes >= RECIPE_STROKES || r->npoints + n > RECIPE_STROKE_POINTS)
+  if (n <= 0 || mask < 0 || mask >= r->nmasks || r->nstrokes >= RECIPE_STROKES || r->npoints + n > RECIPE_STROKE_POINTS)
     return -1;
   st = &r->stroke[r->nstrokes];
-  st->kind = kind < 0 || kind >= BRUSH_KINDS ? BRUSH_DODGE : kind;
+  st->mask = mask;
+  st->kind = kind < 0 || kind >= BRUSH_KINDS ? BRUSH_ADD : kind;
   st->r = radius < 0.001f ? 0.001f : radius > 0.25f ? 0.25f : radius;
   st->f = clamp_unit (feather);
   st->amount = clamp_unit (amount);
@@ -522,7 +787,7 @@ int recipe_strokes_equal (const recipe *a, const recipe *b)
   for (i = 0; i < a->nstrokes; i++)
     {
       const recipe_stroke *p = &a->stroke[i], *q = &b->stroke[i];
-      if (p->kind != q->kind || p->n != q->n || p->first != q->first || !same (p->r, q->r) || !same (p->f, q->f)
+      if (p->kind != q->kind || p->mask != q->mask || p->n != q->n || p->first != q->first || !same (p->r, q->r) || !same (p->f, q->f)
           || !same (p->amount, q->amount))
         return 0;
     }
@@ -531,10 +796,21 @@ int recipe_strokes_equal (const recipe *a, const recipe *b)
 
 void recipe_spot_remove (recipe *r, int i)
 {
+  int j, first, n;
   if (i < 0 || i >= r->nspots)
     return;
+  first = r->spot[i].first;
+  n = r->spot[i].n >= 2 ? r->spot[i].n : 0;
+  if (n)
+    {
+      memmove (&r->spt[first], &r->spt[first + n], sizeof r->spt[0] * (size_t) (r->nspoints - first - n));
+      r->nspoints -= n;
+    }
   memmove (&r->spot[i], &r->spot[i + 1], sizeof r->spot[0] * (size_t) (r->nspots - i - 1));
   r->nspots--;
+  for (j = 0; j < r->nspots; j++)
+    if (n && r->spot[j].n >= 2 && r->spot[j].first > first)
+      r->spot[j].first -= n;
 }
 
 int recipe_format_look (const recipe *r, char *out, size_t n)
@@ -543,6 +819,24 @@ int recipe_format_look (const recipe *r, char *out, size_t n)
   recipe_default (&look);
   recipe_copy_look (&look, r);
   return recipe_format (&look, out, n);
+}
+
+/* " p=4120,3310;4180,3325..." for n points: its length, or -1. */
+static int format_points (char *out, size_t room, const uint16_t (*pt)[2], int n)
+{
+  size_t used = 0;
+  int j, k = snprintf (out, room, " p=");
+  if (k < 0 || (size_t) k >= room)
+    return -1;
+  used = (size_t) k;
+  for (j = 0; j < n; j++)
+    {
+      k = snprintf (out + used, room - used, "%s%u,%u", j ? ";" : "", pt[j][0], pt[j][1]);
+      if (k < 0 || used + (size_t) k >= room)
+        return -1;
+      used += (size_t) k;
+    }
+  return (int) used;
 }
 
 int recipe_format (const recipe *r, char *out, size_t n)
@@ -615,28 +909,60 @@ int recipe_format (const recipe *r, char *out, size_t n)
     for (i = 0; i < r->nspots; i++)
       {
         const recipe_spot *p = &r->spot[i];
-        int k = snprintf (out + used, n - used, "spot x=%.4f y=%.4f r=%.4f sx=%.4f sy=%.4f clone=%d f=%.2f\n",
-                          (double) p->x, (double) p->y, (double) p->r, (double) p->sx, (double) p->sy, p->clone,
-                          (double) p->f);
+        int k = snprintf (out + used, n - used, "spot x=%.4f y=%.4f r=%.4f sx=%.4f sy=%.4f clone=%d f=%.2f",
+                             (double) p->x, (double) p->y, (double) p->r, (double) p->sx, (double) p->sy, p->clone,
+                             (double) p->f);
         if (k < 0 || used + (size_t) k >= n)
           return -1;
         used += (size_t) k;
+        if (p->n >= 2 && (k = format_points (out + used, n - used, (const uint16_t (*)[2]) &r->spt[p->first], p->n)) < 0)
+          return -1;
+        used += p->n >= 2 ? (size_t) k : 0;
+        if (used + 2 > n)
+          return -1;
+        out[used++] = '\n';
+        out[used] = '\0';
       }
-    for (i = 0; i < r->nstrokes; i++)
+    for (i = 0; i < r->nmasks; i++)
       {
-        const recipe_stroke *st = &r->stroke[i];
-        int j, k = snprintf (out + used, n - used, "brush k=%s a=%.2f r=%.4f f=%.2f p=", recipe_brush_keys[st->kind],
-                             (double) st->amount, (double) st->r, (double) st->f);
+        const recipe_mask *m = &r->mask[i];
+        int q, k = snprintf (out + used, n - used, "mask k=%s%s", recipe_mask_keys[m->kind], m->off ? " off=1" : "");
         if (k < 0 || used + (size_t) k >= n)
           return -1;
         used += (size_t) k;
-        for (j = 0; j < st->n; j++)
+        if (m->kind != MASK_BRUSH)
           {
-            k = snprintf (out + used, n - used, "%s%u,%u", j ? ";" : "", r->pt[st->first + j][0], r->pt[st->first + j][1]);
+            k = snprintf (out + used, n - used, " x0=%.4f y0=%.4f x1=%.4f y1=%.4f f=%.2f%s", (double) m->x0, (double) m->y0,
+                          (double) m->x1, (double) m->y1, (double) m->f, m->invert ? " invert=1" : "");
             if (k < 0 || used + (size_t) k >= n)
               return -1;
             used += (size_t) k;
           }
+        for (q = 0; q < M_COUNT; q++)
+          if (!same (m->v[q], 0))
+            {
+              k = snprintf (out + used, n - used, " %s=%.*f", recipe_mask_params[q].key, recipe_mask_params[q].decimals,
+                            (double) m->v[q]);
+              if (k < 0 || used + (size_t) k >= n)
+                return -1;
+              used += (size_t) k;
+            }
+        if (used + 2 > n)
+          return -1;
+        out[used++] = '\n';
+        out[used] = '\0';
+      }
+    for (i = 0; i < r->nstrokes; i++)
+      {
+        const recipe_stroke *st = &r->stroke[i];
+        int k = snprintf (out + used, n - used, "paint m=%d k=%s a=%.2f r=%.4f f=%.2f", st->mask, recipe_brush_keys[st->kind],
+                          (double) st->amount, (double) st->r, (double) st->f);
+        if (k < 0 || used + (size_t) k >= n)
+          return -1;
+        used += (size_t) k;
+        if ((k = format_points (out + used, n - used, (const uint16_t (*)[2]) &r->pt[st->first], st->n)) < 0)
+          return -1;
+        used += (size_t) k;
         if (used + 2 > n)
           return -1;
         out[used++] = '\n';

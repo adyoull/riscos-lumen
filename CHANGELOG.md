@@ -51,6 +51,29 @@
   them (watched ones too) are looked through more quickly.
 - The guide says how Lumen knows photos.
 
+- Layers: adjustments of their own on part of the photo (Exposure,
+  Contrast, Highlights, Shadows, Temperature, Tint, Saturation, Clarity,
+  Sharpness), each where its mask is: painted (brush), a graduated
+  filter (gradient) or an oval (radial, which can be inverted), any of
+  them painted on or off with Add and Erase. The Layers tool (B, the
+  Brush button before) has everything in the Adjustments tab: the
+  layers, New layer, the brush's Size, Feather and Flow, the chosen
+  layer's sliders, Invert, Show mask (red over the photo) and Delete.
+  The list stays in the tab with the tool put away: click a layer to
+  choose it, its tick to switch it off and on. Pins on the photo choose
+  layers; handles change gradients and ovals. Brush strokes from 0.0.37
+  and earlier (Dodge, Burn, Saturate, Desaturate) open as brush layers
+  that do the same.
+- Retouch: drag along a wire, a hair or a scratch to paint it out along
+  the path (a source the same shape is found for it). Repair blends
+  better: the difference between the spot's surroundings and the
+  source's is spread through the spot as smoothly as it can be (a
+  membrane), so there's no seam and gradients carry on through it.
+- The Adjustments tab's groups have header bars: a click anywhere on
+  one folds the group; Adjust keeps only that one open, like a
+  concertina. Fold all and Open all, under the tool buttons, fold or open
+  the Layers list and every group.
+
 - Presets are files: each a Text file named after it in
   <Choices$Write>.Lumen.Presets, used by every library. To share one,
   copy it into another Lumen's Presets directory, or drop it on Lumen's

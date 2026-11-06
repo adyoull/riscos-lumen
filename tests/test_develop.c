@@ -2000,7 +2000,21 @@ static void test_hsl_vignette_noise (const char *work)
   (void) k;
 }
 
-/* Spots: healing and cloning, on 8 and 16 bits; the recipe keeps them. */
+/* A brush mask with exposure ev (or saturation sat), and a stroke on it. */
+static int brush_mask (recipe *r, float ev, float sat, const float *xy, int n, float rad, float fe)
+{
+  recipe_mask mk;
+  int m;
+  recipe_mask_init (&mk, MASK_BRUSH);
+  recipe_mask_set (&mk, M_EV, ev);
+  recipe_mask_set (&mk, M_SATURATION, sat);
+  if ((m = recipe_mask_add (r, &mk)) < 0)
+    return -1;
+  return recipe_stroke_add (r, m, BRUSH_ADD, rad, fe, 1, xy, n) < 0 ? -1 : m;
+}
+
+/* Masks: painted, graduated and radial, each with its own adjustments;
+   strokes before 0.0.38 read as masks. */
 static void test_brush (void)
 {
   int w = 200, h = 100, x, y;
@@ -2017,75 +2031,204 @@ static void test_brush (void)
         p[0] = 118; p[1] = (unsigned char) (x < w / 2 ? 118 : 80); p[2] = (unsigned char) (x < w / 2 ? 118 : 80);
       }
   memcpy (orig, img, (size_t) w * h * 3);
-  recipe_default (&r);
-  CHECK (recipe_stroke_add (&r, BRUSH_DODGE, 0.05f, 0.5f, 0.5f, line, 3) == 0 && r.npoints == 3, "a stroke added");
+  /* An old dodge stroke: a mask of its own, a stop (2 at 1) where painted. */
+  recipe_parse (&r, "brush k=dodge a=0.50 r=0.0500 f=0.50 p=2000,5000;5000,5000;8000,5000\n");
+  CHECK (r.nmasks == 1 && r.nstrokes == 1 && r.mask[0].kind == MASK_BRUSH && r.mask[0].v[M_EV] == 1.0f
+         && r.stroke[0].mask == 0 && r.stroke[0].kind == BRUSH_ADD && r.stroke[0].amount == 1 && r.npoints == 3,
+         "an old dodge stroke read as a brush mask, Exposure +1");
   recipe_format (&r, t, sizeof t);
   recipe_parse (&back, t);
-  CHECK (strstr (t, "brush k=dodge a=0.50 r=0.0500 f=0.50 p=2000,5000;5000,5000;8000,5000\n") != NULL
-         && recipe_equal (&r, &back), "brush line written and read back");
-  CHECK (!recipe_is_default (&r), "a recipe with a stroke isn't the original");
+  CHECK (strstr (t, "mask k=brush ev=1.00\npaint m=0 k=add a=1.00 r=0.0500 f=0.50 p=2000,5000;5000,5000;8000,5000\n") != NULL
+         && recipe_equal (&r, &back), "mask and paint lines written and read back");
+  CHECK (!recipe_is_default (&r), "a recipe with a mask isn't the original");
   {
     recipe look;
     recipe_format_look (&r, t, sizeof t);
     recipe_parse (&look, t);
-    CHECK (look.nstrokes == 0, "a look (preset) leaves strokes out");
+    CHECK (look.nmasks == 0 && look.nstrokes == 0, "a look (preset) leaves masks out");
   }
   retouch_rgb8 (img, w, h, &r);
   {
-    /* 118 is about 0.18 linear; one stop up (a = 0.5) is 0.36, about 163. */
+    /* 118 is about 0.18 linear; one stop up is 0.36, about 163. */
     unsigned char *c = img + ((size_t) 50 * w + 60) * 3;
-    CHECK (abs (c[0] - 163) <= 2 && c[0] == c[1], "dodge: a stop lighter along the stroke");
+    CHECK (abs (c[0] - 163) <= 2 && c[0] == c[1], "brushed exposure: a stop lighter along the stroke");
     CHECK (!memcmp (img, orig, (size_t) w * 30 * 3) && !memcmp (img + (size_t) w * 70 * 3, orig + (size_t) w * 70 * 3, (size_t) w * 30 * 3),
-           "dodge: away from the stroke untouched");
+           "away from the stroke untouched");
     c = img + ((size_t) 50 * w + 33) * 3;
-    CHECK (c[0] > 118 && c[0] < 163, "dodge: fades at the brush's edge");
+    CHECK (c[0] > 118 && c[0] < 163, "it fades at the brush's edge");
   }
   /* A stroke that crosses itself counts once. */
   {
     recipe once;
     float back_and_forth[6] = { 0.20f, 0.50f, 0.40f, 0.50f, 0.20f, 0.50f };
     recipe_default (&once);
-    recipe_stroke_add (&once, BRUSH_DODGE, 0.05f, 0.5f, 0.5f, back_and_forth, 3);
+    brush_mask (&once, 1, 0, back_and_forth, 3, 0.05f, 0.5f);
     memcpy (img, orig, (size_t) w * h * 3);
     retouch_rgb8 (img, w, h, &once);
     CHECK (abs (img[((size_t) 50 * w + 60) * 3] - 163) <= 2, "a stroke over itself counts once");
   }
-  /* Burn, and the colour: the red desaturated to grey. */
-  r.stroke[0].kind = BRUSH_BURN;
+  /* Darker, and the colour: the red desaturated to grey, or stronger. */
+  recipe_parse (&r, "brush k=burn a=0.50 r=0.0500 f=0.50 p=2000,5000;5000,5000;8000,5000\n");
   memcpy (img, orig, (size_t) w * h * 3);
   retouch_rgb8 (img, w, h, &r);
-  CHECK (abs (img[((size_t) 50 * w + 60) * 3] - 84) <= 2, "burn: a stop darker");
-  r.stroke[0].kind = BRUSH_DESATURATE;
-  r.stroke[0].amount = 1;
-  memcpy (img, orig, (size_t) w * h * 3);
-  retouch_rgb8 (img, w, h, &r);
-  {
-    unsigned char *c = img + ((size_t) 50 * w + 140) * 3;
-    CHECK (abs (c[0] - c[1]) <= 1 && abs (c[1] - c[2]) <= 1, "desaturate at 1: grey");
-  }
-  r.stroke[0].kind = BRUSH_SATURATE;
-  r.stroke[0].amount = 0.5f;
+  CHECK (r.mask[0].v[M_EV] == -1.0f && abs (img[((size_t) 50 * w + 60) * 3] - 84) <= 2, "an old burn: a stop darker");
+  recipe_parse (&r, "brush k=desaturate a=1 r=0.0500 f=0.50 p=2000,5000;5000,5000;8000,5000\n");
   memcpy (img, orig, (size_t) w * h * 3);
   retouch_rgb8 (img, w, h, &r);
   {
     unsigned char *c = img + ((size_t) 50 * w + 140) * 3;
-    CHECK (c[0] - c[1] > 118 - 80, "saturate: the red stronger");
+    CHECK (r.mask[0].v[M_SATURATION] == -100 && abs (c[0] - c[1]) <= 1 && abs (c[1] - c[2]) <= 1, "saturation -100: grey");
   }
-  /* 16-bit linear: the same dodge. */
-  r.stroke[0].kind = BRUSH_DODGE;
+  recipe_mask_set (&r.mask[0], M_SATURATION, 50);
+  memcpy (img, orig, (size_t) w * h * 3);
+  retouch_rgb8 (img, w, h, &r);
+  {
+    unsigned char *c = img + ((size_t) 50 * w + 140) * 3;
+    CHECK (c[0] - c[1] > 118 - 80, "saturation +50: the red stronger");
+  }
+  /* 16-bit linear: the same exposure. */
+  recipe_default (&r);
+  brush_mask (&r, 1, 0, line, 3, 0.05f, 0.5f);
   dev_to_linear (orig, lin, (size_t) w * h);
   {
     uint16_t before = lin[((size_t) 50 * w + 60) * 3];
     retouch_lin (lin, w, h, &r);
     CHECK (abs ((int) lin[((size_t) 50 * w + 60) * 3] - 2 * (int) before) < 200, "16-bit: a stop lighter too");
   }
-  /* Taking strokes away keeps the others' points. */
+  /* Erasing takes the mask away again, where it goes. */
+  {
+    float right[4] = { 0.55f, 0.50f, 0.90f, 0.50f };
+    CHECK (recipe_stroke_add (&r, 0, BRUSH_ERASE, 0.08f, 0.2f, 1, right, 2) == 1, "an erasing stroke on the mask");
+    memcpy (img, orig, (size_t) w * h * 3);
+    retouch_rgb8 (img, w, h, &r);
+    CHECK (abs (img[((size_t) 50 * w + 60) * 3] - 163) <= 2 && img[((size_t) 50 * w + 140) * 3] == 118,
+           "erased: the right part as it was, the left still lighter");
+    CHECK (retouch_mask_at (&r, 0, w, h, 0.30f, 0.50f) > 0.99f && retouch_mask_at (&r, 0, w, h, 0.70f, 0.50f) < 0.01f
+           && retouch_mask_at (&r, 0, w, h, 0.30f, 0.10f) == 0, "retouch_mask_at agrees");
+  }
+  /* Taking strokes away keeps the others' points; a mask goes with its strokes. */
   {
     float dab[2] = { 0.9f, 0.1f };
-    recipe_stroke_add (&r, BRUSH_BURN, 0.02f, 0.3f, 0.2f, dab, 1);
+    recipe_default (&r);
+    brush_mask (&r, 1, 0, line, 3, 0.05f, 0.5f);
+    brush_mask (&r, -1, 0, dab, 1, 0.02f, 0.3f);
     recipe_stroke_remove (&r, 0);
-    CHECK (r.nstrokes == 1 && r.npoints == 1 && r.stroke[0].first == 0 && r.pt[0][0] == 9000 && r.stroke[0].kind == BRUSH_BURN,
+    CHECK (r.nstrokes == 1 && r.npoints == 1 && r.stroke[0].first == 0 && r.pt[0][0] == 9000 && r.stroke[0].mask == 1,
            "a stroke taken away, the next moved down");
+    recipe_mask_remove (&r, 0);
+    CHECK (r.nmasks == 1 && r.nstrokes == 1 && r.stroke[0].mask == 0 && r.mask[0].v[M_EV] == -1,
+           "a mask taken away: the next one's strokes follow it down");
+    recipe_mask_remove (&r, 0);
+    CHECK (r.nmasks == 0 && r.nstrokes == 0 && r.npoints == 0, "and its strokes go with it");
+  }
+  /* Graduated: all of it at the top, fading to none half way down. */
+  {
+    recipe_mask mk;
+    recipe_default (&r);
+    recipe_mask_init (&mk, MASK_GRADIENT);
+    recipe_mask_set (&mk, M_EV, 1);
+    recipe_mask_add (&r, &mk);
+    memcpy (img, orig, (size_t) w * h * 3);
+    retouch_rgb8 (img, w, h, &r);
+    CHECK (abs (img[((size_t) 0 * w + 20) * 3] - 163) <= 3 && img[((size_t) 60 * w + 20) * 3] == 118
+           && img[((size_t) 25 * w + 20) * 3] > 125 && img[((size_t) 25 * w + 20) * 3] < 160,
+           "gradient: the top a stop lighter, past half way as it was, between in between");
+    recipe_format (&r, t, sizeof t);
+    recipe_parse (&back, t);
+    CHECK (strstr (t, "mask k=gradient x0=0.5000 y0=0.0000 x1=0.5000 y1=0.5000 f=0.50 ev=1.00\n") && recipe_equal (&r, &back),
+           "gradient written and read back");
+  }
+  /* Radial, inverted: the oval as it was, the corners darker. */
+  {
+    recipe_mask mk;
+    recipe_default (&r);
+    recipe_mask_init (&mk, MASK_RADIAL);
+    mk.x1 = 0.3f; mk.y1 = 0.4f; mk.f = 0.3f; mk.invert = 1;
+    recipe_mask_set (&mk, M_EV, -1);
+    recipe_mask_add (&r, &mk);
+    memcpy (img, orig, (size_t) w * h * 3);
+    retouch_rgb8 (img, w, h, &r);
+    CHECK (img[((size_t) 50 * w + 100) * 3 + 2] == orig[((size_t) 50 * w + 100) * 3 + 2]
+           && abs (img[((size_t) 2 * w + 2) * 3] - 84) <= 3, "radial inverted: the middle as it was, the corners a stop darker");
+    recipe_format (&r, t, sizeof t);
+    recipe_parse (&back, t);
+    CHECK (strstr (t, "mask k=radial x0=0.5000 y0=0.5000 x1=0.3000 y1=0.4000 f=0.30 invert=1 ev=-1.00\n")
+           && recipe_equal (&r, &back), "radial written and read back");
+    /* Painting on a radial mask adds to it. */
+    {
+      float c[2] = { 0.5f, 0.5f };
+      recipe_stroke_add (&r, 0, BRUSH_ADD, 0.05f, 0.2f, 1, c, 1);
+      memcpy (img, orig, (size_t) w * h * 3);
+      retouch_rgb8 (img, w, h, &r);
+      CHECK (img[((size_t) 50 * w + 100) * 3] < 100, "a stroke on it adds the middle");
+    }
+  }
+  /* Tone: shadows lift dark parts more than light ones; temperature warms. */
+  {
+    unsigned char *g = malloc ((size_t) w * h * 3), *g0 = malloc ((size_t) w * h * 3);
+    recipe_mask mk;
+    for (y = 0; y < h; y++)
+      for (x = 0; x < w; x++)
+        {
+          unsigned char *p = g + ((size_t) y * w + x) * 3;
+          p[0] = p[1] = p[2] = (unsigned char) (20 + x);   /* dark to light */
+        }
+    memcpy (g0, g, (size_t) w * h * 3);
+    recipe_default (&r);
+    recipe_mask_init (&mk, MASK_GRADIENT);
+    mk.x0 = 0.5f; mk.y0 = 2; mk.x1 = 0.5f; mk.y1 = 3;   /* all of the photo */
+    recipe_mask_set (&mk, M_SHADOWS, 80);
+    recipe_mask_add (&r, &mk);
+    retouch_rgb8 (g, w, h, &r);
+    {
+      int dark = g[((size_t) 50 * w + 20) * 3] - g0[((size_t) 50 * w + 20) * 3];
+      int light = g[((size_t) 50 * w + 190) * 3] - g0[((size_t) 50 * w + 190) * 3];
+      CHECK (dark > 8 && dark > 3 * (light > 0 ? light : 0), "shadows: the dark end lifted, the light end hardly");
+    }
+    memcpy (g, g0, (size_t) w * h * 3);
+    recipe_mask_set (&r.mask[0], M_SHADOWS, 0);
+    recipe_mask_set (&r.mask[0], M_TEMP, 60);
+    retouch_rgb8 (g, w, h, &r);
+    {
+      unsigned char *c = g + ((size_t) 50 * w + 100) * 3;
+      CHECK (c[0] > c[1] + 5 && c[1] > c[2] + 5, "temperature: warmer (red up, blue down)");
+    }
+    /* Clarity and sharpness on an edge: more difference across it. */
+    for (y = 0; y < h; y++)
+      for (x = 0; x < w; x++)
+        {
+          unsigned char *p = g + ((size_t) y * w + x) * 3;
+          p[0] = p[1] = p[2] = (unsigned char) (x < 100 ? 100 : 140);
+        }
+    memcpy (g0, g, (size_t) w * h * 3);
+    recipe_mask_set (&r.mask[0], M_TEMP, 0);
+    recipe_mask_set (&r.mask[0], M_CLARITY, 100);
+    retouch_rgb8 (g, w, h, &r);
+    CHECK (g[((size_t) 50 * w + 97) * 3] < 100 && g[((size_t) 50 * w + 102) * 3] > 140 && g[((size_t) 50 * w + 5) * 3] > 95
+           && g[((size_t) 50 * w + 5) * 3] < 105, "clarity: the edge's sides pushed apart, flat parts kept");
+    memcpy (g, g0, (size_t) w * h * 3);
+    recipe_mask_set (&r.mask[0], M_CLARITY, 0);
+    recipe_mask_set (&r.mask[0], M_SHARPNESS, 100);
+    retouch_rgb8 (g, w, h, &r);
+    CHECK (g[((size_t) 50 * w + 99) * 3] < 100 && g[((size_t) 50 * w + 100) * 3] > 140 && g[((size_t) 50 * w + 98) * 3] == 100,
+           "sharpness: the pixels either side of the edge, only them");
+    memcpy (g, g0, (size_t) w * h * 3);
+    recipe_mask_set (&r.mask[0], M_SHARPNESS, -100);
+    retouch_rgb8 (g, w, h, &r);
+    CHECK (g[((size_t) 50 * w + 99) * 3] > 100 && g[((size_t) 50 * w + 100) * 3] < 140, "sharpness below 0 softens");
+    free (g);
+    free (g0);
+  }
+  /* Thumbnails and exports go through develop_image: masks too. */
+  {
+    rgb_image im = { w, h, NULL };
+    recipe_default (&r);
+    brush_mask (&r, 1, 0, line, 3, 0.05f, 0.5f);
+    im.rgb = malloc ((size_t) w * h * 3);
+    memcpy (im.rgb, orig, (size_t) w * h * 3);
+    develop_image (&r, &im);
+    CHECK (abs (im.rgb[((size_t) 50 * im.w + 60) * 3] - 163) <= 3, "develop_image applies the masks");
+    free (im.rgb);
   }
   free (img); free (orig); free (lin);
 }
@@ -2096,7 +2239,7 @@ static void test_retouch (void)
   unsigned char *img = malloc ((size_t) w * h * 3), *orig = malloc ((size_t) w * h * 3);
   uint16_t *lin = malloc ((size_t) w * h * 6);
   recipe r, back;
-  recipe_spot sp = { 0.30f, 0.50f, 0.04f, 0.50f, 0.50f, 0, 0.3f };
+  recipe_spot sp = { 0.30f, 0.50f, 0.04f, 0.50f, 0.50f, 0, 0.3f, 0, 0 };
   char t[RECIPE_TEXT_MAX];
   /* A gradient left to right, a dark blemish at (60, 50). */
   for (y = 0; y < h; y++)
@@ -2220,6 +2363,68 @@ static void test_retouch (void)
     develop_image (&r, &im);
     CHECK (abs (im.rgb[((size_t) 50 * im.w + 60) * 3] - (60 + 60 * 150 / w)) <= 6, "develop_image applies the spots");
     free (im.rgb);
+  }
+  /* A painted spot: a scratch along a path, healed from the shape above it. */
+  {
+    float scratch[6] = { 0.20f, 0.30f, 0.40f, 0.35f, 0.70f, 0.30f };
+    recipe_spot ps = { 0, 0, 0.02f, 0, 0, 0, 0.3f, 0, 0 };
+    float dx, dy;
+    int worst = 0, inside = 0;
+    for (y = 0; y < h; y++)
+      for (x = 0; x < w; x++)
+        {
+          unsigned char *p = orig + ((size_t) y * w + x) * 3;
+          int v = 60 + x * 150 / w + y / 2;
+          p[0] = (unsigned char) v; p[1] = (unsigned char) (v - 20); p[2] = (unsigned char) (v - 40);
+        }
+    /* The scratch: a dark line along the path. */
+    for (x = 40; x <= 140; x++)
+      {
+        double u = x / (double) w, vv = u < 0.40 ? 0.30 + (u - 0.20) / 0.20 * 0.05 : 0.35 - (u - 0.40) / 0.30 * 0.05;
+        int yy = (int) lround (vv * h);
+        for (y = yy - 1; y <= yy + 1; y++)
+          {
+            unsigned char *p = orig + ((size_t) y * w + x) * 3;
+            p[0] = 10; p[1] = 10; p[2] = 10;
+          }
+      }
+    dev_to_linear (orig, lin, (size_t) w * h);
+    retouch_auto_offset (lin, w, h, scratch, 3, 0.02f, &dx, &dy);
+    CHECK (fabsf (dy) * h > 3.5f, "auto source for a path: off the line, above or below it");
+    ps.x = scratch[0]; ps.y = scratch[1];
+    ps.sx = ps.x + dx; ps.sy = ps.y + dy;
+    recipe_default (&r);
+    CHECK (recipe_spot_add_path (&r, &ps, scratch, 3) == 0 && r.spot[0].n == 3 && r.nspoints == 3, "a painted spot added");
+    recipe_format (&r, t, sizeof t);
+    recipe_parse (&back, t);
+    CHECK (strstr (t, " p=2000,3000;4000,3500;7000,3000\n") != NULL && recipe_equal (&r, &back), "its path written and read back");
+    memcpy (img, orig, (size_t) w * h * 3);
+    retouch_rgb8 (img, w, h, &r);
+    for (x = 45; x <= 135; x++)
+      for (y = 25; y <= 40; y++)
+        {
+          int want = 60 + x * 150 / w + y / 2, d = abs (img[((size_t) y * w + x) * 3] - want);
+          worst = d > worst ? d : worst;
+          inside++;
+        }
+    CHECK (inside && worst <= 8, "healed: the scratch gone, the gradient carried on through it");
+    /* Moved: the whole path, and its source with it. */
+    recipe_spot_move (&r, 0, 0.1f, 0.05f, 0);
+    CHECK (r.spt[0][0] == 3000 && r.spt[2][0] == 8000 && r.spt[0][1] == 3500 && fabsf (r.spot[0].x - 0.30f) < 1e-4f
+           && fabsf (r.spot[0].sx - (ps.sx + 0.1f)) < 1e-4f, "moved: path and source together");
+    recipe_spot_move (&r, 0, 0.5f, 0, 0);
+    CHECK (r.spt[2][0] == 10000, "kept on the photo");
+    /* Taken away with a circle before it: the points close up. */
+    {
+      recipe two;
+      recipe_default (&two);
+      recipe_spot_add_path (&two, &ps, scratch, 3);
+      recipe_spot_add_path (&two, &ps, scratch + 2, 2);
+      recipe_spot_remove (&two, 0);
+      CHECK (two.nspots == 1 && two.nspoints == 2 && two.spot[0].first == 0 && two.spt[0][0] == 4000, "a painted spot taken away");
+    }
+    /* Clone along the path: the source's pixels as they are. */
+    r.spot[0].clone = 1;
   }
   /* Full: at most RECIPE_SPOTS. */
   recipe_default (&r);

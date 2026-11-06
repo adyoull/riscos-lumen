@@ -72,7 +72,7 @@ a { color:#1f5fa8; }
 <li><a href="#part2">Part II: Your Photos</a>
 <ul><li><a href="#ch4">4. Bringing photos in</a></li><li><a href="#ch5">5. Looking through, rating and flagging</a></li><li><a href="#ch6">6. Projects, albums, stacks and watched folders</a></li><li><a href="#ch7">7. Keywords and finding photos</a></li><li><a href="#ch8">8. Removing photos, and photos that have moved</a></li></ul></li>
 <li><a href="#part3">Part III: Making Photos Better</a>
-<ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping, straightening, retouching and brushing</a></li><li><a href="#ch12">12. Styles, presets, versions and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
+<ul><li><a href="#ch9">9. Looking closely: the Viewer</a></li><li><a href="#ch10">10. The adjustments</a></li><li><a href="#ch11">11. Cropping, straightening, retouching and layers</a></li><li><a href="#ch12">12. Styles, presets, versions and copying adjustments</a></li><li><a href="#ch13">13. What the camera recorded: the Info tab</a></li></ul></li>
 <li><a href="#part4">Part IV: Sharing and Setting Up</a>
 <ul><li><a href="#ch14">14. Exporting and printing photos</a></li><li><a href="#ch15">15. Backing up, moving and checking the library</a></li><li><a href="#ch16">16. Camera raw files and plug-ins</a></li><li><a href="#ch17">17. Choices</a></li><li><a href="#ch18">18. Getting help</a></li></ul></li>
 <li><a href="#part5">Part V: The Part of Tens</a>
@@ -468,15 +468,16 @@ a { color:#1f5fa8; }
 <p>Click the <b>Adjustments</b> tab. If you were in the Browser, Lumen switches to Split View so you can see the photo you're adjusting.</p>
 <figure><img src="images/adjustments.png" alt="The Adjustments tab"><figcaption>The Adjustments tab beside the photo.</figcaption></figure>
 
-<p>At the top is the photo's <b>histogram</b> (a graph of how much of the photo is dark, middle and light: left to right), its place in the list, its flag, its colour label (click a dot to change it) and its stars. Under that are the buttons <b>Auto</b>, <b>Crop</b>, <b>Grid</b> and <b>Presets</b>, then <b>Retouch</b> and <b>Brush</b> (<a href="#ch11">Chapter 11</a>), and then the adjustments, in groups.</p>
+<p>At the top is the photo's <b>histogram</b> (a graph of how much of the photo is dark, middle and light: left to right), its place in the list, its flag, its colour label (click a dot to change it) and its stars. Under that are the buttons <b>Auto</b>, <b>Crop</b>, <b>Grid</b> and <b>Presets</b>, then <b>Retouch</b> and <b>Layers</b> (<a href="#ch11">Chapter 11</a>), the photo's layers if it has any, and then the adjustments, in groups.</p>
 
 <h4>Using the sliders</h4>
 <ul>
 <li>Drag a slider's knob, or click on its track, to change it. The photo changes as you drag.</li>
 <li>Click a slider with <b>Adjust</b> to put it back to its starting value.</li>
-<li>Click a group's name to fold it away, and again to open it.</li>
+<li>Click a group's header bar to fold it away, and again to open it. Click it with <b>Adjust</b> to fold all the others away and keep just that one open, like a concertina (Adjust on it again opens them all). <b>Fold all</b> and <b>Open all</b>, under the tool buttons, do what they say, for the Layers list and every group.</li>
 <li>Each group has a <b>Reset</b> link, which puts back every slider in the group.</li>
 </ul>
+<figure><img src="images/panel-folded.png" alt="The groups folded"><figcaption>Fold all: every group down to its header, to find the one you want. The photo's two layers are folded too.</figcaption></figure>
 
 <div class="pair">
 <figure><img src="images/panel-top.png" alt="The top of the Adjustments tab"><figcaption>White balance, exposure, highlights &amp; shadows, levels.</figcaption></figure>
@@ -556,7 +557,7 @@ a { color:#1f5fa8; }
 
 <div class="box tech"><b class="label">TECHNICAL STUFF</b>Lumen works on a copy of the photo up to 1600 pixels across while you adjust, in 16-bit linear light, so changes are quick and smooth. 100%, the loupe and exports work from the full-size photo. A photo's adjustments are kept as a short text "recipe" in the catalogue.</div>
 
-<h3 class="chapter" id="ch11"><span>11</span> Cropping, straightening, retouching and brushing</h3>
+<h3 class="chapter" id="ch11"><span>11</span> Cropping, straightening, retouching and layers</h3>
 
 <p>Click <b>Crop</b> in the Adjustments tab, or press <kbd>C</kbd>. Lumen shows the whole photo with the crop over it; the parts outside are darkened.</p>
 <figure><img src="images/crop.png" alt="Cropping"><figcaption>Cropping, with the Thirds grid to help place horse and rider.</figcaption></figure>
@@ -573,42 +574,50 @@ a { color:#1f5fa8; }
 <p>Drag the <b>Straighten</b> slider in the Geometry group. A fine grid appears over the photo while you drag, to line the horizon up with. <kbd>[</kbd> and <kbd>]</kbd> turn the photo a quarter left and right.</p>
 
 <h4>Painting things out: Retouch</h4>
-<p>A speck of dust on the sensor, a flowerpot behind your dogs, a crisp packet on a beach: click <b>Retouch</b> in the Adjustments tab, or press <kbd>R</kbd>, and click on it. Lumen paints it out with a patch from close by, which it chooses for you.</p>
+<p>A speck of dust on the sensor, a flowerpot behind your dogs, a crisp packet on a beach: click <b>Retouch</b> in the Adjustments tab, or press <kbd>R</kbd>, and click on it. Lumen paints it out with a patch from close by, which it chooses for you. For something long and thin (a power line across the sky, a stray hair, a scratch on a scan), drag along it instead: Lumen paints it out along the path you drew, from the same shape a little way off.</p>
 <figure><img src="images/retouch.png" alt="The Retouch tool"><figcaption>Retouching: the spot's circle in blue, and the place it was filled from in grey, with a line between.</figcaption></figure>
 <p>The tool's controls are in a box at the top of the photo:</p>
 <ul>
-<li><b>Repair</b> (usually best) takes the texture from the patch but matches its colour and brightness to what's round the spot, so it blends in. <b>Clone</b> copies the patch exactly as it is: use it where there's a hard line to carry on, such as a wall's edge.</li>
-<li><b>Size</b> sets the size of the circle. A circle follows the pointer over the photo, so you can match it to what you're painting out before you click: a little bigger than the blemish is right. <kbd>[</kbd> and <kbd>]</kbd> make it smaller and larger.</li>
+<li><b>Repair</b> (usually best) takes the texture from the patch but matches its colour and brightness to what's round the spot, all the way round its edge, so it blends in without a seam: light that grades across the spot (a sky darkening towards the top, a shadow's edge) carries on through it. <b>Clone</b> copies the patch exactly as it is: use it where there's a hard line to carry on, such as a wall's edge.</li>
+<li><b>Size</b> sets the size of the circle (or the width of a painted spot). A circle follows the pointer over the photo, so you can match it to what you're painting out before you click: a little bigger than the blemish is right. <kbd>[</kbd> and <kbd>]</kbd> make it smaller and larger.</li>
 <li><b>Feather</b> is how much of the circle's edge fades into the photo. The inner ring shows where the painting is complete. A spot with too much feather lets a ghost of the blemish show; too little can leave a visible edge.</li>
 <li>The sliders change the spot you placed (or moved) last as well as new ones: if a spot doesn't quite cover the blemish, make it bigger. Lumen chooses a new patch to fill it from.</li>
-<li>Drag a spot to move it, or drag its grey circle to fill it from somewhere else. Click a spot with <b>Adjust</b> to take it away.</li>
+<li>Drag a spot (anywhere along a painted one) to move it, or drag its grey source to fill it from somewhere else. Click a spot with <b>Adjust</b> to take it away.</li>
 <li><b>Done</b>, <kbd>Return</kbd> or <kbd>Escape</kbd> puts the tool away. Undo works on spots as on everything else.</li>
 </ul>
 <div class="pair">
 <figure><img src="images/retouch-before.png" alt="Before retouching"><figcaption>Before: the circle over the flowerpot.</figcaption></figure>
 <figure><img src="images/retouch-after.png" alt="After retouching"><figcaption>After one click.</figcaption></figure>
 </div>
-<div class="box tip"><b class="label">TIP</b>Keep each spot small and close to its blemish. A big circle that reaches a sharp edge nearby (the edge of a dog's ear, say) smudges it; two small spots do better than one large one.</div>
+<div class="box tip"><b class="label">TIP</b>Keep each spot small and close to its blemish. A big circle that reaches a sharp edge nearby (the edge of a dog's ear, say) smudges it; two small spots do better than one large one. For a long line, paint it in pieces where what's behind it changes.</div>
 
-<h4>Painting on adjustments: Brush</h4>
-<p>Sometimes only part of a photo needs a change: a sky a little too bright, a face in shadow, a field of flowers that should glow. Click <b>Brush</b> in the Adjustments tab, or press <kbd>B</kbd>, choose what to paint, and drag over the photo:</p>
+<h4>Adjusting part of the photo: Layers</h4>
+<p>Sometimes only part of a photo needs a change: a sky a little too bright, a face in shadow, a busy background that should be quieter. A <b>layer</b> is a set of adjustments of its own (exposure, contrast, highlights, shadows, temperature, tint, saturation, clarity and sharpness) with a <b>mask</b> that says where on the photo they apply. Click <b>Layers</b> in the Adjustments tab, or press <kbd>B</kbd>. The Adjustments tab shows the layers and the chosen one's sliders, so the photo stays clear to work on.</p>
+<figure><img src="images/layers.png" alt="The Layers tool"><figcaption>Two radial layers on the terrier: the first lifts him (+0.5 EV, Shadows +16); the second, inverted, darkens everything round him (-0.75 EV). The chosen one's oval and handles are on the photo.</figcaption></figure>
+<p>A layer's mask is one of three kinds, chosen under <b>New layer</b>:</p>
 <ul>
-<li><b>Dodge</b> lightens and <b>Burn</b> darkens, as a darkroom printer did by hand.</li>
-<li><b>Saturate</b> makes colours stronger; <b>Desaturate</b> makes them quieter (at full strength, grey).</li>
-<li><b>Size</b> and <b>Feather</b> are the brush's size and soft edge, as for Retouch; <b>Strength</b> is how much: for Dodge and Burn, in stops (EV) of light, up to 2.</li>
+<li><b>Brush</b>: paint where it applies. With no layer chosen, just paint on the photo: a new brush layer is made for the stroke. <b>Add</b> paints the mask on, <b>Erase</b> takes it off again. <b>Size</b>, <b>Feather</b> and <b>Flow</b> (how much each stroke gives) are under them; <kbd>[</kbd>, <kbd>]</kbd>, <kbd>{</kbd> and <kbd>}</kbd> change the size and feather.</li>
+<li><b>Gradient</b>: a graduated filter, as for a sky. Click it, then drag on the photo from where it should be strongest to where it should stop. The lines across the photo show where it starts and ends; drag the handles to change it.</li>
+<li><b>Radial</b>: an oval, to lift a subject or darken round it. Click it, then drag from the middle outwards. Drag the handles to move it or change its width and height; <b>Invert</b> makes it everything except the oval.</li>
 </ul>
-<figure><img src="images/brush.png" alt="The Brush tool"><figcaption>Brushing: Burn strokes round the edges of the woodland (their paths in blue) and a Dodge stroke down the terrier (in yellow). The circle is the brush.</figcaption></figure>
+<p>You can paint on a gradient or radial layer too, with Add and Erase, to bring the mask round a tree that breaks the skyline, say.</p>
 <div class="pair">
-<figure><img src="images/brush-before.png" alt="Before brushing"><figcaption>Before.</figcaption></figure>
-<figure><img src="images/brush-after.png" alt="After brushing"><figcaption>After: the busy background quieter, the terrier lifted out of it.</figcaption></figure>
+<figure><img src="images/layers-panel.png" alt="The Layers section while the tool is on"><figcaption>While the tool is on: the layers, New layer, the brush, and the chosen layer's adjustments.</figcaption></figure>
+<figure><img src="images/layers-list.png" alt="The Layers list"><figcaption>With the tool put away, the Layers list stays above the groups.</figcaption></figure>
 </div>
 <ul>
-<li>Each stroke's path is drawn over the photo in its colour: yellow for Dodge, blue for Burn, red for Saturate, grey for Desaturate.</li>
-<li>Going over the same place in one stroke doesn't add up; a second stroke over the first does. So for a stronger effect, paint again.</li>
-<li>The sliders change the stroke you painted last, so you can paint first and then judge how strong it should be.</li>
-<li>Click a stroke's path with <b>Adjust</b> to take that stroke away.</li>
+<li>Each layer is listed with what it does. Click one to choose it (with the tool put away, that turns the tool on), or click its pin on the photo.</li>
+<li>The tick beside a layer switches it off and on, to compare: it's kept while it's off.</li>
+<li>A new layer starts with the adjustments of the last one you changed, so two strokes in a row are alike.</li>
+<li><b>Show mask</b> shows the chosen layer's mask in red over the photo, as much as it covers each part.</li>
+<li><b>Delete</b> takes the chosen layer away. Click a stroke with <b>Adjust</b> to take that stroke away.</li>
+<li><b>Done</b> (where the Layers button was), <kbd>Return</kbd> or <kbd>Escape</kbd> puts the tool away.</li>
 </ul>
-<div class="box rem"><b class="label">REMEMBER</b>Spots and strokes belong to that photo: they aren't part of a preset or a style, and aren't copied by Copy adjustments, because they're in particular places on that photo. They're kept in its recipe, so like every adjustment they change nothing in the photo's file, and they're in exports, prints and thumbnails.</div>
+<div class="pair">
+<figure><img src="images/brush-before.png" alt="Before"><figcaption>Before.</figcaption></figure>
+<figure><img src="images/brush-after.png" alt="After two brush layers"><figcaption>After two brush layers: the busy background darker, the terrier lighter.</figcaption></figure>
+</div>
+<div class="box rem"><b class="label">REMEMBER</b>Spots and layers belong to that photo: they aren't part of a preset or a style, and aren't copied by Copy adjustments, because they're in particular places on that photo. They're kept in its recipe, so like every adjustment they change nothing in the photo's file, and they're in exports, prints and thumbnails. Brush strokes made with Lumen 0.0.37 or earlier (Dodge, Burn, Saturate, Desaturate) open as brush layers that do the same.</div>
 
 <h3 class="chapter" id="ch12"><span>12</span> Styles, presets, versions and copying adjustments</h3>
 
@@ -667,7 +676,7 @@ a { color:#1f5fa8; }
 <h4>Sharing presets</h4>
 <p>Each preset is a small text file, named after it, in the <b>Presets</b> directory in Lumen's Choices (<code>&lt;Choices$Write&gt;.Lumen.Presets</code>; on most computers that's <code>!Boot.Choices.Lumen.Presets</code>). Every library you open uses the same presets.</p>
 <p>To give a preset to another computer (or a friend), copy its file into the other computer's <code>Lumen.Presets</code> directory, or drop it on Lumen's icon bar icon there: Lumen adds it, and says so. It's on the Presets menu straight away. A preset with the same name is replaced.</p>
-<p>The file holds only the look (the sliders, curve and colour settings), never a photo's crop, retouching or brush strokes. It starts <code>Lumen preset 1</code>, then <code>Name:</code> and the preset's name, which is what the menu shows, whatever the file is called. Exporting a library (<a href="#ch15">Chapter 15</a>) takes your presets with it too.</p>
+<p>The file holds only the look (the sliders, curve and colour settings), never a photo's crop, retouching or layers. It starts <code>Lumen preset 1</code>, then <code>Name:</code> and the preset's name, which is what the menu shows, whatever the file is called. Exporting a library (<a href="#ch15">Chapter 15</a>) takes your presets with it too.</p>
 <div class="box note"><b class="label">NOTE</b>Presets saved with Lumen 0.0.37 or earlier were kept inside each library. The first time Lumen opens such a library, it moves them into the Presets directory (one with the same name as a preset already there is left as that one).</div>
 
 <h3 class="chapter" id="ch13"><span>13</span> What the camera recorded: the Info tab</h3>
@@ -900,7 +909,7 @@ a { color:#1f5fa8; }
 <li><b>The library</b> is a directory: <code>Catalogue</code> (an SQLite database) and <code>Thumbs</code> (256-pixel JPEGs in 256 subdirectories). Originals are referenced where they are, never written to (only a library exported or imported with its photos has copies of them, in its own <code>Originals</code>). Back it up with <b>Export library...</b>, or copy the directory while Lumen isn't running; <b>Repair</b> leaves <code>Catalogue-backup</code> beside the catalogue.</li>
 <li><b>Choosing the library:</b> <code>Lumen$Library</code>, set before Lumen starts, wins over the Choices window. Otherwise it's the Choices setting, else <code>&lt;Choices$Write&gt;.Lumen.Library</code> (or <code>LumenLibrary</code> beside !Lumen if there's no Choices yet).</li>
 <li><b>Recognising photos:</b> each original is identified by a hash of its size and its first and last 64 KB, which is how re-imports are skipped and moved files relinked.</li>
-<li><b>Recipes:</b> adjustments are stored per photo as a short text recipe; retouch spots (<code>spot</code> lines) and brush strokes (<code>brush</code> lines, their points in ten-thousandths of the photo) are applied first, on the photo turned upright, so they stay on what they cover whatever the crop; then the pipeline runs geometry (quarter turns, straighten, perspective, crop) in 16-bit linear light, then white balance, exposure, local highlights and shadows, levels, curves and enhance, then the black and white mix and split toning (after saturation, so it tints black and white), then the glow (the bright parts of a 96-cell colour map of the photo, developed, blurred and screened over it in linear light), then the vignette, then sharpening at the output size. A style is the look part of a recipe; while one is shown from the menu, nothing is written to the catalogue.</li>
+<li><b>Recipes:</b> adjustments are stored per photo as a short text recipe; retouch spots (<code>spot</code> lines, a painted one's path as <code>p=</code>) and layers (a <code>mask</code> line each, with its adjustments, and <code>paint</code> lines for the strokes on them, their points in ten-thousandths of the photo) are applied first, on the photo turned upright, so they stay on what they cover whatever the crop; then the pipeline runs geometry (quarter turns, straighten, perspective, crop) in 16-bit linear light, then white balance, exposure, local highlights and shadows, levels, curves and enhance, then the black and white mix and split toning (after saturation, so it tints black and white), then the glow (the bright parts of a 96-cell colour map of the photo, developed, blurred and screened over it in linear light), then the vignette, then sharpening at the output size. A style is the look part of a recipe; while one is shown from the menu, nothing is written to the catalogue.</li>
 <li><b>Speed:</b> the Viewer works on a proxy of up to 1600 pixels, and a half-size copy while a slider is dragged. Lumen is built for any ARMv7 with VFPv3; where the processor has NEON, libjpeg-turbo's JPEG code and Lumen's own scaling to the screen and sharpening use it, chosen when Lumen starts (VFPSupport_Features), with exactly the same results as the plain code. Set <code>JSIMD_FORCENONE</code> or <code>Lumen$NEON</code> to 0 to compare (LumenBench times both). <code>*Set Lumen$JPEGEighths 1</code> lets JPEGs be decoded at any eighth of their size (3/8 for a 6000-pixel photo shown at 1600), which is fewer pixels but without libjpeg-turbo's NEON code; LumenBench times it, so you can see which is quicker on your machine. Given a JPEG (<code>*Run &lt;Lumen$Dir&gt;.Bench</code> followed by its pathname: Shift-drag the file into the task window, as an ordinary drag types the file's contents), LumenBench exports it at full size instead and says where the time goes. Exports themselves say how long they took in the Activity history; for a raw file, how much of it was LumenRaw developing it, its picture being read, and the adjusting and writing. Every change in the Viewer is scaled to the size shown before the window is redrawn, so the redraw is a straight copy; a raw file's full size is read in the background once the photo is shown, and until then the loupe enlarges the picture on screen.</li>
 <li><b>Background work</b> (imports, thumbnails, exports, checking files, watched folders) runs in short slices on null events, so the desktop never waits; Lumen asks for null events only while there's work to do. Thumbnails nobody is looking at are made with <code>Wimp_PollIdle</code> between slices while another task has the input focus. Watched folders wake Lumen with <code>Wimp_PollIdle</code> when they're due; unchanged files are skipped by size and date without being read. The Styles item asks for <code>Message_MenuWarning</code>, and only while that list is open does Lumen look at the pointer (every 5 cs) to show the style under it.</li>
 <li><b>Colour:</b> Adobe RGB (1998) and Display P3 photos (from their ICC profile, or EXIF's colour space and interoperability index) are converted to sRGB by matrix in linear light. Other profiles are treated as sRGB.</li>
@@ -942,10 +951,10 @@ a { color:#1f5fa8; }
 <tr><td><kbd>A</kbd></td><td>Auto adjust (Viewer)</td></tr>
 <tr><td><kbd>C</kbd></td><td>Crop (Viewer)</td></tr>
 <tr><td><kbd>G</kbd></td><td>Next grid: none, thirds, quarters, fine (Viewer)</td></tr>
-<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Turn a quarter left / right (Viewer; while retouching or brushing: the brush smaller / larger)</td></tr>
-<tr><td><kbd>{</kbd> / <kbd>}</kbd></td><td>Less / more feather (while retouching or brushing)</td></tr>
+<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Turn a quarter left / right (Viewer; with Retouch or Layers on: the brush smaller / larger)</td></tr>
+<tr><td><kbd>{</kbd> / <kbd>}</kbd></td><td>Less / more feather (with Retouch or Layers on)</td></tr>
 <tr><td><kbd>R</kbd></td><td>Retouch on / off (Viewer)</td></tr>
-<tr><td><kbd>B</kbd></td><td>Brush on / off (Viewer)</td></tr>
+<tr><td><kbd>B</kbd></td><td>Layers on / off (Viewer)</td></tr>
 <tr><td><kbd>O</kbd></td><td>Compare: the selection (Browser), or this photo with the next (Viewer); again to stop. While comparing, <kbd>Return</kbd> pins the photo on the right</td></tr>
 </table>
 
@@ -955,10 +964,11 @@ a { color:#1f5fa8; }
 <tr><td>A thumbnail</td><td>Select it (double-click: open it)</td><td>Add to or take from the selection</td></tr>
 <tr><td>The photo in the Viewer</td><td>100% there (at 100%: drag to move, click to see it whole). With the loupe: pin it where it is</td><td>With the loupe: 100%, 200%, 400%</td></tr>
 <tr><td>A slider</td><td>Drag or click to set it</td><td>Back to where it started</td></tr>
-<tr><td>A group's name</td><td colspan="2">Fold it away or open it</td></tr>
+<tr><td>A group's header</td><td>Fold it away or open it</td><td>Only it open (again: all open)</td></tr>
 <tr><td>The curve</td><td>Add a point, or drag one</td><td>Remove a point</td></tr>
-<tr><td>The photo, retouching</td><td>Paint out a spot; drag a spot or its source to move it</td><td>Take a spot away</td></tr>
-<tr><td>The photo, brushing</td><td>Drag to paint a stroke (click: a dab)</td><td>Take a stroke away</td></tr>
+<tr><td>The photo, retouching</td><td>Paint out a spot (drag: along a line); drag a spot or its source to move it</td><td>Take a spot away</td></tr>
+<tr><td>The photo, with Layers on</td><td>Paint a stroke on the chosen layer (none chosen: a new one); drag a handle; click a pin to choose its layer</td><td>Take a stroke away</td></tr>
+<tr><td>A layer's tick (Adjustments tab)</td><td colspan="2">Switch it off or on</td></tr>
 <tr><td>A colour label's dot (Info or Adjustments tab)</td><td colspan="2">Give the photo that label (its own dot again: none)</td></tr>
 <tr><td>A line in the Library tab</td><td>Show those photos</td><td>&ndash;</td></tr>
 <tr><td>The number on a stack's pick</td><td colspan="2">Open or close the stack</td></tr>
