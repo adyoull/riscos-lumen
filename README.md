@@ -40,11 +40,11 @@ were written with Anthropic's Claude as a coding assistant.
    haven't already.
 2. Unzip `Lumen-0.0.38.2.zip` and copy `!Lumen` to where you keep your
    applications, for example `$.Apps.Graphics`.
-3. For camera raw files, unzip `LumenRaw-1.3.zip`: it holds
+3. For camera raw files, unzip `LumenRaw-1.4.zip`: it holds
    `!Lumen.Plugins.LibRaw`. Drag that `LibRaw` directory into Lumen's
    Plug-ins > Add plug-in window, or copy it into your
    `!Lumen.Plugins`.
-4. For HEIF and AVIF photos, likewise unzip `LumenHEIF-1.2.zip` and add its
+4. For HEIF and AVIF photos, likewise unzip `LumenHEIF-1.3.zip` and add its
    `!Lumen.Plugins.HEIF` directory.
 5. For Lens Correction's lens profiles, likewise unzip `LumenLens-1.0.zip`
    and add its `!Lumen.Plugins.Lens` directory.
@@ -155,7 +155,7 @@ LibRaw library it is built with is under the LGPL 2.1 (or CDDL), and its
 source ships with each release (`LibRaw-0.22.3-source.zip`). The
 LumenHEIF plug-in's own code is MIT; libheif is under the LGPL 3 and
 FFmpeg's libavcodec and libavutil under the LGPL 2.1 or later, dav1d
-under its BSD licence, and their sources and the patches ship as `LumenHEIF-1.2-sources.zip`. The
+under its BSD licence, and their sources and the patches ship as `LumenHEIF-1.3-sources.zip`. The
 libraries built into Lumen keep their own licences, collected in
 `app/Licences` (installed as `!Lumen.Licences`): SQLite (public domain),
 libjpeg-turbo, libpng, libtiff, zlib and UnixLib (BSD-style, with LGPL parts:

@@ -1,5 +1,22 @@
 # Lumen changelog
 
+## 0.0.38.7 (7 November 2026): raw and HEIF photos quicker, with LumenRaw 1.4 and LumenHEIF 1.3
+
+- 100% and the loupe ask LumenRaw 1.4 for its faster demosaicing (PPG,
+  about three times quicker in all); exports still ask for the best
+  (AHD). The scratch cache keeps each apart, and a best picture kept
+  serves 100% too.
+- With no scratch directory, a plug-in's picture is handed over in
+  memory (a dynamic area, only while it's passed over) instead of being
+  written to the scrap directory and read back: with the photos on an
+  SD card, 36 MB each way for a 12 MP photo. Pictures left behind (if
+  Lumen stopped first) are removed when it next starts.
+- LumenRaw 1.4 reads the raw file in one go (quicker from an SD card or
+  a network share). LumenHEIF 1.3 makes 8-bit 4:2:0 photos RGB itself,
+  with NEON, and makes thumbnails without a division for each pixel.
+- The plug-in API's decode takes QUALITY and MEMORY after NOISE
+  (docs/plugin-api.md); older plug-ins ignore them and work as before.
+
 ## 0.0.38.6 (7 November 2026): a scratch disc, and Choices in tabs
 
 - Scratch: a directory, chosen in Choices, where Lumen keeps raw photos

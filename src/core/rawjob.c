@@ -7,15 +7,22 @@
 #include <string.h>
 #include "fsys.h"
 #include "rawjob.h"
+#ifdef __riscos
+#include "swis.h"
+#endif
 
 enum { J_QUEUED, J_RUNNING, J_ENDED, J_DONE, J_FAILED };
 
 static int raw_noise;                  /* for raw jobs started from now on (rawjob_set_raw_noise) */
+static int raw_quality;                /* and their demosaicing (rawjob_set_raw_quality) */
 
 struct rawjob
 {
   int state, tag, kind, noise;
   int want;                            /* the size asked for (develop jobs) */
+  int quality;                         /* raw demosaicing: 0 best (AHD), 1 faster (PPG) */
+  int mem_area;                        /* the picture handed over in this dynamic area (-1: a file) */
+  size_t mem_len;
   int cached;                          /* its files are in the cache: not deleted with it */
   char src[1024], image[300], details[300], err[300];
   img_info info;
@@ -154,6 +161,10 @@ int rawjob_kind_for (int format, const char *path, const unsigned char *head, si
   return -1;
 }
 
+#ifdef __riscos
+static void areas_tidy (void);
+#endif
+
 void rawjob_setup (const char *h, const char *s, rawjob_runner run)
 {
   rawjob_setup_kind (RAWJOB_RAW, h, s, run);
@@ -162,6 +173,14 @@ void rawjob_setup (const char *h, const char *s, rawjob_runner run)
 void rawjob_setup_kind (int kind, const char *h, const char *s, rawjob_runner run)
 {
   int clean = !rawjob_busy ();
+#ifdef __riscos
+  static int tidied;
+  if (!tidied)
+    {
+      tidied = 1;
+      areas_tidy ();                   /* pictures left in memory last time */
+    }
+#endif
   have_helper[kind] = h && *h;
   stamp[kind] = 0;
   if (have_helper[kind])
@@ -293,6 +312,50 @@ static const char *plugin_name (int kind)
 int rawjob_busy (void) { return queue || running; }
 
 void rawjob_set_raw_noise (int level) { raw_noise = level < 0 ? 0 : level > 2 ? 2 : level; }
+void rawjob_set_raw_quality (int fast) { raw_quality = fast ? 1 : 0; }
+
+/* --- pictures handed over in memory (plugins/handover.h): a dynamic area */
+
+#ifdef __riscos
+#define HANDOVER_AREA_NAME "Lumen picture"
+static void area_remove (int area)
+{
+  _swix (OS_DynamicArea, _INR (0, 1), 1, area);
+}
+
+/* Areas a plug-in left behind (Lumen stopped before it read them). */
+static void areas_tidy (void)
+{
+  int area = -1, next;
+  for (;;)
+    {
+      const char *name = NULL;
+      if (_swix (OS_DynamicArea, _INR (0, 1) | _OUT (1), 3, area, &next) || next < 0)
+        return;
+      if (!_swix (OS_DynamicArea, _INR (0, 1) | _OUT (8), 2, next, &name) && name
+          && !strcmp (name, HANDOVER_AREA_NAME))
+        area_remove (next);            /* (enumerating goes on from where it was) */
+      area = next;
+    }
+}
+#endif
+
+const unsigned char *rawjob_memory (rawjob *j, size_t *len)
+{
+#ifdef __riscos
+  int base = 0, size = 0;
+  if (j->state != J_DONE || j->mem_area < 0)
+    return NULL;
+  if (_swix (OS_ReadDynamicArea, _IN (0) | _OUTR (0, 1), j->mem_area, &base, &size) || (size_t) size < j->mem_len)
+    return NULL;
+  *len = j->mem_len;
+  return (const unsigned char *) base;
+#else
+  (void) j;
+  *len = 0;
+  return NULL;
+#endif
+}
 
 const char *rawjob_busy_title (void)
 {
@@ -337,10 +400,13 @@ static void run_next (void)
   j->state = J_RUNNING;
   remove (j->image);
   remove (j->details);
-  if (j->info.format == 1 && j->noise > 0)
-    /* develop, with the raw plug-in's noise reduction (API: a 6th argument) */
-    snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d %d", helper[j->kind], j->src, j->image, j->details, j->info.width,
-              j->noise);
+  if (j->info.format == 1)
+    /* develop: NOISE (the raw plug-in's noise reduction), QUALITY (its
+       demosaicing) and MEMORY (the picture may come in memory: when
+       there's no scratch cache to keep it in), as the API's 6th to 8th
+       arguments; plug-ins that know fewer ignore the rest */
+    snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d %d %d %d", helper[j->kind], j->src, j->image, j->details,
+              j->info.width, j->noise, j->quality, !cache_limit);
   else if (j->info.format == 1)        /* develop */
     snprintf (cmd, sizeof cmd, "%s decode %s %s %s %d", helper[j->kind], j->src, j->image, j->details, j->info.width);
   else
@@ -383,6 +449,7 @@ static unsigned cache_key (const rawjob *j)
   x = (x ^ stamp[j->kind]) * 16777619u;
   x = (x ^ (unsigned) j->kind) * 16777619u;
   x = (x ^ (unsigned) j->noise) * 16777619u;
+  x = (x ^ (unsigned) j->quality * 7919u) * 16777619u;
   return x;
 }
 
@@ -484,6 +551,13 @@ static int cache_find (rawjob *j)
   if (!cache_limit || j->info.format != 1 || j->want <= CACHE_MIN_SIDE)
     return 0;
   cache_paths (cache_key (j), image, sizeof image, details, sizeof details);
+  if ((fsys_stat (image, &e) != 0 || e.size <= 0 || fsys_stat (details, &e) != 0) && j->quality)
+    {
+      /* the faster demosaicing asked for: the best one kept will do (better) */
+      j->quality = 0;
+      cache_paths (cache_key (j), image, sizeof image, details, sizeof details);
+      j->quality = 1;
+    }
   if (fsys_stat (image, &e) != 0 || e.size <= 0 || fsys_stat (details, &e) != 0)
     return 0;
   {
@@ -515,7 +589,7 @@ static void cache_keep (rawjob *j)
   char image[300], details[300];
   unsigned key;
   int longer = j->info.width > j->info.height ? j->info.width : j->info.height;
-  if (!cache_limit || j->cached || j->want <= CACHE_MIN_SIDE || longer <= 0 || longer >= j->want)
+  if (!cache_limit || j->cached || j->mem_area >= 0 || j->want <= CACHE_MIN_SIDE || longer <= 0 || longer >= j->want)
     return;
   key = cache_key (j);
   cache_paths (key, image, sizeof image, details, sizeof details);
@@ -556,6 +630,8 @@ rawjob *rawjob_start_kind (int kind, const char *src, int develop, int max_side,
   j->tag = next_tag++;
   j->kind = kind;
   j->noise = kind == RAWJOB_RAW && develop ? raw_noise : 0;
+  j->quality = kind == RAWJOB_RAW && develop ? raw_quality : 0;
+  j->mem_area = -1;
   snprintf (j->src, sizeof j->src, "%s", src);
   {
     char leaf[24];
@@ -623,6 +699,16 @@ static int read_details (rawjob *j)
       else if (!strcmp (line, "focal35")) in->focal35 = atof (v);
       else if (!strcmp (line, "taken")) snprintf (in->taken, sizeof in->taken, "%s", v);
       else if (!strcmp (line, "encoding")) snprintf (in->encoding, sizeof in->encoding, "%s", v);
+      else if (!strcmp (line, "memory"))
+        {
+          int a = -1;
+          unsigned long l = 0;
+          if (sscanf (v, "%d %lu", &a, &l) == 2 && a >= 0 && l > 0)
+            {
+              j->mem_area = a;
+              j->mem_len = (size_t) l;
+            }
+        }
       else if (!strcmp (line, "exif"))
         {
           long a = 0, b = 0;
@@ -651,7 +737,7 @@ int rawjob_poll (rawjob *j)
     return 0;
   /* Running, or ended: the picture is there once it's complete (renamed
      into place after the details). */
-  if (fsys_stat (j->image, &e) == 0)
+  if (fsys_stat (j->image, &e) == 0 || (read_details (j) == 1 && j->mem_area >= 0))
     {
       if (read_details (j) == 1)
         {
@@ -726,6 +812,10 @@ void rawjob_free (rawjob *j)
       remove (j->image);
       remove (j->details);
     }
+#ifdef __riscos
+  if (j->mem_area >= 0)
+    area_remove (j->mem_area);
+#endif
   free (j);
   run_next ();
 }

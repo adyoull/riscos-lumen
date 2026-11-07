@@ -78,6 +78,18 @@ static int choice_icon_y0[64];         /* where the Choices window's icons were 
 
 /* TaskManager_EnumerateTasks: ourselves, a LumenRaw task window, a module
    task called Lumen, and maybe another Lumen; two records a call. */
+/* Dynamic areas (plug-ins' pictures handed over in memory): none here. */
+static const _kernel_oserror *dynamic_areas (int n, int r[10])
+{
+  static const _kernel_oserror none = { 0x1E6, "No such dynamic area" };
+  if (n == OS_DynamicArea && r[0] == 3)
+    {
+      r[1] = -1;                       /* no more */
+      return NULL;
+    }
+  return &none;
+}
+
 static const _kernel_oserror *tasks (int n, int r[10])
 {
   static const char *const names[4] = { "Lumen\r", "LumenRaw", "Lumen", "Lumen\0" };
@@ -582,6 +594,8 @@ static void fakes (void)
     fake_swi (list[i].swi, list[i].name, list[i].wimp ? wimp : graphics);
   fake_swi (TaskManager_EnumerateTasks, "TaskManager_EnumerateTasks", tasks);
   fake_swi (OS_SetVarVal, "OS_SetVarVal", setvarval);
+  fake_swi (OS_DynamicArea, "OS_DynamicArea", dynamic_areas);
+  fake_swi (OS_ReadDynamicArea, "OS_ReadDynamicArea", dynamic_areas);
   {
     static const struct { int swi; const char *name; } pl[] = {
       { PDriver_Info, "PDriver_Info" }, { PDriver_PageSize, "PDriver_PageSize" },

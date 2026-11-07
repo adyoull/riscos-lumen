@@ -36,6 +36,7 @@
 #include <libavutil/cpu.h>
 #include <dav1d/dav1d.h>
 #include "exif.h"
+#include "../handover.h"
 #ifdef __riscos
 #include <kernel.h>
 #include <unixlib/local.h>
@@ -44,7 +45,7 @@ int __riscosify_control = __RISCOSIFY_NO_PROCESS;   /* paths are RISC OS paths, 
 #include <sys/auxv.h>
 #endif
 
-#define VERSION "1.2"
+#define VERSION "1.3"
 #define THUMB_MAX 512                  /* a thumbnail made from the photo itself: this at most */
 
 /* --- writing results --- */
@@ -82,23 +83,138 @@ static int fail (const char *info, const char *what, const char *why)
   return 1;
 }
 
-static int write_ppm (const char *path, const unsigned char *rgb, int w, int h)
+/* --- YCbCr 4:2:0 (8 bits) to RGB, done here rather than by libheif: its
+   own conversion is plain C, and a sixth of the decoding. In 13-bit fixed
+   point, with NEON when the processor has it (exactly the same pixels).
+   The chroma of each 2x2 pixels is their own (as libheif's). --- */
+
+typedef struct
 {
-  char tmp[1100];
-  FILE *f;
-  tmpname (tmp, sizeof tmp, path);
-  f = fopen (tmp, "wb");
-  if (!f)
-    return -1;
-  fprintf (f, "P6\n%d %d\n255\n", w, h);
-  if (fwrite (rgb, (size_t) w * 3, (size_t) h, f) != (size_t) h)
+  int yoff;                            /* 16 (limited range) or 0 */
+  int cy, crv, cgu, cgv, cbu;          /* 8192ths */
+} yuvk;
+
+/* The coefficients for a matrix (nclx matrix_coefficients) and range. */
+static void yuv_coefficients (int matrix, int full, yuvk *k)
+{
+  double kr = 0.299, kb = 0.114, kg, ys = 1, cs = 1;   /* BT.601 (5, 6, and unknown) */
+  if (matrix == 1)
+    kr = 0.2126, kb = 0.0722;          /* BT.709 */
+  else if (matrix == 9 || matrix == 10)
+    kr = 0.2627, kb = 0.0593;          /* BT.2020 */
+  kg = 1 - kr - kb;
+  if (!full)
+    ys = 255.0 / 219, cs = 255.0 / 224;
+  k->yoff = full ? 0 : 16;
+  k->cy = (int) (ys * 8192 + 0.5);
+  k->crv = (int) (2 * (1 - kr) * cs * 8192 + 0.5);
+  k->cbu = (int) (2 * (1 - kb) * cs * 8192 + 0.5);
+  k->cgu = (int) (2 * kb * (1 - kb) / kg * cs * 8192 + 0.5);
+  k->cgv = (int) (2 * kr * (1 - kr) / kg * cs * 8192 + 0.5);
+}
+
+static inline unsigned char clip8 (int v)
+{
+  v = (v + 4096) >> 13;
+  return (unsigned char) (v < 0 ? 0 : v > 255 ? 255 : v);
+}
+
+static void yuv_row_plain (const uint8_t *Y, const uint8_t *U, const uint8_t *V, uint8_t *o, int x0, int w,
+                           const yuvk *k)
+{
+  int x;
+  for (x = x0; x < w; x++, o += 3)
     {
-      fclose (f);
-      return -1;
+      int y = (Y[x] - k->yoff) * k->cy, u = U[x >> 1] - 128, v = V[x >> 1] - 128;
+      o[0] = clip8 (y + k->crv * v);
+      o[1] = clip8 (y - k->cgu * u - k->cgv * v);
+      o[2] = clip8 (y + k->cbu * u);
     }
-  if (fclose (f))
-    return -1;
-  return finish (tmp, path);
+}
+
+#if defined(__arm__)
+#pragma GCC push_options
+#pragma GCC target ("fpu=neon")
+#include <arm_neon.h>
+/* Sixteen pixels at a time; where it got to. */
+static int yuv_row_neon (const uint8_t *Y, const uint8_t *U, const uint8_t *V, uint8_t *o, int w, const yuvk *k)
+{
+  int x;
+  const int16x8_t yoff = vdupq_n_s16 ((int16_t) k->yoff), c128 = vdupq_n_s16 (128);
+  for (x = 0; x + 16 <= w; x += 16, o += 48)
+    {
+      uint8x16_t yy = vld1q_u8 (Y + x);
+      uint8x8_t u8 = vld1_u8 (U + x / 2), v8 = vld1_u8 (V + x / 2);
+      uint8x8x2_t uz = vzip_u8 (u8, u8), vz = vzip_u8 (v8, v8);
+      uint8x16x3_t out;
+      int half;
+      uint8x8_t rr[2], gg[2], bb[2];
+      for (half = 0; half < 2; half++)
+        {
+          int16x8_t y16 = vsubq_s16 (vreinterpretq_s16_u16 (vmovl_u8 (half ? vget_high_u8 (yy) : vget_low_u8 (yy))), yoff);
+          int16x8_t u16 = vsubq_s16 (vreinterpretq_s16_u16 (vmovl_u8 (uz.val[half])), c128);
+          int16x8_t v16 = vsubq_s16 (vreinterpretq_s16_u16 (vmovl_u8 (vz.val[half])), c128);
+          int32x4_t ylo = vmull_n_s16 (vget_low_s16 (y16), (int16_t) k->cy), yhi = vmull_n_s16 (vget_high_s16 (y16), (int16_t) k->cy);
+          int32x4_t rlo = vmlal_n_s16 (ylo, vget_low_s16 (v16), (int16_t) k->crv);
+          int32x4_t rhi = vmlal_n_s16 (yhi, vget_high_s16 (v16), (int16_t) k->crv);
+          int32x4_t glo = vmlsl_n_s16 (vmlsl_n_s16 (ylo, vget_low_s16 (u16), (int16_t) k->cgu), vget_low_s16 (v16), (int16_t) k->cgv);
+          int32x4_t ghi = vmlsl_n_s16 (vmlsl_n_s16 (yhi, vget_high_s16 (u16), (int16_t) k->cgu), vget_high_s16 (v16), (int16_t) k->cgv);
+          int32x4_t blo = vmlal_n_s16 (ylo, vget_low_s16 (u16), (int16_t) k->cbu);
+          int32x4_t bhi = vmlal_n_s16 (yhi, vget_high_s16 (u16), (int16_t) k->cbu);
+          rr[half] = vqmovn_u16 (vcombine_u16 (vqrshrun_n_s32 (rlo, 13), vqrshrun_n_s32 (rhi, 13)));
+          gg[half] = vqmovn_u16 (vcombine_u16 (vqrshrun_n_s32 (glo, 13), vqrshrun_n_s32 (ghi, 13)));
+          bb[half] = vqmovn_u16 (vcombine_u16 (vqrshrun_n_s32 (blo, 13), vqrshrun_n_s32 (bhi, 13)));
+        }
+      out.val[0] = vcombine_u8 (rr[0], rr[1]);
+      out.val[1] = vcombine_u8 (gg[0], gg[1]);
+      out.val[2] = vcombine_u8 (bb[0], bb[1]);
+      vst3q_u8 (o, out);
+    }
+  return x;
+}
+#pragma GCC pop_options
+#endif
+
+static int use_neon;
+
+/* A row of pixels (w of them) from its Y row and its chroma rows. */
+static void yuv_row (const uint8_t *Y, const uint8_t *U, const uint8_t *V, uint8_t *o, int w, const yuvk *k)
+{
+  int x = 0;
+#if defined(__arm__)
+  if (use_neon)
+    x = yuv_row_neon (Y, U, V, o, w, k);
+#endif
+  yuv_row_plain (Y, U, V, o + (size_t) x * 3, x, w, k);
+}
+
+/* "LumenHEIF selftest": the NEON conversion against the plain one, on
+   every Y, Cb and Cr and odd widths. 0 if they agree. */
+static int selftest (void)
+{
+  static uint8_t Y[1024], U[512], V[512], a[3072], b[3072];
+  int m, full, i, w, bad = 0;
+  unsigned seed = 1;
+  for (m = 1; m <= 9; m += 4)
+    for (full = 0; full < 2; full++)
+      for (w = 1; w <= 1024; w += w < 40 ? 1 : 97)
+        {
+          yuvk k;
+          yuv_coefficients (m, full, &k);
+          for (i = 0; i < 1024; i++)
+            {
+              seed = seed * 1103515245u + 12345u;
+              Y[i] = (uint8_t) (seed >> 24);
+              U[i / 2] = (uint8_t) (seed >> 16);
+              V[i / 2] = (uint8_t) (seed >> 8);
+            }
+          yuv_row_plain (Y, U, V, a, 0, w, &k);
+          yuv_row (Y, U, V, b, w, &k);
+          if (memcmp (a, b, (size_t) w * 3))
+            bad++;
+        }
+  printf ("LumenHEIF selftest (%s): %s\n", use_neon ? "NEON" : "plain", bad ? "differ" : "ok");
+  return bad != 0;
 }
 
 /* --- NEON --- */
@@ -137,6 +253,7 @@ extern unsigned dav1d_riscos_arm_cpu_flags;
 static void choose_simd (void)
 {
   int neon = has_neon ();
+  use_neon = neon;
   if (!neon)
     av_force_cpu_flags (av_get_cpu_flags () & ~AV_CPU_FLAG_NEON);
 #ifdef __riscos
@@ -487,31 +604,90 @@ static unsigned char *picture (struct heif_image_handle *h, int max_side, int *o
   const uint8_t *src;
   int stride, w, hh, tw, th, x, y;
   unsigned char *out;
+  unsigned char *own = NULL;            /* the RGB we made from YCbCr ourselves */
   {
     /* One thread: RISC OS has one core for the program (and dav1d would
-       otherwise ask how many there are). */
+       otherwise ask how many there are). 8-bit 4:2:0 photos (most phones')
+       come as YCbCr and are made RGB here (yuv_row); others by libheif. */
     struct heif_decoding_options *o = heif_decoding_options_alloc ();
+    enum heif_colorspace pcs;
+    enum heif_chroma pch;
+    int ours = heif_image_handle_get_preferred_decoding_colorspace (h, &pcs, &pch).code == heif_error_Ok
+               && pcs == heif_colorspace_YCbCr && pch == heif_chroma_420
+               && heif_image_handle_get_luma_bits_per_pixel (h) == 8 && heif_image_handle_get_chroma_bits_per_pixel (h) == 8
+               && !getenv ("LUMENHEIF_LIBHEIF_RGB");
     if (o)
       o->num_codec_threads = 1;
-    e = heif_decode_image (h, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGB, o);
+    if (ours)
+      {
+        e = heif_decode_image (h, &img, heif_colorspace_YCbCr, heif_chroma_420, o);
+        if (e.code == heif_error_Ok)
+          {
+            int ys, us, vs, cw, chh;
+            const uint8_t *Y = heif_image_get_plane_readonly (img, heif_channel_Y, &ys);
+            const uint8_t *U = heif_image_get_plane_readonly (img, heif_channel_Cb, &us);
+            const uint8_t *V = heif_image_get_plane_readonly (img, heif_channel_Cr, &vs);
+            struct heif_color_profile_nclx *n = NULL;
+            yuvk k;
+            int matrix = 6, full = 1;
+            w = heif_image_get_width (img, heif_channel_Y);
+            hh = heif_image_get_height (img, heif_channel_Y);
+            cw = heif_image_get_width (img, heif_channel_Cb);
+            chh = heif_image_get_height (img, heif_channel_Cb);
+            if (heif_image_get_nclx_color_profile (img, &n).code == heif_error_Ok && n)
+              {
+                matrix = n->matrix_coefficients;
+                full = n->full_range_flag;
+              }
+            heif_nclx_color_profile_free (n);
+            yuv_coefficients (matrix, full, &k);
+            if (Y && U && V && w > 0 && hh > 0 && cw >= (w + 1) / 2 && chh >= (hh + 1) / 2
+                && (matrix == 1 || matrix == 2 || matrix == 5 || matrix == 6 || matrix == 9 || matrix == 10)
+                && (own = malloc ((size_t) w * hh * 3)) != NULL)
+              {
+                for (y = 0; y < hh; y++)
+                  yuv_row (Y + (size_t) y * ys, U + (size_t) (y >> 1) * us, V + (size_t) (y >> 1) * vs,
+                           own + (size_t) y * w * 3, w, &k);
+              }
+            heif_image_release (img);
+            img = NULL;
+          }
+      }
+    if (!own)
+      e = heif_decode_image (h, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGB, o);
     heif_decoding_options_free (o);
   }
-  if (e.code != heif_error_Ok)
+  if (own)
     {
-      *why = e.message;
-      return NULL;
+      src = own;
+      stride = w * 3;
     }
-  src = heif_image_get_plane_readonly (img, heif_channel_interleaved, &stride);
-  w = heif_image_get_width (img, heif_channel_interleaved);
-  hh = heif_image_get_height (img, heif_channel_interleaved);
-  if (!src || w <= 0 || hh <= 0)
+  else
     {
-      heif_image_release (img);
-      *why = "no picture in it";
-      return NULL;
+      if (e.code != heif_error_Ok)
+        {
+          *why = e.message;
+          return NULL;
+        }
+      src = heif_image_get_plane_readonly (img, heif_channel_interleaved, &stride);
+      w = heif_image_get_width (img, heif_channel_interleaved);
+      hh = heif_image_get_height (img, heif_channel_interleaved);
+      if (!src || w <= 0 || hh <= 0)
+        {
+          heif_image_release (img);
+          *why = "no picture in it";
+          return NULL;
+        }
     }
   if (is_p3 (h))
     p3_to_srgb ((unsigned char *) src, w, hh, stride);
+  if (own && (max_side <= 0 || (w <= max_side && hh <= max_side)))
+    {
+      /* as it is: ours already, no copy */
+      *ow = w;
+      *oh = hh;
+      return own;
+    }
   tw = w; th = hh;
   if (max_side > 0 && (w > max_side || hh > max_side))
     {
@@ -531,7 +707,9 @@ static unsigned char *picture (struct heif_image_handle *h, int max_side, int *o
   out = malloc ((size_t) tw * th * 3);
   if (!out)
     {
-      heif_image_release (img);
+      if (img)
+        heif_image_release (img);
+      free (own);
       *why = "not enough memory";
       return NULL;
     }
@@ -545,7 +723,9 @@ static unsigned char *picture (struct heif_image_handle *h, int max_side, int *o
       if (!x0)
         {
           free (out);
-          heif_image_release (img);
+          free (own);
+          if (img)
+            heif_image_release (img);
           *why = "not enough memory";
           return NULL;
         }
@@ -571,13 +751,24 @@ static unsigned char *picture (struct heif_image_handle *h, int max_side, int *o
                     }
                 }
               cnt = (unsigned) ((y1 - y0) * (xb - xa));
-              for (c = 0; c < 3; c++)
-                out[((size_t) y * tw + x) * 3 + c] = (unsigned char) ((s[c] + cnt / 2) / cnt);
+              if (cnt > 1 && cnt < 4096)
+                {
+                  /* dividing by multiplying, exactly (no divide instruction:
+                     a library call each); see Lumen's thumbgen.c */
+                  uint64_t mm = ((1ull << 32) + cnt - 1) / cnt;
+                  for (c = 0; c < 3; c++)
+                    out[((size_t) y * tw + x) * 3 + c] = (unsigned char) (((s[c] + cnt / 2) * mm) >> 32);
+                }
+              else
+                for (c = 0; c < 3; c++)
+                  out[((size_t) y * tw + x) * 3 + c] = (unsigned char) ((s[c] + cnt / 2) / cnt);
             }
         }
       free (x0);
     }
-  heif_image_release (img);
+  if (img)
+    heif_image_release (img);
+  free (own);
   *ow = tw;
   *oh = th;
   return out;
@@ -592,11 +783,17 @@ int main (int argc, char **argv)
   unsigned char *rgb;
   char t[1200];
   int w, hh, maxside, pw, ph, rc;
+  if (argc == 2 && !strcmp (argv[1], "selftest"))
+    {
+      choose_simd ();
+      return selftest ();
+    }
   if (argc < 5 || (strcmp (argv[1], "thumb") != 0 && strcmp (argv[1], "decode") != 0)
       || (strcmp (argv[1], "decode") == 0 && argc < 6))
     {
       fprintf (stderr, "LumenHEIF %s (libheif %s, FFmpeg's HEVC decoder)\n"
-               "  LumenHEIF thumb SRC IMAGE INFO\n  LumenHEIF decode SRC IMAGE INFO MAXSIDE\n",
+               "  LumenHEIF thumb SRC IMAGE INFO\n  LumenHEIF decode SRC IMAGE INFO MAXSIDE [NOISE [QUALITY [MEMORY]]]\n"
+               "  (NOISE and QUALITY are for raw plug-ins and ignored; MEMORY: 1 the picture may be handed over in memory)\n",
                VERSION, heif_get_version ());
       return 2;
     }
@@ -617,8 +814,6 @@ int main (int argc, char **argv)
   w = heif_image_handle_get_width (h);
   hh = heif_image_handle_get_height (h);
   describe (src, ctx, h, w, hh, t, sizeof t);
-  if (write_info (info, t))
-    return 1;
 
   maxside = 0;
   if (strcmp (argv[1], "thumb") == 0)
@@ -641,10 +836,19 @@ int main (int argc, char **argv)
   if (!rgb)
     return fail (info, "can't decode the photo", why);
 write:
-  rc = write_ppm (image, rgb, pw, ph);
+  rc = handover_write (image, rgb, pw, ph, strcmp (argv[1], "decode") == 0 && argc > 8 && atoi (argv[8]) == 1);
   free (rgb);
   heif_image_handle_release (h);
   heif_context_free (ctx);
   heif_deinit ();
-  return rc ? fail (info, "can't write the picture", NULL) : 0;
+  if (rc)
+    return fail (info, "can't write the picture", NULL);
+  /* The details last: with where the picture is, if it's in memory. */
+  strncat (t, handover_info (), sizeof t - strlen (t) - 1);
+  if (write_info (info, t))
+    {
+      handover_drop ();
+      return 1;
+    }
+  return 0;
 }

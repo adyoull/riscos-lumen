@@ -25,7 +25,7 @@ for f in "${samples[@]}"; do
   check "[ -z \"\$out\" ]" "$f: thumb says nothing (output would open a task window): $out"
   check "head -c 2 \"$b.thumb\" | od -An -tx1 | grep -q 'ff d8' || head -c 2 \"$b.thumb\" | grep -q P6" "$f: the preview is a JPEG or PPM"
   check "grep -q '^width=[1-9]' \"$b.tinfo\" && grep -q '^make=.' \"$b.tinfo\"" "$f: info has the size and camera"
-  check "grep -q '^lensspec=[0-9.]* [0-9.]* [0-9.]*\$' \"$b.tinfo\" && grep -q '^focal35=[0-9]*\$' \"$b.tinfo\"" "$f: info has the lens's focal lengths (LumenRaw 1.3)"
+  check "grep -q '^lensspec=[0-9.]* [0-9.]* [0-9.]*\$' \"$b.tinfo\" && grep -q '^focal35=[0-9]*\$' \"$b.tinfo\"" "$f: info has the lens's focal lengths (LumenRaw 1.3 and later)"
   check "[ ! -e \"$b.thumb_t\" ] && [ ! -e \"$b.tinfo_t\" ]" "$f: no temporary files left"
   out=$(eval $wrap "$helper" decode "\"$f\"" "\"$b.ppm\"" "\"$b.info\"" 1000 2>&1); rc=$?
   check "[ $rc -eq 0 ] && [ -z \"\$out\" ]" "$f: decode exits 0 and quietly ($rc: $out)"
@@ -39,6 +39,17 @@ for f in "${samples[@]}"; do
   out=$(eval $wrap "$helper" decode "\"$f\"" "\"$b.nr.ppm\"" "\"$b.nr.info\"" 1000 2 2>&1); rc=$?
   check "[ $rc -eq 0 ] && [ -z \"\$out\" ] && [ \"\$(head -c 20 \"$b.nr.ppm\" | tr '\\n' ' ' | awk '{print \$2\"x\"\$3}')\" = \"$dims\" ] && ! cmp -s \"$b.ppm\" \"$b.nr.ppm\"" "$f: decode with noise reduction (2): same size, a different picture"
 done
+# Full size, the best (AHD) and the faster (PPG) demosaicing (API: QUALITY,
+# the 7th), and MEMORY (the 8th) where there are no dynamic areas: the
+# same size, a little different, files all the same. One sample (it's slow
+# under QEMU).
+f=${samples[0]}; b=$work/full
+rm -f "$b".*
+eval $wrap "$helper" decode "\"$f\"" "\"$b.q0.ppm\"" "\"$b.q0.info\"" 0 0 0 1 >/dev/null 2>&1
+eval $wrap "$helper" decode "\"$f\"" "\"$b.q1.ppm\"" "\"$b.q1.info\"" 0 0 1 1 >/dev/null 2>&1
+d0=$(head -c 20 "$b.q0.ppm" | tr '\n' ' ' | awk '{print $2"x"$3}'); d1=$(head -c 20 "$b.q1.ppm" | tr '\n' ' ' | awk '{print $2"x"$3}')
+check "[ -n \"$d0\" ] && [ \"$d0\" = \"$d1\" ] && ! cmp -s \"$b.q0.ppm\" \"$b.q1.ppm\"" "$f: full size, AHD and PPG: the same size ($d0, $d1), a little different"
+check "! grep -q '^memory=' \"$b.q1.info\" && grep -q '^width=' \"$b.q1.info\"" "$f: MEMORY where there are no dynamic areas: a file, as before"
 # Not a raw file: an error line, no picture, nothing printed.
 echo "not a raw file" > "$work/plain.txt"
 out=$(eval $wrap "$helper" decode "\"$work/plain.txt\"" "\"$work/plain.ppm\"" "\"$work/plain.info\"" 1000 2>&1)

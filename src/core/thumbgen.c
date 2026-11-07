@@ -187,6 +187,8 @@ struct thumbgen
   /* A camera raw file: the plug-in's job, then its picture read as a
      JPEG or a PPM. */
   rawjob *rj;
+  const unsigned char *mem;            /* the plug-in's picture handed over in memory (rawjob_memory), or NULL */
+  size_t mem_len, mem_pos;
   int is_raw, raw_developed;
   img_info raw_info;
   int done;
@@ -684,15 +686,36 @@ static int step_tiff (thumbgen *t, int rows)
 /* --- PPM (P6, 8 bits): what the raw plug-in develops to */
 #define IMG_PPM 4
 
-static int ppm_number (FILE *f)
+/* The PPM's bytes: from the file, or from memory. */
+static int ppm_getc (thumbgen *t)
+{
+  if (t->mem)
+    return t->mem_pos < t->mem_len ? t->mem[t->mem_pos++] : EOF;
+  return getc (t->f);
+}
+
+static int ppm_read (thumbgen *t, unsigned char *buf, size_t n)
+{
+  if (t->mem)
+    {
+      if (t->mem_len - t->mem_pos < n)
+        return -1;
+      memcpy (buf, t->mem + t->mem_pos, n);
+      t->mem_pos += n;
+      return 0;
+    }
+  return fread (buf, n, 1, t->f) == 1 ? 0 : -1;
+}
+
+static int ppm_number (thumbgen *t)
 {
   int c, n = 0;
   do
     {
-      c = getc (f);
+      c = ppm_getc (t);
       if (c == '#')
         while (c != '\n' && c != EOF)
-          c = getc (f);
+          c = ppm_getc (t);
     }
   while (c == ' ' || c == '\n' || c == '\r' || c == '\t');
   if (c < '0' || c > '9')
@@ -702,7 +725,7 @@ static int ppm_number (FILE *f)
       n = n * 10 + (c - '0');
       if (n > 1 << 20)
         return -1;
-      c = getc (f);
+      c = ppm_getc (t);
     }
   return n;                            /* the one whitespace after it is read too */
 }
@@ -710,14 +733,14 @@ static int ppm_number (FILE *f)
 static int start_ppm (thumbgen *t)
 {
   int w, h, maxval;
-  if (getc (t->f) != 'P' || getc (t->f) != '6')
+  if (ppm_getc (t) != 'P' || ppm_getc (t) != '6')
     {
       seterr (t, "Not a picture the raw plug-in made");
       return -1;
     }
-  w = ppm_number (t->f);
-  h = ppm_number (t->f);
-  maxval = ppm_number (t->f);
+  w = ppm_number (t);
+  h = ppm_number (t);
+  maxval = ppm_number (t);
   if (w <= 0 || h <= 0 || maxval != 255)
     {
       seterr (t, "Not a picture the raw plug-in made");
@@ -736,7 +759,14 @@ static int step_ppm (thumbgen *t, int rows)
 {
   while (rows-- > 0 && t->y < t->sc.sh)
     {
-      if (fread (t->row, (size_t) t->sc.sw * 3, 1, t->f) != 1)
+      if (t->mem && t->mem_len - t->mem_pos >= (size_t) t->sc.sw * 3)
+        {
+          /* straight from the plug-in's memory, no copy */
+          scaler_row (&t->sc, t->y++, t->mem + t->mem_pos);
+          t->mem_pos += (size_t) t->sc.sw * 3;
+          continue;
+        }
+      if (ppm_read (t, t->row, (size_t) t->sc.sw * 3))
         {
           seterr (t, "The raw plug-in's picture is cut short");
           return -1;
@@ -752,6 +782,13 @@ static int start_raw_picture (thumbgen *t)
   unsigned char head[4];
   rawjob_details (t->rj, &t->raw_info);
   t->orientation = t->raw_info.orientation;   /* the plug-in's, as the catalogue will have it */
+  if ((t->mem = rawjob_memory (t->rj, &t->mem_len)) != NULL)
+    {
+      /* handed over in memory: always a PPM */
+      t->mem_pos = 0;
+      t->format = IMG_PPM;
+      return start_ppm (t);
+    }
   t->f = fopen (rawjob_image (t->rj), "rb");
   if (t->f)
     setvbuf (t->f, NULL, _IOFBF, 64 * 1024);

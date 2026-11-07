@@ -403,12 +403,16 @@ void viewer_lens_auto (void)
   lens_set (i, -1);
 }
 
-/* Starts developing the full size, with the photo's raw noise reduction. */
+/* Starts developing the full size, with the photo's raw noise reduction
+   and the faster demosaicing (PPG: 100% and the loupe are for looking;
+   exports use the best, AHD). */
 static thumbgen *start_full (char *e, size_t en)
 {
   thumbgen *t;
   rawjob_set_raw_noise (loaded_noise);
+  rawjob_set_raw_quality (1);
   t = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, en);
+  rawjob_set_raw_quality (0);
   rawjob_set_raw_noise (0);
   return t;
 }

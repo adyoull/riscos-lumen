@@ -16,7 +16,7 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.38.6
+VERSION := 0.0.38.7
 DATE := 07 Nov 2026
 OUT := out
 
@@ -165,7 +165,7 @@ $(OUT)/lumenraw-arm: $(RAW_SRC)
 	arm-linux-gnueabihf-g++ -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard -mno-unaligned-access -no-pie $(RAW_FLAGS) \
 	  -I$(DEPS)/linuxarm/include -o $@ $(RAW_SRC) $(DEPS)/linuxarm/lib/libraw.a $(DEPS)/linuxarm/lib/libjpeg.a \
 	  $(DEPS)/linuxarm/lib/libz.a -lm
-RAW_VERSION := 1.3
+RAW_VERSION := 1.4
 LIBRAW_VERSION := 0.22.3
 # The plug-in's release zip, laid out as it goes into Lumen (PackMan's
 # LumenRaw package maps it into Apps.Graphics.!Lumen.Plugins.LibRaw), and
@@ -246,7 +246,7 @@ $(OUT)/lumenheif-arm: $(HEIF_SRC) src/core/exif.c src/core/exif.h
 	  -Isrc/core -c src/core/exif.c -o $(OUT)/lumenheif-arm-exif.o
 	arm-linux-gnueabihf-g++ -no-pie -o $@ $(OUT)/lumenheif-arm.o $(OUT)/lumenheif-arm-exif.o \
 	  $(call HEIF_LIBS,$(DEPS)/linuxarm) -lm
-HEIF_VERSION := 1.2
+HEIF_VERSION := 1.3
 LIBHEIF_VERSION := 1.23.7
 FFMPEG_VERSION := 5.1.10
 # The plug-in's release zip, laid out as it goes into Lumen (PackMan's

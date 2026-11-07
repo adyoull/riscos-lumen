@@ -60,7 +60,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <h1>LumenRaw User Guide</h1>
 <p>Camera raw files in Lumen, on RISC OS</p>
 <p>Everything about the plug-in that lets Lumen open, show, adjust and export the raw files from your camera, and a list of every camera it knows.</p>
-<span class="badge">LumenRaw 1.3 &middot; LibRaw 0.22.3</span>
+<span class="badge">LumenRaw 1.4 &middot; LibRaw 0.22.3</span>
 </div>
 </header>
 <main>
@@ -98,6 +98,13 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>This guide is about the plug-in. Everything else about Lumen (the library, the adjustments, exporting) is in the <b>Lumen User Guide</b>, which comes with Lumen: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
 <p>The pictures are screenshots of Lumen 0.0.26 with LumenRaw on RISC OS 5. The raw photos in them are by the author, Andrew Youll, straight from his Nikon D700.</p>
 
+<h4>New in LumenRaw 1.4</h4>
+<p>LumenRaw 1.4 is quicker, especially with your photos on an SD card:</p>
+<ul>
+<li><b>A faster way of working out the colours for looking.</b> A raw file has one colour at each pixel; working out the other two (demosaicing) is most of the time LumenRaw takes. For Lumen's 100% view and the loupe it now uses <b>PPG</b>, about three times quicker in all, and a little less clean on the very finest detail. Exports still use <b>AHD</b>, the best. (Lumen 0.0.38.7 or later asks for each.)</li>
+<li><b>The raw file read in one go</b>, not a few kilobytes at a time: quicker from an SD card, and much quicker from a network share.</li>
+<li><b>The picture handed to Lumen in memory.</b> A 12-megapixel photo developed is 36 MB; LumenRaw used to write it to the scrap directory (usually on the SD card) for Lumen to read back. Now it passes it to Lumen in memory, which is used only while it's passed over. With a scratch directory chosen in Lumen's Choices, the picture goes there instead, so it can be kept.</li>
+</ul>
 <h4>New in LumenRaw 1.3</h4>
 <p>LumenRaw 1.3 tells Lumen what it can find of the lens: its name (from the camera's own notes when the EXIF hasn't it), its focal lengths and widest aperture, and the focal length in 35 mm terms. Lumen 0.0.38's <b>Lens Correction</b> uses them, with the LumenLens plug-in, to find the lens's profile: many cameras, Nikons especially, put these only in their own notes.</p>
 <h4>New in LumenRaw 1.2</h4>
@@ -167,7 +174,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>Lumen's <b>Add plug-in</b> window has an <b>Open PackMan</b> button that starts PackMan for you.</p>
 
 <h4>By hand, from the zip file</h4>
-<p>LumenRaw also comes as a zip file, <code>LumenRaw-1.3.zip</code>. Inside it, the plug-in is laid out as it goes into Lumen: <code>!Lumen.Plugins.LibRaw</code>.</p>
+<p>LumenRaw also comes as a zip file, <code>LumenRaw-1.4.zip</code>. Inside it, the plug-in is laid out as it goes into Lumen: <code>!Lumen.Plugins.LibRaw</code>.</p>
 <ol class="steps">
 <li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
 <li>Open the <code>!Lumen</code> directory inside it: hold <kbd>Shift</kbd> and double-click it, then double-click <code>Plugins</code>. You'll see a directory called <code>LibRaw</code>.</li>
@@ -178,7 +185,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>You can also drag the <code>LibRaw</code> directory straight onto Lumen's main window.</p>
 
 <h4>Checking it's working</h4>
-<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenRaw is listed as <b>LumenRaw 1.3</b>, with a tick when it's on.</p>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenRaw is listed as <b>LumenRaw 1.4</b>, with a tick when it's on.</p>
 <figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw installed and on.</figcaption></figure>
 
 <div class="box try"><b class="label">TRY IT</b>Find a raw file from your camera (its name usually ends in <code>/NEF</code>, <code>/CR2</code>, <code>/CR3</code>, <code>/ARW</code>, <code>/RAF</code>, <code>/ORF</code>, <code>/RW2</code> or <code>/DNG</code>) and drag it into Lumen's window. A thumbnail should appear within a second or two. Double-click it: after a moment the photo sharpens as LumenRaw develops it.</div>
@@ -278,7 +285,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <h3 class="chapter" id="ch8"><span>8</span> Which cameras work</h3>
 
-<p>LumenRaw 1.3 uses LibRaw 0.22.3, which lists <b>1,258 cameras</b> from about 80 makers, from early digital cameras to models released in 2024. The whole list is in <a href="#appA">Appendix A</a>. Here's a summary of the makers with the most:</p>
+<p>LumenRaw 1.4 uses LibRaw 0.22.3, which lists <b>1,258 cameras</b> from about 80 makers, from early digital cameras to models released in 2024. The whole list is in <a href="#appA">Appendix A</a>. Here's a summary of the makers with the most:</p>
 <table>
 <tr><th>Maker</th><th>Models</th><th>For example</th></tr>
 <tr><td>Canon</td><td>171</td><td>EOS R1, EOS R5 Mark II, EOS R6 Mark II, EOS R8, EOS R50, EOS R10, EOS 5D Mark IV, EOS 90D; many PowerShots</td></tr>
@@ -302,7 +309,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <p>Camera makers bring out new models, and new raw formats, every year, and LibRaw 0.22.3's list stops at cameras from 2024. A camera that's newer than the list, or a format this build of LibRaw doesn't include, may not open at all, or may open with colours that look wrong.</p>
 
-<h4>Known not to work in LumenRaw 1.3</h4>
+<h4>Known not to work in LumenRaw 1.4</h4>
 <ul>
 <li><b>Newer cameras</b>, for example the Nikon Z50 II and Z5 II, Sony A1 II, Fujifilm X-M5, X-E5 and GFX100RF, Panasonic S1R II, OM System OM-3 and the iPhone 16. If your camera came out late in 2024 or later, it may not be in the list.</li>
 <li><b>Nikon's High Efficiency raw</b> (the HE and HE* settings on the Z 9, Z 8, Z f and Z 6 III). Set the camera to <b>lossless compressed</b> raw instead.</li>

@@ -1,4 +1,4 @@
-Lumen 0.0.38.6 (07 Nov 2026)
+Lumen 0.0.38.7 (07 Nov 2026)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -513,7 +513,7 @@ Camera raw files
 ----------------
 Lumen reads camera raw files (Canon, Nikon, Sony, Fujifilm, Olympus,
 Panasonic, Pentax, DNG and many more) with its LibRaw plug-in, which is
-a separate package: LumenRaw, in PackMan or as LumenRaw-1.3.zip on
+a separate package: LumenRaw, in PackMan or as LumenRaw-1.4.zip on
 Lumen's release page (drag the LibRaw directory in its !Lumen.Plugins
 into Plug-ins > Add plug-in). It goes into !Lumen.Plugins,
 and Lumen finds it when it next starts (or at once, if it is added from

@@ -29,6 +29,12 @@ for f in plain.heic thumb.heic p3.heic turned.heic deep.heic late.heic plain.avi
     check "cmp -s '$b.info' '$ref/$n.info'" "$n: the same details as on the PC"
   fi
 done
+out=$(eval $wrap "$helper" selftest 2>&1)
+check "echo \"\$out\" | grep -q ': ok'" "selftest: its own YCbCr to RGB, NEON as plain ($out)"
+check "! grep -q '^memory=' $work/plain.info" "decode without MEMORY: a file, as before"
+b=$work/mem; rm -f "$b".*
+eval $wrap "$helper" decode "\"$here/heif/plain.heic\"" "\"$b.ppm\"" "\"$b.info\"" 0 0 0 1 >/dev/null 2>&1
+check "[ \"\$(head -c 2 \"$b.ppm\")\" = P6 ] && grep -q '^width=1200' $b.info && ! grep -q '^memory=' $b.info" "MEMORY 1 where there are no dynamic areas: the file all the same"
 check "[ \$(dims $work/plain.ppm) = 1200x800 ] && grep -q '^width=1200' $work/plain.info && grep -q '^height=800' $work/plain.info" "plain: 1200 x 800"
 check "grep -q '^make=TestCam' $work/plain.info && grep -q '^model=H1' $work/plain.info && grep -q '^iso=200' $work/plain.info && grep -q '^exposure=0.004' $work/plain.info && grep -q '^fnumber=2.8' $work/plain.info && grep -q '^focal=26' $work/plain.info && grep -q '^taken=2026:11:04 12:34:56' $work/plain.info" "plain: the camera, exposure and date from its EXIF"
 check "[ \$(dims $work/plain.thumb) = 512x341 ]" "plain: no thumbnail of its own: made from the photo, 512 wide ($(dims $work/plain.thumb))"

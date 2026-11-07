@@ -5,7 +5,8 @@
    Lumen runs in the background (in a task window) for each raw file job:
 
      LumenRaw thumb  SRC IMAGE INFO          the camera's embedded preview
-     LumenRaw decode SRC IMAGE INFO MAXSIDE  the raw developed to sRGB
+     LumenRaw decode SRC IMAGE INFO MAXSIDE [NOISE [QUALITY [MEMORY]]]
+                                             the raw developed to sRGB
 
    IMAGE is a JPEG (an embedded preview as the camera made it) or a binary
    PPM (P6, 8 bits, sRGB). INFO is text, one "key=value" a line: the
@@ -17,7 +18,13 @@
    decode develops at half size (LibRaw's 2x2 binning, fast) when that is
    still at least MAXSIDE on the longer side, and in full otherwise. The
    camera's white balance and colour matrix are used; the picture is not
-   turned (Lumen turns it, by the orientation in INFO).
+   turned (Lumen turns it, by the orientation in INFO). NOISE: noise
+   reduction before demosaicing (0-2). QUALITY: 0 the best demosaicing
+   (AHD), 1 faster (PPG: about three times quicker in all, a little less
+   clean on the finest detail); Lumen asks for 1 for the Viewer's 100%
+   and loupe, 0 for exports. MEMORY 1: the picture may be handed over in
+   memory (handover.h). The raw file is read into memory in one go, not a
+   few KB at a time, which is much quicker from an SD card or a network.
 
    Copyright (C) 2026 Andrew Youll. LibRaw is used under the GNU LGPL 2.1
    (see Licence); this program's source is in Lumen's source, plugins.libraw. */
@@ -26,6 +33,7 @@
 #include <cstring>
 #include <ctime>
 #include "libraw/libraw.h"
+#include "../handover.h"
 #ifdef __riscos
 #include <unixlib/local.h>
 int __riscosify_control = __RISCOSIFY_NO_PROCESS;   /* paths are RISC OS paths, unchanged */
@@ -126,27 +134,33 @@ static void describe (LibRaw &r, char *t, size_t n)
             lens_name (r), lens_min (r), lens_max (r), lens_ap (r), (int) r.imgdata.lens.FocalLengthIn35mmFormat);
 }
 
-static int write_ppm (const char *path, const unsigned char *rgb, int w, int h)
+/* The whole raw file in memory (decode reads all of it anyway): one read,
+   not LibRaw's few KB at a time. NULL if it can't be. */
+static unsigned char *whole_file (const char *src, size_t *n)
 {
-  char tmp[1100];
-  FILE *f;
-  tmpname (tmp, sizeof tmp, path);
-  f = fopen (tmp, "wb");
+  FILE *f = fopen (src, "rb");
+  long l;
+  unsigned char *b = NULL;
   if (!f)
-    return -1;
-  fprintf (f, "P6\n%d %d\n255\n", w, h);
-  if (fwrite (rgb, (size_t) w * 3, (size_t) h, f) != (size_t) h)
+    return NULL;
+  if (fseek (f, 0, SEEK_END) == 0 && (l = ftell (f)) > 0 && fseek (f, 0, SEEK_SET) == 0
+      && (b = (unsigned char *) malloc ((size_t) l)) != NULL)
     {
-      fclose (f);
-      return -1;
+      if (fread (b, 1, (size_t) l, f) != (size_t) l)
+        {
+          free (b);
+          b = NULL;
+        }
+      else
+        *n = (size_t) l;
     }
-  if (fclose (f))
-    return -1;
-  return finish (tmp, path);
+  fclose (f);
+  return b;
 }
 
-/* Develops the opened raw and writes it as a PPM. */
-static int develop (LibRaw &r, const char *image, const char *info)
+/* Develops the opened raw and hands the picture over (a PPM, or in
+   memory if asked for and it can be). */
+static int develop (LibRaw &r, const char *image, const char *info, int memory)
 {
   int rc;
   libraw_processed_image_t *mem;
@@ -157,7 +171,7 @@ static int develop (LibRaw &r, const char *image, const char *info)
   mem = r.dcraw_make_mem_image (&rc);
   if (!mem || mem->type != LIBRAW_IMAGE_BITMAP || mem->colors != 3 || mem->bits != 8)
     return fail (info, "can't make the picture", rc);
-  rc = write_ppm (image, mem->data, mem->width, mem->height);
+  rc = handover_write (image, mem->data, mem->width, mem->height, memory);
   LibRaw::dcraw_clear_mem (mem);
   return rc ? fail (info, "can't write the picture", 0) : 0;
 }
@@ -191,9 +205,10 @@ int main (int argc, char **argv)
       || (strcmp (argv[1], "decode") == 0 && argc < 6))
     {
       fprintf (stderr, "LumenRaw %s (LibRaw %s)\n"
-               "  LumenRaw thumb SRC IMAGE INFO\n  LumenRaw decode SRC IMAGE INFO MAXSIDE [NOISE]\n"
-               "  (NOISE: 0 none, 1 light, 2 strong noise reduction before demosaicing)\n",
-               "1.3", libraw_version ());
+               "  LumenRaw thumb SRC IMAGE INFO\n  LumenRaw decode SRC IMAGE INFO MAXSIDE [NOISE [QUALITY [MEMORY]]]\n"
+               "  (NOISE: 0 none, 1 light, 2 strong noise reduction before demosaicing;\n"
+               "   QUALITY: 0 best (AHD), 1 faster (PPG); MEMORY: 1 the picture may be handed over in memory)\n",
+               "1.4", libraw_version ());
       return 2;
     }
   const char *src = argv[2], *image = argv[3], *info = argv[4];
@@ -226,7 +241,7 @@ int main (int argc, char **argv)
         return fail (info, "not a raw file Lumen can read", rc);
       if (write_info (info, t))
         return 1;
-      return develop (r, image, info);
+      return develop (r, image, info, 0);
     }
 
   /* decode */
@@ -248,8 +263,38 @@ int main (int argc, char **argv)
             r.imgdata.params.threshold = nr >= 2 ? 300.0f : 120.0f;
           }
       }
-    if (write_info (info, t))
-      return 1;
-    return develop (r, image, info);
+    if (argc > 7 && atoi (argv[7]) == 1)
+      r.imgdata.params.user_qual = 2;  /* PPG */
+    {
+      int memory = argc > 8 && atoi (argv[8]) == 1;
+      size_t n = 0;
+      unsigned char *raw = whole_file (src, &n);
+      if (raw)
+        {
+          /* again, from memory (the settings kept) */
+          libraw_output_params_t keep = r.imgdata.params;
+          r.recycle ();
+          settings (r);
+          r.imgdata.params = keep;
+          if ((rc = r.open_buffer (raw, n)) != LIBRAW_SUCCESS)
+            {
+              free (raw);
+              return fail (info, "not a raw file Lumen can read", rc);
+            }
+        }
+      rc = develop (r, image, info, memory);
+      r.recycle ();
+      free (raw);
+      if (rc)
+        return rc;
+      /* The details last: with where the picture is, if it's in memory. */
+      strncat (t, handover_info (), sizeof t - strlen (t) - 1);
+      if (write_info (info, t))
+        {
+          handover_drop ();
+          return 1;
+        }
+      return 0;
+    }
   }
 }

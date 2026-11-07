@@ -60,7 +60,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <h1>LumenHEIF User Guide</h1>
 <p>HEIF and AVIF photos in Lumen, on RISC OS</p>
 <p>The plug-in that lets Lumen open, show, adjust and export the HEIF photos (.heic) that iPhones and many other phones and cameras take, and AVIF photos (.avif).</p>
-<span class="badge">LumenHEIF 1.1 &middot; libheif 1.23.7 &middot; FFmpeg 5.1.10 &middot; dav1d 1.5.4</span>
+<span class="badge">LumenHEIF 1.3 &middot; libheif 1.23.7 &middot; FFmpeg 5.1.10 &middot; dav1d 1.5.4</span>
 </div>
 </header>
 <main>
@@ -95,7 +95,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 
 <h4>About this guide</h4>
 <p>This guide is about the plug-in. Everything else about Lumen is in the <b>Lumen User Guide</b>: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
-<p>The pictures are screenshots of Lumen 0.0.37 with LumenHEIF 1.1 on RISC OS 5 (1.2 looks the same). The photos in them are <b>not the author's</b>: the two HEIF photos, from an iPhone 12 Pro and a Samsung Galaxy A32 5G, are sample files from <a href="https://heic.digital/samples/">heic.digital/samples</a>, and the two AVIF photos are sample files from <a href="https://www.aviftools.net/samples/">aviftools.net/samples</a> (see <a href="#credits">Credits</a>).</p>
+<p>The pictures are screenshots of Lumen 0.0.37 with LumenHEIF 1.1 on RISC OS 5 (1.2 and 1.3 look the same). The photos in them are <b>not the author's</b>: the two HEIF photos, from an iPhone 12 Pro and a Samsung Galaxy A32 5G, are sample files from <a href="https://heic.digital/samples/">heic.digital/samples</a>, and the two AVIF photos are sample files from <a href="https://www.aviftools.net/samples/">aviftools.net/samples</a> (see <a href="#credits">Credits</a>).</p>
 
 <h4>What we assume you know</h4>
 <p>That you have Lumen and know your way round it a little: how to import photos and open one in the Viewer, the three mouse buttons (<b>Select</b>, <b>Menu</b> and <b>Adjust</b>), and how to drag a directory from a Filer window.</p>
@@ -145,7 +145,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 </ol>
 
 <h4>By hand, from the zip file</h4>
-<p>LumenHEIF also comes as a zip file, <code>LumenHEIF-1.2.zip</code>, laid out as it goes into Lumen: <code>!Lumen.Plugins.HEIF</code>.</p>
+<p>LumenHEIF also comes as a zip file, <code>LumenHEIF-1.3.zip</code>, laid out as it goes into Lumen: <code>!Lumen.Plugins.HEIF</code>.</p>
 <ol class="steps">
 <li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
 <li>Open the <code>!Lumen</code> directory inside it (hold <kbd>Shift</kbd> and double-click it), then <code>Plugins</code>. You'll see a directory called <code>HEIF</code>.</li>
@@ -156,7 +156,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>You can also drag the <code>HEIF</code> directory straight onto Lumen's main window.</p>
 
 <h4>Checking it's working</h4>
-<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenHEIF is listed as <b>LumenHEIF 1.2</b>, with a tick when it's on.</p>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenHEIF is listed as <b>LumenHEIF 1.3</b>, with a tick when it's on.</p>
 <p>LumenHEIF tells Lumen the MIME types it reads, <code>image/heic</code>, <code>image/heif</code> and <code>image/avif</code>. If your MimeMap (<code>InetDBase:MimeMap</code>) gives them RISC OS filetypes, Lumen 0.0.38 or later imports files of those types whatever they're called, lists them on its <b>File types</b> menu so a double-click can open them in Lumen, and gives them its file icon if the desktop has none. RISC OS 5.31's MimeMap has no filetypes for them yet.</p>
 <figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenRaw and LumenHEIF installed and on.</figcaption></figure>
 
@@ -214,7 +214,7 @@ span.count { font-weight:normal; font-size:0.85em; color:#777; }
 <p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon (or from the main menu over the Browser).</p>
 
 <h4>Switching it off and on</h4>
-<p>Choose <b>LumenHEIF 1.2</b> to switch it off: the tick goes. LumenHEIF stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
+<p>Choose <b>LumenHEIF 1.3</b> to switch it off: the tick goes. LumenHEIF stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on.</p>
 <p>While it's off, HEIF photos keep their thumbnails, stars, albums and adjustments, but opening one shows a message instead of the photo:</p>
 <figure><img src="images/switched-off.png" alt="A HEIF photo with the plug-in switched off"><figcaption>With LumenHEIF switched off. The Info tab says so too.</figcaption></figure>
 

@@ -95,7 +95,7 @@ in one of two ways:
 
 ```
 <Program> thumb  SRC IMAGE INFO
-<Program> decode SRC IMAGE INFO MAXSIDE [NOISE]
+<Program> decode SRC IMAGE INFO MAXSIDE [NOISE [QUALITY [MEMORY]]]
 ```
 
 - `SRC` is the photo, by its full pathname.
@@ -107,7 +107,21 @@ in one of two ways:
 - `NOISE` (Lumen 0.0.38 and later, raw plug-ins only, and only for a
   photo whose recipe asks for it): noise reduction before demosaicing, 1
   light or 2 strong. A plug-in that doesn't do any ignores it; when it's missing,
-  do none.
+  do none. Lumen 0.0.38.7 and later always give it (0 for none), with:
+- `QUALITY` (raw plug-ins): 0 the best demosaicing, 1 a faster one. Lumen
+  asks for 1 for the Viewer's 100% and loupe and 0 for exports. LumenRaw
+  1.4 uses AHD for 0 and PPG for 1.
+- `MEMORY`: 1 if the picture may be handed over in memory instead of
+  `IMAGE` (Lumen asks when it has no scratch cache to keep the file in).
+  On RISC OS, make a dynamic area named `Lumen picture` (OS_DynamicArea
+  0), put the PPM in it (header and all), and add `memory=AREA LENGTH`
+  (the area's number and the PPM's length) to `INFO`; don't write
+  `IMAGE`. Lumen reads the picture from the area and removes it, and
+  removes any left behind the next time it starts. A plug-in that can't
+  (or one before this) writes `IMAGE` as usual. LumenRaw 1.4 and
+  LumenHEIF 1.3 do; `plugins/handover.h` is their code for it. With the
+  photos on an SD card it saves writing the picture to the card and
+  reading it back: 36 MB each way for a 12 MP photo.
 - `IMAGE` is where to write the picture. Write a binary PPM (`P6`, 8 bits a
   sample), or a baseline JPEG. Use sRGB, turned the right way up, and
   convert other colour spaces (Display P3, say) first.
@@ -128,7 +142,8 @@ in one of two ways:
 | `error` | Something went wrong. The value says what, in a few words, and Lumen shows it. |
 
 Write `INFO` and `IMAGE` under other names first, then rename them, so
-Lumen never reads half a file. Lumen waits for the program to end, then
+Lumen never reads half a file; write `INFO` last when the picture is in
+memory (it says where). Lumen waits for the program to end, then
 reads `INFO`. If `INFO` has `error`, or the program stops without writing
 it, the job has failed.
 

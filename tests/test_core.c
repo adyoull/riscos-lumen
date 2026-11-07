@@ -1331,8 +1331,9 @@ static void test_raw (void)
         rawjob_set_raw_noise (0);      /* the job keeps what it started with */
         while (t2 && (r2 = thumbgen_step (t2, 256)) == 0)
           ;
-        CHECK (strstr (last_cmd, " decode ") && !strcmp (last_cmd + strlen (last_cmd) - 2, " 2"),
-               "raw noise reduction: the plug-in's decode is given 2 (its sixth argument)");
+        CHECK (strstr (last_cmd, " decode ") && !strcmp (last_cmd + strlen (last_cmd) - 6, " 2 0 1"),
+               "raw noise reduction: the plug-in's decode is given 2 (its sixth argument; then QUALITY 0, "
+               "MEMORY 1: no scratch cache)");
         {
           thumbgen *t3;
           rawjob_set_raw_noise (2);

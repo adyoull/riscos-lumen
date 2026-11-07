@@ -98,6 +98,18 @@ int rawjob_busy (void);
    strong. A photo's own (recipe P_NOISE_RAW): set it just before
    starting its job, and back to 0 after. */
 void rawjob_set_raw_noise (int level);
+/* Raw develop jobs started from now on: 1 the faster demosaicing (PPG:
+   the Viewer's 100% and loupe), 0 the best (AHD: exports). A plug-in
+   before LumenRaw 1.4 always does the best. */
+void rawjob_set_raw_quality (int fast);
+
+/* A finished develop job's picture, if the plug-in handed it over in
+   memory (a PPM, in a dynamic area; LumenRaw 1.4 and LumenHEIF 1.3 do
+   when there's no scratch cache): its bytes and length, NULL if it's a
+   file (rawjob_image). Valid until rawjob_free, which gives the memory
+   back. */
+const unsigned char *rawjob_memory (rawjob *j, size_t *len);
+
 /* Where jobs put their files from now on (rawjob_setup set it first). */
 void rawjob_set_scratch (const char *scratch);
 
