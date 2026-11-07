@@ -52,6 +52,8 @@ enum { Button_Adjust = 1, Button_Menu = 2, Button_Select = 4 };
 #define KEY_HOME 0x1E
 #define KEY_END 0x1AB
 #define KEY_ESCAPE 0x1B
+#define KEY_TAB_KEY 0x18A                 /* Tab (and with Shift) */
+#define KEY_SHIFT_TAB 0x19A
 #define KEY_CTRL_A 0x01
 #define KEY_RETURN 0x0D
 
@@ -90,6 +92,9 @@ void app_report (const char *msg);
 void app_inform (const char *msg);   /* news, not a problem */
 /* Choices' Discard: removes the library's previews and says how many. */
 void app_discard_previews (void);
+/* The scratch cache (Choices): what it holds (bytes, and photos), and emptying it. */
+long long app_scratch_used (int *photos);
+void app_discard_scratch (void);
 int app_confirm (const char *msg, const char *button);   /* 1: the button was chosen */
 unsigned app_now (void);               /* centiseconds */
 library *app_library (void);
@@ -410,6 +415,10 @@ int choicewin_key (int key);
 void choicewin_drop (const char *path);
 const char *choicewin_library_text (void);   /* tests */
 void choicewin_set_library_text (const char *s);
+void choicewin_set_scratch_text (const char *dir, const char *mb);
+int choicewin_tab (void);                  /* 0 Library, 1 Export, 2 Previews and scratch */
+void choicewin_show_tab (int tab);
+void choicewin_redraw (int *block);
 
 /* --- libbox.c: Export library, Import library and Check library */
 int libbox_create (void);

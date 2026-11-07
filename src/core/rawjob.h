@@ -98,6 +98,25 @@ int rawjob_busy (void);
    strong. A photo's own (recipe P_NOISE_RAW): set it just before
    starting its job, and back to 0 after. */
 void rawjob_set_raw_noise (int level);
+/* Where jobs put their files from now on (rawjob_setup set it first). */
+void rawjob_set_scratch (const char *scratch);
+
+/* The cache: plug-ins' full-size pictures (developed for 100%, the loupe
+   or an export) kept in dir, mb megabytes at most, the least recently
+   used going first, so a photo isn't developed again while it's there.
+   A develop job asking for more than the Viewer's proxy (1600) whose
+   photo is there is done at once; one done that gave the photo's full
+   size is kept (its files renamed: put the jobs' files in the same
+   directory, rawjob_set_scratch). Keyed by the file (path, size, date),
+   the plug-in and the raw noise reduction. dir NULL or "", or mb 0: no
+   cache. */
+void rawjob_cache_setup (const char *dir, int mb);
+int rawjob_cache_on (void);
+/* What it holds: bytes, and how many photos. */
+long long rawjob_cache_used (int *photos);
+/* Empties it. */
+void rawjob_cache_discard (void);
+
 /* The plug-in at work (or next): its title ("LumenRaw", "LumenHEIF"). */
 const char *rawjob_busy_title (void);                /* any job waiting or running */
 

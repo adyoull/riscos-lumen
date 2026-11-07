@@ -11,6 +11,7 @@
 #include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
 #include "fsys.h"
 #if defined(__arm__) && defined(__linux__)
 #include <sys/auxv.h>
@@ -143,6 +144,11 @@ int fsys_neon (void)
 #else
   return 0;
 #endif
+}
+
+int fsys_touch (const char *path)
+{
+  return utime (path, NULL);
 }
 
 int fsys_settype (const char *path, int filetype)

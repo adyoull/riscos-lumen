@@ -1,4 +1,4 @@
-Lumen 0.0.38.5 (06 Nov 2026)
+Lumen 0.0.38.6 (07 Nov 2026)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -556,7 +556,8 @@ are imported once it is installed: import the folder again.
 
 Choices
 -------
-Choices... on the icon bar menu sets:
+Choices... on the icon bar menu sets, on three tabs (click one, or Tab
+and Shift-Tab to go round them):
   Library     where the library is kept, from the next time Lumen starts
               (empty: the usual place, in Choices). Drag a directory to
               the window to fill it in. Setting Lumen$Library before
@@ -570,6 +571,13 @@ Choices... on the icon bar menu sets:
   Folders     whether folders imported from now on are watched and get
               albums from their folders, and how often watched folders
               are looked through (in minutes)
+  Scratch     a directory on a fast disc where raw photos are kept at
+              full size, as LumenRaw developed them, so 100%, the loupe
+              and export don't need LumenRaw again (in a LumenCache
+              directory inside it); Up to: how big it may grow in MB (a
+              12 MP photo takes about 36 MB; the least recently used go
+              first); Discard empties it. Empty: none. A RAM disc works
+              but takes memory Lumen and LumenRaw need.
 They are kept in <Choices$Write>.Lumen.Choices.
 
 Help

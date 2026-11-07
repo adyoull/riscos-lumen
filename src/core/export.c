@@ -227,7 +227,7 @@ exporter *export_start (const char *src, int src_w, int src_h, int orientation,
   e->full_h = full_h;
   /* Decode only as large as the output needs: the output's scale relative
      to the full-size picture, applied to the original's longer side. */
-  decode_side = longer (src_w, src_h);
+  decode_side = 1 << 30;               /* all of it (and a plug-in's full size can be kept in the scratch cache) */
   if ((e->o.max_side > 0 || (e->o.box_w > 0 && e->o.box_h > 0)) && full_w > 0 && full_h > 0)
     {
       int fw, fh;

@@ -15,6 +15,8 @@ static int raw_noise;                  /* for raw jobs started from now on (rawj
 struct rawjob
 {
   int state, tag, kind, noise;
+  int want;                            /* the size asked for (develop jobs) */
+  int cached;                          /* its files are in the cache: not deleted with it */
   char src[1024], image[300], details[300], err[300];
   img_info info;
   rawjob *next;                        /* in the queue */
@@ -30,6 +32,14 @@ static rawjob *queue, *running;
 static int next_tag = 1;
 
 static unsigned stamp[RAWJOB_KINDS];
+
+/* The cache (rawjob_cache_setup): plug-ins' full-size pictures and their
+   details, C<key>p and C<key>i in cache_dir, so a photo isn't developed
+   again; cache_limit bytes at most (0: no cache), the least recently used
+   going first. */
+static char cache_dir[1024];
+static long long cache_limit;
+#define CACHE_MIN_SIDE 1600            /* bigger than the Viewer's proxy (which previews keep) */
 static plugin_info formats[RAWJOB_KINDS];
 static int switched_off[RAWJOB_KINDS];   /* [0] unused; dir[0] == 0: free */
 
@@ -195,6 +205,15 @@ void rawjob_setup_kind (int kind, const char *h, const char *s, rawjob_runner ru
     }
 }
 
+void rawjob_set_scratch (const char *s)
+{
+  if (s && *s && strcmp (s, scratch))
+    {
+      snprintf (scratch, sizeof scratch, "%s", s);
+      fsys_mkdirs (scratch);
+    }
+}
+
 int rawjob_available (void) { return have_helper[RAWJOB_RAW]; }
 int rawjob_available_kind (int kind) { return kind >= 0 && kind < RAWJOB_KINDS && have_helper[kind]; }
 int rawjob_switched_off_kind (int kind) { return kind >= 0 && kind < RAWJOB_KINDS && switched_off[kind]; }
@@ -334,6 +353,187 @@ static void run_next (void)
     }
 }
 
+/* --- the cache */
+
+void rawjob_cache_setup (const char *dir, int mb)
+{
+  snprintf (cache_dir, sizeof cache_dir, "%s", dir && mb > 0 ? dir : "");
+  cache_limit = cache_dir[0] ? (long long) mb * 1024 * 1024 : 0;
+  if (cache_dir[0])
+    fsys_mkdirs (cache_dir);
+}
+
+int rawjob_cache_on (void) { return cache_limit > 0; }
+
+/* A develop job's key: the file (its path, size and date), the plug-in
+   (its stamp), and the raw noise reduction asked for. */
+static unsigned cache_key (const rawjob *j)
+{
+  fsys_entry e;
+  const char *c;
+  unsigned x = 2166136261u;
+  for (c = j->src; *c; c++)
+    x = (x ^ (unsigned char) *c) * 16777619u;
+  if (fsys_stat (j->src, &e) == 0)
+    {
+      x = (x ^ (unsigned) e.size) * 16777619u;
+      x = (x ^ (unsigned) e.mtime) * 16777619u;
+      x = (x ^ (unsigned) (e.mtime >> 32)) * 16777619u;
+    }
+  x = (x ^ stamp[j->kind]) * 16777619u;
+  x = (x ^ (unsigned) j->kind) * 16777619u;
+  x = (x ^ (unsigned) j->noise) * 16777619u;
+  return x;
+}
+
+static void cache_paths (unsigned key, char *image, size_t ni, char *details, size_t nd)
+{
+  char leaf[16];
+  snprintf (leaf, sizeof leaf, "C%08xp", key);
+  fsys_join (image, ni, cache_dir, leaf);
+  snprintf (leaf, sizeof leaf, "C%08xi", key);
+  fsys_join (details, nd, cache_dir, leaf);
+}
+
+/* A cache file: C, eight hex digits, p or i. */
+static int cache_file (const char *leaf)
+{
+  size_t l = strlen (leaf);
+  return l == 10 && leaf[0] == 'C' && (leaf[9] == 'p' || leaf[9] == 'i');
+}
+
+long long rawjob_cache_used (int *photos)
+{
+  fsys_dir *d;
+  fsys_entry e;
+  long long used = 0;
+  int n = 0;
+  if (photos)
+    *photos = 0;
+  if (!cache_dir[0] || !(d = fsys_opendir (cache_dir)))
+    return 0;
+  while (fsys_readdir (d, &e) == 1)
+    if (!e.is_dir && cache_file (e.name))
+      {
+        used += e.size;
+        n += e.name[9] == 'p';
+      }
+  fsys_closedir (d);
+  if (photos)
+    *photos = n;
+  return used;
+}
+
+/* Down to the limit, the least recently used first, never keep's. */
+static void cache_trim (unsigned keep)
+{
+  for (;;)
+    {
+      fsys_dir *d;
+      fsys_entry e;
+      long long used = 0, oldest = 0;
+      char victim[16] = "";
+      if (!cache_dir[0] || !(d = fsys_opendir (cache_dir)))
+        return;
+      while (fsys_readdir (d, &e) == 1)
+        if (!e.is_dir && cache_file (e.name))
+          {
+            used += e.size;
+            if (e.name[9] == 'p' && strtoul (e.name + 1, NULL, 16) != keep && (!victim[0] || e.mtime < oldest))
+              {
+                oldest = e.mtime;
+                snprintf (victim, sizeof victim, "%s", e.name);
+              }
+          }
+      fsys_closedir (d);
+      if (used <= cache_limit || !victim[0])
+        return;
+      {
+        char a[1100], b[1100];
+        cache_paths ((unsigned) strtoul (victim + 1, NULL, 16), a, sizeof a, b, sizeof b);
+        if (remove (a) != 0)
+          return;                      /* can't: don't go round for ever */
+        remove (b);
+      }
+    }
+}
+
+void rawjob_cache_discard (void)
+{
+  fsys_dir *d;
+  fsys_entry e;
+  if (!cache_dir[0] || !(d = fsys_opendir (cache_dir)))
+    return;
+  while (fsys_readdir (d, &e) == 1)
+    if (!e.is_dir && cache_file (e.name))
+      {
+        char path[1100];
+        fsys_join (path, sizeof path, cache_dir, e.name);
+        remove (path);
+      }
+  fsys_closedir (d);
+}
+
+static int read_details (rawjob *j);
+
+/* A develop job whose picture is in the cache: done at once. */
+static int cache_find (rawjob *j)
+{
+  fsys_entry e;
+  char image[300], details[300];
+  if (!cache_limit || j->info.format != 1 || j->want <= CACHE_MIN_SIDE)
+    return 0;
+  cache_paths (cache_key (j), image, sizeof image, details, sizeof details);
+  if (fsys_stat (image, &e) != 0 || e.size <= 0 || fsys_stat (details, &e) != 0)
+    return 0;
+  {
+    char was_image[300], was_details[300];
+    snprintf (was_image, sizeof was_image, "%s", j->image);
+    snprintf (was_details, sizeof was_details, "%s", j->details);
+    snprintf (j->image, sizeof j->image, "%s", image);
+    snprintf (j->details, sizeof j->details, "%s", details);
+    if (read_details (j) != 1)
+      {
+        snprintf (j->image, sizeof j->image, "%s", was_image);
+        snprintf (j->details, sizeof j->details, "%s", was_details);
+        j->err[0] = '\0';
+        return 0;
+      }
+  }
+  fsys_touch (image);                  /* used: last to go */
+  fsys_touch (details);
+  j->cached = 1;
+  j->state = J_DONE;
+  return 1;
+}
+
+/* A develop job just done: its picture kept, if it's the photo's full
+   size (smaller than asked for: the plug-in didn't halve it), by renaming
+   its files into the cache (the jobs' files are in the same directory). */
+static void cache_keep (rawjob *j)
+{
+  char image[300], details[300];
+  unsigned key;
+  int longer = j->info.width > j->info.height ? j->info.width : j->info.height;
+  if (!cache_limit || j->cached || j->want <= CACHE_MIN_SIDE || longer <= 0 || longer >= j->want)
+    return;
+  key = cache_key (j);
+  cache_paths (key, image, sizeof image, details, sizeof details);
+  remove (image);
+  remove (details);
+  if (rename (j->details, details) != 0)
+    return;
+  if (rename (j->image, image) != 0)
+    {
+      rename (details, j->details);
+      return;
+    }
+  snprintf (j->image, sizeof j->image, "%s", image);
+  snprintf (j->details, sizeof j->details, "%s", details);
+  j->cached = 1;
+  cache_trim (key);
+}
+
 rawjob *rawjob_start (const char *src, int develop, int max_side, char *err, size_t n)
 {
   return rawjob_start_kind (RAWJOB_RAW, src, develop, max_side, err, n);
@@ -366,6 +566,11 @@ rawjob *rawjob_start_kind (int kind, const char *src, int develop, int max_side,
   }
   /* Kept until it runs: what to do. */
   j->info.format = develop;
+  j->info.width = max_side;
+  j->want = develop ? max_side : 0;
+  if (cache_find (j))
+    return j;                          /* developed before, and kept */
+  j->info.format = develop;            /* (read_details may have started on it) */
   j->info.width = max_side;
   j->state = J_QUEUED;
   for (p = &queue; *p; p = &(*p)->next)
@@ -451,6 +656,7 @@ int rawjob_poll (rawjob *j)
       if (read_details (j) == 1)
         {
           j->state = J_DONE;
+          cache_keep (j);
           unlink_job (j);
           run_next ();
           return 1;
@@ -515,8 +721,11 @@ void rawjob_free (rawjob *j)
   if (j->state == J_RUNNING)
     running = NULL;                    /* forgotten: it finishes on its own, and rawjob_setup clears its files up next time */
   unlink_job (j);
-  remove (j->image);
-  remove (j->details);
+  if (!j->cached)
+    {
+      remove (j->image);
+      remove (j->details);
+    }
   free (j);
   run_next ();
 }

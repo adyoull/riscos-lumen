@@ -1,5 +1,24 @@
 # Lumen changelog
 
+## 0.0.38.6 (7 November 2026): a scratch disc, and Choices in tabs
+
+- Scratch: a directory, chosen in Choices, where Lumen keeps raw photos
+  (and format plug-ins' photos) at full size as the plug-in developed
+  them, so 100%, the loupe and exporting don't wait for LumenRaw again.
+  Up to so many MB (2048 to start with; a 12 MP photo takes about
+  36 MB), the least recently used going first; Discard empties it. Kept
+  by the file (its path, size and date), the plug-in and the raw noise
+  reduction, so a changed file or setting is developed afresh. Lumen
+  keeps its files in a LumenCache directory inside the one chosen, and
+  the plug-ins' own working files go there too (so a picture is kept by
+  renaming it). Empty (as before): none, and the scrap directory.
+- An export at full size asks for all of the photo (it asked for its
+  size, which comes to the same, but now its picture can be kept).
+- Choices is in three tabs: Library (where it is, thumbnails, checking
+  files, watched folders), Export, and Previews and scratch. Tab and
+  Shift-Tab go round them. A directory dropped on the window is the
+  scratch directory on that tab, else the library; a file is left alone.
+
 ## 0.0.38.5 (6 November 2026): NEON for developing and layers
 
 - Developing (develop_rows) has a NEON version: tone, saturation,

@@ -253,6 +253,8 @@ void app_keep_prefs (const prefs *p)
     the_prefs = *p;
 }
 
+static void scratch_use (void);
+
 int app_set_prefs (const prefs *p)
 {
   if (prefs_save (prefs_path, p))
@@ -261,6 +263,7 @@ int app_set_prefs (const prefs *p)
       return -1;
     }
   the_prefs = *p;
+  scratch_use ();
   lib_set_new_folders (lib, p->watch_new, p->albums_new);
   lib_set_previews (lib, p->previews);
   browser_set_size (p->thumb_size);
@@ -309,6 +312,40 @@ static int set_helper (int kind, const plugin_info *pi, int off, const char *scr
   return pi != NULL;
 }
 
+/* Where plug-ins' jobs put their files: the scratch directory chosen in
+   Choices (where the cache of full-size pictures is too, so a job's
+   picture is kept by renaming it), else <Wimp$ScrapDir>.LumenRaw. */
+static void plugins_scratch (char *scratch, size_t n)
+{
+  const char *v = getenv ("Lumen$Scratch");   /* the tests' own */
+  if (the_prefs.scratch_dir[0])
+    fsys_join (scratch, n, the_prefs.scratch_dir, "LumenCache");   /* its own directory there: */
+                                                                   /* nothing else in the one chosen is touched */
+  else if (v && *v)
+    snprintf (scratch, n, "%s", v);
+  else if (fsys_canonical ("<Wimp$ScrapDir>.LumenRaw", scratch, n))
+    snprintf (scratch, n, "<Wimp$ScrapDir>.LumenRaw");
+}
+
+/* The scratch Choices in use: the jobs' directory and the cache. */
+static void scratch_use (void)
+{
+  char scratch[700];
+  plugins_scratch (scratch, sizeof scratch);
+  rawjob_set_scratch (scratch);
+  rawjob_cache_setup (the_prefs.scratch_dir[0] ? scratch : NULL, the_prefs.scratch_dir[0] ? the_prefs.scratch_mb : 0);
+}
+
+long long app_scratch_used (int *photos)
+{
+  return rawjob_cache_used (photos);
+}
+
+void app_discard_scratch (void)
+{
+  rawjob_cache_discard ();
+}
+
 void app_plugins_rescan (void)
 {
   char scratch[700];
@@ -316,13 +353,8 @@ void app_plugins_rescan (void)
   if (!plugins_dir[0])
     plugin_paths ();
   nplugins = plugins_dir[0] ? plugins_scan (plugins_dir, plugins_state, plugin_list, PLUGINS_MAX) : 0;
-  {
-    const char *v = getenv ("Lumen$Scratch");   /* the tests' own */
-    if (v && *v)
-      snprintf (scratch, sizeof scratch, "%s", v);
-    else if (fsys_canonical ("<Wimp$ScrapDir>.LumenRaw", scratch, sizeof scratch))
-      snprintf (scratch, sizeof scratch, "<Wimp$ScrapDir>.LumenRaw");
-  }
+  plugins_scratch (scratch, sizeof scratch);
+  rawjob_cache_setup (the_prefs.scratch_dir[0] ? scratch : NULL, the_prefs.scratch_dir[0] ? the_prefs.scratch_mb : 0);
   /* Camera raw files: LumenRaw. */
   {
     const plugin_info *pi = plugins_find (plugin_list, nplugins, "raw");
@@ -910,7 +942,10 @@ static void data_load (int *b)
     }
   if (b[5] == choicewin_window ())
     {
-      /* A directory for the library. */
+      /* A directory for the library, or the scratch directory (a file
+         dropped there is no use: left alone). */
+      if (type != FT_DIR && type != FT_APP)
+        return;
       b[3] = b[2];
       b[4] = Message_DataLoadAck;
       _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
@@ -1025,6 +1060,8 @@ static int app_event_1 (int reason, int *b, int sender)
         viewer_redraw (b);
       else if (b[0] == activitywin_window ())
         activitywin_redraw (b);
+      else if (b[0] == choicewin_window ())
+        choicewin_redraw (b);
       else
         {
           int more = 0;

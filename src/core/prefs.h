@@ -27,6 +27,10 @@ typedef struct
   int open_mode;                       /* OPEN_NEVER, OPEN_RUNNING, OPEN_ALWAYS; -1 not chosen yet */
   char open_types[160];                /* the ticked filetypes, "C85 B60 ..."; "-" none yet */
   int open_data;                       /* Data files named like a photo (while running); -1 not chosen */
+  /* Scratch: where plug-ins' full-size pictures are kept (rawjob's cache)
+     and their jobs' files go; "" none (<Wimp$ScrapDir>, no cache). */
+  char scratch_dir[512];
+  int scratch_mb;                      /* the cache's size at most, in MB (16-65536) */
 } prefs;
 
 enum { OPEN_NEVER, OPEN_RUNNING, OPEN_ALWAYS };

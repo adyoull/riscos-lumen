@@ -303,6 +303,11 @@ void fsys_mimemap_add (const char *mime, int filetype, const char *name, const c
   (void) mime; (void) filetype; (void) name; (void) exts;
 }
 
+int fsys_touch (const char *path)
+{
+  return _swix (OS_File, _INR (0, 1), 9, path) ? -1 : 0;
+}
+
 int fsys_settype (const char *path, int filetype)
 {
   return _swix (OS_File, _INR (0, 2), 18, path, filetype) ? -1 : 0;

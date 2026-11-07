@@ -144,7 +144,20 @@ const char *help_text (int window, int icon, int x, int y)
       case 22: return "Ticked: the folders inside the folders you drag in become albums, under their project.";
       case 24: return "How often Lumen looks in watched folders for new photos, in minutes. 0: only when it starts "
                       "and when its window opens.";
-      default: return "Lumen's Choices.";
+      case 27: case 28: case 29: return "Which photos get a working copy kept with the library, so they open at once.";
+      case 30: return "Deletes the previews kept with the library (they are made again).";
+      case 32: return "Where the library is, thumbnails, checking files, and watched folders. Tab goes to the next tab.";
+      case 33: return "What the Export box starts with. Tab goes to the next tab.";
+      case 34: return "Previews, and the scratch directory for raw photos at full size. Tab goes to the next tab.";
+      case 36: return "A directory on a fast disc (or a RAM disc) where Lumen keeps raw photos at full size, as "
+                      "LumenRaw developed them, so 100%, the loupe and export don't need LumenRaw again. Lumen "
+                      "keeps them in a LumenCache directory inside it. Drag a directory here. Empty: none "
+                      "(LumenRaw's files go to the scrap directory).";
+      case 39: return "How big the scratch cache may grow, in MB. A 12-megapixel photo takes about 36 MB; the photos "
+                      "used least recently go first when it's full.";
+      case 41: return "How many photos the scratch cache holds, and what it holds now.";
+      case 42: return "Deletes the photos kept in the scratch directory (they are developed again when wanted).";
+      default: return "Lumen's Choices. Click a tab at the top to see its choices.";
       }
   if (window == printbox_window ())
     switch (icon)

@@ -1207,6 +1207,13 @@ static int run_and_keep (const char *cmd, int tag)
   return run_now (cmd, tag);
 }
 
+static int runs;
+static int run_counting (const char *cmd, int tag)
+{
+  runs++;
+  return run_now (cmd, tag);
+}
+
 static int ran_nothing (const char *cmd, int tag)
 {
   (void) cmd;
@@ -1398,6 +1405,85 @@ static void test_raw (void)
   CHECK (t && r == -1 && strstr (thumbgen_error (t), "stopped without finishing"), "ended with nothing: said so, not waited for for ever");
   thumbgen_free (t);
   rawjob_setup (helper, scratch, run_now);
+
+  /* The scratch cache: the full size kept, so it isn't developed again. */
+  {
+    unsigned char first[64];
+    int photos = 0, made = 0;
+    long long used;
+    rawjob_setup (helper, scratch, run_counting);
+    rawjob_cache_setup (scratch, 100);
+    runs = 0;
+    t = thumbgen_start (nef, NULL, 1 << 30, 1, err, sizeof err);
+    while (t && (r = thumbgen_step (t, 256)) == 0)
+      ;
+    if (t && r == 1 && thumbgen_take (t, &img) == 0)
+      {
+        made = img.w == 4284;
+        memcpy (first, img.rgb + (size_t) img.w * 1400 * 3 + 2000 * 3, sizeof first);
+        free (img.rgb);
+      }
+    thumbgen_free (t);
+    used = rawjob_cache_used (&photos);
+    CHECK (made && runs == 1 && photos == 1 && used > 36000000, "scratch: the full size developed once, and kept (36 MB)");
+    t = thumbgen_start (nef, NULL, 1 << 30, 1, err, sizeof err);
+    while (t && (r = thumbgen_step (t, 256)) == 0)
+      ;
+    made = 0;
+    if (t && r == 1 && thumbgen_take (t, &img) == 0)
+      {
+        made = img.w == 4284 && !memcmp (first, img.rgb + (size_t) img.w * 1400 * 3 + 2000 * 3, sizeof first);
+        free (img.rgb);
+      }
+    thumbgen_free (t);
+    CHECK (made && runs == 1, "scratch: asked again, from the cache (the plug-in not run), the same picture");
+    t = thumbgen_start (nef, NULL, 2000, 1, err, sizeof err);
+    while (t && (r = thumbgen_step (t, 256)) == 0)
+      ;
+    CHECK (t && r == 1 && runs == 1 && thumbgen_take (t, &img) == 0 && img.w == 2000, "scratch: a 2000-pixel export uses it too");
+    if (t && r == 1)
+      free (img.rgb);
+    thumbgen_free (t);
+    t = thumbgen_start (nef, NULL, 1600, 1, err, sizeof err);
+    while (t && (r = thumbgen_step (t, 256)) == 0)
+      ;
+    CHECK (t && r == 1 && runs == 2, "scratch: the Viewer's proxy isn't taken from it (previews keep that)");
+    thumbgen_free (t);
+    rawjob_set_raw_noise (1);
+    t = thumbgen_start (nef, NULL, 1 << 30, 1, err, sizeof err);
+    rawjob_set_raw_noise (0);
+    while (t && (r = thumbgen_step (t, 256)) == 0)
+      ;
+    thumbgen_free (t);
+    rawjob_cache_used (&photos);
+    CHECK (runs == 3 && photos == 2, "scratch: with raw noise reduction, another picture (developed, kept)");
+    rawjob_cache_setup (scratch, 40);
+    t = thumbgen_start (cr2, NULL, 1 << 30, 1, err, sizeof err);
+    while (t && (r = thumbgen_step (t, 256)) == 0)
+      ;
+    thumbgen_free (t);
+    used = rawjob_cache_used (&photos);
+    CHECK (runs == 4 && used <= 40ll * 1024 * 1024 && photos >= 1, "scratch: kept within its size, the least recently used going first");
+    rawjob_cache_discard ();
+    CHECK (rawjob_cache_used (&photos) == 0 && photos == 0, "scratch: discarded");
+    rawjob_cache_setup (NULL, 0);
+    t = thumbgen_start (nef, NULL, 1 << 30, 1, err, sizeof err);
+    while (t && (r = thumbgen_step (t, 256)) == 0)
+      ;
+    thumbgen_free (t);
+    CHECK (runs == 5 && !rawjob_cache_on (), "scratch: none chosen, nothing kept");
+    {
+      fsys_dir *d = fsys_opendir (scratch);
+      fsys_entry e;
+      int left = 0;
+      while (d && fsys_readdir (d, &e) == 1)
+        left += !e.is_dir;
+      if (d)
+        fsys_closedir (d);
+      CHECK (left == 0, "scratch: no files left behind");
+    }
+    rawjob_setup (helper, scratch, run_now);
+  }
 
   /* Importing a folder of raw files: added, thumbnails made, details filled in. */
   {

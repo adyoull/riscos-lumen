@@ -26,6 +26,7 @@ void prefs_default (prefs *p)
   p->previews = 1;                     /* raw files */
   p->open_mode = -1;                   /* File types: not chosen yet (filetypes.c decides) */
   p->open_data = -1;
+  p->scratch_mb = 2048;
 }
 
 static int clamp (int v, int lo, int hi)
@@ -54,6 +55,8 @@ int prefs_load (const char *path, prefs *p)
         snprintf (p->library, sizeof p->library, "%s", v);
       else if (!strcmp (line, "open_types"))
         snprintf (p->open_types, sizeof p->open_types, "%s", v);
+      else if (!strcmp (line, "scratch"))
+        snprintf (p->scratch_dir, sizeof p->scratch_dir, "%s", v);
       else if (!strcmp (line, "export_names"))
         snprintf (p->export_names, sizeof p->export_names, "%s", v);
       else
@@ -85,6 +88,8 @@ int prefs_load (const char *path, prefs *p)
             p->albums_new = n != 0;
           else if (!strcmp (line, "watch_minutes"))
             p->watch_minutes = clamp ((int) n, 0, 1440);
+          else if (!strcmp (line, "scratch_mb"))
+            p->scratch_mb = clamp ((int) n, 16, 65536);
           else if (!strcmp (line, "previews"))
             p->previews = clamp ((int) n, 0, 2);
           else if (!strcmp (line, "open_mode"))
@@ -124,6 +129,9 @@ int prefs_save (const char *path, const prefs *p)
            p->export_format, p->export_quality, p->export_size, p->thumb_size, p->verify);
   fprintf (f, "watch_new %d\nalbums_new %d\nwatch_minutes %d\n", p->watch_new, p->albums_new, p->watch_minutes);
   fprintf (f, "previews %d\n", p->previews);
+  if (p->scratch_dir[0])
+    fprintf (f, "scratch %s\n", p->scratch_dir);
+  fprintf (f, "scratch_mb %d\n", p->scratch_mb);
   fprintf (f, "export_box_w %d\nexport_box_h %d\nexport_colour %d\nexport_sharpen %d\n", p->export_box_w,
            p->export_box_h, p->export_colour, p->export_sharpen);
   if (p->export_names[0])

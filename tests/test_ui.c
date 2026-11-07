@@ -73,7 +73,8 @@ static int getmenustate0, submenu_opened;
 static unsigned smart_icon_flags[32];   /* the Smart album window's */
 static int tagw_open, smartw_open;
 static unsigned lib_icon_flags[3][16];   /* the Export, Import and Check library windows' icons */
-static unsigned choice_icon_flags[32];  /* the Choices window's icons' state (bit 21: selected) */                /* a task handle the fake Task Manager lists as another Lumen */
+static unsigned choice_icon_flags[64];
+static int choice_icon_y0[64];         /* where the Choices window's icons were moved to (tabs) */  /* the Choices window's icons' state (bit 21: selected) */                /* a task handle the fake Task Manager lists as another Lumen */
 
 /* TaskManager_EnumerateTasks: ourselves, a LumenRaw task window, a module
    task called Lumen, and maybe another Lumen; two records a call. */
@@ -126,6 +127,12 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         }
       return NULL;
     case Wimp_ResizeIcon:
+      if (r[0] == CHOICEW)
+        {
+          if (r[1] >= 0 && r[1] < 64)
+            choice_icon_y0[r[1]] = r[3];
+          return NULL;
+        }
       CHECK (r[0] == MAINW && r[1] == 0, "the search field moves with the bottom bar");
       memcpy (&win_icon[1], &r[2], 4 * sizeof (int));
       return NULL;
@@ -228,7 +235,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       b[7] = -1; b[8] = 0;
       return NULL;
     case Wimp_SetIconState:
-      if (b[0] == CHOICEW && b[1] >= 0 && b[1] < 32)
+      if (b[0] == CHOICEW && b[1] >= 0 && b[1] < 64)
         choice_icon_flags[b[1]] = (choice_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
       if (b[0] == SMARTW && b[1] >= 0 && b[1] < 32)
         smart_icon_flags[b[1]] = (smart_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
@@ -255,7 +262,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
           return NULL;
         }
       CHECK (b[0] == CHOICEW, "icon state: the Choices window's");
-      if (b[1] >= 0 && b[1] < 32)
+      if (b[1] >= 0 && b[1] < 64)
         b[6] = (int) choice_icon_flags[b[1]];
       return NULL;
     case Wimp_StartTask:
@@ -2960,6 +2967,42 @@ int main (int argc, char **argv)
     snprintf ((char *) &b[11], 200, "%s/Holiday", work);
     app_event (User_Message_Recorded, b, 0);
     CHECK (strstr (choicewin_library_text (), "/Holiday") != NULL, "Choices: a directory dropped sets the library");
+    /* Tabs: Library, Export, Previews and scratch. */
+    CHECK (choicewin_tab () == 0, "Choices: opens on its Library tab");
+    memset (b, 0, sizeof b);
+    b[2] = Button_Select; b[3] = CHOICEW; b[4] = 34;
+    app_event (Mouse_Click, b, 0);
+    CHECK (choicewin_tab () == 2
+           && choice_icon_y0[36] > -640 && choice_icon_y0[1] < -2000 && choice_icon_y0[4] < -2000,
+           "Choices: the Previews and scratch tab shows its own (the scratch field), the others' moved out of sight");
+    memset (b, 0, sizeof b);
+    b[0] = 256; b[1] = 0x5678; b[2] = 92; b[4] = 3; b[5] = CHOICEW; b[10] = 0x1000;
+    snprintf ((char *) &b[11], 200, "%s/Scratch", work);
+    app_event (User_Message_Recorded, b, 0);
+    CHECK (strstr (choicewin_library_text (), "/Holiday") != NULL, "Choices: on that tab a directory dropped is the scratch "
+           "directory, not the library");
+    choicewin_set_library_text ("");
+    {
+      char sd[760];
+      snprintf (sd, sizeof sd, "%s/Scratch", work);
+      choicewin_set_scratch_text (sd, "500");
+      memset (b, 0, sizeof b);
+      b[2] = Button_Select; b[3] = CHOICEW; b[4] = 19;
+      app_event (Mouse_Click, b, 0);
+      CHECK (!strcmp (app_prefs ()->scratch_dir, sd) && app_prefs ()->scratch_mb == 500 && rawjob_cache_on (),
+             "Choices: a scratch directory and 500 MB saved, and the cache in use");
+      CHECK (prefs_load (cf, &p) == 0 && !strcmp (p.scratch_dir, sd) && p.scratch_mb == 500, "Choices: the scratch in the file");
+    }
+    choicewin_key (KEY_TAB_KEY);
+    CHECK (choicewin_tab () == 0, "Choices: Tab goes round the tabs");
+    choicewin_key (KEY_SHIFT_TAB);
+    CHECK (choicewin_tab () == 2, "Choices: Shift-Tab back");
+    choicewin_set_scratch_text ("", "2048");
+    memset (b, 0, sizeof b);
+    b[2] = Button_Select; b[3] = CHOICEW; b[4] = 19;
+    app_event (Mouse_Click, b, 0);
+    CHECK (!app_prefs ()->scratch_dir[0] && !rawjob_cache_on (), "Choices: scratch emptied: no cache");
+    choicewin_show_tab (0);
   }
   /* Libraries: export the whole library, a project; import; check. */
   {

@@ -873,16 +873,25 @@ a { color:#1f5fa8; }
 <p>A ticked type the desktop has no name or icon for gets MimeMap's name for it and Lumen's file icon: a picture on a page, with Lumen's icon in the corner. Lumen keeps them in <code>Choices:Lumen.Types</code> and <code>Choices:Lumen.Sprites</code>, which !Lumen's !Boot reads each time the desktop starts.</p>
 
 <h3 class="chapter" id="ch17"><span>17</span> Choices</h3>
-<p>Choose <b>Choices...</b> from the icon bar menu.</p>
-<figure><img src="images/choices.png" alt="Lumen's Choices"><figcaption>Lumen's Choices.</figcaption></figure>
+<p>Choose <b>Choices...</b> from the icon bar menu. The window has three tabs: click one along the top to see its choices, or press <kbd>Tab</kbd> to go to the next (<kbd>Shift</kbd>+<kbd>Tab</kbd> the one before).</p>
+<figure><img src="images/choices.png" alt="Lumen's Choices, its Library tab"><figcaption>Lumen's Choices: the Library tab.</figcaption></figure>
 <table>
-<tr><th>Choice</th><th>Does</th></tr>
+<tr><th>Library tab</th><th>Does</th></tr>
 <tr><td>Library</td><td>Where the library is kept. Leave it empty for the usual place, in your Choices. To use another place, type a full pathname, or drag a directory onto the window. It's used from the next time Lumen starts.</td></tr>
-<tr><td>Export</td><td>The format, size and JPEG quality the Export box starts with.</td></tr>
 <tr><td>Thumbnails</td><td>The thumbnail size Lumen starts with. Saving changes the size at once, too.</td></tr>
-<tr><td>Previews</td><td>Which photos Lumen keeps a preview of, so they open at once in the Viewer: <b>Raw files</b> (the usual), <b>All photos</b>, or <b>None</b> (<a href="#ch16">Chapter 16</a>). <b>Discard</b> removes the previews there are, after asking; unless you choose None, they are made again in the background.</td></tr>
 <tr><td>Check the photos' files are still there when Lumen opens</td><td>Switch this off if your photos are on discs that are often away, so they aren't all marked missing (<a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Folders</td><td><b>Watch folders I import for new photos</b> and <b>Make albums from the folders inside them</b> do for every directory you import from now on what the project menu does for one (<a href="#ch6">Chapter 6</a>). <b>Look in watched folders every</b> so many minutes; 0 means only when Lumen starts and when its window opens.</td></tr>
+</table>
+<table>
+<tr><th>Export tab</th><th>Does</th></tr>
+<tr><td>Export, Quality, Size</td><td>The format, JPEG quality and size the Export box starts with.</td></tr>
+</table>
+<figure><img src="images/choices-scratch.png" alt="Lumen's Choices, its Previews and scratch tab"><figcaption>The Previews and scratch tab.</figcaption></figure>
+<table>
+<tr><th>Previews and scratch tab</th><th>Does</th></tr>
+<tr><td>Previews</td><td>Which photos Lumen keeps a preview of, so they open at once in the Viewer: <b>Raw files</b> (the usual), <b>All photos</b>, or <b>None</b> (<a href="#ch16">Chapter 16</a>). <b>Discard</b> removes the previews there are, after asking; unless you choose None, they are made again in the background.</td></tr>
+<tr><td>Scratch</td><td>A directory where Lumen keeps raw photos (and other plug-ins' photos) at full size, as the plug-in developed them, so 100%, the loupe and exporting don't wait for LumenRaw again. Type its pathname, or drag a directory onto the field while this tab is showing; Lumen keeps its files in a <b>LumenCache</b> directory inside it and touches nothing else there. Choose a fast disc: an SSD or hard disc is best. A RAM disc works too, but takes memory Lumen and LumenRaw need, so keep it small. Leave it empty for none.</td></tr>
+<tr><td>Up to</td><td>How big the scratch cache may grow, in MB. A 12-megapixel photo takes about 36 MB, a 24-megapixel one about 72 MB; the line below says how many 12-megapixel photos fit, and how many it holds now. When it's full, the photos used least recently go first. <b>Discard</b> empties it.</td></tr>
 </table>
 <p>Click <b>Save</b> to keep them, or <b>Cancel</b> to leave them as they were.</p>
 
