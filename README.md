@@ -38,7 +38,7 @@ were written with Anthropic's Claude as a coding assistant.
 
 1. Install SharedUnixLibrary and ARMEABISupport with PackMan, if you
    haven't already.
-2. Unzip `Lumen-0.0.38.2.zip` and copy `!Lumen` to where you keep your
+2. Unzip `Lumen-0.0.38.7.zip` and copy `!Lumen` to where you keep your
    applications, for example `$.Apps.Graphics`.
 3. For camera raw files, unzip `LumenRaw-1.4.zip`: it holds
    `!Lumen.Plugins.LibRaw`. Drag that `LibRaw` directory into Lumen's
@@ -135,7 +135,11 @@ plug-in API, so plug-ins can add photo formats (the first is LumenHEIF,
 for HEIF and AVIF photos), and has simpler menus. 0.0.38.2 adds layers
 (local adjustments with brushes, gradients and ovals), lens correction
 (with the LumenLens plug-in's profiles), wavelet noise reduction, TIFF,
-and double-clicking photos to open them in Lumen. Lumen has
+and double-clicking photos to open them in Lumen. 0.0.38.7 makes
+opening, developing and layers quicker (with NEON where the processor
+has it), adds a scratch disc that keeps raw photos developed at full
+size, puts Choices in tabs, and hands raw and HEIF photos over in
+memory instead of through the disc. Lumen has
 been tested on RISC OS 5.31 on a Raspberry Pi 4, and on RISC OS running on
 Linux (RISC OS 5.31-5 under QEMU); its automated tests run on Linux
 (x86-64, and ARM under QEMU with and without NEON).

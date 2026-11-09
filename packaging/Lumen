@@ -19,7 +19,8 @@ Description: Photo library and non-destructive editor
  lens correction, crop, straighten and perspective, layers (brushes,
  gradients and ovals) and retouching, with presets, undo, a loupe and
  a 100% view; then exports them as JPEG, PNG or TIFF. One window with a
- browser, viewer, split view and full screen.
+ browser, viewer, split view and full screen, and a scratch
+ directory that keeps raw photos developed at full size.
  .
  Camera raw files need the LibRaw plug-in (LumenRaw), HEIF and AVIF
  photos the LumenHEIF plug-in, and lens profiles the LumenLens plug-in:

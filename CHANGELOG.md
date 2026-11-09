@@ -17,7 +17,7 @@
 - The plug-in API's decode takes QUALITY and MEMORY after NOISE
   (docs/plugin-api.md); older plug-ins ignore them and work as before.
 
-## 0.0.38.6 (7 November 2026): a scratch disc, and Choices in tabs
+## 0.0.38.6 (7 November 2026, not released on its own): a scratch disc, and Choices in tabs
 
 - Scratch: a directory, chosen in Choices, where Lumen keeps raw photos
   (and format plug-ins' photos) at full size as the plug-in developed
@@ -36,7 +36,7 @@
   Shift-Tab go round them. A directory dropped on the window is the
   scratch directory on that tab, else the library; a file is left alone.
 
-## 0.0.38.5 (6 November 2026): NEON for developing and layers
+## 0.0.38.5 (6 November 2026, not released on its own): NEON for developing and layers
 
 - Developing (develop_rows) has a NEON version: tone, saturation,
   vibrancy, the vignette, Highlights & Shadows and glow four pixels at
@@ -56,7 +56,7 @@
 - LumenBench times developing (9 adjustments) and a layer with every
   slider, at half size and on 12 MP, plain and NEON.
 
-## 0.0.38.4 (6 November 2026): quicker opening and developing
+## 0.0.38.4 (6 November 2026, not released on its own): quicker opening and developing
 
 - Opening a JPEG: the box filter that scales the decoded photo to the
   working size (and thumbnails to theirs) divides by multiplying, as
@@ -74,7 +74,7 @@
   after another (vignette, Highlights & Shadows, glow, Hue Saturation
   and Lightness, black and white, split toning), and what each adds.
 
-## 0.0.38.3 (6 November 2026): the lens database read in the background
+## 0.0.38.3 (6 November 2026, not released on its own): the lens database read in the background
 
 - Lens Correction's database (the LumenLens plug-in's) is read in the
   background soon after Lumen starts, or when the plug-in is added, a
