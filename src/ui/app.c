@@ -19,6 +19,7 @@
 #include "rawjob.h"
 #include "fsys.h"
 #include "plugins.h"
+#include "geodata.h"
 
 static int task;
 static library *lib;
@@ -269,6 +270,7 @@ int app_set_prefs (const prefs *p)
   browser_set_size (p->thumb_size);
   mainwin_status_changed ();
   exportbox_use_prefs (p);
+  geomap_library_changed ();           /* sharing with map programs on or off */
   return 0;
 }
 
@@ -581,6 +583,24 @@ static int name_is (const char *s, const char *want)
   return (unsigned char) s[k] < 32;    /* control-terminated */
 }
 
+/* A task named name (not this one): its handle, 0 if there's none. */
+int app_find_task (const char *name)
+{
+  int next = 0, guard = 0;
+  do
+    {
+      int buf[4 * 16], *end = buf, *r;
+      if (_swix (TaskManager_EnumerateTasks, _INR (0, 2) | _OUT (0) | _OUT (1), next, buf, (int) sizeof buf,
+                 &next, &end))
+        return 0;
+      for (r = buf; r + 4 <= end; r += 4)
+        if ((r[0] & 0xFFFF) != (task & 0xFFFF) && r[1] && !(r[3] & 1) && name_is ((const char *) r[1], name))
+          return r[0];
+    }
+  while (next >= 0 && ++guard < 64);
+  return 0;
+}
+
 int app_other_instance (void)
 {
   int next = 0, guard = 0;
@@ -603,6 +623,12 @@ int app_other_instance (void)
 static char pending_open[1024];       /* imported, to open when the import has finished */
 
 /* Opens version v in the Viewer, showing its project in the Browser. */
+static int show_version (cat_id v);
+int app_show_version (cat_id v)
+{
+  return show_version (v);
+}
+
 static int show_version (cat_id v)
 {
   cat_details d;
@@ -663,7 +689,8 @@ int app_init (const char *library_path, const char *start_file)
 {
   static const int messages[] = { Message_DataLoad, Message_DataOpen, 2 /* DataSaveAck */, Message_ModeChange, Message_HelpRequest,
                                   Message_TaskWindow_Output, Message_TaskWindow_Ego, Message_TaskWindow_Morio,
-                                  Message_MenusDeleted, Message_MenuWarning, 0 };
+                                  Message_MenusDeleted, Message_MenuWarning,
+                                  GeoData_DescribeDatasets, GeoData_FetchData, GeoData_FetchFile, GeoData_DisplayInfo, 0 };
   char err[300];
   if (_swix (Wimp_Initialise, _INR (0, 3) | _OUT (1), 380, TASK_WORD, APP_NAME, messages, &task))
     return 1;
@@ -726,6 +753,7 @@ int app_init (const char *library_path, const char *start_file)
   lib_set_previews (lib, the_prefs.previews);
   app_plugins_rescan ();               /* also retries raw files imported before the plug-in was installed */
   mainwin_open (NULL);
+  geomap_start ();                     /* map programs hear of the library's photos */
   if (start_file && *start_file)
     app_open_file (start_file);
   return 0;
@@ -735,6 +763,7 @@ void app_quit (void)
 {
   printbox_quit ();                    /* a print being prepared: its scrap files go */
   libbox_quit ();
+  geomap_stop ();
   lib_close (lib);
   lib = NULL;
   close_down ();
@@ -746,7 +775,8 @@ static int lens_db_due (void);
 int app_busy (void)
 {
   return pending_open[0] || viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib)
-         || rawjob_busy () || printbox_busy () || libbox_busy () || previews_due () || lens_db_due ();
+         || rawjob_busy () || printbox_busy () || libbox_busy () || previews_due () || lens_db_due ()
+         || lib_geo_pending (lib) || geomap_busy ();
 }
 
 /* Previews are made when nothing else is going on: not while the Viewer,
@@ -856,6 +886,16 @@ static void idle (void)
     }
   start = app_now ();
   deadline = start + 2;
+  /* Photos for a map program; when an import has finished, the area the
+     library's places cover may have grown. */
+  {
+    static int was_importing;
+    int now_importing = lib && lib_importing (lib);
+    if (was_importing && !now_importing)
+      geomap_library_changed ();
+    was_importing = now_importing;
+  }
+  geomap_idle (start, start + 1);
   /* What is on screen comes first. */
   if (thumbcache_pending ())
     thumbcache_work (app_now, start + 1, browser_thumb_loaded);
@@ -883,6 +923,14 @@ static void idle (void)
           browser_reload ();
           mainwin_library_changed ();
           mainwin_info_changed ();
+        }
+      /* Then where photos were taken, for those not read for it yet. */
+      else if (lib_geo_pending (lib))
+        {
+          if (lib_geo_step (lib, app_now, app_has_focus () ? deadline : start + 1))
+            mainwin_info_changed ();
+          if (!lib_geo_pending (lib))
+            geomap_library_changed ();   /* all read: the area they cover */
         }
       /* Then previews: a short slice while another program is in front. */
       else if (previews_due ())
@@ -1195,6 +1243,12 @@ static int app_event_1 (int reason, int *b, int sender)
         case Message_TaskWindow_Ego:     /* a plug-in's task window: its handle, then its end */
         case Message_TaskWindow_Morio:
           raw_message (b);
+          break;
+        case GeoData_DescribeDatasets:
+        case GeoData_FetchData:
+        case GeoData_FetchFile:
+        case GeoData_DisplayInfo:
+          geomap_message (b);
           break;
         case Message_ModeChange:
           draw_init_mode ();

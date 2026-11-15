@@ -147,4 +147,12 @@ int lib_discard_previews (library *l, long long *bytes);
 /* The last problem met while working (a file that couldn't be read), or "". */
 const char *lib_last_error (library *l);
 
+/* Reading photos for where they were taken (EXIF GPS), for those the
+   catalogue hasn't read yet: libraries from before 0.0.39, moved files,
+   raw and plug-in photos once their plug-in has said where their EXIF is.
+   Pending: there are (or may be) some. A step reads them until deadline;
+   how many had a place. */
+int lib_geo_pending (library *l);
+int lib_geo_step (library *l, unsigned (*now) (void), unsigned deadline);
+
 #endif

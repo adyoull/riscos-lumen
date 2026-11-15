@@ -31,6 +31,7 @@ typedef struct
      and their jobs' files go; "" none (<Wimp$ScrapDir>, no cache). */
   char scratch_dir[512];
   int scratch_mb;                      /* the cache's size at most, in MB (16-65536) */
+  int map_share;                       /* map programs (RiscOSM) may search the library's photos by place */
 } prefs;
 
 enum { OPEN_NEVER, OPEN_RUNNING, OPEN_ALWAYS };

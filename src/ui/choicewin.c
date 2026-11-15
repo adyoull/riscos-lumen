@@ -34,6 +34,8 @@ enum
   C_TAB_LIB, C_TAB_EXPORT, C_TAB_CACHE,
   C_SCRATCH_LABEL, C_SCRATCH, C_SCRATCH_NOTE, C_SCRATCH_SIZE_LABEL, C_SCRATCH_MB, C_SCRATCH_MB_LABEL,
   C_SCRATCH_FITS, C_SCRATCH_DISCARD,
+  /* 0.0.39: map programs */
+  C_MAP_LABEL, C_MAP_SHARE,
   C_COUNT
 };
 static const int size_choice[4] = { 0, 3840, 2048, 1024 };
@@ -102,6 +104,7 @@ int choicewin_create (void)
   static char t_tab_lib[] = "Library", t_tab_export[] = "Export", t_tab_cache[] = "Previews and scratch";
   static char t_scratch[] = "Scratch", t_scratch_note[] = "Raw photos are kept here at full size. Empty: none.";
   static char t_scratch_size[] = "Up to", t_mb[] = "MB";
+  static char t_maps[] = "Maps", t_map_share[] = "Let map programs (RiscOSM) search my photos by place";
   int b[22 + 8 * C_COUNT];
   icons = &b[22];
   memset (b, 0, sizeof b);
@@ -148,6 +151,8 @@ int choicewin_create (void)
   place (C_3840, CT_EXPORT, 390, -224, 520, -180, T_RADIO | (2u << 16), t_3840, v_radio, (int) sizeof t_3840);
   place (C_2048, CT_EXPORT, 540, -224, 670, -180, T_RADIO | (2u << 16), t_2048, v_radio, (int) sizeof t_2048);
   place (C_1024, CT_EXPORT, 690, -224, 820, -180, T_RADIO | (2u << 16), t_1024, v_radio, (int) sizeof t_1024);
+  LABEL (C_MAP_LABEL, CT_EXPORT, -270, t_maps);
+  place (C_MAP_SHARE, CT_EXPORT, 240, -314, W - 24, -270, T_RADIO, t_map_share, v_option, (int) sizeof t_map_share);
   /* Previews and scratch. */
   LABEL (C_PREVIEWS_LABEL, CT_CACHE, -110, t_previews);
   place (C_PV_RAW, CT_CACHE, 240, -154, 430, -110, T_RADIO | (4u << 16), t_pv_raw, v_radio, (int) sizeof t_pv_raw);
@@ -220,6 +225,7 @@ static void show (const prefs *p)
   set_on (C_PV_ALL, p->previews == 2);
   set_on (C_PV_OFF, p->previews == 0);
   set_on (C_VERIFY, p->verify);
+  set_on (C_MAP_SHARE, p->map_share);
   set_on (C_WATCH_NEW, p->watch_new);
   set_on (C_ALBUMS_NEW, p->albums_new);
   snprintf (minutes_text, sizeof minutes_text, "%d", p->watch_minutes);
@@ -361,6 +367,7 @@ static void save (void)
       p.thumb_size = k;
   p.previews = is_on (C_PV_ALL) ? 2 : is_on (C_PV_OFF) ? 0 : 1;
   p.verify = is_on (C_VERIFY);
+  p.map_share = is_on (C_MAP_SHARE);
   p.watch_new = is_on (C_WATCH_NEW);
   p.albums_new = is_on (C_ALBUMS_NEW);
   {

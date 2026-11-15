@@ -73,6 +73,8 @@ struct library
   cat_id pv_original;
   char pv_leaf[64];                    /* its file's leaf name, for the status bar */
   unsigned char pv_shard_made[256];
+  /* reading photos already in the library for where they were taken */
+  int geo_more, geo_found;
   char err[256];
 };
 
@@ -114,6 +116,11 @@ int lib_open (library **out, const char *root, char *err, size_t errlen)
   libx_rehome (l->db, l->root);      /* moved, with originals inside it */
   l->thumbs_pending = -1;
   lib_verify_start (l);
+  {
+    /* Photos not yet read for their place (a library from before 0.0.39). */
+    cat_origin o;
+    l->geo_more = cat_geo_unread (l->db, &o) == 1;
+  }
   *out = l;
   return 0;
 }
@@ -492,6 +499,7 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
           {
             cat_set_missing (l->db, orig, 0);
             l->relinked++;
+          l->geo_more = 1;
           }
         else
           l->skipped++;                /* already there */
@@ -578,6 +586,9 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
     }
   else
     xmp_read (l->head, got, xcap, sizeof xcap, xkw, sizeof xkw);
+  /* Else IPTC's (Photoshop's, and many other programs'). */
+  if (!xcap[0] && !xkw[0] && info.format == IMG_JPEG)
+    img_iptc_read (l->head, got, xcap, sizeof xcap, xkw, sizeof xkw);
   /* Content hash: the size, the first 64 KB and the last 64 KB. */
   h = fnv (h, (const unsigned char *) &e->size, sizeof e->size);
   h = fnv (h, l->head, got < HASH_BYTES ? got : HASH_BYTES);
@@ -827,7 +838,10 @@ static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
     /* A raw file: its size, orientation and camera, from the plug-in. */
     img_info ri;
     if (r > 0 && thumbgen_raw_details (l->tg, &ri))
-      cat_set_original_info (l->db, l->tg_version, &ri);
+      {
+        cat_set_original_info (l->db, l->tg_version, &ri);
+        l->geo_more = 1;                /* its EXIF can be read for its place now */
+      }
   }
   cat_set_thumb (l->db, l->tg_version, r > 0 ? THUMB_READY : THUMB_FAILED);
   if (l->thumbs_pending > 0)
@@ -1207,4 +1221,96 @@ int lib_discard_previews (library *l, long long *bytes)
   memset (l->pv_shard_made, 0, sizeof l->pv_shard_made);
   lib_previews_changed (l);
   return n;
+}
+
+/* --- Where photos were taken: read from the files of photos imported
+   before Lumen kept it (and of raw and plug-in photos, once the plug-in
+   has said where their EXIF is). */
+
+#define GEO_HEAD (256 * 1024)
+
+static int geo_read_file (library *l, const cat_origin *o, img_info *info)
+{
+  FILE *f = fopen (o->path, "rb");
+  size_t got;
+  int fmt;
+  memset (info, 0, sizeof *info);
+  if (!f)
+    return -1;
+  got = fread (l->head, 1, HEAD_BYTES < GEO_HEAD ? HEAD_BYTES : GEO_HEAD, f);
+  fmt = img_probe_named (l->head, got, o->path);
+  if (fmt == IMG_JPEG)
+    img_read_info (l->head, got, info);
+  else if (fmt == IMG_RAW)
+    img_read_raw_info (l->head, got, info);
+  else if (fmt == IMG_TIFF)
+    {
+      tiff_meta m;
+      rewind (f);
+      if (tiff_meta_read (f, &m) == 0)
+        {
+          if (m.exif)
+            img_read_tiff_tags (m.exif, m.exif_len, info);
+          tiff_meta_free (&m);
+        }
+    }
+  /* A plug-in's photo (HEIF, CR3...): its EXIF where the plug-in said. */
+  if (!(info->geo & GEO_POS) && o->exif_length > 8 && o->exif_length < 4L * 1024 * 1024)
+    {
+      unsigned char *tiff = malloc ((size_t) o->exif_length);
+      if (tiff && fseek (f, (long) o->exif_offset, SEEK_SET) == 0
+          && fread (tiff, 1, (size_t) o->exif_length, f) == (size_t) o->exif_length)
+        {
+          img_info t;
+          memset (&t, 0, sizeof t);
+          img_read_tiff_tags (tiff, (size_t) o->exif_length, &t);
+          info->geo = t.geo;
+          info->lat = t.lat;
+          info->lon = t.lon;
+          info->alt_mm = t.alt_mm;
+          info->bearing = t.bearing;
+        }
+      free (tiff);
+    }
+  fclose (f);
+  return 0;
+}
+
+int lib_geo_pending (library *l)
+{
+  return l && l->geo_more && !l->importing;
+}
+
+int lib_geo_step (library *l, unsigned (*now) (void), unsigned deadline)
+{
+  int found = 0, n = 0;
+  if (!lib_geo_pending (l))
+    return 0;
+  cat_begin (l->db);
+  do
+    {
+      cat_origin o;
+      img_info info;
+      int r = cat_geo_unread (l->db, &o);
+      if (r <= 0)
+        {
+          l->geo_more = 0;
+          break;
+        }
+      /* A file that can't be read (gone, or a disc not there): none now;
+         it's read again if it is found (cat_relink). */
+      if (o.missing || geo_read_file (l, &o, &info))
+        cat_set_geo (l->db, o.id, NULL);
+      else
+        {
+          cat_set_geo (l->db, o.id, &info);
+          if (info.geo & GEO_POS)
+            found++;
+        }
+      n++;
+    }
+  while ((int) (deadline - now ()) > 0 && n < 200);
+  cat_commit (l->db);
+  l->geo_found += found;
+  return found;
 }

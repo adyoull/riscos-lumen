@@ -1,5 +1,5 @@
-Lumen 0.0.38.7 (07 Nov 2026)
-============================
+Lumen 0.0.39 (15 Nov 2026)
+==========================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
 
@@ -372,6 +372,23 @@ a directory: they are written into a new directory of that name, one
 file each. The box remembers its settings. Exports run in the
 background; the bottom bar shows the progress.
 
+Maps
+----
+Lumen keeps where each photo was taken, if its camera (or phone)
+recorded it: the Info tab's Location line. Photos imported before
+0.0.39 are read for it in the background. With RiscOSM (Sine Nomine's
+map of OpenStreetMap) running:
+  Show on map, on the Selection or Photo menu, sends the photos to
+              RiscOSM, which shows them as pins with their thumbnails
+              (Lumen starts RiscOSM if the Filer has seen it).
+  RiscOSM can search Lumen's photos by the map's area and by words, as
+              one of its photo sources ("Lumen photos").
+  Ctrl-click a pin in RiscOSM to open its photo in Lumen.
+RiscOSM gets the photo's own file if it's a JPEG Lumen hasn't adjusted;
+otherwise a JPEG Lumen makes for it (1024 pixels, adjusted), kept in
+<Wimp$ScrapDir>.LumenMap until Lumen quits. Choices (Export tab) can
+stop map programs searching the library.
+
 Printing
 --------
 Ctrl-P (or Print... in the Selection or Photo menu) prints the selected
@@ -486,7 +503,7 @@ The Lumen menu
   Selection       rating, colour label, flag, reject, caption and
                   keywords, select all, clear, copy and paste
                   adjustments, apply a preset, compare, export, export
-                  as library, print, remove
+                  as library, print, show on map, remove
   Album           make a new album from the selection, add to one,
                   or remove from the album shown; a new smart album
   Versions and stacks
@@ -498,7 +515,7 @@ The Photo menu (Menu over the photo in the Viewer)
 --------------
   Undo, Redo, Auto adjust, Crop, Presets, Before and after
   Copy and Paste adjustments, Colour label, Caption and keywords...
-  Export..., Print...
+  Export..., Print..., Show on map
   View            100%, the loupe, compare with the next, back to the
                   Browser
   Adjust          pick white balance, crop shape, the grid, reset all
@@ -562,7 +579,9 @@ and Shift-Tab to go round them):
               (empty: the usual place, in Choices). Drag a directory to
               the window to fill it in. Setting Lumen$Library before
               running Lumen overrides it.
-  Export      the format, size and JPEG quality the Export box starts with
+  Export      the format, size and JPEG quality the Export box starts with;
+              and Maps: whether map programs (RiscOSM) may search the
+              library's photos by place
   Thumbnails  the size Lumen starts with
   Previews    which photos get previews: Raw files, All photos or None;
               Discard removes them (made again unless None)

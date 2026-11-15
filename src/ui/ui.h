@@ -99,6 +99,21 @@ int app_confirm (const char *msg, const char *button);   /* 1: the button was ch
 unsigned app_now (void);               /* centiseconds */
 library *app_library (void);
 int app_task (void);
+int app_find_task (const char *name);  /* a task by its name (not Lumen): its handle, or 0 */
+int app_show_version (cat_id v);       /* opens it in the Viewer (its project in the Browser); 0 on success */
+
+/* --- geomap.c: photos on maps (RiscOSM), by the GeoData messages
+   (core/geodata.h). Lumen offers the library's photos with a place as a
+   dataset map programs can search, sends photos to be shown (Show on
+   map), hands over their files, and opens a photo when its pin is
+   Ctrl-clicked. */
+void geomap_start (void);              /* after the Wimp has started; announces the library */
+void geomap_stop (void);               /* withdraws it, and removes the files made for maps */
+void geomap_library_changed (void);    /* another library, or places found: announced again */
+int geomap_message (int *block);       /* a GeoData message: 1 if it was one */
+void geomap_show (const cat_id *versions, int n);
+int geomap_busy (void);
+void geomap_idle (unsigned now, unsigned deadline);   /* now: the time (app_now) */
 /* Opens a file in !Lumen ("!Help", "Guide.index/html") with Filer_Run; the
    guide needs a web browser, and says so if there isn't one. */
 void app_open_doc (const char *leaf);

@@ -957,6 +957,22 @@ static void info_load (int force)
                 it.stack_open ? "open" : "closed");
       info_add ("Stack", v, 0);
     }
+  {
+    cat_geo g;
+    if (cat_get_geo (lib_cat (app_library ()), it.id, &g) == 1)
+      {
+        char pos[64];
+        img_geo_text (g.lat, g.lon, pos, sizeof pos);
+        if (g.geo & GEO_ALT)
+          snprintf (v, sizeof v, "%s, %d m%s", pos, (g.alt_mm < 0 ? -g.alt_mm : g.alt_mm) / 1000 + ((g.alt_mm < 0 ? -g.alt_mm : g.alt_mm) % 1000 >= 500),
+                    g.alt_mm < 0 ? " below sea level" : "");
+        else
+          snprintf (v, sizeof v, "%s", pos);
+        if (g.geo & GEO_DIR)
+          snprintf (v + strlen (v), sizeof v - strlen (v), ", facing %d\xB0", (g.bearing + 500) / 1000 % 360);
+        info_add ("Location", v, 0);
+      }
+  }
   info_add ("File", d.path, 0);
   if (d.missing)
     info_add ("Missing", "The file can't be found there. If it has moved, drag the folder it is in now into Lumen.", 0);

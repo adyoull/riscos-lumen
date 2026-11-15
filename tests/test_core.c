@@ -31,6 +31,7 @@
 #include "../src/core/prefs.h"
 #include <math.h>
 #include "../src/core/lens.h"
+#include "../src/core/geodata.h"
 
 static int checks, fails;
 #define CHECK(c, what) do { checks++; if (!(c)) { fails++; fprintf (stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, what); } } while (0)
@@ -3241,6 +3242,234 @@ static void test_lensdb (void)
   }
 }
 
+/* --- where photos were taken (EXIF GPS), and IPTC captions */
+
+static void put16be (unsigned char *p, unsigned v) { p[0] = (unsigned char) (v >> 8); p[1] = (unsigned char) v; }
+
+/* A big-endian EXIF block with a GPS IFD: 33 51' 35.46" S, 151 12' 30.48" E,
+   58.4 m, facing 270.5 (true). With south 0: north. */
+static size_t make_gps_exif (unsigned char *ex, int south, int below)
+{
+  unsigned char *t = ex + 6;
+  size_t g = 26, d;
+  memset (ex, 0, 400);
+  memcpy (ex, "Exif\0\0", 6);
+  memcpy (t, "MM\0\x2a", 4); put32be (t + 4, 8);
+  put16be (t + 8, 1);                                        /* IFD0: GPSInfo */
+  put16be (t + 10, 0x8825); put16be (t + 12, 4); put32be (t + 14, 1); put32be (t + 18, (unsigned long) g);
+  put32be (t + 22, 0);
+  d = g + 2 + 12 * 9 + 4;                                     /* the rationals after the IFD */
+  put16be (t + g, 9);
+#define ENT(k, tag, type, count) (put16be (t + g + 2 + 12 * (k), tag), put16be (t + g + 4 + 12 * (k), type), \
+                                  put32be (t + g + 6 + 12 * (k), count))
+  ENT (0, 1, 2, 2); t[g + 2 + 8] = south ? 'S' : 'N';
+  ENT (1, 2, 5, 3); put32be (t + g + 2 + 12 + 8, (unsigned long) d);
+  put32be (t + d, 33); put32be (t + d + 4, 1); put32be (t + d + 8, 51); put32be (t + d + 12, 1);
+  put32be (t + d + 16, 3546); put32be (t + d + 20, 100);
+  ENT (2, 3, 2, 2); t[g + 2 + 24 + 8] = 'E';
+  ENT (3, 4, 5, 3); put32be (t + g + 2 + 36 + 8, (unsigned long) d + 24);
+  put32be (t + d + 24, 151); put32be (t + d + 28, 1); put32be (t + d + 32, 12); put32be (t + d + 36, 1);
+  put32be (t + d + 40, 3048); put32be (t + d + 44, 100);
+  ENT (4, 5, 1, 1); t[g + 2 + 48 + 8] = (unsigned char) below;
+  ENT (5, 6, 5, 1); put32be (t + g + 2 + 60 + 8, (unsigned long) d + 48);
+  put32be (t + d + 48, 584); put32be (t + d + 52, 10);
+  ENT (6, 16, 2, 2); t[g + 2 + 72 + 8] = 'T';
+  ENT (7, 17, 5, 1); put32be (t + g + 2 + 84 + 8, (unsigned long) d + 56);
+  put32be (t + d + 56, 2705); put32be (t + d + 60, 10);
+  ENT (8, 0, 1, 4); t[g + 2 + 96 + 8] = 2; t[g + 2 + 96 + 9] = 3;
+#undef ENT
+  put32be (t + g + 2 + 12 * 9, 0);
+  return 6 + d + 64;
+}
+
+static void test_geo (void)
+{
+  unsigned char ex[400], buf[4096];
+  unsigned char rgb[3] = { 90, 120, 160 };
+  char path[1024], libdir[1024], err[256], text[64];
+  size_t exn, n;
+  img_info in;
+  FILE *f;
+  library *l;
+  cat_geo g;
+  cat_id v;
+
+  exn = make_gps_exif (ex, 1, 0);
+  p (path, "geo-sydney.jpg");
+  make_flat_jpeg (path, 40, 30, rgb, NULL, 0, ex, exn);
+  f = fopen (path, "rb");
+  n = fread (buf, 1, sizeof buf, f);
+  fclose (f);
+  CHECK (img_read_info (buf, n, &in) == 0 && (in.geo & GEO_POS), "GPS: a position read");
+  CHECK (in.lat == -338598500 && in.lon == 1512084667, "GPS: degrees, minutes, seconds to ten-millionths, S negative");
+  CHECK ((in.geo & GEO_ALT) && in.alt_mm == 58400, "GPS: altitude in mm");
+  CHECK ((in.geo & GEO_DIR) && in.bearing == 270500, "GPS: bearing in thousandths of a degree");
+  img_geo_text (in.lat, in.lon, text, sizeof text);
+  CHECK (strcmp (text, "33.859850\xB0 S, 151.208467\xB0 E") == 0, "GPS: the position for people");
+  {
+    unsigned char e2[400];
+    size_t m = make_gps_exif (e2, 0, 1);
+    img_info i2;
+    memset (&i2, 0, sizeof i2);
+    img_read_tiff_tags (e2 + 6, m - 6, &i2);
+    CHECK (i2.lat == 338598500 && i2.alt_mm == -58400, "GPS: north, and below sea level");
+    /* 0,0 is a camera without a fix: no position. */
+    put32be (e2 + 6 + 140 + 0, 0); put32be (e2 + 6 + 140 + 8, 0); put32be (e2 + 6 + 140 + 16, 0);
+    put32be (e2 + 6 + 140 + 24, 0); put32be (e2 + 6 + 140 + 32, 0); put32be (e2 + 6 + 140 + 40, 0);
+    memset (&i2, 0, sizeof i2);
+    img_read_tiff_tags (e2 + 6, m - 6, &i2);
+    CHECK (!(i2.geo & GEO_POS), "GPS: 0,0 isn't a position");
+    for (n = 0; n < m; n++)
+      {
+        memset (&i2, 0, sizeof i2);
+        img_read_tiff_tags (e2 + 6, n, &i2);
+      }
+    CHECK (1, "GPS: cut-off blocks read safely");
+  }
+
+  /* IPTC caption and keywords (APP13, Photoshop 3.0, resource &404). */
+  {
+    static const unsigned char iptc[] = {
+      0xFF, 0xD8, 0xFF, 0xED, 0x00, 0x44,
+      'P', 'h', 'o', 't', 'o', 's', 'h', 'o', 'p', ' ', '3', '.', '0', 0,
+      '8', 'B', 'I', 'M', 0x04, 0x04, 0, 0, 0, 0, 0, 0x27,
+      0x1C, 0x02, 0x00, 0x00, 0x02, 0x00, 0x04,
+      0x1C, 0x02, 0x78, 0x00, 0x0A, 'O', 'l', 'd', ' ', 'h', 'a', 'r', 'b', 'o', 'u',
+      0x1C, 0x02, 0x19, 0x00, 0x03, 's', 'e', 'a',
+      0x1C, 0x02, 0x19, 0x00, 0x04, 'b', 'o', 'a', 't', 0,
+      0xFF, 0xD9 };
+    char cap[64], kw[64];
+    CHECK (img_iptc_read (iptc, sizeof iptc, cap, sizeof cap, kw, sizeof kw) == 1
+           && strcmp (cap, "Old harbou") == 0 && strcmp (kw, "sea, boat") == 0, "IPTC: caption and keywords");
+    for (n = 0; n < sizeof iptc; n++)
+      img_iptc_read (iptc, n, cap, sizeof cap, kw, sizeof kw);
+    CHECK (1, "IPTC: cut-off segments read safely");
+  }
+
+  /* The library keeps it, and reads it for photos it had before. */
+  p (libdir, "LibraryGeo");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "geo: library opens");
+  lib_import (l, path);
+  drain (l);
+  v = cat_version_of_path (lib_cat (l), path);
+  CHECK (v > 0 && cat_get_geo (lib_cat (l), v, &g) == 1 && g.lat == -338598500 && g.lon == 1512084667
+         && g.alt_mm == 58400 && g.bearing == 270500 && g.geo == (GEO_POS | GEO_ALT | GEO_DIR), "geo: kept at import");
+  sqlite3_exec (cat_sqlite (lib_cat (l)), "UPDATE original SET geo = -1, lat = 0, lon = 0", NULL, NULL, NULL);
+  CHECK (cat_get_geo (lib_cat (l), v, &g) == 0, "geo: not read yet, none");
+  lib_close (l);
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "geo: library reopens");
+  drain (l);
+  CHECK (lib_geo_pending (l), "geo: photos to read");
+  clock_cs = 0;
+  {
+    int guard = 0;
+    while (lib_geo_pending (l) && guard++ < 100)
+      lib_geo_step (l, fake_now, clock_cs + 3);
+  }
+  CHECK (!lib_geo_pending (l) && cat_get_geo (lib_cat (l), v, &g) == 1 && g.lat == -338598500,
+         "geo: read in the background");
+
+  /* Searching by place, as a map program asks. */
+  {
+    cat_geo_query q;
+    cat_geo_hit *h = NULL;
+    int nh = 0, total = 0, x0, y0, x1, y1;
+    char p2[1024];
+    unsigned char e3[400];
+    size_t m3 = make_gps_exif (e3, 0, 0);       /* 33.86 N, 151.21 E */
+    p (p2, "geo-north.jpg");
+    make_flat_jpeg (p2, 40, 30, rgb, NULL, 0, e3, m3);
+    lib_import (l, p2);
+    p (p2, "geo-none.jpg");
+    make_flat_jpeg (p2, 40, 30, rgb, NULL, 0, NULL, 0);
+    lib_import (l, p2);
+    drain (l);
+    CHECK (cat_geo_bounds (lib_cat (l), &x0, &y0, &x1, &y1) == 2 && y0 == -338598500 && y1 == 338598500
+           && x0 == 1512084667 && x1 == 1512084667, "geo: the box round the library's places");
+    memset (&q, 0, sizeof q);
+    CHECK (cat_geo_find (lib_cat (l), &q, &h, &nh, &total) == 0 && nh == 2 && total == 2, "geo: all with a place");
+    free (h);
+    q.how = CAT_GEO_BOX;
+    q.x0 = 1510000000; q.x1 = 1520000000; q.y0 = -340000000; q.y1 = -330000000;
+    CHECK (cat_geo_find (lib_cat (l), &q, &h, &nh, NULL) == 0 && nh == 1 && h[0].version == v, "geo: in a box");
+    free (h);
+    q.x0 = 1520000000; q.x1 = -1700000000;      /* across 180 degrees, east of it */
+    CHECK (cat_geo_find (lib_cat (l), &q, &h, &nh, NULL) == 0 && nh == 0, "geo: a box across 180 degrees");
+    free (h);
+    memset (&q, 0, sizeof q);
+    q.how = CAT_GEO_RADIUS;
+    q.x0 = 1512084667; q.y0 = -338598500 + 9000;   /* 100 m north */
+    q.radius = 120;
+    CHECK (cat_geo_find (lib_cat (l), &q, &h, &nh, NULL) == 0 && nh == 1, "geo: within 120 m");
+    free (h);
+    q.radius = 80;
+    CHECK (cat_geo_find (lib_cat (l), &q, &h, &nh, NULL) == 0 && nh == 0, "geo: not within 80 m");
+    free (h);
+    CHECK (fabs (cat_geo_distance (-338598500, 1512084667, -338598500 + 9000, 1512084667) - 100.08) < 0.5,
+           "geo: distance in metres");
+    memset (&q, 0, sizeof q);
+    snprintf (q.words, sizeof q.words, "north");
+    CHECK (cat_geo_find (lib_cat (l), &q, &h, &nh, NULL) == 0 && nh == 1 && strcmp (h[0].name, "geo-north.jpg") == 0,
+           "geo: with words");
+    free (h);
+    memset (&q, 0, sizeof q);
+    q.page_size = 1; q.page = 2;
+    CHECK (cat_geo_find (lib_cat (l), &q, &h, &nh, &total) == 0 && nh == 1 && total == 2, "geo: a page at a time");
+    free (h);
+
+    /* The messages. */
+    {
+      int b[GEODATA_WORDS];
+      unsigned char t[5];
+      char u[64];
+      cat_geo_hit hit;
+      geodata_fetch f;
+      memset (&hit, 0, sizeof hit);
+      hit.version = 77;
+      hit.geo.geo = GEO_POS | GEO_DIR;
+      hit.geo.lat = -338598500; hit.geo.lon = 1512084667; hit.geo.bearing = 270500;
+      snprintf (hit.taken, sizeof hit.taken, "2026:06:16 04:52:10");
+      snprintf (hit.name, sizeof hit.name, "IMG_1/jpg");
+      snprintf (hit.caption, sizeof hit.caption, "Caf\xE9 by the harbour");
+      CHECK (geodata_time (hit.taken, t) == 0 && t[0] == 168 && t[1] == 49 && t[2] == 173 && t[3] == 233 && t[4] == 92,
+             "geodata: a RISC OS time");
+      geodata_transmit (b, 0, 1, &hit, GD_DRAW_MAP | GD_FILE);
+      CHECK (b[4] == GeoData_TransmitData && b[6] == 1 && b[7] == 77 && b[8] == GD_PHOTOS, "geodata: TransmitData ids");
+      CHECK (b[9] == (GD_DRAW_MAP | GD_FILE | GD_LATLON | GD_TIME | GD_HAS_BEARING | GD_TITLE | GD_DESCRIPTION),
+             "geodata: TransmitData flags");
+      CHECK (b[10] == 1512084667 && b[11] == -338598500 && b[16] == 270500 && memcmp ((char *) b + 52, t, 5) == 0,
+             "geodata: longitude, latitude, time, bearing");
+      CHECK (strcmp ((char *) b + 76, "Caf\xC3\xA9 by the harbour") == 0
+             && strcmp ((char *) b + 76 + strlen ((char *) b + 76) + 1, "IMG_1/jpg") == 0, "geodata: title (UTF-8) and description");
+      CHECK (b[0] % 4 == 0 && b[0] <= 256 && b[0] == 108, "geodata: its length");
+      memset (hit.caption, 'x', 400);
+      hit.caption[400] = '\0';
+      geodata_transmit (b, 0, 1, &hit, 0);
+      CHECK (b[0] <= 256 && ((char *) b)[255] == '\0', "geodata: a long caption fits in 256 bytes");
+      geodata_utf8 ("Caf\xC3\xA9", u, sizeof u);
+      CHECK (strcmp (u, "Caf\xC3\xA9") == 0, "geodata: UTF-8 kept");
+      geodata_utf8 ("\xE9\xE9\xE9", u, 6);
+      CHECK (strcmp (u, "\xC3\xA9\xC3\xA9") == 0, "geodata: cut at a whole character");
+      geodata_latin1 ("Caf\xC3\xA9 \xE2\x82\xAC", u, sizeof u);
+      CHECK (strcmp (u, "Caf\xE9 ?") == 0, "geodata: UTF-8 to Latin-1");
+      memset (b, 0, sizeof b);
+      b[5] = 9; b[6] = 1; b[9] = 1512084667; b[10] = -338598500; b[11] = 500;
+      b[13] = GD_PHOTOS | GD_RADIUS | GD_PAGED; b[16] = 20; b[17] = 2;
+      geodata_read_fetch (b, &f);
+      CHECK (geodata_query (&f, "harbour", &q) == 0 && q.how == CAT_GEO_RADIUS && q.radius == 500 && q.y0 == -338598500
+             && q.page_size == 20 && q.page == 2 && strcmp (q.words, "harbour") == 0, "geodata: FetchData read");
+      b[13] = (1 << 2) | GD_BOX;               /* fixed points only */
+      geodata_read_fetch (b, &f);
+      CHECK (geodata_query (&f, NULL, &q) != 0, "geodata: not asked for photos");
+      geodata_details (b, 1, 2, x0, y0, x1, y1, "Lumen photos", "2 photos");
+      CHECK (b[4] == GeoData_DatasetDetails && b[5] == 1 && b[7] == -338598500 && (b[10] & GD_PHOTOS) && (b[10] & GD_TEXT)
+             && strcmp ((char *) b + 48, "Lumen photos") == 0 && strcmp ((char *) b + 48 + 13, "2 photos") == 0,
+             "geodata: DatasetDetails");
+    }
+  }
+  lib_close (l);
+}
+
 int main (int argc, char **argv)
 {
   bus_trap_install ();
@@ -3252,6 +3481,7 @@ int main (int argc, char **argv)
   snprintf (work, sizeof work, "%s", argv[1]);
   fsys_mkdirs (work);
   test_exif ();
+  test_geo ();
   test_colour ();
   test_jpeg_scaling ();
   test_raw ();

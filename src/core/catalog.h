@@ -252,6 +252,50 @@ int cat_count_versions (cat *c, cat_id original);      /* versions of an origina
 /* The first version of the photo whose file is path, or 0 if the library hasn't it. */
 cat_id cat_version_of_path (cat *c, const char *path);
 
+/* --- Where photos were taken (schema 8), from their EXIF GPS. */
+#define CAT_GEO_UNREAD (-1)    /* its file hasn't been read for it yet */
+#define CAT_GEO_PLUGIN (-2)    /* waiting for its plug-in to say where its EXIF is */
+typedef struct
+{
+  int geo;                     /* GEO_* (exif.h); 0 if not known */
+  int lat, lon;                /* ten-millionths of a degree */
+  int alt_mm, bearing;         /* bearing in thousandths of a degree */
+} cat_geo;
+/* An original's place, read from its file (in NULL or without GEO_POS: none). */
+int cat_set_geo (cat *c, cat_id original, const img_info *in);
+/* An original not yet read for its place: 1 and it, 0 if none. */
+int cat_geo_unread (cat *c, cat_origin *o);
+/* A version's place: 1 if it has one. */
+int cat_get_geo (cat *c, cat_id version, cat_geo *g);
+
+/* Searching by place (for map programs: GeoData). */
+enum { CAT_GEO_ANYWHERE, CAT_GEO_BOX, CAT_GEO_RADIUS };
+typedef struct
+{
+  int how;                     /* CAT_GEO_* */
+  int x0, y0, x1, y1;          /* a box: west, south, east, north (x0 > x1 crosses 180 degrees) */
+                               /* a radius: x0, y0 the centre's longitude and latitude */
+  double radius;               /* metres */
+  char words[128];             /* all must match, as the Browser's search ("" none) */
+  cat_id version;              /* just this one (0: all) */
+  int page_size, page;         /* page_size 0: all; page from 1 */
+} cat_geo_query;
+typedef struct
+{
+  cat_id version;
+  cat_geo geo;
+  char taken[20], name[64], caption[CAT_CAPTION_MAX], path[1024];
+  int format, filetype, edited;
+} cat_geo_hit;
+/* The photos with a place that match, oldest first, one for each photo
+   (its first version that isn't rejected); the page asked for (malloc'd),
+   and how many match in all. 0 on success. */
+int cat_geo_find (cat *c, const cat_geo_query *q, cat_geo_hit **out, int *count, int *total);
+/* The box round every place in the library: how many photos have one. */
+int cat_geo_bounds (cat *c, int *x0, int *y0, int *x1, int *y1);
+/* Metres between two points. */
+double cat_geo_distance (int lat1, int lon1, int lat2, int lon2);
+
 /* Details for the info line and tests. */
 typedef struct
 {

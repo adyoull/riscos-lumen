@@ -27,6 +27,7 @@ void prefs_default (prefs *p)
   p->open_mode = -1;                   /* File types: not chosen yet (filetypes.c decides) */
   p->open_data = -1;
   p->scratch_mb = 2048;
+  p->map_share = 1;
 }
 
 static int clamp (int v, int lo, int hi)
@@ -88,6 +89,8 @@ int prefs_load (const char *path, prefs *p)
             p->albums_new = n != 0;
           else if (!strcmp (line, "watch_minutes"))
             p->watch_minutes = clamp ((int) n, 0, 1440);
+          else if (!strcmp (line, "map_share"))
+            p->map_share = n != 0;
           else if (!strcmp (line, "scratch_mb"))
             p->scratch_mb = clamp ((int) n, 16, 65536);
           else if (!strcmp (line, "previews"))
@@ -132,6 +135,7 @@ int prefs_save (const char *path, const prefs *p)
   if (p->scratch_dir[0])
     fprintf (f, "scratch %s\n", p->scratch_dir);
   fprintf (f, "scratch_mb %d\n", p->scratch_mb);
+  fprintf (f, "map_share %d\n", p->map_share);
   fprintf (f, "export_box_w %d\nexport_box_h %d\nexport_colour %d\nexport_sharpen %d\n", p->export_box_w,
            p->export_box_h, p->export_colour, p->export_sharpen);
   if (p->export_names[0])

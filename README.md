@@ -70,6 +70,9 @@ were written with Anthropic's Claude as a coding assistant.
   LumenLens plug-in's 1,533 lens profiles, found from the photo; wavelet
   noise reduction with Auto.
 - Double-clicking a photo in the Filer can open it in Lumen.
+- Keeps where photos were taken (EXIF GPS) and shows them on a map in
+  RiscOSM (Show on map); RiscOSM can search the library by place and
+  words, and Ctrl-clicking a pin opens the photo in Lumen.
 - Exports JPEG, PNG or TIFF at any size, in sRGB, Adobe RGB or Display P3,
   sharpened for the size, with EXIF, caption and keywords; prints to any
   RISC OS printer.

@@ -279,7 +279,7 @@ static void load_groups (void)
 
 /* Selection > ... (the order menus_selection decodes) */
 enum { SEL_RATING, SEL_LABEL, SEL_FLAG, SEL_REJECT, SEL_TAGS, SEL_ALL, SEL_CLEAR, SEL_COPY, SEL_PASTE, SEL_PRESET,
-       SEL_COMPARE, SEL_EXPORT, SEL_EXPORT_LIB, SEL_PRINT, SEL_REMOVE, SEL_COUNT };
+       SEL_COMPARE, SEL_EXPORT, SEL_EXPORT_LIB, SEL_PRINT, SEL_MAP, SEL_REMOVE, SEL_COUNT };
 
 
 
@@ -406,7 +406,8 @@ static menu *build_window_menu (void)
       set_item (selm, SEL_COMPARE, 0, "Compare " SH "O", MF_DOTTED, -1, nsel != 2);
       set_item (selm, SEL_EXPORT, 0, "Export... ^E", 0, -1, nsel == 0);
       set_item (selm, SEL_EXPORT_LIB, 0, "Export as library...", 0, -1, nsel == 0);
-      set_item (selm, SEL_PRINT, 0, "Print... ^P", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, SEL_PRINT, 0, "Print... ^P", 0, -1, nsel == 0);
+      set_item (selm, SEL_MAP, 0, "Show on map", MF_DOTTED, -1, nsel == 0);
       set_item (selm, SEL_REMOVE, 1, "Remove from library... Delete", 0, -1, nsel == 0);
     }
 
@@ -477,9 +478,9 @@ static menu *build_window_menu (void)
    (the action's own submenu: loupe, crop shape, grid, presets, labels),
    which is what the rest of this file goes by. */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
-       VM_PRESETS, VM_COPY, VM_PASTE, VM_LABEL, VM_TAGS, VM_COMPARE, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_BACK, VM_REMOVE, VM_COUNT };
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_LABEL, VM_TAGS, VM_COMPARE, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_MAP, VM_BACK, VM_REMOVE, VM_COUNT };
 enum { PM_UNDO, PM_REDO, PM_AUTO, PM_CROP, PM_PRESETS, PM_BEFORE, PM_LOUPE, PM_COPY, PM_PASTE, PM_LABEL, PM_TAGS,
-       PM_EXPORT, PM_PRINT, PM_VIEW, PM_ADJUST, PM_VERSIONS, PM_REMOVE, PM_COUNT };
+       PM_EXPORT, PM_PRINT, PM_MAP, PM_VIEW, PM_ADJUST, PM_VERSIONS, PM_REMOVE, PM_COUNT };
 /* A group itself (the pointer on View, say): -100 - PM_*. */
 #define VM_GROUP(pm) (-100 - (pm))
 
@@ -490,7 +491,7 @@ static const signed char *const pm_groups[PM_COUNT] = { [PM_VIEW] = vm_view, [PM
                                                          [PM_VERSIONS] = vm_versions };
 /* The ones on the menu itself. */
 static const signed char pm_single[PM_COUNT] = { VM_UNDO, VM_REDO, VM_AUTO, VM_CROP, VM_PRESETS, VM_BEFORE, VM_LOUPE, VM_COPY,
-                                                 VM_PASTE, VM_LABEL, VM_TAGS, VM_EXPORT, VM_PRINT, -1, -1, -1, VM_REMOVE };
+                                                 VM_PASTE, VM_LABEL, VM_TAGS, VM_EXPORT, VM_PRINT, VM_MAP, -1, -1, -1, VM_REMOVE };
 
 /* c: a path in a menu of actions and groups of them (-1 terminated).
    out: [the action, the rest of the path, -1]; [VM_GROUP (group), -1] on
@@ -669,7 +670,12 @@ static menu *build_viewer_menu (void)
       set_item (m, PM_LABEL, 0, "Colour label", 0, (int) label_menu ("Colour label", now), 0);
       set_item (m, PM_TAGS, 0, "Caption and keywords... ^K", MF_DOTTED, -1, 0);
       set_item (m, PM_EXPORT, 0, "Export... ^E", 0, -1, 0);
-      set_item (m, PM_PRINT, 0, "Print... ^P", MF_DOTTED, -1, 0);
+      set_item (m, PM_PRINT, 0, "Print... ^P", 0, -1, 0);
+      {
+        cat_geo g;
+        set_item (m, PM_MAP, 0, "Show on map", MF_DOTTED, -1,
+                  !viewer_item () || cat_get_geo (lib_cat (app_library ()), viewer_item (), &g) != 1);
+      }
       set_item (m, PM_VIEW, 0, "View", 0, (int) view, 0);
       set_item (m, PM_ADJUST, 0, "Adjust", 0, (int) adj, 0);
       set_item (m, PM_VERSIONS, 0, "Versions", MF_DOTTED, (int) vers, 0);
@@ -1440,6 +1446,15 @@ static int window_choice (const int *c)
         case SEL_EXPORT: export_after_menu = 1; break;
         case SEL_EXPORT_LIB: libexport_after_menu = 2; break;
         case SEL_PRINT: print_after_menu = 1; break;
+        case SEL_MAP:
+          {
+            cat_id *ids;
+            int n = browser_selection (&ids);
+            if (n > 0)
+              geomap_show (ids, n);
+            free (ids);
+          }
+          break;
         case SEL_REMOVE: remove_after_menu = 1; break;
         }
       break;
@@ -1545,6 +1560,13 @@ int menus_selection (const int *choice)
       case VM_NEW_ORIG: viewer_new_version (0); break;
       case VM_EXPORT: export_after_menu = 2; break;
       case VM_PRINT: print_after_menu = 2; break;
+      case VM_MAP:
+        {
+          cat_id v = viewer_item ();
+          if (v)
+            geomap_show (&v, 1);
+        }
+        break;
       case VM_BACK: viewer_close (); return 0;
       case VM_REMOVE:
         {
@@ -1811,6 +1833,9 @@ const char *menus_help (int window, int icon)
       case 1:
         if (c[1] == SEL_REMOVE)
           return "Takes the selected photos out of the library, after asking. Their files are not deleted.";
+        if (c[1] == SEL_MAP)
+          return "Shows the selected photos on a map in RiscOSM, as pins, from where they were taken (those with a "
+                 "Location in Info). Ctrl-click a pin in RiscOSM to open its photo here.";
         if (c[1] == SEL_PRINT)
           return "Prints the selected photos, one to a page, on the printer chosen in !Printers.";
         if (c[1] == SEL_EXPORT)
@@ -1887,6 +1912,8 @@ const char *menus_help (int window, int icon)
         case VM_NEW_ORIG: return "Makes another version of the photo as it came from the camera, without adjustments.";
         case VM_EXPORT: return "Exports the photo as a new JPEG or PNG file.";
         case VM_PRINT: return "Prints the photo on the printer chosen in !Printers.";
+        case VM_MAP: return "Shows the photo on a map in RiscOSM, from where it was taken (its Location in Info). "
+                            "Grey: it has no location.";
         case VM_REMOVE: return "Takes the photo out of the library, after asking. Its file is not deleted.";
         }
       return "What can be done to this photo. Many have keys, shown beside them.";

@@ -33,7 +33,21 @@ typedef struct
   long exif_offset;           /* its EXIF (TIFF) data, from the file start, when a plug-in */
   long exif_length;           /* says where it is (plug-in formats); 0 if not known */
   char encoding[48];          /* how a plug-in's photo is encoded ("AV1, 10 bits, 4:2:0"), or "" */
+  int geo;                    /* GEO_*: what's known of where it was taken (EXIF GPS) */
+  int lat, lon;               /* WGS84, in ten-millionths of a degree, north and east positive */
+  int alt_mm;                 /* millimetres above sea level (below: negative) */
+  int bearing;                /* the way the camera faced, thousandths of a degree from north (0-359999) */
 } img_info;
+
+/* img_info.geo: the latitude and longitude, the altitude, the bearing. */
+enum { GEO_POS = 1, GEO_ALT = 2, GEO_DIR = 4 };
+
+/* The IPTC caption and keywords ("a, b") in a JPEG's start, as written
+   by Photoshop and many photo programs; "" for none. 1 if any. */
+int img_iptc_read (const unsigned char *buf, size_t len, char *caption, size_t cn, char *keywords, size_t kn);
+
+/* A position for people: "54.601234\xB0 N, 3.134567\xB0 W" (Latin-1 degree sign). */
+void img_geo_text (int lat, int lon, char *out, size_t n);
 
 /* 1 if the name ends in a camera raw extension ("/nef" or ".nef"). */
 int img_has_raw_extension (const char *name);

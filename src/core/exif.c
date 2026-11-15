@@ -86,9 +86,11 @@ static void ascii (const tiff *t, size_t entry, unsigned type, unsigned long cou
     out[--i] = '\0';
 }
 
+static double nth (const tiff *t, size_t at, unsigned type, unsigned long k);
+
 /* Walks one IFD. Returns the offset of the next IFD (0 if none). */
 static unsigned long walk (const tiff *t, size_t ifd, int which, img_info *info,
-                           unsigned long *exif_ifd, long base)
+                           unsigned long *exif_ifd, unsigned long *gps_ifd, long base)
 {
   unsigned n, i;
   if (ifd < 8 || ifd + 2 > t->len)
@@ -108,6 +110,7 @@ static unsigned long walk (const tiff *t, size_t ifd, int which, img_info *info,
           case 0x010F: ascii (t, e, type, count, info->make, sizeof info->make); break;
           case 0x0110: ascii (t, e, type, count, info->model, sizeof info->model); break;
           case 0x8769: *exif_ifd = int_value (t, e, type, count); break;
+          case 0x8825: if (gps_ifd) *gps_ifd = int_value (t, e, type, count); break;
           case 0x0132: if (!info->taken[0]) ascii (t, e, type, count, info->taken, sizeof info->taken); break;
           }
       else if (which == 1)                      /* IFD1: the thumbnail */
@@ -147,10 +150,100 @@ static unsigned long walk (const tiff *t, size_t ifd, int which, img_info *info,
   return rd32 (t, ifd + 2 + 12 * (size_t) n);
 }
 
+/* Degrees, minutes and seconds (one to three rationals) as degrees;
+   -1000 if there aren't any. */
+static double gps_degrees (const tiff *t, size_t e, unsigned type, unsigned long count)
+{
+  size_t at = value_at (t, e, type, count);
+  double v = 0, div = 1;
+  unsigned long k;
+  if (at == (size_t) -1 || (type != 5 && type != 10) || count < 1 || count > 3 || at + 8 * count > t->len)
+    return -1000;
+  for (k = 0; k < count; k++, div *= 60)
+    v += nth (t, at, type, k) / div;
+  return v;
+}
+
+/* Where the photo was taken, from the GPS IFD (EXIF 2.32, 4.6.6): the
+   latitude and longitude (with their N/S and E/W), the altitude (above
+   or below sea level) and the direction the camera faced. */
+static void walk_gps (const tiff *t, size_t ifd, img_info *info)
+{
+  unsigned n, i;
+  double lat = -1000, lon = -1000, alt = -1, dir = -1;
+  int south = 0, west = 0, below = 0;
+  char ref[4];
+  if (ifd < 8 || ifd + 2 > t->len)
+    return;
+  n = rd16 (t, ifd);
+  if (n > 200 || ifd + 2 + 12 * (size_t) n > t->len)
+    return;
+  for (i = 0; i < n; i++)
+    {
+      size_t e = ifd + 2 + 12 * (size_t) i, at;
+      unsigned tag = rd16 (t, e), type = rd16 (t, e + 2);
+      unsigned long count = rd32 (t, e + 4);
+      switch (tag)
+        {
+        case 1: ascii (t, e, type, count, ref, sizeof ref); south = ref[0] == 'S' || ref[0] == 's'; break;
+        case 2: lat = gps_degrees (t, e, type, count); break;
+        case 3: ascii (t, e, type, count, ref, sizeof ref); west = ref[0] == 'W' || ref[0] == 'w'; break;
+        case 4: lon = gps_degrees (t, e, type, count); break;
+        case 5:
+          at = value_at (t, e, type, count);
+          below = (type == 1 || type == 7) && count >= 1 && at != (size_t) -1 && at < t->len && t->p[at] == 1;
+          break;
+        case 6:
+          at = value_at (t, e, type, count);
+          if ((type == 5 || type == 10) && count >= 1 && at != (size_t) -1 && at + 8 <= t->len && rd32 (t, at + 4))
+            alt = nth (t, at, type, 0);
+          break;
+        case 17:
+          at = value_at (t, e, type, count);
+          if ((type == 5 || type == 10) && count >= 1 && at != (size_t) -1 && at + 8 <= t->len && rd32 (t, at + 4))
+            dir = nth (t, at, type, 0);
+          break;
+        }
+    }
+  /* 0,0 is in the sea off Africa: cameras without a fix write it. */
+  if (lat >= 0 && lat <= 90 && lon >= 0 && lon <= 180 && (lat != 0 || lon != 0))
+    {
+      long la = (long) (lat * 1e7 + 0.5), lo = (long) (lon * 1e7 + 0.5);
+      if (south)
+        la = -la;
+      if (west)
+        lo = -lo;
+      if (lo == 1800000000L)
+        lo = -lo;                       /* 180 E is 180 W */
+      info->lat = (int) la;
+      info->lon = (int) lo;
+      info->geo |= GEO_POS;
+      if (alt >= 0 && alt < 100000)
+        {
+          info->alt_mm = (int) (alt * 1000 + 0.5) * (below ? -1 : 1);
+          info->geo |= GEO_ALT;
+        }
+      if (dir >= 0 && dir <= 360)
+        {
+          long b = (long) (dir * 1000 + 0.5);
+          info->bearing = (int) (b >= 360000 ? b - 360000 : b);
+          info->geo |= GEO_DIR;
+        }
+    }
+}
+
+void img_geo_text (int lat, int lon, char *out, size_t n)
+{
+  /* Six places (about 10 cm). */
+  long a = ((lat < 0 ? -(long) lat : lat) + 5) / 10, o = ((lon < 0 ? -(long) lon : lon) + 5) / 10;
+  snprintf (out, n, "%ld.%06ld\xB0 %c, %ld.%06ld\xB0 %c", a / 1000000, a % 1000000, lat < 0 ? 'S' : 'N',
+            o / 1000000, o % 1000000, lon < 0 ? 'W' : 'E');
+}
+
 static void parse_exif (const unsigned char *p, size_t len, long base, img_info *info)
 {
   tiff t;
-  unsigned long ifd0, ifd1, exif_ifd = 0;
+  unsigned long ifd0, ifd1, exif_ifd = 0, gps_ifd = 0;
   char taken0[20];
   if (len < 8)
     return;
@@ -165,16 +258,18 @@ static void parse_exif (const unsigned char *p, size_t len, long base, img_info 
   if (rd16 (&t, 2) != 42)
     return;
   ifd0 = rd32 (&t, 4);
-  ifd1 = walk (&t, ifd0, 0, info, &exif_ifd, base);
+  ifd1 = walk (&t, ifd0, 0, info, &exif_ifd, &gps_ifd, base);
   /* DateTimeOriginal (EXIF IFD) wins over DateTime (IFD0). */
   memcpy (taken0, info->taken, sizeof taken0);
   info->taken[0] = '\0';
   if (exif_ifd)
-    walk (&t, exif_ifd, 2, info, &exif_ifd, base);
+    walk (&t, exif_ifd, 2, info, &exif_ifd, NULL, base);
+  if (gps_ifd)
+    walk_gps (&t, gps_ifd, info);
   if (!info->taken[0])
     memcpy (info->taken, taken0, sizeof taken0);
   if (ifd1)
-    walk (&t, ifd1, 1, info, &exif_ifd, base);
+    walk (&t, ifd1, 1, info, &exif_ifd, NULL, base);
   if (info->orientation < 1 || info->orientation > 8)
     info->orientation = 1;
   if (info->thumb_offset <= 0 || info->thumb_length <= 0)
@@ -346,6 +441,101 @@ int img_read_info (const unsigned char *buf, size_t len, img_info *info)
       return (info->width > 0 && info->height > 0) ? 0 : -1;
     }
   return -1;
+}
+
+/* --- IPTC (IIM 4.2): the caption and keywords many programs write in a
+   JPEG's APP13 segment ("Photoshop 3.0"), inside Photoshop's image
+   resource &404. Each dataset is &1C, its record and number, a 16-bit
+   length and the text: 2:120 is the caption, 2:25 a keyword (repeated). */
+
+static void iptc_add (char *out, size_t n, const unsigned char *p, unsigned len, const char *sep)
+{
+  size_t at = strlen (out), k;
+  if (at && sep)
+    {
+      if (at + strlen (sep) + 1 >= n)
+        return;
+      strcpy (out + at, sep);
+      at += strlen (sep);
+    }
+  for (k = 0; k < len && at + 1 < n; k++)
+    if (p[k] >= ' ')
+      out[at++] = (char) p[k];
+  out[at] = '\0';
+  while (at > 0 && out[at - 1] == ' ')
+    out[--at] = '\0';
+}
+
+static void iptc_records (const unsigned char *p, size_t len, char *caption, size_t cn, char *keywords, size_t kn)
+{
+  size_t at = 0;
+  while (at + 5 <= len && p[at] == 0x1C)
+    {
+      unsigned rec = p[at + 1], ds = p[at + 2], n = (unsigned) (p[at + 3] << 8 | p[at + 4]);
+      if (n & 0x8000)
+        return;                         /* an extended length: not for text */
+      if (at + 5 + n > len)
+        return;
+      if (rec == 2 && ds == 120 && cn && !caption[0])
+        iptc_add (caption, cn, p + at + 5, n, NULL);
+      else if (rec == 2 && ds == 25 && kn && n)
+        iptc_add (keywords, kn, p + at + 5, n, ", ");
+      at += 5 + n;
+    }
+}
+
+int img_iptc_read (const unsigned char *buf, size_t len, char *caption, size_t cn, char *keywords, size_t kn)
+{
+  size_t pos = 2;
+  if (cn)
+    caption[0] = '\0';
+  if (kn)
+    keywords[0] = '\0';
+  if (img_probe (buf, len) != IMG_JPEG)
+    return 0;
+  while (pos + 4 <= len && buf[pos] == 0xFF)
+    {
+      unsigned marker = buf[pos + 1], seglen;
+      if (marker == 0xFF)
+        {
+          pos++;
+          continue;
+        }
+      if (marker == 0xD8 || (marker >= 0xD0 && marker <= 0xD7) || marker == 0x01)
+        {
+          pos += 2;
+          continue;
+        }
+      if (marker == 0xDA || marker == 0xD9)
+        break;
+      seglen = (unsigned) (buf[pos + 2] << 8 | buf[pos + 3]);
+      if (seglen < 2)
+        break;
+      if (marker == 0xED && pos + 4 + 14 <= len && memcmp (buf + pos + 4, "Photoshop 3.0\0", 14) == 0)
+        {
+          size_t r = pos + 4 + 14, end = pos + 2 + seglen;
+          if (end > len)
+            end = len;
+          /* Image resources: "8BIM", id, a Pascal name padded to even, a
+             32-bit size and the data, padded to even. */
+          while (r + 12 <= end && memcmp (buf + r, "8BIM", 4) == 0)
+            {
+              unsigned id = (unsigned) (buf[r + 4] << 8 | buf[r + 5]);
+              size_t nl = buf[r + 6], q = r + 6 + ((nl + 2) & ~(size_t) 1), size;
+              if (q + 4 > end)
+                break;
+              size = (size_t) buf[q] << 24 | (size_t) buf[q + 1] << 16 | (size_t) buf[q + 2] << 8 | buf[q + 3];
+              q += 4;
+              if (size > end - q)
+                break;
+              if (id == 0x0404)
+                iptc_records (buf + q, size, caption, cn, keywords, kn);
+              r = q + ((size + 1) & ~(size_t) 1);
+            }
+        }
+      pos += 2 + seglen;
+    }
+  return (cn && caption[0]) || (kn && keywords[0]);
 }
 
 /* --- every tag, for the Info tab */

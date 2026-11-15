@@ -707,6 +707,8 @@ a { color:#1f5fa8; }
 <figure><img src="images/info-exif.png" alt="More of the Info tab"><figcaption>Further down: the exposure, as the camera recorded it.</figcaption></figure>
 </div>
 <p>The tab scrolls: there can be a lot. Photos from some programs and phones have less; a PNG usually has none.</p>
+<p>If the camera or phone recorded where the photo was taken, <b>Location</b> gives it: the latitude and longitude, the height above sea level and the way the camera faced, if it recorded them. Photos already in the library when you first run Lumen 0.0.39 are read for their location in the background. To see where that is, use <b>Show on map</b> (<a href="#ch14">Chapter 14</a>).</p>
+<figure><img src="images/info-location.png" alt="The Info tab's Location line"><figcaption>Location: where the photo was taken, as the camera recorded it.</figcaption></figure>
 
 <!-- ======================================================================= -->
 <h2 class="part" id="part4">Part IV: Sharing and Setting Up<small>Exporting, printing, raw files, Choices and help</small></h2>
@@ -737,6 +739,17 @@ a { color:#1f5fa8; }
 <div class="box tip"><b class="label">TIP</b>Exported photos keep what the camera recorded: camera, lens, exposure, date, place, author and copyright, and your caption and keywords. Other programs (and websites) can show it. If you'd rather not share where a photo was taken, remember the GPS details go with it.</div>
 
 <div class="box tech"><b class="label">TECHNICAL STUFF</b>The camera's EXIF goes into a JPEG's APP1 block, a PNG's eXIf chunk and a TIFF's own tags (with its EXIF and GPS directories), rewritten for the new file: its size is the export's, its orientation is "normal" (the export is already the right way up), the colour space is sRGB, and Software says Lumen. The camera's tiny thumbnail and the maker's private notes are left out. For an original with no EXIF of its own, Lumen writes what the library knows of it.</div>
+
+<h4>Photos on a map, with RiscOSM</h4>
+<p>Lumen works with <b>RiscOSM</b>, Sine Nomine's map of OpenStreetMap, to show photos where they were taken: those with a <b>Location</b> in the Info tab.</p>
+<ul>
+<li><b>Show on map</b>, on the Selection menu (for the selected photos) or the Photo menu (for the photo in the Viewer), sends them to RiscOSM, which shows each as a pin with its thumbnail. If RiscOSM isn't running but the Filer has seen it, Lumen starts it first. Photos without a location are left out (Lumen says how many).</li>
+<li>In RiscOSM, <b>Ctrl</b>-click a photo's pin to open the photo in Lumen.</li>
+<li>Lumen tells RiscOSM about the library's photos, so RiscOSM can <b>search</b> them as one of its photo sources ("Lumen photos"): those in the area of the map, near a point, or matching words (in the name, caption, keywords, camera or date, as Lumen's own search).</li>
+</ul>
+<p>RiscOSM makes its thumbnail from the photo's file. A JPEG you haven't adjusted goes as it is; any other photo (a raw file, a HEIF, a TIFF, or one you've adjusted) goes as a JPEG Lumen makes for the map, 1024 pixels on its longer side with your adjustments, kept until Lumen quits.</p>
+<div class="box tip"><b class="label">TIP</b>If you'd rather other programs couldn't search your photos by place, untick <b>Maps</b> in Choices (<a href="#ch17">Chapter 17</a>). Show on map still works.</div>
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>Lumen speaks Sine Nomine's GeoData messages (&amp;546D0 onwards): DatasetDetails to announce the library (one dataset, with the area its photos cover), FetchData to search it (a box, a point and radius, words, a page at a time), TransmitData for each photo (its place, date, height, bearing, caption and name), FetchFile for its file, and DisplayInfo to open it. Positions are in ten-millionths of a degree, as OpenStreetMap's.</div>
 
 <h4>Printing</h4>
 <p>Lumen prints through RISC OS's printer drivers, so first choose your printer in <b>!Printers</b> (in the Printing directory), as for any other program.</p>
@@ -882,9 +895,11 @@ a { color:#1f5fa8; }
 <tr><td>Check the photos' files are still there when Lumen opens</td><td>Switch this off if your photos are on discs that are often away, so they aren't all marked missing (<a href="#ch8">Chapter 8</a>).</td></tr>
 <tr><td>Folders</td><td><b>Watch folders I import for new photos</b> and <b>Make albums from the folders inside them</b> do for every directory you import from now on what the project menu does for one (<a href="#ch6">Chapter 6</a>). <b>Look in watched folders every</b> so many minutes; 0 means only when Lumen starts and when its window opens.</td></tr>
 </table>
+<figure><img src="images/choices-export.png" alt="Lumen's Choices, its Export tab"><figcaption>The Export tab, with Maps.</figcaption></figure>
 <table>
 <tr><th>Export tab</th><th>Does</th></tr>
 <tr><td>Export, Quality, Size</td><td>The format, JPEG quality and size the Export box starts with.</td></tr>
+<tr><td>Maps</td><td><b>Let map programs (RiscOSM) search my photos by place</b>: ticked, RiscOSM can find the library's photos with a location and show them on its maps (<a href="#ch14">Chapter 14</a>).</td></tr>
 </table>
 <figure><img src="images/choices-scratch.png" alt="Lumen's Choices, its Previews and scratch tab"><figcaption>The Previews and scratch tab.</figcaption></figure>
 <table>

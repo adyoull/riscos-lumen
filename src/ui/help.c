@@ -157,6 +157,8 @@ const char *help_text (int window, int icon, int x, int y)
                       "used least recently go first when it's full.";
       case 41: return "How many photos the scratch cache holds, and what it holds now.";
       case 42: return "Deletes the photos kept in the scratch directory (they are developed again when wanted).";
+      case 44: return "Ticked: map programs such as RiscOSM can search the library's photos by place (those with a "
+                      "Location), and show them as pins on their maps. Show on map works either way.";
       default: return "Lumen's Choices. Click a tab at the top to see its choices.";
       }
   if (window == printbox_window ())

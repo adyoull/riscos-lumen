@@ -25,6 +25,8 @@
 #include "export.h"
 #include "presets.h"
 #include "ui.h"
+#include "geodata.h"
+#include "sqlite3.h"
 
 #define BROWSER 0x2a000
 #define INFO 0x2b000
@@ -62,6 +64,9 @@ static int stars;
 static char texts[256][80];
 static int ntexts;
 static int sent_reason, sent_block[64], sent_to;
+/* Every message sent, the last 32 (sent_log[k % 32]). */
+static int sent_log[32][64], sent_log_to[32], nsent;
+static int map_running;                /* a task handle the fake Task Manager lists as RiscOSM */
 static const int *menu_open;
 static char reported[256], asked[256], asked_button[32];
 static int answer = 2;            /* Cancel */
@@ -90,17 +95,44 @@ static const _kernel_oserror *dynamic_areas (int n, int r[10])
   return &none;
 }
 
+/* Wimp_TransferBlock: one address space here. */
+static const _kernel_oserror *transfer_block (int n, int r[10])
+{
+  (void) n;
+  memcpy ((void *) r[3], (const void *) r[1], (size_t) r[4]);
+  return NULL;
+}
+
+/* The k'th message sent since mark that is number msg (NULL if none). */
+static int *sent_since (int mark, int msg, int k)
+{
+  int i;
+  for (i = mark; i < nsent; i++)
+    if (i >= nsent - 32 && sent_log[i % 32][4] == msg && k-- == 0)
+      return sent_log[i % 32];
+  return NULL;
+}
+
 static const _kernel_oserror *tasks (int n, int r[10])
 {
-  static const char *const names[4] = { "Lumen\r", "LumenRaw", "Lumen", "Lumen\0" };
-  int handles[4], flags[4] = { 0, 0, 1, 0 }, *buf = (int *) r[1], k, at = r[0], count = other_lumen ? 4 : 3;
+  static const char *const names[5] = { "Lumen\r", "LumenRaw", "Lumen", "Lumen\0", "RiscOSM\r" };
+  int handles[5], flags[5] = { 0, 0, 1, 0, 0 }, *buf = (int *) r[1], k, at = r[0], count = other_lumen ? 4 : 3;
+  const char *nm[5];
   (void) n;
+  memcpy (nm, names, sizeof nm);
   handles[0] = TASK + 0x20000;          /* ourselves, with other top bits (as in ROL) */
-  handles[1] = 0x2000; handles[2] = 0x3000; handles[3] = other_lumen;
+  handles[1] = 0x2000; handles[2] = 0x3000; handles[3] = other_lumen; handles[4] = map_running;
+  if (map_running)
+    {
+      handles[count] = map_running;      /* RiscOSM, after the others */
+      nm[count] = names[4];
+      flags[count] = 0;
+      count++;
+    }
   for (k = 0; k < 2 && at < count; k++, at++)
     {
       buf[4 * k] = handles[at];
-      buf[4 * k + 1] = (int) names[at];
+      buf[4 * k + 1] = (int) nm[at];
       buf[4 * k + 2] = 640 * 1024;
       buf[4 * k + 3] = flags[at];
     }
@@ -343,6 +375,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       b[2] = 0x5151;                   /* the Wimp fills in my_ref */
       memcpy (sent_block, b, sizeof sent_block);
       sent_to = r[2];
+      memcpy (sent_log[nsent % 32], b, sizeof sent_log[0]);
+      sent_log_to[nsent++ % 32] = r[2];
       return NULL;
     case Wimp_CreateMenu:
       menu_open = b;
@@ -593,6 +627,7 @@ static void fakes (void)
   for (i = 0; i < sizeof list / sizeof list[0]; i++)
     fake_swi (list[i].swi, list[i].name, list[i].wimp ? wimp : graphics);
   fake_swi (TaskManager_EnumerateTasks, "TaskManager_EnumerateTasks", tasks);
+  fake_swi (0x400F1, "Wimp_TransferBlock", transfer_block);
   fake_swi (OS_SetVarVal, "OS_SetVarVal", setvarval);
   fake_swi (OS_DynamicArea, "OS_DynamicArea", dynamic_areas);
   fake_swi (OS_ReadDynamicArea, "OS_ReadDynamicArea", dynamic_areas);
@@ -644,6 +679,9 @@ static int nulls_until_idle (void)
       app_event (Null_Reason, b, 0);
       k++;
     }
+  if (getenv ("DBG_BUSY") && k >= 20000)
+    fprintf (stderr, "BUSY: lib %d geo %d map %d exp %d raw %d verify %d\n", lib_busy (app_library ()), lib_geo_pending (app_library ()),
+             geomap_busy (), exports_busy (), rawjob_busy (), lib_verifying (app_library ()));
   return k;
 }
 
@@ -1459,9 +1497,9 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      CHECK (strcmp (item_text (menu_open, 14), "Adjust") == 0 && strstr (item_text (submenu (menu_open, 14), 1), "Crop shape") != NULL,
+      CHECK (strcmp (item_text (menu_open, 15), "Adjust") == 0 && strstr (item_text (submenu (menu_open, 15), 1), "Crop shape") != NULL,
              "Photo > Adjust > Crop shape");
-      choose4 (14, 1, 2, -1);
+      choose4 (15, 1, 2, -1);
       CHECK (viewer_crop_mode () && fabsf ((viewer_recipe ()->v[P_CROP_X1] - viewer_recipe ()->v[P_CROP_X0]) * 640
                                            - (viewer_recipe ()->v[P_CROP_Y1] - viewer_recipe ()->v[P_CROP_Y0]) * 480) < 2,
              "Square: the crop becomes square");
@@ -2351,17 +2389,17 @@ int main (int argc, char **argv)
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
     CHECK (!strcmp (item_text (menu_open, 0), "Undo ^Z") && !strcmp (item_text (menu_open, 2), "Auto adjust \x8B" "A")
            && !strcmp (item_text (menu_open, 4), "Presets") && !strcmp (item_text (menu_open, 11), "Export... ^E")
-           && !strcmp (item_text (menu_open, 13), "View") && !strcmp (item_text (menu_open, 15), "Versions")
-           && (item (menu_open, 16)[0] & 0x80), "Photo menu: the common ones first, then View, Adjust, Versions, Remove");
-    CHECK (!strcmp (item_text (menu_open, 6), "Loupe \x8BL") && submenu (menu_open, 6) == submenu (submenu (menu_open, 13), 1),
+           && !strcmp (item_text (menu_open, 14), "View") && !strcmp (item_text (menu_open, 16), "Versions")
+           && (item (menu_open, 17)[0] & 0x80), "Photo menu: the common ones first, then View, Adjust, Versions, Remove");
+    CHECK (!strcmp (item_text (menu_open, 6), "Loupe \x8BL") && submenu (menu_open, 6) == submenu (submenu (menu_open, 14), 1),
            "Photo menu: Loupe on it, as well as under View (the same magnifications)");
     CHECK (strstr (item_text (menu_open, 9), "Colour label") != NULL, "Photo menu: Colour label");
     CHECK (!strcmp (item_text (menu_open, 10), "Caption and keywords... ^K"), "Caption and keywords..., its key after one space");
     CHECK (!strcmp (item_text (menu_open, 5), "Before and after \x8BM"), "Before and after: Shift-M shown");
-    CHECK (strstr (item_text (submenu (menu_open, 13), 2), "Compare") != NULL, "Photo > View > Compare");
-    CHECK (strstr (item_text (submenu (menu_open, 15), 0), "Duplicate version") != NULL, "Photo > Versions > Duplicate version");
-    CHECK (strstr (item_text (submenu (menu_open, 14), 3), "Reset all") != NULL, "Photo > Adjust > Reset all adjustments");
-    CHECK (strstr (item_text (submenu (menu_open, 13), 3), "Back to the Browser") != NULL, "Back to the Browser");
+    CHECK (strstr (item_text (submenu (menu_open, 14), 2), "Compare") != NULL, "Photo > View > Compare");
+    CHECK (strstr (item_text (submenu (menu_open, 16), 0), "Duplicate version") != NULL, "Photo > Versions > Duplicate version");
+    CHECK (strstr (item_text (submenu (menu_open, 15), 3), "Reset all") != NULL, "Photo > Adjust > Reset all adjustments");
+    CHECK (strstr (item_text (submenu (menu_open, 14), 3), "Back to the Browser") != NULL, "Back to the Browser");
     {
       /* Loupe from the menu: the toolbar's Loupe button lights up. */
       int r[4];
@@ -2378,7 +2416,7 @@ int main (int argc, char **argv)
       CHECK (!viewer_loupe () && force_redraws >= 1, "put away by a key: the button redrawn again");
       app_event (Mouse_Click, b, 0);
     }
-    choose (13, 3, -1);
+    choose (14, 3, -1);
     CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
     {
       /* Undo and Redo shaded in the Browser: the toolbar draws them grey and a click does nothing. */
@@ -2646,11 +2684,11 @@ int main (int argc, char **argv)
     browser_focus_on (0);
     click (16 + 352 + 60, -16 - 60, Button_Adjust);      /* add the second photo (Large thumbnails) */
     click (5, -5, Button_Menu);
-    CHECK (strstr (item_text (submenu (menu_open, 1), 14), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 13), "Print") != NULL
+    CHECK (strstr (item_text (submenu (menu_open, 1), 15), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 13), "Print") != NULL
            && strstr (item_text (submenu (menu_open, 1), 12), "Export as library") != NULL, "Selection > Export as library..., Print..., Remove from library");
     CHECK (!strcmp (item_text (submenu (menu_open, 1), 2), "Flag / unflag \x8BP"), "Selection > Flag / unflag, Shift-P shown");
     asked[0] = '\0';
-    choose (1, 14, -1);
+    choose (1, 15, -1);
     CHECK (strstr (asked, "these 2 photos") != NULL, "it asks about the two");
     CHECK (browser_count () == before - 3 && viewer_item () == 0, "both gone, and the Viewer let its photo go");
 
@@ -2783,6 +2821,119 @@ int main (int argc, char **argv)
     menu_state[0] = -1;
     CHECK (strstr (help_text (0x9000, 3, 0, 0), "") != NULL && help_text (0x9000, 3, 0, 0)[0] == '\0',
            "help: a window that isn't ours: nothing");
+  }
+
+  /* --- Photos on maps (GeoData, as RiscOSM uses it). */
+  {
+    int m[64], mark, *t;
+    cat_item it;
+    cat_id v;
+    cat_details d;
+    char sql[200];
+    static char words[] = "IMG";
+    browser_set_source (&(cat_source) { SRC_ALL, 0, 0, "" });
+    CHECK (browser_item (0, &it), "geo: a photo to place");
+    v = it.id;
+    cat_get_details (lib_cat (app_library ()), v, &d);
+    snprintf (sql, sizeof sql, "UPDATE original SET geo = 1, lat = 546000000, lon = -31000000 WHERE id = %lld",
+              (long long) d.original);
+    sqlite3_exec (cat_sqlite (lib_cat (app_library ())), sql, NULL, NULL, NULL);
+    /* DescribeDatasets: the library, described to the asker. */
+    memset (m, 0, sizeof m);
+    m[0] = 48; m[1] = 0x4444; m[2] = 91; m[4] = GeoData_DescribeDatasets; m[10] = GD_PHOTOS;
+    app_event (User_Message, m, 0);
+    CHECK (sent_block[4] == GeoData_DatasetDetails && sent_to == 0x4444 && sent_block[3] == 91 && sent_block[5] == 1
+           && sent_block[7] == 546000000 && sent_block[6] == -31000000 && (sent_block[10] & GD_PHOTOS)
+           && strcmp ((char *) sent_block + 48, "Lumen photos") == 0, "geo: DescribeDatasets answered with DatasetDetails");
+    /* FetchData: a box round it and a word. */
+    mark = nsent;
+    memset (m, 0, sizeof m);
+    m[0] = 76; m[1] = 0x4444; m[2] = 92; m[4] = GeoData_FetchData; m[5] = 7; m[6] = 1;
+    m[9] = -40000000; m[10] = 540000000; m[11] = -20000000; m[12] = 550000000;
+    m[13] = GD_PHOTOS | GD_BOX | GD_TEXT; m[14] = (int) words; m[15] = 3;
+    app_event (User_Message_Recorded, m, 0);
+    t = sent_since (mark, GeoData_Status, 0);
+    CHECK (t && t[5] == GDS_SEARCHING && t[3] == 92, "geo: FetchData: Status searching");
+    nulls_until_idle ();
+    t = sent_since (mark, GeoData_TransmitData, 0);
+    CHECK (t && t[5] == 7 && t[6] == 1 && t[7] == (int) v && t[3] == 92 && t[11] == 546000000 && t[10] == -31000000
+           && (t[9] & GD_FILE) && (t[9] & GD_MORE_INFO) && (t[9] & GD_LATLON) && !(t[9] & GD_DRAW_MAP),
+           "geo: the photo found, sent with TransmitData");
+    t = sent_since (mark, GeoData_Status, 1);
+    CHECK (t && t[5] == GDS_FOUND && t[6] == 1 && t[3] == 92, "geo: Status found 1");
+    /* A box with nothing in it. */
+    mark = nsent;
+    m[10] = 100000000; m[12] = 110000000;
+    app_event (User_Message_Recorded, m, 0);
+    t = sent_since (mark, GeoData_Status, 1);
+    CHECK (t && t[5] == GDS_NO_RESULTS, "geo: Status no results");
+    /* FetchFile: the photo's file, by DataLoad. */
+    mark = nsent;
+    memset (m, 0, sizeof m);
+    m[0] = 48; m[1] = 0x4444; m[2] = 93; m[4] = GeoData_FetchFile; m[5] = 7; m[6] = 1; m[7] = (int) v;
+    m[8] = 0xC85; m[9] = -1;
+    app_event (User_Message_Recorded, m, 0);
+    nulls_until_idle ();
+    t = sent_since (mark, 3, 0);
+    CHECK (t && t[3] == 93 && t[10] == 0xC85 && sent_log_to[(nsent - 1) % 32] == 0x4444, "geo: FetchFile answered with DataLoad");
+    if (t)
+      {
+        FILE *f = fopen ((const char *) &t[11], "rb");
+        unsigned char h[3] = { 0 };
+        if (f)
+          {
+            if (fread (h, 1, 3, f) != 3) h[0] = 0;
+            fclose (f);
+          }
+        CHECK (h[0] == 0xFF && h[1] == 0xD8, "geo: a JPEG there");
+      }
+    /* An adjusted photo: a JPEG made for the map, with the adjustments. */
+    cat_set_recipe (lib_cat (app_library ()), v, "exposure 0.5");
+    mark = nsent;
+    m[2] = 94;
+    memset (m, 0, sizeof m);
+    m[0] = 44; m[1] = 0x4444; m[2] = 94; m[4] = GeoData_FetchFile; m[5] = 7; m[6] = 1; m[7] = (int) v; m[8] = -1;
+    app_event (User_Message_Recorded, m, 0);
+    nulls_until_idle ();
+    t = sent_since (mark, 3, 0);
+    CHECK (t && t[3] == 94 && strstr ((const char *) &t[11], "LumenMap") != NULL, "geo: an adjusted photo: a JPEG made for the map");
+    if (t)
+      {
+        FILE *f = fopen ((const char *) &t[11], "rb");
+        CHECK (f != NULL, "geo: and it's there");
+        if (f)
+          fclose (f);
+      }
+    cat_set_recipe (lib_cat (app_library ()), v, "");
+    /* DisplayInfo: the photo opens. */
+    memset (m, 0, sizeof m);
+    m[0] = 60; m[1] = 0x4444; m[4] = GeoData_DisplayInfo; m[5] = 7; m[6] = 1; m[7] = (int) v;
+    app_event (User_Message, m, 0);
+    CHECK (mainwin_mode () == LAYOUT_VIEWER && viewer_item () == v, "geo: DisplayInfo opens the photo");
+    /* Show on map: no RiscOSM, and the Filer hasn't seen one. */
+    reported[0] = '\0';
+    geomap_show (&v, 1);
+    CHECK (strstr (reported, "isn't running") != NULL, "geo: Show on map without RiscOSM says so");
+    /* RiscOSM running: sent to it, asking for a map. */
+    map_running = 0x5555;
+    mark = nsent;
+    geomap_show (&v, 1);
+    nulls_until_idle ();
+    t = sent_since (mark, GeoData_TransmitData, 0);
+    CHECK (t && (t[9] & GD_DRAW_MAP) && t[7] == (int) v && sent_log_to[(mark) % 32] == 0x5555, "geo: Show on map sends it to RiscOSM");
+    /* Not running, but seen by the Filer: started, then sent. */
+    map_running = 0;
+    fake_setvar ("RiscOSM$Dir", "ADFS::0.$.Apps.!RiscOSM");
+    started[0] = '\0';
+    mark = nsent;
+    geomap_show (&v, 1);
+    CHECK (strstr (started, "RiscOSM$Dir") != NULL, "geo: RiscOSM started");
+    map_running = 0x5556;
+    nulls_until_idle ();
+    t = sent_since (mark, GeoData_TransmitData, 0);
+    CHECK (t && (t[9] & GD_DRAW_MAP), "geo: and the photo sent when it's up");
+    map_running = 0;
+    viewer_close ();
   }
 
   /* One Lumen at a time: a second finds the first (not LumenRaw, not a module). */

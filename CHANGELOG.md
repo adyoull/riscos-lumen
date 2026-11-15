@@ -1,5 +1,31 @@
 # Lumen changelog
 
+## 0.0.39 (15 November 2026): photos on maps, with RiscOSM
+
+- Lumen keeps where each photo was taken, from its EXIF GPS: latitude
+  and longitude (in ten-millionths of a degree, as OpenStreetMap's), the
+  height and the way the camera faced. The Info tab shows it as
+  Location. Photos already in the library are read for it in the
+  background (and raw and plug-in photos once their plug-in has said
+  where their EXIF is); a photo found again after moving is read again.
+- Show on map (Selection and Photo menus) sends photos to RiscOSM (Sine
+  Nomine's OpenStreetMap map), which shows them as pins with their
+  thumbnails; Lumen starts RiscOSM if the Filer has seen it.
+  Ctrl-clicking a pin in RiscOSM opens the photo in Lumen.
+- RiscOSM can search the library ("Lumen photos") by the map's area, a
+  point and radius, and words, a page at a time.
+- RiscOSM gets a JPEG it can read: the original if it is an unadjusted
+  JPEG, else one made for it (1024 pixels, with the adjustments and the
+  EXIF), kept in <Wimp$ScrapDir>.LumenMap until Lumen quits.
+- All through Sine Nomine's GeoData messages (DescribeDatasets,
+  DatasetDetails, FetchData, TransmitData, FetchFile, DisplayInfo,
+  Status). Choices (Export tab) has Maps: whether map programs may
+  search the library.
+- Captions and keywords in a JPEG's IPTC block (as Photoshop and many
+  other programs write them) are imported, when it has no XMP ones.
+- Catalogue schema 8 (geo, lat, lon, alt and bearing for each
+  original).
+
 ## 0.0.38.7 (7 November 2026): raw and HEIF photos quicker, with LumenRaw 1.4 and LumenHEIF 1.3
 
 - 100% and the loupe ask LumenRaw 1.4 for its faster demosaicing (PPG,

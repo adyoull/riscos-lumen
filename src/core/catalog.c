@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include <math.h>
 #include <strings.h>
 #include "sqlite3.h"
 #include "catalog.h"
@@ -129,6 +130,20 @@ static int upgrade (cat *c)
                         "ALTER TABLE original ADD COLUMN exif_length INTEGER NOT NULL DEFAULT 0;"
                         "ALTER TABLE original ADD COLUMN encoding TEXT;"
                         "UPDATE meta SET value = 7 WHERE key = 'schema';"))
+    return -1;
+  /* Schema 8 (0.0.39): where a photo was taken (EXIF GPS): geo is
+     GEO_* bits once its file has been read for it, CAT_GEO_UNREAD
+     until then (photos already in the library are read in the
+     background), CAT_GEO_PLUGIN while a plug-in hasn't said where its
+     EXIF is. */
+  if (v < 8 && step (c, "ALTER TABLE original ADD COLUMN geo INTEGER NOT NULL DEFAULT -1;"
+                        "ALTER TABLE original ADD COLUMN lat INTEGER NOT NULL DEFAULT 0;"
+                        "ALTER TABLE original ADD COLUMN lon INTEGER NOT NULL DEFAULT 0;"
+                        "ALTER TABLE original ADD COLUMN alt INTEGER NOT NULL DEFAULT 0;"
+                        "ALTER TABLE original ADD COLUMN bearing INTEGER NOT NULL DEFAULT 0;"
+                        "CREATE INDEX IF NOT EXISTS original_geo ON original (geo);"
+                        "CREATE INDEX IF NOT EXISTS original_lat ON original (lat);"
+                        "UPDATE meta SET value = 8 WHERE key = 'schema';"))
     return -1;
   return 0;
 }
@@ -433,7 +448,7 @@ int cat_set_missing (cat *c, cat_id original, int missing)
 int cat_relink (cat *c, cat_id version, const char *path, long long mtime)
 {
   /* The original's new place; its thumbnail is made again if it failed. */
-  sqlite3_stmt *s = prep (c, "UPDATE original SET path = ?2, mtime = ?3, missing = 0"
+  sqlite3_stmt *s = prep (c, "UPDATE original SET path = ?2, mtime = ?3, missing = 0, geo = -1"
                              " WHERE id = (SELECT original FROM version WHERE id = ?1)");
   int rc = 0;
   if (!s)
@@ -470,7 +485,8 @@ int cat_set_original_info (cat *c, cat_id version, const img_info *in)
                              " focal = CASE WHEN ?11 > 0 THEN ?11 ELSE focal END,"
                              " exif_offset = CASE WHEN ?13 > 0 THEN ?12 ELSE exif_offset END,"
                              " exif_length = CASE WHEN ?13 > 0 THEN ?13 ELSE exif_length END,"
-                             " encoding = COALESCE(?14, encoding)"
+                             " encoding = COALESCE(?14, encoding),"
+                             " geo = CASE WHEN geo = -2 THEN -1 ELSE geo END"
                              " WHERE id = (SELECT original FROM version WHERE id = ?1)");
   int rc = 0;
   if (!s)
@@ -659,7 +675,8 @@ cat_id cat_add_original (cat *c, cat_id project, const cat_original *o, cat_id *
 
   s = prep (c, "INSERT INTO original (path, size, mtime, hash, filetype, format, width, height,"
                " orientation, taken, make, model, exposure, fnumber, iso, focal, thumb_offset,"
-               " thumb_length, batch) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)");
+               " thumb_length, batch, geo, lat, lon, alt, bearing)"
+               " VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24)");
   if (!s)
     return -1;
   sqlite3_bind_text (s, 1, o->path, -1, SQLITE_TRANSIENT);
@@ -681,6 +698,13 @@ cat_id cat_add_original (cat *c, cat_id project, const cat_original *o, cat_id *
   sqlite3_bind_int64 (s, 17, in->thumb_offset);
   sqlite3_bind_int64 (s, 18, in->thumb_length);
   sqlite3_bind_int64 (s, 19, o->batch);
+  /* A raw or plug-in photo whose start didn't say: its plug-in tells
+     where its EXIF is, then it's read for the place. */
+  sqlite3_bind_int (s, 20, in->geo ? in->geo : img_is_plugin_format (in->format) ? CAT_GEO_PLUGIN : 0);
+  sqlite3_bind_int (s, 21, in->geo & GEO_POS ? in->lat : 0);
+  sqlite3_bind_int (s, 22, in->geo & GEO_POS ? in->lon : 0);
+  sqlite3_bind_int (s, 23, in->geo & GEO_ALT ? in->alt_mm : 0);
+  sqlite3_bind_int (s, 24, in->geo & GEO_DIR ? in->bearing : 0);
   if (sqlite3_step (s) != SQLITE_DONE)
     {
       fail (c, "add original");
@@ -2308,4 +2332,190 @@ int cat_auto_stack (cat *c, const cat_id *v, int n, int seconds)
     }
   free (t);
   return made;
+}
+
+/* --- Where photos were taken (schema 8) */
+
+int cat_set_geo (cat *c, cat_id original, const img_info *in)
+{
+  sqlite3_stmt *s = prep (c, "UPDATE original SET geo = ?2, lat = ?3, lon = ?4, alt = ?5, bearing = ?6 WHERE id = ?1");
+  int rc = 0, g = in ? in->geo & (GEO_POS | GEO_ALT | GEO_DIR) : 0;
+  if (!(g & GEO_POS))
+    g = 0;
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, original);
+  sqlite3_bind_int (s, 2, g);
+  sqlite3_bind_int (s, 3, g ? in->lat : 0);
+  sqlite3_bind_int (s, 4, g ? in->lon : 0);
+  sqlite3_bind_int (s, 5, g & GEO_ALT ? in->alt_mm : 0);
+  sqlite3_bind_int (s, 6, g & GEO_DIR ? in->bearing : 0);
+  if (sqlite3_step (s) != SQLITE_DONE)
+    rc = fail (c, "place");
+  sqlite3_finalize (s);
+  return rc;
+}
+
+int cat_geo_unread (cat *c, cat_origin *o)
+{
+  sqlite3_stmt *s = prep (c, "SELECT id FROM original WHERE geo = -1 LIMIT 1");
+  cat_id id = 0;
+  if (!s)
+    return -1;
+  if (sqlite3_step (s) == SQLITE_ROW)
+    id = sqlite3_column_int64 (s, 0);
+  sqlite3_finalize (s);
+  if (!id)
+    return 0;
+  return cat_origin_of (c, id, o) == 1 ? 1 : -1;
+}
+
+int cat_get_geo (cat *c, cat_id version, cat_geo *g)
+{
+  sqlite3_stmt *s = prep (c, "SELECT o.geo, o.lat, o.lon, o.alt, o.bearing FROM version v"
+                             " JOIN original o ON o.id = v.original WHERE v.id = ?1");
+  int rc = 0;
+  memset (g, 0, sizeof *g);
+  if (!s)
+    return -1;
+  sqlite3_bind_int64 (s, 1, version);
+  if (sqlite3_step (s) == SQLITE_ROW)
+    {
+      g->geo = sqlite3_column_int (s, 0);
+      g->lat = sqlite3_column_int (s, 1);
+      g->lon = sqlite3_column_int (s, 2);
+      g->alt_mm = sqlite3_column_int (s, 3);
+      g->bearing = sqlite3_column_int (s, 4);
+      rc = g->geo > 0 && (g->geo & GEO_POS) ? 1 : 0;
+      if (g->geo < 0)
+        g->geo = 0;
+    }
+  sqlite3_finalize (s);
+  return rc;
+}
+
+/* Metres between two points (ten-millionths of a degree), on a sphere
+   of the Earth's mean radius: good to a few metres at these distances. */
+double cat_geo_distance (int lat1, int lon1, int lat2, int lon2)
+{
+  const double k = 3.14159265358979323846 / 180e7;
+  double p1 = lat1 * k, p2 = lat2 * k, dp = (lat2 - (double) lat1) * k, dl = (lon2 - (double) lon1) * k;
+  double a, sh = sin (dp / 2), sl;
+  if (dl > 3.14159265358979323846)
+    dl -= 2 * 3.14159265358979323846;
+  else if (dl < -3.14159265358979323846)
+    dl += 2 * 3.14159265358979323846;
+  sl = sin (dl / 2);
+  a = sh * sh + cos (p1) * cos (p2) * sl * sl;
+  return 2 * 6371008.8 * asin (sqrt (a < 1 ? a : 1));
+}
+
+int cat_geo_find (cat *c, const cat_geo_query *q, cat_geo_hit **out, int *count, int *total)
+{
+  char sql[12000], match[9000] = "", words[8][70], box[400] = "";
+  sqlite3_stmt *s;
+  int nw, k, n = 0, cap = 64, all = 0, first, last;
+  cat_geo_hit *a;
+  *out = NULL;
+  *count = 0;
+  if (total)
+    *total = 0;
+  nw = add_words (q->words, words, 0, 8, match, sizeof match);
+  if (q->how == CAT_GEO_BOX)
+    {
+      long y0 = q->y0 < q->y1 ? q->y0 : q->y1, y1 = q->y0 < q->y1 ? q->y1 : q->y0;
+      if (q->x0 <= q->x1)
+        snprintf (box, sizeof box, " AND o.lat BETWEEN %ld AND %ld AND o.lon BETWEEN %ld AND %ld",
+                  y0, y1, (long) q->x0, (long) q->x1);
+      else                             /* across 180 degrees */
+        snprintf (box, sizeof box, " AND o.lat BETWEEN %ld AND %ld AND (o.lon >= %ld OR o.lon <= %ld)",
+                  y0, y1, (long) q->x0, (long) q->x1);
+    }
+  else if (q->how == CAT_GEO_RADIUS)
+    {
+      /* A box round the circle first; the distance is checked after. */
+      double dlat = (q->radius + 10.0) / 111194.9 * 1e7, coslat = cos (q->y0 * 3.14159265358979323846 / 180e7);
+      double dlon = coslat > 0.01 ? dlat / coslat : 4e9;
+      double la0 = q->y0 - dlat, la1 = q->y0 + dlat, lo0 = q->x0 - dlon, lo1 = q->x0 + dlon;
+      if (lo0 < -1800000000.0 || lo1 > 1800000000.0)
+        snprintf (box, sizeof box, " AND o.lat BETWEEN %.0f AND %.0f", la0, la1);
+      else
+        snprintf (box, sizeof box, " AND o.lat BETWEEN %.0f AND %.0f AND o.lon BETWEEN %.0f AND %.0f", la0, la1, lo0, lo1);
+    }
+  /* One pin for each photo: its first version (not a rejected one). */
+  snprintf (sql, sizeof sql,
+            "SELECT v.id, o.geo, o.lat, o.lon, o.alt, o.bearing, IFNULL(o.taken, ''), v.name, v.caption, o.path,"
+            " o.format, o.filetype, v.recipe != ''"
+            " FROM version v JOIN original o ON o.id = v.original"
+            " WHERE o.geo > 0 AND (o.geo & 1) AND (?1 != 0 OR v.rating >= 0) AND (?1 = 0 OR v.id = ?1) AND ?2 = ?2%s%s"
+            " AND (?1 != 0 OR v.id = (SELECT MIN(v2.id) FROM version v2 WHERE v2.original = o.id AND v2.rating >= 0))"
+            " ORDER BY IFNULL(o.taken, ''), v.id",
+            box, match);
+  if (!(s = prep (c, sql)))
+    return -1;
+  sqlite3_bind_int64 (s, 1, q->version);
+  sqlite3_bind_int (s, 2, 0);
+  for (k = 0; k < nw; k++)
+    sqlite3_bind_text (s, 3 + k, words[k], -1, SQLITE_TRANSIENT);
+  if (!(a = malloc (sizeof *a * (size_t) cap)))
+    {
+      sqlite3_finalize (s);
+      return -1;
+    }
+  first = q->page_size > 0 ? (q->page > 1 ? q->page - 1 : 0) * q->page_size : 0;
+  last = q->page_size > 0 ? first + q->page_size : 0x7FFFFFFF;
+  while (sqlite3_step (s) == SQLITE_ROW)
+    {
+      cat_geo_hit *h;
+      int lat = sqlite3_column_int (s, 2), lon = sqlite3_column_int (s, 3);
+      if (q->how == CAT_GEO_RADIUS && cat_geo_distance (q->y0, q->x0, lat, lon) > q->radius)
+        continue;
+      if (all++ < first || all > last)
+        continue;
+      if (n == cap)
+        {
+          cat_geo_hit *more = realloc (a, sizeof *a * (size_t) (cap *= 2));
+          if (!more)
+            break;
+          a = more;
+        }
+      h = &a[n++];
+      memset (h, 0, sizeof *h);
+      h->version = sqlite3_column_int64 (s, 0);
+      h->geo.geo = sqlite3_column_int (s, 1);
+      h->geo.lat = lat;
+      h->geo.lon = lon;
+      h->geo.alt_mm = sqlite3_column_int (s, 4);
+      h->geo.bearing = sqlite3_column_int (s, 5);
+      col_text (s, 6, h->taken, sizeof h->taken);
+      col_text (s, 7, h->name, sizeof h->name);
+      col_text (s, 8, h->caption, sizeof h->caption);
+      col_text (s, 9, h->path, sizeof h->path);
+      h->format = sqlite3_column_int (s, 10);
+      h->filetype = sqlite3_column_int (s, 11);
+      h->edited = sqlite3_column_int (s, 12);
+    }
+  sqlite3_finalize (s);
+  *out = a;
+  *count = n;
+  if (total)
+    *total = all;
+  return 0;
+}
+
+int cat_geo_bounds (cat *c, int *x0, int *y0, int *x1, int *y1)
+{
+  sqlite3_stmt *s = prep (c, "SELECT COUNT(*), MIN(lon), MIN(lat), MAX(lon), MAX(lat) FROM original WHERE geo > 0 AND (geo & 1)");
+  int n = 0;
+  if (!s)
+    return -1;
+  if (sqlite3_step (s) == SQLITE_ROW && (n = sqlite3_column_int (s, 0)) > 0)
+    {
+      *x0 = sqlite3_column_int (s, 1);
+      *y0 = sqlite3_column_int (s, 2);
+      *x1 = sqlite3_column_int (s, 3);
+      *y1 = sqlite3_column_int (s, 4);
+    }
+  sqlite3_finalize (s);
+  return n;
 }
