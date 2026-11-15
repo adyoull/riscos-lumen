@@ -1,10 +1,10 @@
 REM A stand-in for RiscOSM: GeoData messages to and from Lumen, logged.
 ON ERROR PROCerr : END
-DIM b% 256, q% 32, ml% 32
+DIM b% 256, q% 32, ml% 40
 log$="IXFS:$.home.claude.rol.out.maplog"
 f%=OPENOUT(log$) : CLOSE#f%
 $q%="Derwent"
-ml%!0=&546D4 : ml%!4=&546D6 : ml%!8=&546D9 : ml%!12=3 : ml%!16=0
+ml%!0=&546D4 : ml%!4=&546D6 : ml%!8=&546D9 : ml%!12=3 : ml%!16=&546D0 : ml%!20=0
 SYS "Wimp_Initialise",380,&4B534154,"RiscOSM",ml% TO ver%,me%
 PROClog("started "+STR$~me%)
 searched%=0 : fetched%=0 : shown%=0
@@ -21,6 +21,11 @@ CASE m% OF
 WHEN &546D4
   PROClog("DatasetDetails id "+STR$(b%!20)+" box "+STR$(b%!24)+" "+STR$(b%!28)+" "+STR$(b%!32)+" "+STR$(b%!36)+" types &"+STR$~(b%!40)+" other &"+STR$~(b%!44)+" title "+FNs(b%+48))
   IF b%!40<>0 AND searched%=0 THEN PROCfetch(t%,b%!24-10000,b%!28-10000,b%!32+10000,b%!36+10000)
+WHEN &546D0
+  PROClog("OpenMap flags &"+STR$~(b%!20)+" "+STR$(b%!24)+" "+STR$(b%!28)+" "+STR$(b%!32)+" "+STR$(b%!36)+" title "+FNs(b%+60))
+  b%!12=b%!8 : b%!16=&546D2 : b%!20=9 : b%!0=84
+  SYS "Wimp_SendMessage",17,b%,t%
+  PROClog("sent MapInfo map 9")
 WHEN &546D9
   PROClog("Status "+STR$(b%!20)+" "+STR$(b%!24)+" "+FNs(b%+28)+" your_ref "+STR$~(b%!12))
 WHEN &546D6

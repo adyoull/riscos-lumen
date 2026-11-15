@@ -51,6 +51,11 @@ typedef struct batch
   int n, at;
   int status;                          /* send Status when done (a reply to FetchData) */
   int total;
+  /* Show on map: waiting for the map to open (MapInfo, in reply to our
+     OpenMap), to put the pins on it; until then, until it bounces or the
+     time is up (then the first photo asks for a map itself). */
+  int opening, open_ref;
+  unsigned open_until;
 } batch;
 static batch *queue_head, *queue_tail;
 
@@ -308,10 +313,39 @@ static void fetch_file (int *m)
   free (h);
 }
 
+/* The map RiscOSM opened for Show on map: the pins go on it. */
+static void map_info (int *m)
+{
+  batch *b;
+  for (b = queue_head; b; b = b->next)
+    if (b->opening && m[3] == b->open_ref)
+      {
+        b->opening = 0;
+        b->map = m[5];
+      }
+}
+
+void geomap_bounced (int *m)
+{
+  batch *b;
+  if (m[4] != GeoData_OpenMap)
+    return;
+  /* Nothing opened a map: the first photo asks for one itself. */
+  for (b = queue_head; b; b = b->next)
+    if (b->opening && m[2] == b->open_ref)
+      {
+        b->opening = 0;
+        b->flags |= GD_DRAW_MAP;
+      }
+}
+
 int geomap_message (int *m)
 {
   switch (m[4])
     {
+    case GeoData_MapInfo:
+      map_info (m);
+      return 1;
     case GeoData_DescribeDatasets:
       describe (m);
       return 1;
@@ -341,7 +375,7 @@ static int find_map (void)
   return map_task = app_find_task ("RiscOSM");
 }
 
-static void show_now (const cat_id *v, int n)
+static void show_now (const cat_id *v, int n, const char *title)
 {
   batch *b = calloc (1, sizeof *b);
   int k, none = 0;
@@ -372,7 +406,29 @@ static void show_now (const cat_id *v, int n)
       return;
     }
   b->task = map_task;
-  b->flags = GD_DRAW_MAP | GD_FILE | GD_MORE_INFO;
+  b->flags = GD_FILE | GD_MORE_INFO;
+  /* A map framing them all first (or centred on the one); the pins go
+     on it when RiscOSM says which map it is. */
+  {
+    int m[GEODATA_WORDS];
+    char t[120];
+    if (title && title[0])
+      snprintf (t, sizeof t, "%s", title);
+    else if (b->n == 1)
+      snprintf (t, sizeof t, "%s", b->hits[0].name);
+    else
+      snprintf (t, sizeof t, "%d photos from Lumen", b->n);
+    geodata_open_map (m, b->hits, b->n, t);
+    m[3] = 0;
+    if (_swix (Wimp_SendMessage, _INR (0, 2), 18, m, b->task) == NULL)
+      {
+        b->opening = 1;
+        b->open_ref = m[2];
+        b->open_until = app_now () + 500;
+      }
+    else
+      b->flags |= GD_DRAW_MAP;
+  }
   enqueue (b);
   if (none)
     {
@@ -385,12 +441,19 @@ static void show_now (const cat_id *v, int n)
 
 void geomap_show (const cat_id *v, int n)
 {
+  geomap_show_named (v, n, NULL);
+}
+
+static char wait_title[120];
+
+void geomap_show_named (const cat_id *v, int n, const char *title)
+{
   char dir[256];
   if (n <= 0)
     return;
   if (find_map ())
     {
-      show_now (v, n);
+      show_now (v, n, title);
       return;
     }
   /* Not running: start it if the Filer has seen it, and send when it's up. */
@@ -403,6 +466,7 @@ void geomap_show (const cat_id *v, int n)
         return;
       memcpy (waiting, v, sizeof *waiting * (size_t) n);
       nwaiting = n;
+      snprintf (wait_title, sizeof wait_title, "%s", title ? title : "");
       wait_until = app_now () + 3000;
       wait_seen = 0;
       _swix (Wimp_StartTask, _IN (0), "Filer_Run <RiscOSM$Dir>");
@@ -493,7 +557,7 @@ void geomap_idle (unsigned now, unsigned deadline)
         wait_seen = now;
       if (wait_seen && (int) (now - wait_seen) > 200)
         {
-          show_now (waiting, nwaiting);
+          show_now (waiting, nwaiting, wait_title);
           free (waiting);
           waiting = NULL;
           nwaiting = 0;
@@ -509,6 +573,13 @@ void geomap_idle (unsigned now, unsigned deadline)
   while (queue_head && sent < PER_POLL)
     {
       batch *b = queue_head;
+      if (b->opening)
+        {
+          if ((int) (now - b->open_until) < 0)
+            break;                     /* still waiting for the map */
+          b->opening = 0;
+          b->flags |= GD_DRAW_MAP;     /* no answer: the first photo asks for a map */
+        }
       if (b->at < b->n)
         {
           int m[GEODATA_WORDS];
@@ -518,7 +589,7 @@ void geomap_idle (unsigned now, unsigned deadline)
             b->at = b->n;              /* gone: drop them */
           else
             {
-              geodata_transmit (m, b->map, DATASET, &b->hits[b->at], b->flags);
+              geodata_transmit (m, b->map, DATASET, &b->hits[b->at], b->at == 0 ? b->flags : b->flags & ~GD_DRAW_MAP);
               m[3] = b->your_ref;
               send (17, m, b->task);
               b->at++;

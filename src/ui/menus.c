@@ -1296,7 +1296,7 @@ static void group_choice (const int *c)
       if (cat_group_versions (db, group_kind, group_id, &ids, &n) == 0)
         {
           if (n > 0)
-            geomap_show (ids, n);
+            geomap_show_named (ids, n, name);
           else
             app_report (group_kind == SRC_PROJECT ? "This project has no photos." : "This album has no photos.");
           free (ids);

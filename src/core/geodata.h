@@ -82,6 +82,14 @@ int geodata_time (const char *taken, unsigned char out[5]);
    GD_FILE, GD_MORE_INFO). The block's length is set. */
 void geodata_transmit (int *block, int map, int dataset, const cat_geo_hit *h, int flags);
 
+/* Message_GeoData_OpenMap framing photos: a box round them all with a
+   margin (a sixth of their size each side), or, for one photo or a group
+   within a few hundred metres, the centre at the map's own scale; with a
+   title for its window. */
+void geodata_open_map (int *block, const cat_geo_hit *h, int n, const char *title);
+#define GD_OPEN_BOUNDS     (1 << 0)
+#define GD_OPEN_TITLE      (1 << 5)
+
 /* Message_GeoData_DatasetDetails for the library: n photos with a place
    within the box (n 0: undeclared, every field but the id 0). */
 void geodata_details (int *block, int dataset, int n, int x0, int y0, int x1, int y1,

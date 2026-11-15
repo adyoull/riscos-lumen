@@ -690,7 +690,8 @@ int app_init (const char *library_path, const char *start_file)
   static const int messages[] = { Message_DataLoad, Message_DataOpen, 2 /* DataSaveAck */, Message_ModeChange, Message_HelpRequest,
                                   Message_TaskWindow_Output, Message_TaskWindow_Ego, Message_TaskWindow_Morio,
                                   Message_MenusDeleted, Message_MenuWarning,
-                                  GeoData_DescribeDatasets, GeoData_FetchData, GeoData_FetchFile, GeoData_DisplayInfo, 0 };
+                                  GeoData_DescribeDatasets, GeoData_FetchData, GeoData_FetchFile, GeoData_DisplayInfo,
+                                  GeoData_MapInfo, 0 };
   char err[300];
   if (_swix (Wimp_Initialise, _INR (0, 3) | _OUT (1), 380, TASK_WORD, APP_NAME, messages, &task))
     return 1;
@@ -1205,6 +1206,9 @@ static int app_event_1 (int reason, int *b, int sender)
       break;
     case Menu_Selection:
       return menus_selection (b);
+    case 19:                           /* User_Message_Acknowledge: one of ours came back */
+      geomap_bounced (b);
+      break;
     case User_Message:
     case User_Message_Recorded:
       switch (b[4])
@@ -1248,6 +1252,7 @@ static int app_event_1 (int reason, int *b, int sender)
         case GeoData_FetchData:
         case GeoData_FetchFile:
         case GeoData_DisplayInfo:
+        case GeoData_MapInfo:
           geomap_message (b);
           break;
         case Message_ModeChange:

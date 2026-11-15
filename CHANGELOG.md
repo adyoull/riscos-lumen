@@ -9,8 +9,12 @@
   background (and raw and plug-in photos once their plug-in has said
   where their EXIF is); a photo found again after moving is read again.
 - Show on map (Selection and Photo menus) sends photos to RiscOSM (Sine
-  Nomine's OpenStreetMap map), which shows them as pins with their
-  thumbnails; Lumen starts RiscOSM if the Filer has seen it.
+  Nomine's OpenStreetMap map): Lumen asks it to open a map framing them
+  all (OpenMap: a box round them with a margin, or centred on one photo
+  or a close group, titled with the album's or project's name), then
+  puts each photo on that map as a pin with its thumbnail. A RiscOSM
+  that doesn't answer OpenMap is asked for a map by the first photo.
+  Lumen starts RiscOSM if the Filer has seen it.
   Ctrl-clicking a pin in RiscOSM opens the photo in Lumen. Menu over a
   project or album (folder and smart albums too) in the Library tab has
   Show on map, for all its photos.

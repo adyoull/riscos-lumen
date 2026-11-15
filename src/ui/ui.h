@@ -112,6 +112,9 @@ void geomap_stop (void);               /* withdraws it, and removes the files ma
 void geomap_library_changed (void);    /* another library, or places found: announced again */
 int geomap_message (int *block);       /* a GeoData message: 1 if it was one */
 void geomap_show (const cat_id *versions, int n);
+/* The same, with a title for the map's window (an album's name, say). */
+void geomap_show_named (const cat_id *versions, int n, const char *title);
+void geomap_bounced (int *block);      /* a message of ours came back unanswered */
 int geomap_busy (void);
 void geomap_idle (unsigned now, unsigned deadline);   /* now: the time (app_now) */
 /* Opens a file in !Lumen ("!Help", "Guide.index/html") with Filer_Run; the

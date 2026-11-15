@@ -379,8 +379,9 @@ recorded it: the Info tab's Location line. Photos imported before
 0.0.39 are read for it in the background. With RiscOSM (Sine Nomine's
 map of OpenStreetMap) running:
   Show on map, on the Selection or Photo menu, sends the photos to
-              RiscOSM, which shows them as pins with their thumbnails
-              (Lumen starts RiscOSM if the Filer has seen it). Menu over
+              RiscOSM: it opens a map framing them all (centred on one
+              photo), with a pin and thumbnail for each (Lumen starts
+              RiscOSM if the Filer has seen it). Menu over
               a project or album in the Library tab has Show on map
               too, for all its photos.
   RiscOSM can search Lumen's photos by the map's area and by words, as

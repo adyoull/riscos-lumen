@@ -3461,6 +3461,23 @@ static void test_geo (void)
       b[13] = (1 << 2) | GD_BOX;               /* fixed points only */
       geodata_read_fetch (b, &f);
       CHECK (geodata_query (&f, NULL, &q) != 0, "geodata: not asked for photos");
+      /* OpenMap: one photo, centred; two far apart, a box round them with a margin. */
+      {
+        cat_geo_hit two[2];
+        memset (two, 0, sizeof two);
+        two[0].geo.lat = 545000000; two[0].geo.lon = -31000000;
+        two[1].geo.lat = 546200000; two[1].geo.lon = -30000000;
+        geodata_open_map (b, two, 1, "Derwentwater");
+        CHECK (b[4] == GeoData_OpenMap && b[5] == GD_OPEN_TITLE && b[6] == -31000000 && b[7] == 545000000
+               && strcmp ((char *) b + 60, "Derwentwater") == 0 && b[0] == 76, "geodata: OpenMap on one photo, centred");
+        geodata_open_map (b, two, 2, NULL);
+        CHECK (b[5] == GD_OPEN_BOUNDS && b[6] < -31000000 && b[8] > -30000000 && b[7] < 545000000 && b[9] > 546200000
+               && b[7] == 545000000 - (1200000 / 6 + 2000) && b[0] == 60, "geodata: OpenMap round two, with a margin");
+        two[1].geo.lat = 545001000;              /* 11 m apart: centred between them */
+        two[1].geo.lon = -31000000;
+        geodata_open_map (b, two, 2, NULL);
+        CHECK (b[5] == 0 && b[7] == 545000500, "geodata: OpenMap on a close group, centred");
+      }
       geodata_details (b, 1, 2, x0, y0, x1, y1, "Lumen photos", "2 photos");
       CHECK (b[4] == GeoData_DatasetDetails && b[5] == 1 && b[7] == -338598500 && (b[10] & GD_PHOTOS) && (b[10] & GD_TEXT)
              && strcmp ((char *) b + 48, "Lumen photos") == 0 && strcmp ((char *) b + 48 + 13, "2 photos") == 0,

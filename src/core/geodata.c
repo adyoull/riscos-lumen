@@ -174,6 +174,52 @@ void geodata_transmit (int *block, int map, int dataset, const cat_geo_hit *h, i
   block[0] = (int) ((at + 3) & ~(size_t) 3);
 }
 
+void geodata_open_map (int *block, const cat_geo_hit *h, int n, const char *title)
+{
+  long long x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+  int k, flags = 0;
+  memset (block, 0, GEODATA_WORDS * 4);
+  block[4] = GeoData_OpenMap;
+  for (k = 0; k < n; k++)
+    {
+      long long lo = h[k].geo.lon, la = h[k].geo.lat;
+      if (k == 0 || lo < x0) x0 = lo;
+      if (k == 0 || lo > x1) x1 = lo;
+      if (k == 0 || la < y0) y0 = la;
+      if (k == 0 || la > y1) y1 = la;
+    }
+  /* A few hundred metres (about 0.003 degrees) or less: the centre, at
+     the map's own scale; else the box, with a margin. */
+  if (n > 1 && (x1 - x0 > 30000 || y1 - y0 > 30000))
+    {
+      long long mx = (x1 - x0) / 6 + 2000, my = (y1 - y0) / 6 + 2000;
+      x0 -= mx; x1 += mx; y0 -= my; y1 += my;
+      if (x0 < -1800000000LL) x0 = -1800000000LL;
+      if (x1 > 1799999999LL) x1 = 1799999999LL;
+      if (y0 < -850000000LL) y0 = -850000000LL;
+      if (y1 > 850000000LL) y1 = 850000000LL;
+      flags |= GD_OPEN_BOUNDS;
+      block[6] = (int) x0;
+      block[7] = (int) y0;
+      block[8] = (int) x1;
+      block[9] = (int) y1;
+    }
+  else
+    {
+      block[6] = (int) ((x0 + x1) / 2);
+      block[7] = (int) ((y0 + y1) / 2);
+    }
+  if (title && title[0])
+    {
+      size_t len = geodata_utf8 (title, (char *) block + 60, 100);
+      flags |= GD_OPEN_TITLE;
+      block[0] = (int) ((60 + len + 1 + 3) & ~(size_t) 3);
+    }
+  else
+    block[0] = 60;
+  block[5] = flags;
+}
+
 void geodata_details (int *block, int dataset, int n, int x0, int y0, int x1, int y1,
                       const char *title, const char *description)
 {

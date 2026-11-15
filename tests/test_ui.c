@@ -2915,8 +2915,23 @@ int main (int argc, char **argv)
     reported[0] = '\0';
     geomap_show (&v, 1);
     CHECK (strstr (reported, "isn't running") != NULL, "geo: Show on map without RiscOSM says so");
-    /* RiscOSM running: sent to it, asking for a map. */
+    /* RiscOSM running: a map opened on the photo, then its pin on that map. */
     map_running = 0x5555;
+    mark = nsent;
+    geomap_show (&v, 1);
+    t = sent_since (mark, GeoData_OpenMap, 0);
+    CHECK (t && sent_reason == 18 && t[5] == GD_OPEN_TITLE && t[6] == -31000000 && t[7] == 546000000
+           && sent_log_to[mark % 32] == 0x5555, "geo: Show on map: OpenMap, centred on the photo");
+    if (t)
+      {
+        memset (m, 0, sizeof m);
+        m[0] = 84; m[1] = 0x5555; m[3] = t[2]; m[4] = GeoData_MapInfo; m[5] = 42;
+        app_event (User_Message, m, 0);
+      }
+    nulls_until_idle ();
+    t = sent_since (mark, GeoData_TransmitData, 0);
+    CHECK (t && t[5] == 42 && !(t[9] & GD_DRAW_MAP), "geo: its pin on the map RiscOSM opened (MapInfo)");
+    /* No MapInfo (an older RiscOSM): the photo asks for a map itself. */
     mark = nsent;
     geomap_show (&v, 1);
     nulls_until_idle ();
