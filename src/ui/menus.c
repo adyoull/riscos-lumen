@@ -1185,11 +1185,12 @@ static menu *build_group_menu (void)
   if (group_kind == SRC_ALBUM && cat_album_is_folder (lib_cat (app_library ()), group_id))
     {
       /* Made from a folder: it follows the folder, so nothing to change here. */
-      m = new_menu ("Folder", 2);
+      m = new_menu ("Folder", 3);
       if (m)
         {
           set_item (m, 0, 0, "Follows its folder", MF_DOTTED, -1, 1);
-          set_item (m, 1, 1, "Export as library...", 0, -1, 0);
+          set_item (m, 1, 0, "Export as library...", 0, -1, 0);
+          set_item (m, 2, 1, "Show on map", 0, -1, 0);
         }
       return m;
     }
@@ -1197,14 +1198,15 @@ static menu *build_group_menu (void)
     {
       cat_rule r;
       int smart = cat_smart_get (lib_cat (app_library ()), group_id, &r) == 1;
-      m = new_menu (smart ? "Smart album" : "Album", smart ? 4 : 3);
+      m = new_menu (smart ? "Smart album" : "Album", smart ? 5 : 4);
       if (m)
         {
           set_item (m, 0, 0, "Rename", 0, (int) ren, 0);
           set_item (m, 1, 0, "Delete album...", smart ? 0 : MF_DOTTED, -1, 0);
           if (smart)
             set_item (m, 2, 0, "Edit smart album...", MF_DOTTED, -1, 0);
-          set_item (m, smart ? 3 : 2, 1, "Export as library...", 0, -1, 0);
+          set_item (m, smart ? 3 : 2, 0, "Export as library...", 0, -1, 0);
+          set_item (m, smart ? 4 : 3, 1, "Show on map", 0, -1, 0);
         }
       return m;
     }
@@ -1213,14 +1215,15 @@ static menu *build_group_menu (void)
     char root[1024];
     int has_root = cat_project_root (lib_cat (app_library ()), group_id, root, sizeof root) == 0;
     cat_project_watching (lib_cat (app_library ()), group_id, &w, &al);
-    m = new_menu ("Project", 5);
+    m = new_menu ("Project", 6);
     if (m)
       {
         set_item (m, 0, 0, "Rename", MF_DOTTED, (int) ren, 0);
         set_item (m, 1, 0, "Watch for new photos", w ? MF_TICK : 0, -1, !has_root);
         set_item (m, 2, 0, "Albums from its folders", (al ? MF_TICK : 0) | MF_DOTTED, -1, !has_root);
-        set_item (m, 3, 0, "Export as library...", MF_DOTTED, -1, 0);
-        set_item (m, 4, 1, "Remove project from library...", 0, -1, 0);
+        set_item (m, 3, 0, "Export as library...", 0, -1, 0);
+        set_item (m, 4, 0, "Show on map", MF_DOTTED, -1, 0);
+        set_item (m, 5, 1, "Remove project from library...", 0, -1, 0);
       }
   }
   return m;
@@ -1285,6 +1288,20 @@ static void group_choice (const int *c)
   cat_group_name (db, group_kind, group_id, name, sizeof name);
   if (c[0] == group_export_item ())
     libexport_after_menu = 3;
+  else if (c[0] == group_export_item () + 1)
+    {
+      /* Show on map: all of the project's or album's photos. */
+      cat_id *ids;
+      int n;
+      if (cat_group_versions (db, group_kind, group_id, &ids, &n) == 0)
+        {
+          if (n > 0)
+            geomap_show (ids, n);
+          else
+            app_report (group_kind == SRC_PROJECT ? "This project has no photos." : "This album has no photos.");
+          free (ids);
+        }
+    }
   else if (c[0] == 0 && c[1] == 0)
     {
       if (cat_group_rename (db, group_kind, group_id, group_name))
@@ -1325,7 +1342,7 @@ static void group_choice (const int *c)
           mainwin_library_changed ();
         }
     }
-  else if (c[0] == 4 && group_kind == SRC_PROJECT)
+  else if (c[0] == 5 && group_kind == SRC_PROJECT)
     {
       cat_id *ids;
       int n;
@@ -1924,6 +1941,10 @@ const char *menus_help (int window, int icon)
     return group_kind == SRC_PROJECT
            ? "Makes a new Lumen library of this project's photos, with all their adjustments (and their originals, if you choose)."
            : "Makes a new Lumen library of this album's photos, with all their adjustments (and their originals, if you choose).";
+  if (which == 7 && c[0] == group_export_item () + 1)
+    return group_kind == SRC_PROJECT
+           ? "Shows this project's photos on a map in RiscOSM, as pins, from where they were taken (those with a Location in Info)."
+           : "Shows this album's photos on a map in RiscOSM, as pins, from where they were taken (those with a Location in Info).";
   if (which == 7)
     switch (c[0])
       {
@@ -1936,7 +1957,7 @@ const char *menus_help (int window, int icon)
                                                : "Deletes the album. Its photos stay in the library.";
       case 2: return group_kind == SRC_ALBUM ? "Changes what this smart album looks for."
                                              : "Ticked: each folder inside this project's folder is an album, under the project in the Library tab.";
-      case 4: return "Takes the project and its photos out of the library, after asking. The files aren't touched.";
+      case 5: return "Takes the project and its photos out of the library, after asking. The files aren't touched.";
       }
   return "";
 }

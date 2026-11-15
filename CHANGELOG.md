@@ -11,7 +11,9 @@
 - Show on map (Selection and Photo menus) sends photos to RiscOSM (Sine
   Nomine's OpenStreetMap map), which shows them as pins with their
   thumbnails; Lumen starts RiscOSM if the Filer has seen it.
-  Ctrl-clicking a pin in RiscOSM opens the photo in Lumen.
+  Ctrl-clicking a pin in RiscOSM opens the photo in Lumen. Menu over a
+  project or album (folder and smart albums too) in the Library tab has
+  Show on map, for all its photos.
 - RiscOSM can search the library ("Lumen photos") by the map's area, a
   point and radius, and words, a page at a time.
 - RiscOSM gets a JPEG it can read: the original if it is an unadjusted

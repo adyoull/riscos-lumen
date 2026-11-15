@@ -2721,10 +2721,11 @@ int main (int argc, char **argv)
     menus_open_group_menu (500, 500, SRC_PROJECT, g[0].id);
     CHECK (strcmp (item_text (menu_open, 1), "Watch for new photos") == 0 && strcmp (item_text (menu_open, 2), "Albums from its folders") == 0
            && strstr (item_text (menu_open, 3), "Export as library") != NULL
-           && strstr (item_text (menu_open, 4), "Remove project") != NULL, "a project's menu: Watch, Albums from its folders, Export as library, Remove project");
+           && strstr (item_text (menu_open, 4), "Show on map") != NULL
+           && strstr (item_text (menu_open, 5), "Remove project") != NULL, "a project's menu: Watch, Albums from its folders, Export as library, Show on map, Remove project");
     CHECK (!(item (menu_open, 1)[0] & 1) && !(item (menu_open, 2)[0] & 1), "neither ticked to start with");
     answer = 2;
-    choose (4, -1, -1);
+    choose (5, -1, -1);
     CHECK (strstr (asked, "\"Holiday\" and its 3 photos") != NULL && browser_count () == 3, "it says how many; Cancel keeps them");
     /* Watch it: a photo put in a new folder inside it comes in; albums from its folders. */
     {
@@ -2921,6 +2922,25 @@ int main (int argc, char **argv)
     nulls_until_idle ();
     t = sent_since (mark, GeoData_TransmitData, 0);
     CHECK (t && (t[9] & GD_DRAW_MAP) && t[7] == (int) v && sent_log_to[(mark) % 32] == 0x5555, "geo: Show on map sends it to RiscOSM");
+    /* An album: all its photos (the one with a place goes, the others are left out, and said so). */
+    {
+      cat_id album = cat_album_create (lib_cat (app_library ()), "Map trip"), two[2];
+      cat_item it2;
+      browser_item (1, &it2);
+      two[0] = v;
+      two[1] = it2.id;
+      cat_album_add (lib_cat (app_library ()), album, two, 2);
+      menus_open_group_menu (500, 500, SRC_ALBUM, album);
+      CHECK (strcmp (item_text (menu_open, 3), "Show on map") == 0, "an album's menu: Show on map");
+      mark = nsent;
+      asked[0] = '\0';
+      choose (3, -1, -1);
+      nulls_until_idle ();
+      t = sent_since (mark, GeoData_TransmitData, 0);
+      CHECK (t && t[7] == (int) v && !sent_since (mark, GeoData_TransmitData, 1), "Show on map: the album's photo with a place");
+      CHECK (strstr (asked, "1 of the 2 photos has no location") != NULL, "and the one without is said");
+      cat_album_delete (lib_cat (app_library ()), album);
+    }
     /* Not running, but seen by the Filer: started, then sent. */
     map_running = 0;
     fake_setvar ("RiscOSM$Dir", "ADFS::0.$.Apps.!RiscOSM");
