@@ -1,6 +1,6 @@
 # Lumen changelog
 
-## 0.0.39 (15 November 2026): photos on maps, with RiscOSM
+## 0.0.39 (16 November 2026): photos on maps, with RiscOSM
 
 - Lumen keeps where each photo was taken, from its EXIF GPS: latitude
   and longitude (in ten-millionths of a degree, as OpenStreetMap's), the
