@@ -1190,6 +1190,8 @@ static int app_event_1 (int reason, int *b, int sender)
         exportbox_drag_end ();
       else if (libbox_dragging ())
         libbox_drag_end ();
+      else if (browser_dragging ())
+        browser_drag_end (b);
       else
         viewer_drag_end ();
       break;

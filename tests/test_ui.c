@@ -66,7 +66,8 @@ static int ntexts;
 static int sent_reason, sent_block[64], sent_to;
 /* Every message sent, the last 32 (sent_log[k % 32]). */
 static int sent_log[32][64], sent_log_to[32], nsent;
-static int map_running;                /* a task handle the fake Task Manager lists as RiscOSM */
+static int map_running;
+static int shift_down;                 /* the fake keyboard's Shift (OS_Byte 121) */                /* a task handle the fake Task Manager lists as RiscOSM */
 static const int *menu_open;
 static char reported[256], asked[256], asked_button[32];
 static int answer = 2;            /* Cancel */
@@ -93,6 +94,13 @@ static const _kernel_oserror *dynamic_areas (int n, int r[10])
       return NULL;
     }
   return &none;
+}
+
+static const _kernel_oserror *os_byte (int n, int r[10])
+{
+  (void) n;
+  r[1] = r[0] == 121 && r[1] == 0x80 && shift_down ? 0xFF : 0;
+  return NULL;
 }
 
 /* Wimp_TransferBlock: one address space here. */
@@ -628,6 +636,7 @@ static void fakes (void)
     fake_swi (list[i].swi, list[i].name, list[i].wimp ? wimp : graphics);
   fake_swi (TaskManager_EnumerateTasks, "TaskManager_EnumerateTasks", tasks);
   fake_swi (0x400F1, "Wimp_TransferBlock", transfer_block);
+  fake_swi (OS_Byte, "OS_Byte", os_byte);
   fake_swi (OS_SetVarVal, "OS_SetVarVal", setvarval);
   fake_swi (OS_DynamicArea, "OS_DynamicArea", dynamic_areas);
   fake_swi (OS_ReadDynamicArea, "OS_ReadDynamicArea", dynamic_areas);
@@ -930,6 +939,60 @@ int main (int argc, char **argv)
   force_redraws = 0;
   click (16 + 2 * 256 + 40, -16 - 40, Button_Adjust);
   CHECK (force_redraws >= 2, "Adjust: the old focus cell and the new one are redrawn");
+  {
+    cat_id *ids;
+    int k = browser_selection (&ids);
+    free (ids);
+    CHECK (k == 2, "Adjust: added to the selection, as in the Filer");
+  }
+  /* Shift-click: a run of photos. */
+  key (KEY_ESCAPE);
+  click (16 + 40, -16 - 40, Button_Select);
+  shift_down = 1;
+  click (16 + 3 * 256 + 40, -16 - 40, Button_Select);
+  shift_down = 0;
+  {
+    cat_id *ids;
+    int k = browser_selection (&ids);
+    free (ids);
+    CHECK (k == 4 && browser_focus () == 3, "Shift-click: the photos from the focused one to this one");
+  }
+  /* A rubber band from the space between photos. */
+  key (KEY_ESCAPE);
+  drag_calls = 0;
+  click (6, -6, Button_Select);
+  CHECK (drag_calls == 1 && drag_block[0] == BROWSER && drag_block[1] == 6 && browser_dragging (),
+         "a click between photos starts a rubber band (Wimp_DragBox 6)");
+  {
+    int box[4];
+    cat_id *ids;
+    int k;
+    box[0] = 6 + opened[1] - opened[5];
+    box[1] = -6 + opened[4] - opened[6];
+    box[2] = 16 + 256 + 60 + opened[1] - opened[5];
+    box[3] = -16 - 60 + opened[4] - opened[6];
+    app_event (User_Drag_Box, box, 0);
+    k = browser_selection (&ids);
+    free (ids);
+    CHECK (!browser_dragging () && k == 2 && browser_focus () == 1, "the band's photos selected when it's let go");
+    /* Adjust's band adds to the selection. */
+    click (6, -6, Button_Adjust);
+    box[2] = 16 + 3 * 256 + 60 + opened[1] - opened[5];
+    box[0] = 16 + 2 * 256 + 20 + opened[1] - opened[5];
+    app_event (User_Drag_Box, box, 0);
+    k = browser_selection (&ids);
+    free (ids);
+    CHECK (k == 4, "Adjust's band adds to the selection");
+    /* A click without a drag: nothing more. */
+    click (6, -6, Button_Select);
+    box[2] = box[0];
+    box[3] = box[1];
+    app_event (User_Drag_Box, box, 0);
+    k = browser_selection (&ids);
+    free (ids);
+    CHECK (k == 0, "a click between photos, not dragged: none selected");
+  }
+  drag_calls = 0;
 
   /* The window menu. */
   click (5, -5, Button_Menu);

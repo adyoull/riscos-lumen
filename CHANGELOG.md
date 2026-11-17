@@ -1,5 +1,18 @@
 # Lumen changelog
 
+## 0.0.39.1 (17 November 2026): selecting like the Filer
+
+- Selecting photos in the Browser works more like the Filer:
+  - drag a box from the space between photos to select those it
+    touches (Select: a new selection; Adjust: added to it);
+  - Shift-click selects the photos from the one in focus to the one
+    clicked;
+  - selected photos are shaded blue, so it's clear which they are (the
+    grey before was easy to miss, so Adjust-click seemed to do nothing).
+- RiscOSM showed a photo's height in millimetres as metres (600 m read
+  600000 m). Lumen no longer sends the height with each photo; RiscOSM
+  reads it from the photo's own EXIF.
+
 ## 0.0.39 (16 November 2026): photos on maps, with RiscOSM
 
 - Lumen keeps where each photo was taken, from its EXIF GPS: latitude

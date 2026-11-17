@@ -143,11 +143,9 @@ void geodata_transmit (int *block, int map, int dataset, const cat_geo_hit *h, i
   flags |= GD_LATLON;
   block[10] = h->geo.lon;
   block[11] = h->geo.lat;
-  if (h->geo.geo & GEO_ALT)
-    {
-      flags |= GD_ALTITUDE;
-      block[12] = h->geo.alt_mm;
-    }
+  /* The altitude isn't sent: RiscOSM was seen showing +48 as metres (the
+     protocol says millimetres), so 600 m read 600000 m; it reads the
+     height from the photo's own EXIF when it loads the file. */
   if (geodata_time (h->taken, b + 52) == 0)
     flags |= GD_TIME;                   /* exact (bits 26 and 27 clear) */
   if (h->geo.geo & GEO_DIR)

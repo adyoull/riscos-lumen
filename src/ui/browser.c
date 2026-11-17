@@ -19,7 +19,7 @@
 /* A dark grey browser, with RISC OS's light blue (Wimp colour
    15, #00BBFF) for what is rated and focused. &BBGGRR00. */
 #define COL_BG 0x3C3C3C00u
-#define COL_SELECTED 0x60606000u
+#define COL_SELECTED 0x99440000u     /* #004499, the Wimp's dark blue, as the Library tab's */
 #define COL_PLACEHOLDER 0x55555500u
 #define COL_FAILED 0x40407800u
 #define COL_TEXT 0xDCDCDC00u
@@ -652,6 +652,78 @@ void browser_show_focus (void)
     scroll_to (focus);
 }
 
+/* Shift held (OS_Byte 121, internal key 0): Shift-click selects a run. */
+static int shift_held (void)
+{
+  int r1 = 0;
+  if (_swix (OS_Byte, _INR (0, 1) | _OUT (1), 121, 0 ^ 0x80, &r1))
+    return 0;
+  return r1 == 0xFF;
+}
+
+/* A rubber band being dragged out over the photos (from a click on the
+   space between them, as in the Filer): Select's starts a new selection,
+   Adjust's adds to it. */
+static int band_dragging;
+
+int browser_dragging (void)
+{
+  return band_dragging;
+}
+
+/* User_Drag_Box: the band's last box (screen coordinates): the photos it
+   touches selected. */
+void browser_drag_end (const int *box)
+{
+  int b[9], x0, y0, x1, y1, i, last = -1;
+  band_dragging = 0;
+  b[0] = win;
+  if (_swix (Wimp_GetWindowState, _IN (1), b))
+    return;
+  /* to work area coordinates */
+  x0 = (box[0] < box[2] ? box[0] : box[2]) - (b[1] - b[5]);
+  x1 = (box[0] < box[2] ? box[2] : box[0]) - (b[1] - b[5]);
+  y0 = (box[1] < box[3] ? box[1] : box[3]) - (b[4] - b[6]);
+  y1 = (box[1] < box[3] ? box[3] : box[1]) - (b[4] - b[6]);
+  if (x1 - x0 < 8 && y1 - y0 < 8)
+    return;                            /* just a click */
+  for (i = 0; i < n; i++)
+    {
+      int cx0, cy0, cx1, cy1;
+      cell_rect (i, &cx0, &cy0, &cx1, &cy1);
+      if (cx1 - 8 < x0 || cx0 + 8 > x1 || cy1 - 4 < y0 || cy0 + 4 > y1)
+        continue;
+      if (!sel[i])
+        {
+          sel[i] = 1;
+          redraw_cell (i);
+        }
+      last = i;
+    }
+  if (last >= 0)
+    {
+      int old = focus;
+      focus = last;
+      redraw_cell (old);
+      redraw_cell (last);
+      mainwin_info_changed ();
+    }
+  mainwin_status_changed ();
+}
+
+static void start_band (int x, int y, const int *wstate)
+{
+  /* Wimp_DragBox type 6: a rubber box from a fixed corner, kept in the
+     window's visible area. */
+  int db[10];
+  db[0] = win;
+  db[1] = 6;
+  db[2] = x; db[3] = y; db[4] = x; db[5] = y;
+  db[6] = wstate[1]; db[7] = wstate[2]; db[8] = wstate[3]; db[9] = wstate[4];
+  if (_swix (Wimp_DragBox, _IN (1), db) == NULL)
+    band_dragging = 1;
+}
+
 void browser_click (int *block)
 {
   int b[9], i, buttons = block[2];
@@ -675,6 +747,32 @@ void browser_click (int *block)
           browser_reload ();
           return;
         }
+    }
+  if (i < 0 && (buttons == Button_Select || buttons == Button_Adjust))
+    {
+      /* The space between the photos: Select clears the selection; either
+         button drags a rubber band to select photos with. */
+      if (buttons == Button_Select)
+        browser_select_all (0);
+      start_band (block[0], block[1], b);
+      return;
+    }
+  if (buttons == Button_Select && shift_held () && focus >= 0 && focus < n)
+    {
+      /* Shift-click: the photos from the focused one to this one too. */
+      int k, a = focus < i ? focus : i, z = focus < i ? i : focus, old = focus;
+      for (k = a; k <= z; k++)
+        if (!sel[k])
+          {
+            sel[k] = 1;
+            redraw_cell (k);
+          }
+      focus = i;
+      redraw_cell (old);
+      redraw_cell (i);
+      mainwin_info_changed ();
+      mainwin_status_changed ();
+      return;
     }
   if (buttons == Button_Select)
     {
