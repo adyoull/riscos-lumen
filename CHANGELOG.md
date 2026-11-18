@@ -1,10 +1,26 @@
 # Lumen changelog
 
+## 0.0.39.2 (18 November 2026): fixes from Matthew Phillips
+
+- Hiding the Inspector (I, or its button), or making the window
+  narrower, could leave the Browser's photos scrolled sideways: shifted
+  left with a gap on the right and the first ones out of sight. The
+  Browser's scroll offsets were left unset in the Browser layout; it now
+  never scrolls sideways and keeps its own place.
+- Dragging a box with Adjust toggles the photos it touches, as the
+  Filer does, so a selection can be trimmed.
+- Show on map started RiscOSM with Filer_Run <RiscOSM$Dir>, which the
+  Filer took as the name of a directory to open; Lumen now gives it
+  RiscOSM's path.
+- The guide's toolbar picture shows Undo dark after a change (in the
+  Viewer, where Undo works), as its caption says.
+
 ## 0.0.39.1 (17 November 2026): selecting like the Filer
 
 - Selecting photos in the Browser works more like the Filer:
   - drag a box from the space between photos to select those it
-    touches (Select: a new selection; Adjust: added to it);
+    touches (Select: a new selection; Adjust: added to it; toggled from
+    0.0.39.2);
   - Shift-click selects the photos from the one in focus to the one
     clicked;
   - selected photos are shaded blue, so it's clear which they are (the

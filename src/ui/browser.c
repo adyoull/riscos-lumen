@@ -362,11 +362,22 @@ static void open_nested (int *b)
   _swix (Wimp_OpenWindow, _INR (1, 4), b, TASK_WORD, mainwin_window (), 0);
 }
 
+/* Where it's scrolled to now (0 if it isn't open). */
+int browser_scroll_y (void)
+{
+  int st[9];
+  st[0] = win;
+  if (!is_open || win == -1 || _swix (Wimp_GetWindowState, _IN (1), st))
+    return 0;
+  return st[6];
+}
+
 /* At block's place: mainwin.c's layout, or our own Open_Window_Request (scrolling). */
 void browser_place (int *block)
 {
   vis_w = block[3] - block[1];
   vis_h = block[4] - block[2];
+  block[5] = 0;                        /* it never scrolls sideways */
   if (relayout (vis_w))
     {
       set_extent ();
@@ -663,8 +674,8 @@ static int shift_held (void)
 
 /* A rubber band being dragged out over the photos (from a click on the
    space between them, as in the Filer): Select's starts a new selection,
-   Adjust's adds to it. */
-static int band_dragging;
+   Adjust's toggles the photos it touches (in becomes out, out in). */
+static int band_dragging, band_adjust;
 
 int browser_dragging (void)
 {
@@ -693,9 +704,9 @@ void browser_drag_end (const int *box)
       cell_rect (i, &cx0, &cy0, &cx1, &cy1);
       if (cx1 - 8 < x0 || cx0 + 8 > x1 || cy1 - 4 < y0 || cy0 + 4 > y1)
         continue;
-      if (!sel[i])
+      if (band_adjust || !sel[i])
         {
-          sel[i] = 1;
+          sel[i] = band_adjust ? !sel[i] : 1;
           redraw_cell (i);
         }
       last = i;
@@ -711,8 +722,9 @@ void browser_drag_end (const int *box)
   mainwin_status_changed ();
 }
 
-static void start_band (int x, int y, const int *wstate)
+static void start_band (int x, int y, const int *wstate, int adjust)
 {
+  band_adjust = adjust;
   /* Wimp_DragBox type 6: a rubber box from a fixed corner, kept in the
      window's visible area. */
   int db[10];
@@ -754,7 +766,7 @@ void browser_click (int *block)
          button drags a rubber band to select photos with. */
       if (buttons == Button_Select)
         browser_select_all (0);
-      start_band (block[0], block[1], b);
+      start_band (block[0], block[1], b, buttons == Button_Adjust);
       return;
     }
   if (buttons == Button_Select && shift_held () && focus >= 0 && focus < n)

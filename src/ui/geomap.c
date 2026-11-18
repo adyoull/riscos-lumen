@@ -469,7 +469,14 @@ void geomap_show_named (const cat_id *v, int n, const char *title)
       snprintf (wait_title, sizeof wait_title, "%s", title ? title : "");
       wait_until = app_now () + 3000;
       wait_seen = 0;
-      _swix (Wimp_StartTask, _IN (0), "Filer_Run <RiscOSM$Dir>");
+      /* Filer_Run doesn't expand <RiscOSM$Dir> (the Filer opened a
+         directory of that name): the path itself. */
+      {
+        char cmd[300];
+        dir[len < (int) sizeof dir ? len : (int) sizeof dir - 1] = '\0';
+        snprintf (cmd, sizeof cmd, "Filer_Run %s", dir);
+        _swix (Wimp_StartTask, _IN (0), cmd);
+      }
       return;
     }
   app_report ("Lumen shows photos on a map with RiscOSM, which isn't running. Start RiscOSM, then choose "

@@ -841,6 +841,17 @@ int main (int argc, char **argv)
          "at start: the Browser, the inspector on its Library tab");
   CHECK (iopened[3] - iopened[1] == 640 && opened[1] > iopened[3] && mopened[4] - opened[4] == 120,
          "the inspector on the left, the browser beside it, under the toolbar");
+  CHECK (opened[5] == 0 && opened[6] == 0, "the browser isn't scrolled sideways");
+  {
+    /* The inspector off (I): the browser fills the width, not scrolled
+       sideways (its scroll was left unset in the Browser layout). */
+    int was_x0 = opened[1];
+    mainwin_toggle_inspector ();
+    CHECK (!mainwin_inspector_on () && opened[1] < was_x0 && opened[5] == 0,
+           "inspector off: the browser widens from the left, not scrolled sideways");
+    mainwin_toggle_inspector ();
+    CHECK (mainwin_inspector_on () && opened[1] == was_x0 && opened[5] == 0, "and back");
+  }
   CHECK (title_buf && strstr (title_buf, "All photos (0)") != NULL, "title: an empty library");
   CHECK (!app_busy (), "nothing to do yet: no null events wanted");
   redraw ();
@@ -982,7 +993,15 @@ int main (int argc, char **argv)
     app_event (User_Drag_Box, box, 0);
     k = browser_selection (&ids);
     free (ids);
-    CHECK (k == 4, "Adjust's band adds to the selection");
+    CHECK (k == 4, "Adjust's band adds photos not selected");
+    /* and takes out those that were (as in the Filer). */
+    click (6, -6, Button_Adjust);
+    box[0] = 16 + 256 + 20 + opened[1] - opened[5];
+    box[2] = 16 + 2 * 256 + 60 + opened[1] - opened[5];
+    app_event (User_Drag_Box, box, 0);
+    k = browser_selection (&ids);
+    free (ids);
+    CHECK (k == 2, "Adjust's band toggles: selected photos it touches come out");
     /* A click without a drag: nothing more. */
     click (6, -6, Button_Select);
     box[2] = box[0];
@@ -3025,7 +3044,7 @@ int main (int argc, char **argv)
     started[0] = '\0';
     mark = nsent;
     geomap_show (&v, 1);
-    CHECK (strstr (started, "RiscOSM$Dir") != NULL, "geo: RiscOSM started");
+    CHECK (strcmp (started, "Filer_Run ADFS::0.$.Apps.!RiscOSM") == 0, "geo: RiscOSM started by its path (Filer_Run doesn't expand <RiscOSM$Dir>)");
     map_running = 0x5556;
     nulls_until_idle ();
     t = sent_since (mark, GeoData_TransmitData, 0);

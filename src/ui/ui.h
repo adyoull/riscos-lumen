@@ -220,6 +220,7 @@ int browser_selection (cat_id **ids);
 int browser_count (void);
 void browser_select_all (int on);
 void browser_toggle_select (int i);   /* as Adjust-click on photo i */
+int browser_scroll_y (void);          /* its vertical scroll offset now */
 int browser_dragging (void);           /* a rubber band being dragged over the photos */
 void browser_drag_end (const int *box); /* User_Drag_Box: its box (screen coordinates) */
 void browser_set_size (int size);      /* 0 small, 1 medium, 2 large */

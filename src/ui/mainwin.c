@@ -268,6 +268,13 @@ static void place_children (int mx0, int my0, int mx1, int my1)
     {
       b[0] = browser_window ();
       b[1] = ax0; b[2] = ay0; b[3] = ax1 - SB_W; b[4] = ay1;
+      /* Its own scroll offsets: not left over from the viewer's block (in
+         the Browser layout b[5] and b[6] were never set, so the photos
+         were scrolled sideways by whatever was there: shifted left, the
+         first ones gone, a gap on the right). It doesn't scroll sideways. */
+      b[5] = 0;
+      b[6] = browser_scroll_y ();
+      b[7] = -1;
       browser_place (b);
     }
   else
