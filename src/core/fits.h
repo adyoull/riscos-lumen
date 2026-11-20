@@ -17,7 +17,7 @@
    detail is in the faintest levels. The reader stretches them for the
    screen as Siril's and PixInsight's auto-stretch does (a shadows clip and
    a midtones balance from each channel's median and its median absolute
-   deviation). A picture that is already bright (its median above a fifth
+   deviation, each colour on its own so the sky comes out grey). A picture that is already bright (its median above a fifth
    of the range) is shown as it is, scaled from its range.
 
    Rows: FITS puts the first row at the bottom. Lumen shows it so unless
@@ -76,9 +76,27 @@ void fits_reader_size (const fits_reader *r, int *w, int *h);
 /* Row y (0 the top) into rgb (w * 3 bytes). Quickest taken in order.
    0, or -1 if it couldn't be read. */
 int fits_reader_row (fits_reader *r, int y, unsigned char *rgb);
+/* Row y as linear values, 0-1 of the data's range, three a pixel
+   (grey: the same three; a mosaic demosaicked, or 2 x 2 to a pixel when
+   half): for lining up and stacking, which work on the data as it is. */
+int fits_reader_row_linear (fits_reader *r, int y, float *rgb);
 /* How it is being shown: 1 stretched (the picture is linear), 0 as it is. */
 int fits_reader_stretched (const fits_reader *r);
 void fits_reader_free (fits_reader *r);
+
+/* Writing a FITS picture (a stack): planes 1 (grey) or 3 (RGB), bitpix
+   16 (unsigned 16-bit, BZERO 32768) or -32 (floating point, 0-1). Rows
+   are given top first, and stored bottom first as FITS has them
+   (ROWORDER = 'BOTTOM-UP' says so). cards: more header cards, each
+   "KEY     = value" (at most 80 characters), NULL-terminated, or NULL. */
+typedef struct fits_writer fits_writer;
+fits_writer *fits_writer_open (const char *path, int w, int h, int planes, int bitpix, const char *const *cards,
+                               char *err, size_t n);
+/* Row y (any order): planes values a pixel, 0-1 (NAN: 0). 0, or -1. */
+int fits_writer_row (fits_writer *wr, int y, const float *v);
+/* Pads the data to a whole block and closes it. 0, or -1 if it couldn't
+   be written (the file is then removed). */
+int fits_writer_close (fits_writer *wr);
 
 /* The auto-stretch for a channel whose (0-1) median and MAD are med and
    mad: the shadows clip *c0 and the midtones balance *m; 0 if it should

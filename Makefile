@@ -20,7 +20,7 @@ VERSION := 0.0.40
 DATE := 18 Nov 2026
 OUT := out
 
-CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/fits.c src/core/tiffmeta.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/lens.c src/core/geodata.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/presets.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
+CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/fits.c src/core/astro.c src/core/tiffmeta.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/lens.c src/core/geodata.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/presets.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
 CORE_H := $(wildcard src/core/*.h)
 UI := src/ui/main.c src/ui/app.c src/ui/mainwin.c src/ui/browser.c src/ui/viewer.c src/ui/looks.c src/ui/exportbox.c src/ui/plugwin.c src/ui/choicewin.c src/ui/activity.c src/ui/printbox.c src/ui/tagbox.c src/ui/smartbox.c src/ui/libbox.c src/ui/help.c src/ui/menus.c src/ui/thumbcache.c src/ui/draw.c src/ui/filetypes.c src/ui/geomap.c
 UI_H := $(wildcard src/ui/*.h)
@@ -58,7 +58,7 @@ $(OUT)/lumen: $(CORE) src/core/fsys_riscos.c $(UI) $(CORE_H) $(UI_H) $(OUT)/risc
 
 $(OUT)/bench: tests/bench.c $(CORE) $(CORE_H) $(OUT)/riscos/sqlite3.o Makefile
 	$(RO_CC) $(RISCOS_CFLAGS) $(WARN) $(DEFS) -Isrc/core -Ithird_party/sqlite -I$(DEPS)/riscos/include \
-	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/simd.c src/core/recipe.c src/core/thumbgen.c src/core/fits.c src/core/tiffmeta.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/fsys_riscos.c \
+	  $(RISCOS_LDFLAGS) -o $@ tests/bench.c src/core/develop.c src/core/retouch.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/simd.c src/core/recipe.c src/core/thumbgen.c src/core/fits.c src/core/astro.c src/core/tiffmeta.c src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/fsys_riscos.c \
 	  src/core/export.c src/core/denoise.c src/core/xmp.c src/core/catalog.c src/core/sqlite_vfs.c $(OUT)/riscos/sqlite3.o \
 	  -L$(DEPS)/riscos/lib -ltiff -ljpeg -lpng16 $(DEVKIT_LDFLAGS) -lz -lm
 
@@ -282,6 +282,12 @@ test-heif: $(OUT)/lumenheif-host $(OUT)/lumenheif-arm
 	tests/test_heif.sh $(OUT)/lumenheif-host "" $(OUT)/heif-host
 	LUMEN_NEON=1 tests/test_heif.sh $(OUT)/lumenheif-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/heif-arm-neon $(OUT)/heif-host
 	LUMEN_NEON=0 tests/test_heif.sh $(OUT)/lumenheif-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/heif-arm-plain $(OUT)/heif-host
+
+# A test of the astro code on whole FITS frames (lines them up and
+# stacks them in memory, timing each step): out/astrostack OUT REF FRAME...
+$(OUT)/astrostack: tests/astrostack.c src/core/fits.c src/core/astro.c src/core/fits.h src/core/astro.h
+	@mkdir -p $(OUT)
+	gcc -O2 -Wall -Wextra -Isrc/core -o $@ tests/astrostack.c src/core/fits.c src/core/astro.c -lm
 
 # --- The WebP plug-in (LumenWebP), a separate program in its own package --
 # libwebp 1.6.0 (deps/build-webp.sh), its NEON code chosen at run time.

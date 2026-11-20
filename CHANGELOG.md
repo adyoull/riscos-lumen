@@ -12,8 +12,8 @@
 - Linear pictures (a nearly black sky) are stretched for the screen as
   Siril's and PixInsight's auto-stretch does: from each channel's median
   and MAD, a shadows clip and a midtones balance that puts the sky at a
-  quarter. A colour mosaic's channels are stretched each on its own, so
-  the sky comes out grey. Already-stretched pictures are shown as they
+  quarter. Each colour is stretched on its own, so the sky comes out
+  grey. Already-stretched pictures are shown as they
   are.
 - Rows: bottom up, as FITS has them, unless ROWORDER says TOP-DOWN.
 - The Info tab shows a FITS header's object, frame type, date, exposure,

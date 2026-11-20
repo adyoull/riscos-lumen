@@ -29,6 +29,7 @@
 #include "../src/core/thumbgen.h"
 #include "../src/core/tiffmeta.h"
 #include "../src/core/fits.h"
+#include "../src/core/astro.h"
 #include "../src/core/plugins.h"
 #include "../src/core/prefs.h"
 #include <math.h>
@@ -2227,6 +2228,56 @@ static void test_fits (void)
   f = fopen (path, "rb");
   CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && h.exptime == 30, "fits: a Fortran D exponent");
   fclose (f);
+  /* Writing (a stack): read back the same */
+  {
+    static const char *const wc[] = { "OBJECT  = 'Round trip'", "STACKCNT=                   12", NULL };
+    float row[3 * 33], back[3 * 33];
+    fits_writer *wr;
+    fits_reader *rd;
+    int y, x, same = 1, pl;
+    for (pl = 0; pl < 2; pl++)
+      {
+        int bitpix = pl ? 16 : -32;
+        p (path, pl ? "Fits/written16.fits" : "Fits/written.fits");
+        wr = fits_writer_open (path, 33, 21, 3, bitpix, wc, err, sizeof err);
+        CHECK (wr != NULL, "fits writer: opened");
+        if (!wr)
+          continue;
+        for (y = 20; y >= 0; y--)                     /* any order */
+          {
+            for (x = 0; x < 33 * 3; x++)
+              row[x] = (float) ((x * 7 + y * 13) % 100) / 100;
+            if (y == 5)
+              row[4] = NAN;
+            fits_writer_row (wr, y, row);
+          }
+        CHECK (fits_writer_close (wr) == 0, "fits writer: closed");
+        f = fopen (path, "rb");
+        CHECK (f && fits_read_header (f, &h, err, sizeof err) == 0 && h.w == 33 && h.h == 21 && h.planes == 3
+               && h.bitpix == bitpix && h.bottom_up && h.stacked == 12 && !strcmp (h.object, "Round trip"),
+               "fits writer: its header read back");
+        rd = f ? fits_reader_open (f, &h, 0, err, sizeof err) : NULL;
+        for (y = 0; rd && y < 21; y++)
+          {
+            fits_reader_row_linear (rd, y, back);
+            for (x = 0; x < 33 * 3; x++)
+              {
+                float want = (y == 5 && x == 4) ? 0 : (float) ((x * 7 + y * 13) % 100) / 100;
+                if (fabsf (back[x] - want) > (pl ? 1.0f / 65535 : 1.0f / 65535))
+                  same = 0;
+              }
+          }
+        CHECK (rd && same, pl ? "fits writer: 16-bit, rows the right way up, values back" : "fits writer: floating point, rows the right way up, values back (NAN as 0)");
+        fits_reader_free (rd);
+        if (f)
+          fclose (f);
+        {
+          struct stat sb;
+          CHECK (stat (path, &sb) == 0 && sb.st_size % 2880 == 0, "fits writer: whole blocks");
+        }
+        remove (path);
+      }
+  }
   /* Importing: the library knows them */
   {
     library *l;
@@ -2235,7 +2286,7 @@ static void test_fits (void)
     cat_source all = { SRC_ALL, 0, 0, "" };
     cat_origin o;
     int n, found = 0;
-    remove (path);                      /* d.fits: 4 x 4 is fine, but keep the count simple */
+    p (path, "Fits/d.fits"); remove (path);   /* 4 x 4 is fine, but keep the count simple */
     p (path, "Fits/cut.fits"); remove (path);
     p (path, "Fits/packed.fz"); remove (path);
     p (libdir, "FitsLibrary");
@@ -2270,6 +2321,252 @@ static void test_fits (void)
     free (items);
     lib_close (l);
   }
+}
+
+
+/* --- lining up frames of the night sky (astro) --- */
+
+static unsigned long long arng = 88172645463325252ull;
+static double aurand (void)
+{
+  arng ^= arng << 13; arng ^= arng >> 7; arng ^= arng << 17;
+  return (double) (arng >> 11) / 9007199254740992.0;
+}
+static double agauss (void)
+{
+  double u = aurand () + 1e-12, v = aurand ();
+  return sqrt (-2 * log (u)) * cos (2 * M_PI * v);
+}
+
+typedef struct { double x, y, f; } truth;
+
+/* A w x h plane: a sky with a gradient, noise, and Gaussian stars
+   (sigma 1.2 pixels) at the given places. */
+static void render_sky (float *px, int w, int h, const truth *st, int n, double noise)
+{
+  int x, y, k;
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++)
+      px[(size_t) y * w + x] = (float) (0.05 + 0.03 * x / w + 0.01 * y / h + noise * agauss ());
+  for (k = 0; k < n; k++)
+    {
+      int x0 = (int) st[k].x, y0 = (int) st[k].y;
+      for (y = y0 - 6; y <= y0 + 6; y++)
+        for (x = x0 - 6; x <= x0 + 6; x++)
+          if (x >= 0 && y >= 0 && x < w && y < h)
+            {
+              double dx = x - st[k].x, dy = y - st[k].y;
+              px[(size_t) y * w + x] += (float) (st[k].f * exp (-(dx * dx + dy * dy) / (2 * 1.2 * 1.2)));
+            }
+    }
+}
+
+/* The largest distance between where two transforms put the corners. */
+static double xform_err (const astro_xform *a, const astro_xform *b, int w, int h)
+{
+  double e = 0;
+  int k;
+  for (k = 0; k < 4; k++)
+    {
+      double x = k & 1 ? w - 1 : 0, y = k & 2 ? h - 1 : 0, ax, ay, bx, by, d;
+      astro_apply (a, x, y, &ax, &ay);
+      astro_apply (b, x, y, &bx, &by);
+      d = hypot (ax - bx, ay - by);
+      if (d > e)
+        e = d;
+    }
+  return e;
+}
+
+static int align_case (const char *name, double dx, double dy, double deg, int w, int h, double *err, astro_fit *fit)
+{
+  truth *t1 = malloc (220 * sizeof *t1), *t2 = malloc (220 * sizeof *t2);
+  float *p1 = malloc ((size_t) w * h * sizeof *p1), *p2 = malloc ((size_t) w * h * sizeof *p2);
+  astro_star *s1 = malloc (300 * sizeof *s1), *s2 = malloc (300 * sizeof *s2);
+  astro_xform truth_t, got;
+  astro_plane a = { w, h, p1, 1 }, b = { w, h, p2, 1 };
+  int n1 = 0, n2 = 0, k, r;
+  double th = deg * M_PI / 180;
+  (void) name;
+  truth_t.a = cos (th); truth_t.b = sin (th); truth_t.tx = dx; truth_t.ty = dy;
+  for (k = 0; k < 180; k++)
+    {
+      t1[n1].x = 10 + aurand () * (w - 20);
+      t1[n1].y = 10 + aurand () * (h - 20);
+      t1[n1].f = 0.02 + 0.5 * pow (aurand (), 3);
+      n1++;
+    }
+  /* The frame: the same stars moved (a tenth gone: cloud, the edge), and a few others. */
+  for (k = 0; k < n1; k++)
+    {
+      double x, y;
+      astro_apply (&truth_t, t1[k].x, t1[k].y, &x, &y);
+      if (k % 10 == 3 || x < 8 || y < 8 || x > w - 9 || y > h - 9)
+        continue;
+      t2[n2].x = x; t2[n2].y = y; t2[n2].f = t1[k].f * 0.9; n2++;
+    }
+  for (k = 0; k < 15 && n2 < 220; k++)
+    {
+      t2[n2].x = 10 + aurand () * (w - 20); t2[n2].y = 10 + aurand () * (h - 20); t2[n2].f = 0.05; n2++;
+    }
+  render_sky (p1, w, h, t1, n1, 0.002);
+  render_sky (p2, w, h, t2, n2, 0.002);
+  /* Hot pixels and a satellite trail in the frame. */
+  for (k = 0; k < 40; k++)
+    p2[(size_t) (20 + (int) (aurand () * (h - 40))) * w + 20 + (int) (aurand () * (w - 40))] = 0.9f;
+  for (k = 0; k < w; k++)
+    {
+      int y = h / 3 + k / 4;
+      if (y < h)
+        p2[(size_t) y * w + k] += 0.3f;
+    }
+  r = astro_find_stars (&a, 0, s1, 300, NULL);
+  k = astro_find_stars (&b, 0, s2, 300, NULL);
+  r = r > 0 && k > 0 ? astro_match (s1, r, s2, k, &got, fit) : -1;
+  *err = r == 0 ? xform_err (&got, &truth_t, w, h) : 1e9;
+  free (t1); free (t2); free (p1); free (p2); free (s1); free (s2);
+  return r;
+}
+
+static void test_align (void)
+{
+  int w = 800, h = 600, n, k, close = 0, hotfound = 0;
+  float *px = malloc ((size_t) w * h * sizeof *px);
+  truth st[150];
+  astro_star found[300];
+  astro_stats as;
+  astro_plane pl = { w, h, px, 1 };
+  astro_fit fit;
+  double err;
+  /* Finding stars */
+  for (k = 0; k < 150; k++)
+    {
+      st[k].x = 10 + aurand () * (w - 20);
+      st[k].y = 10 + aurand () * (h - 20);
+      st[k].f = 0.03 + 0.4 * aurand ();
+    }
+  render_sky (px, w, h, st, 150, 0.002);
+  for (k = 0; k < 20; k++)
+    px[(size_t) (50 + 20 * k) * w + 30 + 35 * k] = 0.95f;   /* hot pixels */
+  n = astro_find_stars (&pl, 0, found, 300, &as);
+  for (k = 0; k < n; k++)
+    {
+      int j;
+      for (j = 0; j < 150; j++)
+        if (hypot (found[k].x - st[j].x, found[k].y - st[j].y) < 0.1)
+          {
+            close++;
+            break;
+          }
+      for (j = 0; j < 20; j++)
+        if (hypot (found[k].x - (30 + 35 * j), found[k].y - (50 + 20 * j)) < 1.5)
+          hotfound++;
+    }
+  CHECK (n >= 140 && n <= 160, "align: the stars found");
+  CHECK (close >= 135, "align: each measured to a tenth of a pixel");
+  CHECK (hotfound == 0 && as.rejected_hot >= 18, "align: hot pixels aren't stars");
+  CHECK (fabs (as.noise - 0.002) < 0.0004, "align: the sky's noise measured");
+  CHECK (n < 2 || found[0].flux >= found[1].flux, "align: brightest first");
+  /* Matching: shifts and turns, a meridian flip, with hot pixels, a satellite and missing stars */
+  CHECK (align_case ("shift", 13.37, -7.21, 0, w, h, &err, &fit) == 0 && err < 0.1 && fit.pairs >= 100,
+         "align: a shift found to a tenth of a pixel");
+  CHECK (align_case ("turn", -20.5, 31.25, 0.8, w, h, &err, &fit) == 0 && err < 0.1 && fabs (fabs (fit.angle) - 0.8) < 0.01
+         && fabs (fit.scale - 1) < 1e-3, "align: a shift and a slight turn (a tripod, a few minutes)");
+  CHECK (align_case ("turn5", 40, -12, 5, w, h, &err, &fit) == 0 && err < 0.1, "align: five degrees");
+  CHECK (align_case ("flip", w - 1 + 3.5, h - 1 - 2.25, 180, w, h, &err, &fit) == 0 && err < 0.1,
+         "align: turned right round (a meridian flip)");
+  printf ("test_core: align: %d stars agree, %.3f px rms\n", fit.pairs, fit.rms);
+  CHECK (fit.rms < 0.2, "align: the stars within a fifth of a pixel of where it puts them (rms)");
+  /* Different skies don't line up */
+  {
+    truth a[100], b[100];
+    float *p2 = malloc ((size_t) w * h * sizeof *p2);
+    astro_star s1[200], s2[200];
+    astro_plane pa = { w, h, px, 1 }, pb = { w, h, p2, 1 };
+    astro_xform t;
+    int n1, n2;
+    for (k = 0; k < 100; k++)
+      {
+        a[k].x = 10 + aurand () * (w - 20); a[k].y = 10 + aurand () * (h - 20); a[k].f = 0.1 + 0.3 * aurand ();
+        b[k].x = 10 + aurand () * (w - 20); b[k].y = 10 + aurand () * (h - 20); b[k].f = 0.1 + 0.3 * aurand ();
+      }
+    render_sky (px, w, h, a, 100, 0.002);
+    render_sky (p2, w, h, b, 100, 0.002);
+    n1 = astro_find_stars (&pa, 0, s1, 200, NULL);
+    n2 = astro_find_stars (&pb, 0, s2, 200, NULL);
+    CHECK (astro_match (s1, n1, s2, n2, &t, NULL) < 0, "align: two different skies don't line up");
+    CHECK (astro_match (s1, 2, s2, 2, &t, NULL) < 0, "align: two stars aren't enough");
+    /* Lined up by hand */
+    {
+      double r[4] = { 100, 100, 500, 400 }, f[4], x, y;
+      astro_xform tt = { cos (0.1), sin (0.1), 5, -3 }, got;
+      astro_apply (&tt, r[0], r[1], &f[0], &f[1]);
+      astro_apply (&tt, r[2], r[3], &f[2], &f[3]);
+      CHECK (astro_xform_from_pairs (r, f, 2, &got) == 0 && xform_err (&got, &tt, w, h) < 1e-6, "align by hand: two stars give the turn");
+      CHECK (astro_xform_from_pairs (r, f, 1, &got) == 0 && got.a == 1 && got.b == 0 && fabs (got.tx - (f[0] - 100)) < 1e-9,
+             "align by hand: one star gives the shift");
+      CHECK (astro_xform_from_pairs (r, r, 1, &got) == 0 && xform_err (&got, &(astro_xform) { 1, 0, 0, 0 }, w, h) < 1e-9,
+             "align by hand: the same place, no move");
+      (void) x; (void) y;
+    }
+    /* Moving a frame: the moved frame matches the reference */
+    {
+      astro_xform tt;
+      astro_img src = { w, h, 1, p2 }, dst;
+      double sum = 0, peak = 0;
+      int cnt = 0, nan_edge;
+      truth moved[100];
+      tt.a = cos (0.02); tt.b = sin (0.02); tt.tx = 7.3; tt.ty = -4.6;
+      for (k = 0; k < 100; k++)
+        {
+          astro_apply (&tt, a[k].x, a[k].y, &moved[k].x, &moved[k].y);
+          moved[k].f = a[k].f;
+        }
+      render_sky (px, w, h, a, 100, 0);
+      render_sky (p2, w, h, moved, 100, 0);
+      dst.w = w; dst.h = h; dst.ch = 1; dst.px = malloc ((size_t) w * h * sizeof *dst.px);
+      astro_warp (&src, &tt, &dst, 0, h);
+      for (k = 0; k < w * h; k++)
+        {
+          int x = k % w, y = k / w;
+          if (x > 40 && y > 40 && x < w - 40 && y < h - 40 && dst.px[k] == dst.px[k])
+            {
+              double d = fabs (dst.px[k] - px[k]);
+              sum += d;
+              cnt++;
+              if (d > peak)
+                peak = d;
+            }
+        }
+      nan_edge = dst.px[(size_t) (h - 1) * w + 2] != dst.px[(size_t) (h - 1) * w + 2];
+      CHECK (cnt > 0 && sum / cnt < 2e-4, "align: a moved frame matches the reference (on average)");
+      CHECK (peak < 0.05, "align: and at every star's peak, closely");
+      CHECK (nan_edge, "align: what the frame didn't cover is left out (NAN)");
+      /* RGB the same as each colour alone */
+      {
+        astro_img s3 = { w, h, 3, malloc ((size_t) w * h * 3 * sizeof (float)) }, d3 = { w, h, 3, malloc ((size_t) w * h * 3 * sizeof (float)) };
+        int same = 1, i;
+        for (i = 0; i < w * h; i++)
+          s3.px[3 * i] = p2[i], s3.px[3 * i + 1] = 0.5f * p2[i], s3.px[3 * i + 2] = 1 - p2[i];
+        astro_warp (&s3, &tt, &d3, 0, h);
+        for (i = 0; i < w * h; i++)
+          {
+            float m = dst.px[i];
+            if (m != m ? d3.px[3 * i] == d3.px[3 * i] : fabsf (d3.px[3 * i] - m) > 1e-6f || fabsf (d3.px[3 * i + 1] - 0.5f * m) > 1e-6f
+                || fabsf (d3.px[3 * i + 2] - (1 - m)) > 1e-5f)
+              same = 0;
+          }
+        CHECK (same, "align: an RGB frame moved as each colour alone");
+        astro_warp (&s3, &(astro_xform) { 1, 0, 0, 0 }, &d3, 0, h);
+        CHECK (!memcmp (s3.px, d3.px, (size_t) w * h * 3 * sizeof (float)), "align: the reference itself, as it is");
+        free (s3.px);
+        free (d3.px);
+      }
+      free (dst.px);
+    }
+    free (p2);
+  }
+  free (px);
 }
 
 /* --- moving photos between libraries (libxfer) */
@@ -3807,6 +4104,7 @@ int main (int argc, char **argv)
   test_mistyped ();
   test_tiff_import ();
   test_fits ();
+  test_align ();
   test_prefs ();
   rawjob_set_switched_off (1);
   checks++; if (!strstr (rawjob_missing_message (), "switched off")) { fails++; fprintf (stderr, "FAIL: raw plug-in off: says so\n"); }

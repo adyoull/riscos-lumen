@@ -360,6 +360,7 @@ struct fits_reader
   uint16_t *cache[3];         /* normalised display rows (a mosaic's, and RGB's planes) */
   int cached[3];              /* the display row in each, or -1 */
   uint16_t *planes;           /* an RGB row's three planes, normalised */
+  uint16_t *row3;             /* a row read, three values a pixel */
   unsigned char lut[3][65536];
   int cfa[2][2];              /* the mosaic's colours (0 R, 1 G, 2 B) at the parities of the row and column */
   /* For full-size demosaicking: the neighbours averaged for each parity and channel. */
@@ -589,16 +590,9 @@ static int measure (fits_reader *r, char *err, size_t en)
   free (vals);
   free (chan);
   free (hist);
-  /* A mosaic: each channel its own (a neutral sky). RGB and grey: one
-     stretch for all, from the channels' average. */
-  if (!h->bayer[0])
-    {
-      double am = 0, ad = 0;
-      for (c = 0; c < nch; c++)
-        am += med[c], ad += mad[c];
-      for (c = 0; c < nch; c++)
-        med[c] = am / nch, mad[c] = ad / nch;
-    }
+  /* Each colour stretched on its own, so the sky comes out grey: a
+     camera's colours (a DSLR's are mostly green) or a stack's not yet
+     colour-calibrated look natural. */
   for (c = 0; c < nch; c++)
     if (fits_stretch_params (med[c], mad[c], &c0[c], &m[c]))
       stretch = 0;
@@ -639,7 +633,8 @@ fits_reader *fits_reader_open (FILE *f, const fits_hdr *h, int half, char *err, 
       r->cached[k] = -1;
     }
   r->planes = malloc ((size_t) w * 3 * sizeof (uint16_t));
-  if (!r->raw || !r->cache[0] || !r->cache[1] || !r->cache[2] || !r->planes)
+  r->row3 = malloc ((size_t) w * 3 * sizeof (uint16_t));
+  if (!r->raw || !r->cache[0] || !r->cache[1] || !r->cache[2] || !r->planes || !r->row3)
     {
       fits_reader_free (r);
       snprintf (err, en, "Not enough memory to read this FITS picture");
@@ -690,7 +685,8 @@ int fits_reader_stretched (const fits_reader *r)
   return r->stretched;
 }
 
-int fits_reader_row (fits_reader *r, int y, unsigned char *o)
+/* Row y as three 0-65535 linear values a pixel (grey: the same three). */
+static int row16 (fits_reader *r, int y, uint16_t *o)
 {
   int x, w = r->h.w;
   if (r->h.planes == 3)
@@ -701,9 +697,9 @@ int fits_reader_row (fits_reader *r, int y, unsigned char *o)
           return -1;
       for (x = 0; x < w; x++, o += 3)
         {
-          o[0] = r->lut[0][r->planes[x]];
-          o[1] = r->lut[1][r->planes[w + x]];
-          o[2] = r->lut[2][r->planes[2 * w + x]];
+          o[0] = r->planes[x];
+          o[1] = r->planes[w + x];
+          o[2] = r->planes[2 * w + x];
         }
       return 0;
     }
@@ -713,7 +709,7 @@ int fits_reader_row (fits_reader *r, int y, unsigned char *o)
       if (!s)
         return -1;
       for (x = 0; x < w; x++, o += 3)
-        o[0] = o[1] = o[2] = r->lut[0][s[x]];
+        o[0] = o[1] = o[2] = s[x];
       return 0;
     }
   if (r->half)
@@ -724,19 +720,17 @@ int fits_reader_row (fits_reader *r, int y, unsigned char *o)
         return -1;
       for (x = 0; x < r->ow; x++, o += 3)
         {
-          unsigned v[3] = { 0, 0, 0 }, g = 0;
-          int dy, dx;
+          unsigned v[3] = { 0, 0, 0 }, n[3] = { 0, 0, 0 };
+          int dy, dx, c;
           for (dy = 0; dy < 2; dy++)
             for (dx = 0; dx < 2; dx++)
               {
-                int c = r->cfa[dy][dx];
-                unsigned s = (dy ? b : a)[2 * x + dx];
-                v[c] += s;
-                g += c == 1;
+                c = r->cfa[dy][dx];
+                v[c] += (dy ? b : a)[2 * x + dx];
+                n[c]++;
               }
-          o[0] = r->lut[0][v[0]];
-          o[1] = r->lut[1][g ? v[1] / g : 0];
-          o[2] = r->lut[2][v[2]];
+          for (c = 0; c < 3; c++)
+            o[c] = (uint16_t) (n[c] ? (v[c] + n[c] / 2) / n[c] : 0);
         }
       return 0;
     }
@@ -771,10 +765,34 @@ int fits_reader_row (fits_reader *r, int y, unsigned char *o)
                   }
                 v = nn ? (sum + (unsigned) nn / 2) / (unsigned) nn : 0;
               }
-            o[ch] = r->lut[ch][v];
+            o[ch] = (uint16_t) v;
           }
       }
   }
+  return 0;
+}
+
+int fits_reader_row (fits_reader *r, int y, unsigned char *o)
+{
+  int x;
+  if (row16 (r, y, r->row3))
+    return -1;
+  for (x = 0; x < r->ow; x++, o += 3)
+    {
+      o[0] = r->lut[0][r->row3[3 * x]];
+      o[1] = r->lut[1][r->row3[3 * x + 1]];
+      o[2] = r->lut[2][r->row3[3 * x + 2]];
+    }
+  return 0;
+}
+
+int fits_reader_row_linear (fits_reader *r, int y, float *o)
+{
+  int x;
+  if (row16 (r, y, r->row3))
+    return -1;
+  for (x = 0; x < 3 * r->ow; x++)
+    o[x] = r->row3[x] * (1.0f / 65535);
   return 0;
 }
 
@@ -787,5 +805,149 @@ void fits_reader_free (fits_reader *r)
   for (k = 0; k < 3; k++)
     free (r->cache[k]);
   free (r->planes);
+  free (r->row3);
   free (r);
+}
+
+/* --- writing --- */
+
+struct fits_writer
+{
+  FILE *f;
+  char path[1024];
+  int w, h, planes, bitpix, bad;
+  long data;
+  unsigned char *buf;
+};
+
+static void put_card (FILE *f, const char *c, int *n)
+{
+  char b[81];
+  snprintf (b, sizeof b, "%-80.80s", c);
+  fwrite (b, 1, 80, f);
+  (*n)++;
+}
+
+fits_writer *fits_writer_open (const char *path, int w, int h, int planes, int bitpix, const char *const *cards,
+                               char *err, size_t en)
+{
+  fits_writer *wr;
+  char c[100];
+  int n = 0;
+  if (w < 1 || h < 1 || (planes != 1 && planes != 3) || (bitpix != 16 && bitpix != -32))
+    {
+      snprintf (err, en, "Can't write a FITS picture like that");
+      return NULL;
+    }
+  wr = calloc (1, sizeof *wr);
+  if (!wr || !(wr->buf = malloc ((size_t) w * 4)))
+    {
+      free (wr);
+      snprintf (err, en, "Not enough memory to write the FITS file");
+      return NULL;
+    }
+  snprintf (wr->path, sizeof wr->path, "%s", path);
+  wr->w = w; wr->h = h; wr->planes = planes; wr->bitpix = bitpix;
+  wr->f = fopen (path, "wb");
+  if (!wr->f)
+    {
+      free (wr->buf);
+      free (wr);
+      snprintf (err, en, "Can't write %s", path);
+      return NULL;
+    }
+  put_card (wr->f, "SIMPLE  =                    T / conforms to the FITS standard", &n);
+  snprintf (c, sizeof c, "BITPIX  = %20d", bitpix); put_card (wr->f, c, &n);
+  snprintf (c, sizeof c, "NAXIS   = %20d", planes == 3 ? 3 : 2); put_card (wr->f, c, &n);
+  snprintf (c, sizeof c, "NAXIS1  = %20d", w); put_card (wr->f, c, &n);
+  snprintf (c, sizeof c, "NAXIS2  = %20d", h); put_card (wr->f, c, &n);
+  if (planes == 3)
+    {
+      snprintf (c, sizeof c, "NAXIS3  = %20d", 3);
+      put_card (wr->f, c, &n);
+    }
+  if (bitpix == 16)
+    {
+      put_card (wr->f, "BZERO   =              32768.0", &n);
+      put_card (wr->f, "BSCALE  =                  1.0", &n);
+    }
+  put_card (wr->f, "ROWORDER= 'BOTTOM-UP'", &n);
+  for (; cards && *cards; cards++)
+    put_card (wr->f, *cards, &n);
+  put_card (wr->f, "END", &n);
+  while (n % 36)
+    put_card (wr->f, "", &n);
+  wr->data = (long) n * CARD;
+  /* The file at its full size at once (padded to whole blocks), so rows
+     can be written in any order inside it. */
+  {
+    long long end = wr->data + (long long) w * h * planes * (bitpix == 16 ? 2 : 4);
+    end = (end + BLOCK - 1) / BLOCK * BLOCK;
+    if (end > 0x7FFFFFFFLL || fseek (wr->f, (long) end - 1, SEEK_SET) != 0 || fputc (0, wr->f) == EOF)
+      {
+        fclose (wr->f);
+        remove (path);
+        free (wr->buf);
+        free (wr);
+        snprintf (err, en, "Can't make the FITS file (is the disc full?)");
+        return NULL;
+      }
+  }
+  return wr;
+}
+
+int fits_writer_row (fits_writer *wr, int y, const float *v)
+{
+  int p, x, bpp = wr->bitpix == 16 ? 2 : 4;
+  size_t len = (size_t) wr->w * bpp;
+  if (y < 0 || y >= wr->h)
+    return -1;
+  for (p = 0; p < wr->planes; p++)
+    {
+      long off = wr->data + (long) (((long long) p * wr->h + (wr->h - 1 - y)) * (long long) len);
+      unsigned char *o = wr->buf;
+      for (x = 0; x < wr->w; x++)
+        {
+          float f = v[(size_t) x * wr->planes + p];
+          if (f != f)
+            f = 0;
+          if (bpp == 2)
+            {
+              int u = f <= 0 ? 0 : f >= 1 ? 65535 : (int) (f * 65535 + 0.5f);
+              u -= 32768;
+              *o++ = (unsigned char) ((unsigned) u >> 8);
+              *o++ = (unsigned char) u;
+            }
+          else
+            {
+              uint32_t u;
+              memcpy (&u, &f, 4);
+              *o++ = (unsigned char) (u >> 24);
+              *o++ = (unsigned char) (u >> 16);
+              *o++ = (unsigned char) (u >> 8);
+              *o++ = (unsigned char) u;
+            }
+        }
+      if (fseek (wr->f, off, SEEK_SET) != 0 || fwrite (wr->buf, 1, len, wr->f) != len)
+        {
+          wr->bad = 1;
+          return -1;
+        }
+    }
+  return 0;
+}
+
+int fits_writer_close (fits_writer *wr)
+{
+  int bad;
+  if (!wr)
+    return -1;
+  if (fclose (wr->f))
+    wr->bad = 1;
+  bad = wr->bad;
+  if (bad)
+    remove (wr->path);
+  free (wr->buf);
+  free (wr);
+  return bad ? -1 : 0;
 }
