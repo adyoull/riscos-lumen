@@ -1195,6 +1195,9 @@ static void test_time_slicing (void)
   lib_close (l);
 }
 
+static unsigned stack_clock;
+static unsigned stack_now (void) { return stack_clock += 1; }
+
 /* --- camera raw files through the plug-in (when LUMENRAW and RAW_SAMPLES are set) */
 
 /* Runs the helper there and then (on RISC OS it runs in a task window). */
@@ -1526,6 +1529,62 @@ static void test_raw (void)
            && strcmp (d.model, "D3S") == 0 && d.iso == 3200, "its details from the plug-in: 4284 x 2844, D3S, ISO 3200");
     free (items);
     lib_close (l);
+  }
+  /* For stacking: the sensor's data as FITS (LumenRaw cfa), then stacked */
+  rawjob_setup (helper, scratch, run_now);
+  {
+    char cr2b[700], f1[1024], f2[1024], st[1024], e2[300];
+    rawjob *j;
+    fits_hdr fh;
+    FILE *ff;
+    if (sample (cr2b, sizeof cr2b, "RAW_CANON_5DMARK2_PREPROD.CR2"))
+      {
+        p (f1, "RawStack"); mkdir (f1, 0777);
+        p (f1, "RawStack/Frame1"); p (f2, "RawStack/Frame2"); p (st, "RawStack/Stacked.fits");
+        j = rawjob_start_cfa (cr2b, f1, e2, sizeof e2);
+        while (j && (r = rawjob_poll (j)) == 0)
+          ;
+        CHECK (j && r == 1, "raw for stacking: the sensor's data written as FITS");
+        rawjob_free (j);
+        ff = fopen (f1, "rb");
+        CHECK (ff && fits_read_header (ff, &fh, e2, sizeof e2) == 0 && fh.w == 5634 && fh.h == 3752 && fh.bitpix == 16
+               && !strcmp (fh.bayer, "GBRG") && !fh.bottom_up && fh.iso == 3200 && !strcmp (fh.instrume, "Canon EOS 5D Mark II"),
+               "raw for stacking: 5634 x 3752, 16 bits, Bayer GBRG, top down, ISO and camera (and kept after the job)");
+        if (ff)
+          fclose (ff);
+        j = rawjob_start_cfa (nef, f2, e2, sizeof e2);
+        while (j && (r = rawjob_poll (j)) == 0)
+          ;
+        CHECK (j && r == 1, "raw for stacking: a NEF too");
+        rawjob_free (j);
+        ff = fopen (f2, "rb");
+        CHECK (ff && fits_read_header (ff, &fh, e2, sizeof e2) == 0 && fh.w == 4284 && !strcmp (fh.bayer, "RGGB"),
+               "raw for stacking: the NEF's Bayer pattern (RGGB)");
+        if (ff)
+          fclose (ff);
+        j = rawjob_start_cfa (cr2, f2, e2, sizeof e2);
+        while (j && (r = rawjob_poll (j)) == 0)
+          ;
+        CHECK (j && r == -1 && strstr (rawjob_error (j), "Bayer"), "raw for stacking: an sRAW isn't a Bayer mosaic: says so");
+        rawjob_free (j);
+        /* The same frame twice: stacked (lined up exactly) */
+        {
+          char cp[2048];
+          snprintf (cp, sizeof cp, "cp '%s' '%s'", f1, f2);
+          if (system (cp) == 0)
+            {
+              const char *lp[2] = { f1, f2 };
+              stack_job *sj = stack_start (lp, 2, NULL, 0, st, "test", e2, sizeof e2);
+              int guard = 0;
+              while (sj && (r = stack_step (sj, stack_now, stack_clock + 1000)) == 0 && guard++ < 100000)
+                ;
+              CHECK (sj && r == 1, "raw for stacking: a real camera's frames stacked");
+              if (sj && r != 1)
+                fprintf (stderr, "raw stack: %s\n", stack_error (sj));
+              stack_free (sj);
+            }
+        }
+      }
   }
 }
 
@@ -2586,8 +2645,6 @@ static int cmp_float_t (const void *a, const void *b)
   float x = *(const float *) a, y = *(const float *) b;
   return x < y ? -1 : x > y;
 }
-static unsigned stack_clock;
-static unsigned stack_now (void) { return stack_clock += 1; }
 
 /* A light: the sky's stars moved by t, as an RGGB mosaic in 16-bit units,
    with the sensor's hot pixels, dark glow, noise, and perhaps a satellite. */

@@ -50,6 +50,17 @@ eval $wrap "$helper" decode "\"$f\"" "\"$b.q1.ppm\"" "\"$b.q1.info\"" 0 0 1 1 >/
 d0=$(head -c 20 "$b.q0.ppm" | tr '\n' ' ' | awk '{print $2"x"$3}'); d1=$(head -c 20 "$b.q1.ppm" | tr '\n' ' ' | awk '{print $2"x"$3}')
 check "[ -n \"$d0\" ] && [ \"$d0\" = \"$d1\" ] && ! cmp -s \"$b.q0.ppm\" \"$b.q1.ppm\"" "$f: full size, AHD and PPG: the same size ($d0, $d1), a little different"
 check "! grep -q '^memory=' \"$b.q1.info\" && grep -q '^width=' \"$b.q1.info\"" "$f: MEMORY where there are no dynamic areas: a file, as before"
+# cfa (LumenRaw 1.5): the sensor's data as FITS, for stacking: 16-bit,
+# top down, with its Bayer pattern; every sample (the sRAW refused).
+for f in "${samples[@]}"; do
+  b=$work/cfa-$(basename "$f"); rm -f "$b".*
+  out=$(eval $wrap "$helper" cfa "\"$f\"" "\"$b.fits\"" "\"$b.info\"" 2>&1); rc=$?
+  if grep -q '^error=' "$b.info" 2>/dev/null; then
+    check "grep -q 'Bayer' \"$b.info\" && [ ! -e \"$b.fits\" ] && [ ! -e \"$b.fits_t\" ] && [ -z \"\$out\" ]" "$f: cfa refused, saying why ($(grep error "$b.info"))"
+  else
+    check "[ $rc -eq 0 ] && [ -z \"\$out\" ] && head -c 2880 \"$b.fits\" | grep -q \"BAYERPAT= '[RGB]*'\" && head -c 2880 \"$b.fits\" | grep -q \"ROWORDER= 'TOP-DOWN'\" && [ \$(( \$(stat -c %s \"$b.fits\") % 2880 )) -eq 0 ] && grep -q '^encoding=Raw sensor data' \"$b.info\"" "$f: cfa: a FITS frame of the sensor's data"
+  fi
+done
 # Not a raw file: an error line, no picture, nothing printed.
 echo "not a raw file" > "$work/plain.txt"
 out=$(eval $wrap "$helper" decode "\"$work/plain.txt\"" "\"$work/plain.ppm\"" "\"$work/plain.info\"" 1000 2>&1)

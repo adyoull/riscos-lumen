@@ -7,6 +7,7 @@
      LumenRaw thumb  SRC IMAGE INFO          the camera's embedded preview
      LumenRaw decode SRC IMAGE INFO MAXSIDE [NOISE [QUALITY [MEMORY]]]
                                              the raw developed to sRGB
+     LumenRaw cfa    SRC FITS INFO           the sensor's own data, for stacking
 
    IMAGE is a JPEG (an embedded preview as the camera made it) or a binary
    PPM (P6, 8 bits, sRGB). INFO is text, one "key=value" a line: the
@@ -176,6 +177,113 @@ static int develop (LibRaw &r, const char *image, const char *info, int memory)
   return rc ? fail (info, "can't write the picture", 0) : 0;
 }
 
+/* --- cfa: the raw data as it came off the sensor, for stacking --- */
+
+/* One 80-character FITS header card. */
+static void card (FILE *f, const char *text, int *n)
+{
+  char b[81];
+  snprintf (b, sizeof b, "%-80.80s", text);
+  fwrite (b, 1, 80, f);
+  (*n)++;
+}
+
+/* The visible part of the colour mosaic (a Bayer sensor's only: not
+   Fuji's X-Trans, not a Foveon), as a FITS picture of 16-bit integers,
+   top row first (ROWORDER 'TOP-DOWN'), with its Bayer pattern
+   (BAYERPAT) and the exposure, ISO, camera, focal length and date in
+   its header: what Lumen's stacking (and Siril, and other astronomy
+   programs) read. Nothing is done to the values: no black level taken
+   off, no white balance (the darks take the black level away). */
+static int write_cfa (LibRaw &r, const char *out, const char *info)
+{
+  const libraw_image_sizes_t &sz = r.imgdata.sizes;
+  const libraw_iparams_t &ip = r.imgdata.idata;
+  const libraw_imgother_t &o = r.imgdata.other;
+  const unsigned short *raw = r.imgdata.rawdata.raw_image;
+  char tmp[1100], c[100], pat[5];
+  int rc, n = 0, x, y, k;
+  FILE *f;
+  unsigned char *row;
+  if ((rc = r.unpack ()) != LIBRAW_SUCCESS)
+    return fail (info, "can't unpack the raw data", rc);
+  raw = r.imgdata.rawdata.raw_image;
+  if (!raw || ip.filters == 0 || ip.filters == 9 || ip.colors < 3)
+    return fail (info, "its sensor isn't a Bayer mosaic (stacking needs one)", 0);
+  for (k = 0; k < 4; k++)
+    {
+      int col = r.COLOR (k >> 1, k & 1);
+      char ch = col >= 0 && col < 4 ? ip.cdesc[col] : '?';
+      pat[k] = ch == 'R' || ch == 'B' ? ch : 'G';
+    }
+  pat[4] = 0;
+  tmpname (tmp, sizeof tmp, out);
+  f = fopen (tmp, "wb");
+  row = (unsigned char *) malloc ((size_t) sz.width * 2);
+  if (!f || !row)
+    {
+      if (f)
+        fclose (f);
+      free (row);
+      return fail (info, "can't write the frame", 0);
+    }
+  card (f, "SIMPLE  =                    T / conforms to the FITS standard", &n);
+  card (f, "BITPIX  =                   16", &n);
+  card (f, "NAXIS   =                    2", &n);
+  snprintf (c, sizeof c, "NAXIS1  = %20d", sz.width); card (f, c, &n);
+  snprintf (c, sizeof c, "NAXIS2  = %20d", sz.height); card (f, c, &n);
+  card (f, "BZERO   =              32768.0", &n);
+  card (f, "BSCALE  =                  1.0", &n);
+  card (f, "ROWORDER= 'TOP-DOWN'", &n);
+  snprintf (c, sizeof c, "BAYERPAT= '%s'", pat); card (f, c, &n);
+  card (f, "XBAYROFF=                    0", &n);
+  card (f, "YBAYROFF=                    0", &n);
+  snprintf (c, sizeof c, "INSTRUME= '%.30s %.30s'", ip.make, ip.model); card (f, c, &n);
+  if (o.shutter > 0) { snprintf (c, sizeof c, "EXPTIME = %20g / seconds", o.shutter); card (f, c, &n); }
+  if (o.iso_speed > 0) { snprintf (c, sizeof c, "ISOSPEED= %20.0f", o.iso_speed); card (f, c, &n); }
+  if (o.focal_len > 0) { snprintf (c, sizeof c, "FOCALLEN= %20g / mm", o.focal_len); card (f, c, &n); }
+  if (o.timestamp > 0)
+    {
+      time_t ts = o.timestamp;
+      struct tm *tm = gmtime (&ts);      /* the camera's own clock, as LibRaw reads it */
+      char when[32];
+      if (tm && strftime (when, sizeof when, "%Y-%m-%dT%H:%M:%S", tm))
+        {
+          snprintf (c, sizeof c, "DATE-OBS= '%s' / the camera's clock", when);
+          card (f, c, &n);
+        }
+    }
+  snprintf (c, sizeof c, "BLACKLVL= %20u / the sensor's black level", r.imgdata.color.black); card (f, c, &n);
+  snprintf (c, sizeof c, "CREATOR = 'LumenRaw 1.5 (LibRaw %.20s)'", libraw_version ()); card (f, c, &n);
+  card (f, "END", &n);
+  while (n % 36)
+    card (f, "", &n);
+  for (y = 0; y < sz.height; y++)
+    {
+      const unsigned short *s = raw + (size_t) (y + sz.top_margin) * (sz.raw_pitch / 2) + sz.left_margin;
+      for (x = 0; x < sz.width; x++)
+        {
+          int v = (int) s[x] - 32768;
+          row[2 * x] = (unsigned char) ((unsigned) v >> 8);
+          row[2 * x + 1] = (unsigned char) v;
+        }
+      if (fwrite (row, 2, sz.width, f) != sz.width)
+        break;
+    }
+  free (row);
+  {
+    long len = 2880L * (n / 36) + 2L * sz.width * sz.height;
+    while (len % 2880)
+      fputc (0, f), len++;
+  }
+  if (y < sz.height || ferror (f) || fclose (f) || finish (tmp, out))
+    {
+      remove (tmp);
+      return fail (info, "can't write the frame (is the disc full?)", 0);
+    }
+  return 0;
+}
+
 /* LibRaw reports damaged data on stderr by default; any output would open
    a task window on the desktop, so it is kept quiet (a damaged file still
    develops as far as it can). */
@@ -201,14 +309,15 @@ int main (int argc, char **argv)
   static LibRaw r;
   char t[1200];
   int rc;
-  if (argc < 5 || (strcmp (argv[1], "thumb") != 0 && strcmp (argv[1], "decode") != 0)
+  if (argc < 5 || (strcmp (argv[1], "thumb") != 0 && strcmp (argv[1], "decode") != 0 && strcmp (argv[1], "cfa") != 0)
       || (strcmp (argv[1], "decode") == 0 && argc < 6))
     {
       fprintf (stderr, "LumenRaw %s (LibRaw %s)\n"
                "  LumenRaw thumb SRC IMAGE INFO\n  LumenRaw decode SRC IMAGE INFO MAXSIDE [NOISE [QUALITY [MEMORY]]]\n"
+               "  LumenRaw cfa SRC FITS INFO (the sensor's data as FITS, for stacking)\n"
                "  (NOISE: 0 none, 1 light, 2 strong noise reduction before demosaicing;\n"
                "   QUALITY: 0 best (AHD), 1 faster (PPG); MEMORY: 1 the picture may be handed over in memory)\n",
-               "1.4", libraw_version ());
+               "1.5", libraw_version ());
       return 2;
     }
   const char *src = argv[2], *image = argv[3], *info = argv[4];
@@ -216,6 +325,29 @@ int main (int argc, char **argv)
   if ((rc = r.open_file (src)) != LIBRAW_SUCCESS)
     return fail (info, "not a raw file Lumen can read", rc);
   describe (r, t, sizeof t);
+
+  if (strcmp (argv[1], "cfa") == 0)
+    {
+      size_t len = 0;
+      unsigned char *raw = whole_file (src, &len);
+      if (raw)
+        {
+          r.recycle ();
+          settings (r);
+          if ((rc = r.open_buffer (raw, len)) != LIBRAW_SUCCESS)
+            {
+              free (raw);
+              return fail (info, "not a raw file Lumen can read", rc);
+            }
+        }
+      rc = write_cfa (r, image, info);
+      r.recycle ();
+      free (raw);
+      if (rc)
+        return rc;
+      strncat (t, "encoding=Raw sensor data (FITS, for stacking)\n", sizeof t - strlen (t) - 1);
+      return write_info (info, t) ? 1 : 0;
+    }
 
   if (strcmp (argv[1], "thumb") == 0)
     {

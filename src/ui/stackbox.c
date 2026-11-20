@@ -3,7 +3,10 @@
    SPDX-License-Identifier: MIT */
 /* stackbox.c: the Stack frames window (Selection > Stack frames...).
 
-   The selected photos that are FITS frames are the lights. Dark frames
+   The selected photos that are FITS frames or camera raw files are the
+   lights (raw files are first read by LumenRaw 1.5 into FITS frames of
+   their sensor data, in a StackWork directory beside them, removed
+   afterwards). Dark frames
    (or a directory of them) are dragged into the window; they're
    optional. The stack is saved beside the first light under the name
    given, and comes into the library when it's done, shown as the Last
@@ -16,7 +19,9 @@
 #include <kernel.h>
 #include <swis.h>
 #include "fsys.h"
+#include "exif.h"
 #include "fits.h"
+#include "rawjob.h"
 #include "stack.h"
 #include "ui.h"
 
@@ -45,6 +50,13 @@ static char (*lights)[1024], (*darks)[1024];
 static int nlights, ndarks, ignored, finished;
 static stack_job *job;
 static char out_path[1100], what[200];
+/* Raw frames read into FITS first: their FITS (lights then darks), the
+   one being read, and the directory they're read into. */
+static char (*lfits)[1024], (*dfits)[1024], work_dir[1100];
+static int converting, conv_next, conv_total, conv_done, made_work;
+static rawjob *conv;
+
+static int frame_kind (const char *path);
 
 int stackbox_window (void) { return win; }
 
@@ -108,9 +120,9 @@ static void refresh (void)
   redraw (S_NAME);
   redraw (S_CANCEL);
   redraw (S_STACK);
-  set_shaded (S_STACK, job != NULL || finished || nlights < 2);
-  set_shaded (S_CLEAR, job != NULL || finished || ndarks == 0);
-  set_shaded (S_NAME, job != NULL || finished);
+  set_shaded (S_STACK, stackbox_busy () || finished || nlights < 2);
+  set_shaded (S_CLEAR, stackbox_busy () || finished || ndarks == 0);
+  set_shaded (S_NAME, stackbox_busy () || finished);
 }
 
 static const char *leaf_of (const char *path)
@@ -125,11 +137,17 @@ static void describe (void)
   for (k = 0; k < NLINES; k++)
     lines[k][0] = 0;
   if (nlights >= 2)
-    snprintf (lines[0], LINE, "Lights: %d FITS frames, %s to %s", nlights, leaf_of (lights[0]), leaf_of (lights[nlights - 1]));
+    {
+      int k, raws = 0;
+      for (k = 0; k < nlights; k++)
+        raws += frame_kind (lights[k]) == 2;
+      snprintf (lines[0], LINE, "Lights: %d %s, %s to %s", nlights, raws == nlights ? "raw frames" : raws ? "frames (FITS and raw)" : "FITS frames",
+                leaf_of (lights[0]), leaf_of (lights[nlights - 1]));
+    }
   else
-    snprintf (lines[0], LINE, "Lights: select two or more FITS frames in the Browser first (%d selected).", nlights);
+    snprintf (lines[0], LINE, "Lights: select two or more raw or FITS frames in the Browser first (%d selected).", nlights);
   if (ignored)
-    snprintf (lines[1], LINE, "(%d other selected photo%s left out: only FITS frames can be stacked.)", ignored,
+    snprintf (lines[1], LINE, "(%d other selected photo%s left out: only raw files and FITS frames can be stacked.)", ignored,
               ignored == 1 ? "" : "s");
   if (ndarks)
     snprintf (lines[2], LINE, "Darks: %d frame%s, %s%s", ndarks, ndarks == 1 ? "" : "s", leaf_of (darks[0]),
@@ -147,23 +165,31 @@ static void describe (void)
     }
 }
 
-static int is_fits (const char *path)
+/* 1 a FITS frame, 2 a camera raw file, 0 neither. */
+static int frame_kind (const char *path)
 {
   FILE *f = fopen (path, "rb");
-  unsigned char head[32];
+  unsigned char head[64];
   size_t got;
   if (!f)
     return 0;
   got = fread (head, 1, sizeof head, f);
   fclose (f);
-  return fits_is (head, got);
+  if (fits_is (head, got))
+    return 1;
+  return img_probe_named (head, got, path) == IMG_RAW ? 2 : 0;
+}
+
+static int is_fits (const char *path)
+{
+  return frame_kind (path) != 0;
 }
 
 void stackbox_open (void)
 {
   cat_id *ids;
   int n, k;
-  if (job)
+  if (stackbox_busy ())
     {
       int s[1];
       s[0] = win;
@@ -241,7 +267,7 @@ void stackbox_drop (const char *path)
 {
   fsys_entry e;
   int before = ndarks, other = 0;
-  if (job || finished)
+  if (stackbox_busy () || finished)
     return;
   if (fsys_stat (path, &e) != 0)
     return;
@@ -267,17 +293,21 @@ void stackbox_drop (const char *path)
   else
     other++;
   if (ndarks == before)
-    app_report (other ? "Darks must be FITS frames, like the lights: there were none there." : "There were no FITS frames there.");
+    app_report (other ? "Darks must be raw files or FITS frames, like the lights: there were none there."
+                      : "There were no raw files or FITS frames there.");
   describe ();
   refresh ();
 }
 
+static void begin_stack (void);
+static void remove_work (void);
+static void fail_convert (const char *why);
+
 static void start (void)
 {
-  const char *lp[MAXF], *dp[MAXF];
-  char dir[1024], leaf[80], err[600], creator[64];
+  char dir[1024], leaf[80];
   int k;
-  if (job || nlights < 2)
+  if (stackbox_busy () || nlights < 2)
     return;
   {
     int st[10];
@@ -297,23 +327,167 @@ static void start (void)
         && !app_confirm ("There's already a file of that name beside the lights. Replace it with the stack?", "Replace"))
       return;
   }
+  /* Raw frames are read into FITS first (each named as its raw file),
+     in StackWork beside the lights; the rest are stacked as they are. */
+  free (lfits);
+  free (dfits);
+  lfits = malloc ((size_t) nlights * sizeof *lfits);
+  dfits = malloc ((size_t) (ndarks ? ndarks : 1) * sizeof *dfits);
+  if (!lfits || !dfits)
+    {
+      app_report ("Not enough memory to stack these frames.");
+      return;
+    }
+  fsys_join (work_dir, sizeof work_dir, dir, "StackWork");
+  conv_total = 0;
+  for (k = 0; k < nlights + ndarks; k++)
+    {
+      const char *src = k < nlights ? lights[k] : darks[k - nlights];
+      char *dst = k < nlights ? lfits[k] : dfits[k - nlights];
+      if (frame_kind (src) == 2)
+        {
+          char l2[300];
+          snprintf (l2, sizeof l2, "%s%s", k < nlights ? "" : "Dark_", leaf_of (src));
+          fsys_join (dst, sizeof lfits[0], work_dir, l2);
+          conv_total++;
+        }
+      else
+        snprintf (dst, sizeof lfits[0], "%s", src);
+    }
+  if (conv_total)
+    {
+      if (!rawjob_available ())
+        {
+          app_report (rawjob_missing_message ());
+          return;
+        }
+      if (fsys_mkdirs (work_dir) != 0)
+        {
+          app_report ("Lumen can't make the StackWork directory beside the lights to read the raw files into (is the disc locked or full?).");
+          return;
+        }
+      made_work = 1;
+      converting = 1;
+      conv_next = 0;
+      conv_done = 0;
+      snprintf (cancel_text, sizeof cancel_text, "Stop");
+      for (k = 0; k < NLINES; k++)
+        lines[k][0] = 0;
+      snprintf (lines[0], LINE, "Stacking %d lights%s%s: reading the raw files first...", nlights, ndarks ? " with " : "",
+                ndarks ? (ndarks == 1 ? "1 dark" : "darks") : "");
+      activity_log (ACT_OTHER, "Stacking %d frames into %s (reading %d raw files first)", nlights, leaf_of (out_path), conv_total);
+      refresh ();
+      return;
+    }
+  begin_stack ();
+}
+
+/* The frames all FITS: the stacking itself. */
+static void begin_stack (void)
+{
+  const char *lp[MAXF], *dp[MAXF];
+  char err[600], creator[64];
+  int k;
   for (k = 0; k < nlights; k++)
-    lp[k] = lights[k];
+    lp[k] = lfits[k];
   for (k = 0; k < ndarks; k++)
-    dp[k] = darks[k];
+    dp[k] = dfits[k];
   snprintf (creator, sizeof creator, "Lumen %s", LUMEN_VERSION);
   job = stack_start (lp, nlights, dp, ndarks, out_path, creator, err, sizeof err);
   if (!job)
     {
+      remove_work ();
       app_report (err);
+      snprintf (cancel_text, sizeof cancel_text, "Cancel");
+      describe ();
+      refresh ();
       return;
     }
   snprintf (cancel_text, sizeof cancel_text, "Stop");
   for (k = 0; k < NLINES; k++)
     lines[k][0] = 0;
   snprintf (lines[0], LINE, "Stacking %d lights%s%s...", nlights, ndarks ? " with " : "", ndarks ? (ndarks == 1 ? "1 dark" : "darks") : "");
-  activity_log (ACT_OTHER, "Stacking %d frames into %s", nlights, leaf_of (out_path));
+  if (!made_work)
+    activity_log (ACT_OTHER, "Stacking %d frames into %s", nlights, leaf_of (out_path));
   refresh ();
+}
+
+/* The raw files' FITS: gone once stacked (or stopped). */
+static void remove_work (void)
+{
+  if (made_work)
+    fsys_remove_tree (work_dir);
+  made_work = 0;
+}
+
+/* Reading the raw files: one at a time, through LumenRaw. */
+static void convert_step (void)
+{
+  int r;
+  if (!conv)
+    {
+      char err[300];
+      int k = conv_next;
+      /* the next raw one */
+      while (k < nlights + ndarks && frame_kind (k < nlights ? lights[k] : darks[k - nlights]) != 2)
+        k++;
+      if (k >= nlights + ndarks)
+        {
+          converting = 0;
+          begin_stack ();
+          return;
+        }
+      conv_next = k + 1;
+      conv = rawjob_start_cfa (k < nlights ? lights[k] : darks[k - nlights], k < nlights ? lfits[k] : dfits[k - nlights], err,
+                               sizeof err);
+      if (!conv)
+        {
+          fail_convert (err);
+          return;
+        }
+      snprintf (lines[1], LINE, "Reading raw file %d of %d (%s) with LumenRaw", conv_done + 1, conv_total,
+                leaf_of (k < nlights ? lights[k] : darks[k - nlights]));
+      redraw (S_L2);
+    }
+  r = rawjob_poll (conv);
+  if (r == 0)
+    return;
+  if (r < 0)
+    {
+      char m[500];
+      const char *e = rawjob_error (conv);
+      snprintf (m, sizeof m, "%s: %s%s", leaf_of (conv_next > nlights ? darks[conv_next - 1 - nlights] : lights[conv_next - 1]), e,
+                strstr (e, "stopped without finishing") ? " Stacking raw files needs LumenRaw 1.5 or later." : "");
+      rawjob_free (conv);
+      conv = NULL;
+      fail_convert (m);
+      return;
+    }
+  rawjob_free (conv);
+  conv = NULL;
+  conv_done++;
+}
+
+static void fail_convert (const char *why)
+{
+  char err[700];
+  int k;
+  converting = 0;
+  if (conv)
+    rawjob_free (conv);
+  conv = NULL;
+  remove_work ();
+  snprintf (err, sizeof err, "Stacking failed: the raw file %s", why);
+  activity_log (ACT_PROBLEM, "%s", err);
+  for (k = 0; k < NLINES; k++)
+    lines[k][0] = 0;
+  snprintf (lines[0], LINE, "%.*s", LINE - 1, err);
+  if (strlen (err) >= LINE - 1)
+    snprintf (lines[1], LINE, "%s", err + LINE - 1);
+  snprintf (cancel_text, sizeof cancel_text, "Close");
+  finished = 1;
+  refresh ();
+  app_report (err);
 }
 
 static void close_window (void)
@@ -325,10 +499,15 @@ static void close_window (void)
 
 static void stop (void)
 {
-  if (!job)
+  if (!job && !converting)
     return;
+  if (conv)
+    rawjob_free (conv);
+  conv = NULL;
+  converting = 0;
   stack_free (job);
   job = NULL;
+  remove_work ();
   activity_log (ACT_OTHER, "Stacking stopped");
 }
 
@@ -369,6 +548,11 @@ static void report (void)
 void stackbox_idle (unsigned deadline)
 {
   int r;
+  if (converting)
+    {
+      convert_step ();
+      return;
+    }
   if (!job)
     return;
   r = stack_step (job, app_now, deadline);
@@ -390,6 +574,7 @@ void stackbox_idle (unsigned deadline)
       activity_log (ACT_PROBLEM, "%s", err);
       stack_free (job);
       job = NULL;
+      remove_work ();
       for (r = 0; r < NLINES; r++)
         lines[r][0] = 0;
       snprintf (lines[0], LINE, "%.*s", LINE - 1, err);
@@ -410,6 +595,7 @@ void stackbox_idle (unsigned deadline)
   }
   stack_free (job);
   job = NULL;
+  remove_work ();
   finished = 1;
   snprintf (cancel_text, sizeof cancel_text, "Close");
   refresh ();
@@ -439,7 +625,7 @@ void stackbox_click (int *b)
         }
       break;
     case S_CANCEL:
-      if (job)
+      if (stackbox_busy ())
         {
           stop ();
           describe ();
@@ -454,9 +640,9 @@ void stackbox_click (int *b)
 
 int stackbox_key (int key)
 {
-  if (key == KEY_RETURN && !job && !finished)
+  if (key == KEY_RETURN && !stackbox_busy () && !finished)
     start ();
-  else if (key == KEY_ESCAPE && !job)
+  else if (key == KEY_ESCAPE && !stackbox_busy ())
     close_window ();
   else
     return 0;
@@ -471,18 +657,24 @@ void stackbox_close_request (void)
 
 int stackbox_busy (void)
 {
-  return job != NULL;
+  return job != NULL || converting;
 }
 
+/* Reading raw files is the first third, when there are any. */
 int stackbox_percent (void)
 {
-  return job ? stack_progress (job, what, sizeof what) : 0;
+  int p = job ? stack_progress (job, what, sizeof what) : 0;
+  if (converting)
+    return conv_total ? 33 * conv_done / conv_total : 0;
+  return conv_total ? 33 + p * 67 / 100 : p;
 }
 
 void stackbox_status (char *out, size_t n)
 {
   out[0] = 0;
-  if (job)
+  if (converting)
+    snprintf (out, n, "Stacking: reading raw file %d of %d", conv_done + 1, conv_total);
+  else if (job)
     stack_progress (job, out, n);
 }
 
@@ -491,8 +683,9 @@ void stackbox_quit (void)
   stop ();
   free (lights);
   free (darks);
-  lights = NULL;
-  darks = NULL;
+  free (lfits);
+  free (dfits);
+  lights = darks = lfits = dfits = NULL;
   nlights = ndarks = 0;
 }
 

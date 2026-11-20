@@ -24,7 +24,8 @@ struct rawjob
   int mem_area;                        /* the picture handed over in this dynamic area (-1: a file) */
   size_t mem_len;
   int cached;                          /* its files are in the cache: not deleted with it */
-  char src[1024], image[300], details[300], err[300];
+  int keep;                            /* a cfa job's FITS file: the caller's, not removed when done */
+  char src[1024], image[1100], details[300], err[300];
   img_info info;
   rawjob *next;                        /* in the queue */
 };
@@ -400,7 +401,10 @@ static void run_next (void)
   j->state = J_RUNNING;
   remove (j->image);
   remove (j->details);
-  if (j->info.format == 1)
+  if (j->info.format == 2)
+    /* the sensor's data as a FITS file, for stacking (LumenRaw 1.5) */
+    snprintf (cmd, sizeof cmd, "%s cfa %s %s %s", helper[j->kind], j->src, j->image, j->details);
+  else if (j->info.format == 1)
     /* develop: NOISE (the raw plug-in's noise reduction), QUALITY (its
        demosaicing) and MEMORY (the picture may come in memory: when
        there's no scratch cache to keep it in), as the API's 6th to 8th
@@ -656,6 +660,40 @@ rawjob *rawjob_start_kind (int kind, const char *src, int develop, int max_side,
   return j;
 }
 
+rawjob *rawjob_start_cfa (const char *src, const char *fits, char *err, size_t n)
+{
+  rawjob *j, **p;
+  if (!rawjob_available_kind (RAWJOB_RAW))
+    {
+      snprintf (err, n, "%s", rawjob_missing_message_for (RAWJOB_RAW, src));
+      return NULL;
+    }
+  j = calloc (1, sizeof *j);
+  if (!j)
+    {
+      snprintf (err, n, "Not enough memory");
+      return NULL;
+    }
+  j->tag = next_tag++;
+  j->kind = RAWJOB_RAW;
+  j->mem_area = -1;
+  j->keep = 1;
+  snprintf (j->src, sizeof j->src, "%s", src);
+  snprintf (j->image, sizeof j->image, "%s", fits);
+  {
+    char leaf[24];
+    snprintf (leaf, sizeof leaf, "R%di", j->tag);
+    fsys_join (j->details, sizeof j->details, scratch, leaf);
+  }
+  j->info.format = 2;
+  j->state = J_QUEUED;
+  for (p = &queue; *p; p = &(*p)->next)
+    ;
+  *p = j;
+  run_next ();
+  return j;
+}
+
 /* Reads the details file: 1 if complete with no error, -1 if it reports
    one (in j->err), 0 if not there. */
 static int read_details (rawjob *j)
@@ -809,7 +847,8 @@ void rawjob_free (rawjob *j)
   unlink_job (j);
   if (!j->cached)
     {
-      remove (j->image);
+      if (!(j->keep && j->state == J_DONE))
+        remove (j->image);
       remove (j->details);
     }
 #ifdef __riscos

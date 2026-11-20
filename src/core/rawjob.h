@@ -80,6 +80,9 @@ typedef struct rawjob rawjob;
 rawjob *rawjob_start (const char *src, int develop, int max_side, char *err, size_t n);
 rawjob *rawjob_start_kind (int kind, const char *src, int develop, int max_side, char *err, size_t n);
 /* 0 still going (or waiting its turn), 1 done, -1 failed (rawjob_error). */
+/* The raw plug-in's cfa job (LumenRaw 1.5): the raw file's sensor data
+   as a FITS file (fits, kept when done), for stacking. Polled as any job. */
+rawjob *rawjob_start_cfa (const char *src, const char *fits, char *err, size_t n);
 int rawjob_poll (rawjob *j);
 const char *rawjob_error (const rawjob *j);
 const char *rawjob_image (const rawjob *j);
