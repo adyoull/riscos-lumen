@@ -361,6 +361,7 @@ struct fits_reader
   int cached[3];              /* the display row in each, or -1 */
   uint16_t *planes;           /* an RGB row's three planes, normalised */
   uint16_t *row3;             /* a row read, three values a pixel */
+  const uint16_t *dark;       /* a master dark taken away (planes x h x w), or NULL */
   unsigned char lut[3][65536];
   int cfa[2][2];              /* the mosaic's colours (0 R, 1 G, 2 B) at the parities of the row and column */
   /* For full-size demosaicking: the neighbours averaged for each parity and channel. */
@@ -422,17 +423,63 @@ static int read_norm (fits_reader *r, int plane, int y, uint16_t *out)
     return -1;
   if (r->h.bitpix == 16 && r->h.bscale == 1 && r->h.bzero == 32768 && r->lo == 0 && r->inv * 65535 > 0.99999
       && r->inv * 65535 < 1.00001)
+    for (x = 0; x < w; x++, p += 2)
+      out[x] = (uint16_t) (((p[0] << 8) | p[1]) ^ 0x8000);
+  else
+    for (x = 0; x < w; x++, p += r->bpp)
+      {
+        double v = (r->h.bzero + r->h.bscale * sample (r, p) - r->lo) * r->inv;
+        out[x] = v != v || v <= 0 ? 0 : v >= 1 ? 65535 : (uint16_t) (v * 65535 + 0.5);
+      }
+  if (r->dark)
     {
-      for (x = 0; x < w; x++, p += 2)
-        out[x] = (uint16_t) (((p[0] << 8) | p[1]) ^ 0x8000);
-      return 0;
-    }
-  for (x = 0; x < w; x++, p += r->bpp)
-    {
-      double v = (r->h.bzero + r->h.bscale * sample (r, p) - r->lo) * r->inv;
-      out[x] = v != v || v <= 0 ? 0 : v >= 1 ? 65535 : (uint16_t) (v * 65535 + 0.5);
+      /* The master dark taken away, with a small pedestal so the noise
+         below it isn't cut off at black. */
+      const uint16_t *d = r->dark + ((size_t) plane * r->h.h + (size_t) y) * w;
+      for (x = 0; x < w; x++)
+        {
+          int v = out[x] - d[x] + FITS_DARK_PEDESTAL;
+          out[x] = (uint16_t) (v < 0 ? 0 : v > 65535 ? 65535 : v);
+        }
     }
   return 0;
+}
+
+int fits_reader_raw_row (fits_reader *r, int plane, int y, uint16_t *out)
+{
+  const uint16_t *dark = r->dark;
+  int rc;
+  if (plane < 0 || plane >= r->h.planes || y < 0 || y >= r->h.h)
+    return -1;
+  r->dark = NULL;
+  rc = read_norm (r, plane, y, out);
+  r->dark = dark;
+  return rc;
+}
+
+void fits_reader_set_dark (fits_reader *r, const uint16_t *dark)
+{
+  int k;
+  r->dark = dark;
+  for (k = 0; k < 3; k++)
+    r->cached[k] = -1;                 /* rows read before are without it */
+}
+
+void fits_reader_range (const fits_reader *r, double *lo, double *hi)
+{
+  *lo = r->lo;
+  *hi = r->lo + 1 / r->inv;
+}
+
+void fits_reader_set_range (fits_reader *r, double lo, double hi)
+{
+  int k;
+  if (hi <= lo)
+    return;
+  r->lo = lo;
+  r->inv = 1 / (hi - lo);
+  for (k = 0; k < 3; k++)
+    r->cached[k] = -1;
 }
 
 /* Display row y (mirrored at the edges, keeping the mosaic's parity) of

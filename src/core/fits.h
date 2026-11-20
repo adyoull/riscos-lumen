@@ -80,6 +80,21 @@ int fits_reader_row (fits_reader *r, int y, unsigned char *rgb);
    (grey: the same three; a mosaic demosaicked, or 2 x 2 to a pixel when
    half): for lining up and stacking, which work on the data as it is. */
 int fits_reader_row_linear (fits_reader *r, int y, float *rgb);
+/* For stacking. The data's own values, 0-65535 of its range, row y
+   (0 the top) of a plane, without demosaicking and without a dark:
+   what a master dark is made of. */
+int fits_reader_raw_row (fits_reader *r, int plane, int y, uint16_t *out);
+/* A master dark (planes x h x w values, as fits_reader_raw_row gives,
+   rows top first) taken away from every row read from now on, with
+   FITS_DARK_PEDESTAL added so the noise isn't cut off at black. NULL:
+   none. The reader doesn't copy it. */
+#define FITS_DARK_PEDESTAL 512
+void fits_reader_set_dark (fits_reader *r, const uint16_t *dark);
+/* The physical values that are 0 and 1 (0 and 65535) when read: for
+   integer data its type's range, for floating point what the picture
+   holds. Set every frame of a stack to the first's, so all are read alike. */
+void fits_reader_range (const fits_reader *r, double *lo, double *hi);
+void fits_reader_set_range (fits_reader *r, double lo, double hi);
 /* How it is being shown: 1 stretched (the picture is linear), 0 as it is. */
 int fits_reader_stretched (const fits_reader *r);
 void fits_reader_free (fits_reader *r);

@@ -58,6 +58,15 @@ typedef struct
    peak must be (0: 5). */
 int astro_find_stars (const astro_plane *p, double sigma, astro_star *out, int max, astro_stats *st);
 
+/* The same a little at a time (for the desktop): begin, step (about
+   rows rows' work each time; 1 when all done), end (the stars, as
+   astro_find_stars), free. The plane must stay as it is till the end. */
+typedef struct astro_finder astro_finder;
+astro_finder *astro_find_begin (const astro_plane *p, double sigma);
+int astro_find_step (astro_finder *f, int rows);
+int astro_find_end (astro_finder *f, astro_star *out, int max, astro_stats *st);
+void astro_find_free (astro_finder *f);
+
 typedef struct
 {
   int pairs;                  /* stars that agree with the transform */
@@ -83,9 +92,11 @@ typedef struct
 {
   int w, h, ch;
   float *px;
+  int y0, rows;               /* px holds rows y0 to y0 + rows - 1 only (rows 0: all h) */
 } astro_img;
 
-/* dst (the reference's size, already allocated) from src moved by t:
+/* dst (the reference's size, already allocated) from src moved by t
+   (src may hold only some of its rows: those the band needs):
    each of dst's pixels is src's at t(x, y), bicubic, kept within its
    four nearest neighbours' range. Pixels that fall outside src are NAN
    (left out when stacking). rows: dst's rows y0 to y1 - 1 only (a band,

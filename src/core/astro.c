@@ -34,68 +34,6 @@ static float median (float *v, size_t n)
   return n & 1 ? v[n / 2] : 0.5f * (v[n / 2 - 1] + v[n / 2]);
 }
 
-/* The sky's level at the centre of each GRID x GRID cell (each cell's
-   median, then each the median of its 3 x 3 cells, so a big bright
-   object doesn't lift its cell), and the noise. */
-static float *sky_model (const astro_plane *p, int *gw, int *gh, float *noise)
-{
-  int w = p->w, h = p->h, cx, cy, x, y;
-  float *g, *g2, *tmp;
-  size_t n, cap;
-  *gw = (w + GRID - 1) / GRID;
-  *gh = (h + GRID - 1) / GRID;
-  g = malloc ((size_t) *gw * *gh * sizeof *g);
-  g2 = malloc ((size_t) *gw * *gh * sizeof *g2);
-  cap = (size_t) GRID * GRID;
-  if ((size_t) w * h / 16 + 16 > cap)
-    cap = (size_t) w * h / 16 + 16;
-  tmp = malloc (cap * sizeof *tmp);
-  if (!g || !g2 || !tmp)
-    {
-      free (g); free (g2); free (tmp);
-      return NULL;
-    }
-  for (cy = 0; cy < *gh; cy++)
-    for (cx = 0; cx < *gw; cx++)
-      {
-        n = 0;
-        for (y = cy * GRID; y < (cy + 1) * GRID && y < h; y++)
-          for (x = cx * GRID; x < (cx + 1) * GRID && x < w; x++)
-            {
-              float v = p->px[(size_t) y * w + x];
-              if (v == v)
-                tmp[n++] = v;
-            }
-        g[(size_t) cy * *gw + cx] = median (tmp, n);
-      }
-  for (cy = 0; cy < *gh; cy++)
-    for (cx = 0; cx < *gw; cx++)
-      {
-        int dx, dy;
-        n = 0;
-        for (dy = -1; dy <= 1; dy++)
-          for (dx = -1; dx <= 1; dx++)
-            if (cy + dy >= 0 && cy + dy < *gh && cx + dx >= 0 && cx + dx < *gw)
-              tmp[n++] = g[(size_t) (cy + dy) * *gw + cx + dx];
-        g2[(size_t) cy * *gw + cx] = median (tmp, n);
-      }
-  free (g);
-  /* The noise: the median absolute difference from the sky, of every
-     fourth pixel each way. */
-  n = 0;
-  for (y = 0; y < h; y += 4)
-    for (x = 0; x < w; x += 4)
-      {
-        float v = p->px[(size_t) y * w + x];
-        int gx = x / GRID, gy = y / GRID;
-        if (v == v && n < cap)
-          tmp[n++] = fabsf (v - g2[(size_t) gy * *gw + gx]);
-      }
-  *noise = 1.4826f * median (tmp, n);
-  free (tmp);
-  return g2;
-}
-
 /* The sky at (x, y): the cells' centres interpolated. */
 static float sky_at (const float *g, int gw, int gh, float x, float y)
 {
@@ -122,183 +60,342 @@ static int cmp_flux (const void *a, const void *b)
 
 /* --- finding stars --- */
 
-int astro_find_stars (const astro_plane *p, double sigma, astro_star *out, int max, astro_stats *st)
+/* Finding stars a little at a time: the sky model a row of cells at a
+   time, then the noise, then the stars a few rows at a time. */
+struct astro_finder
 {
-  int w = p->w, h = p->h, gw, gh, x, y, n = 0, hot = 0, k;
-  float noise, *g, *skyrow;
+  astro_plane p;
+  double sigma;
+  int phase;                  /* 0 the cells, 1 the noise, 2 the stars, 3 done */
+  int gw, gh, cy, y;
+  float *g, *g2, *tmp, *skyrow, noise;
+  size_t cap;
   astro_star *c;
+  int n, hot;
+};
+
+astro_finder *astro_find_begin (const astro_plane *p, double sigma)
+{
+  astro_finder *f = calloc (1, sizeof *f);
+  if (!f)
+    return NULL;
+  f->p = *p;
+  f->sigma = sigma > 0 ? sigma : 5;
+  if (p->w < 2 * WIN + 3 || p->h < 2 * WIN + 3)
+    {
+      f->phase = 3;
+      return f;
+    }
+  f->gw = (p->w + GRID - 1) / GRID;
+  f->gh = (p->h + GRID - 1) / GRID;
+  f->cap = (size_t) GRID * GRID;
+  if ((size_t) p->w * p->h / 16 + 16 > f->cap)
+    f->cap = (size_t) p->w * p->h / 16 + 16;
+  f->g = malloc ((size_t) f->gw * f->gh * sizeof *f->g);
+  f->g2 = malloc ((size_t) f->gw * f->gh * sizeof *f->g2);
+  f->tmp = malloc (f->cap * sizeof *f->tmp);
+  f->skyrow = malloc ((size_t) p->w * sizeof *f->skyrow);
+  f->c = malloc (MAX_CAND * sizeof *f->c);
+  if (!f->g || !f->g2 || !f->tmp || !f->skyrow || !f->c)
+    {
+      astro_find_free (f);
+      return NULL;
+    }
+  f->y = WIN;
+  return f;
+}
+
+/* The k-th smallest of v[0..n-1] (v is reordered). */
+static float select_k (float *v, size_t n, size_t k)
+{
+  size_t lo = 0, hi = n - 1;
+  while (lo < hi)
+    {
+      float pivot = v[(lo + hi) / 2];
+      size_t i = lo, j = hi;
+      while (i <= j)
+        {
+          while (v[i] < pivot) i++;
+          while (v[j] > pivot) j--;
+          if (i <= j)
+            {
+              float t = v[i]; v[i] = v[j]; v[j] = t;
+              i++;
+              if (j == 0)
+                break;
+              j--;
+            }
+        }
+      if (k <= j)
+        hi = j;
+      else if (k >= i)
+        lo = i;
+      else
+        break;
+    }
+  return v[k];
+}
+
+static void finder_cells (astro_finder *f)
+{
+  const astro_plane *p = &f->p;
+  int cx, x, y, cy = f->cy;
+  for (cx = 0; cx < f->gw; cx++)
+    {
+      size_t n = 0;
+      for (y = cy * GRID; y < (cy + 1) * GRID && y < p->h; y++)
+        for (x = cx * GRID; x < (cx + 1) * GRID && x < p->w; x++)
+          {
+            float v = p->px[(size_t) y * p->w + x];
+            if (v == v)
+              f->tmp[n++] = v;
+          }
+      f->g[(size_t) cy * f->gw + cx] = n ? select_k (f->tmp, n, n / 2) : 0;
+    }
+}
+
+static void finder_noise (astro_finder *f)
+{
+  const astro_plane *p = &f->p;
+  int cx, cy, x, y;
+  size_t n;
+  for (cy = 0; cy < f->gh; cy++)
+    for (cx = 0; cx < f->gw; cx++)
+      {
+        int dx, dy;
+        n = 0;
+        for (dy = -1; dy <= 1; dy++)
+          for (dx = -1; dx <= 1; dx++)
+            if (cy + dy >= 0 && cy + dy < f->gh && cx + dx >= 0 && cx + dx < f->gw)
+              f->tmp[n++] = f->g[(size_t) (cy + dy) * f->gw + cx + dx];
+        f->g2[(size_t) cy * f->gw + cx] = median (f->tmp, n);
+      }
+  n = 0;
+  for (y = 0; y < p->h; y += 4)
+    for (x = 0; x < p->w; x += 4)
+      {
+        float v = p->px[(size_t) y * p->w + x];
+        if (v == v && n < f->cap)
+          f->tmp[n++] = fabsf (v - f->g2[(size_t) (y / GRID) * f->gw + x / GRID]);
+      }
+  f->noise = n ? 1.4826f * select_k (f->tmp, n, n / 2) : 0;
+  if (!(f->noise > 0))
+    f->noise = 1e-6f;                  /* a picture with no noise at all (a test's) */
+}
+
+static void finder_row (astro_finder *f, int y)
+{
+  const astro_plane *p = &f->p;
+  int w = p->w, h = p->h, x, k, gw = f->gw, gh = f->gh;
+  float noise = f->noise, *skyrow = f->skyrow, *g = f->g2;
+  double sigma = f->sigma;
+  const float *row = p->px + (size_t) y * w;
+  astro_star *c = f->c;
+  for (x = 0; x < w; x++)
+    skyrow[x] = sky_at (g, gw, gh, (float) x, (float) y);
+  for (x = WIN; x < w - WIN; x++)
+    {
+      float v = row[x], sky = skyrow[x], thr = sky + (float) sigma * noise;
+      int dx, dy, peak = 1, near = 0;
+      double sw = 0, sx = 0, sy = 0, sxx = 0, cxp, cyp;
+      if (!(v > thr))
+        continue;
+      /* The highest in its 5 x 5 (ties: the first). */
+      for (dy = -2; dy <= 2 && peak; dy++)
+        for (dx = -2; dx <= 2; dx++)
+          {
+            float u = p->px[(size_t) (y + dy) * w + x + dx];
+            if ((dy || dx) && (u > v || (u == v && (dy < 0 || (dy == 0 && dx < 0)))))
+              {
+                peak = 0;
+                break;
+              }
+          }
+      if (!peak)
+        continue;
+      /* A star spreads into its neighbours; a hot pixel or a cosmic
+         ray doesn't. */
+      for (dy = -1; dy <= 1; dy++)
+        for (dx = -1; dx <= 1; dx++)
+          if ((dy || dx) && p->px[(size_t) (y + dy) * w + x + dx] > sky + 2 * noise)
+            near++;
+      if (near < 2)
+        {
+          f->hot++;
+          continue;
+        }
+      /* The centre of its light, twice (the second time around the first's centre). */
+      cxp = x;
+      cyp = y;
+      for (k = 0; k < 2; k++)
+        {
+          int ix = (int) lround (cxp), iy = (int) lround (cyp);
+          sw = sx = sy = sxx = 0;
+          if (ix < WIN || iy < WIN || ix >= w - WIN || iy >= h - WIN)
+            break;
+          for (dy = -WIN; dy <= WIN; dy++)
+            for (dx = -WIN; dx <= WIN; dx++)
+              {
+                double u = p->px[(size_t) (iy + dy) * w + ix + dx] - sky;
+                if (u > 0 && u == u && dx * dx + dy * dy <= WIN * WIN)
+                  {
+                    sw += u;
+                    sx += u * (ix + dx);
+                    sy += u * (iy + dy);
+                  }
+              }
+          if (sw <= 0)
+            break;
+          cxp = sx / sw;
+          cyp = sy / sw;
+        }
+      if (sw <= 0 || k < 2)
+        continue;
+      {
+        int ix = (int) lround (cxp), iy = (int) lround (cyp);
+        double fw;
+        for (dy = -WIN; dy <= WIN; dy++)
+          for (dx = -WIN; dx <= WIN; dx++)
+            {
+              double u = p->px[(size_t) (iy + dy) * w + ix + dx] - sky;
+              double ddx = ix + dx - cxp, ddy = iy + dy - cyp;
+              if (u > 0 && u == u && dx * dx + dy * dy <= WIN * WIN)
+                sxx += u * (ddx * ddx + ddy * ddy);
+            }
+        fw = 2.3548 * sqrt (sxx / sw / 2);
+        if (fw > 2 * WIN)
+          continue;                /* a blob (a galaxy's core, a bit of nebula), not a star */
+        /* Long and thin: a satellite's or a plane's trail, not a star
+           (stars trailed a little by a fixed tripod are kept). */
+        {
+          double mxx = 0, myy = 0, mxy = 0, tr, det, l1, l2;
+          for (dy = -WIN; dy <= WIN; dy++)
+            for (dx = -WIN; dx <= WIN; dx++)
+              {
+                double u = p->px[(size_t) (iy + dy) * w + ix + dx] - sky;
+                double ddx = ix + dx - cxp, ddy = iy + dy - cyp;
+                if (u > 0 && u == u && dx * dx + dy * dy <= WIN * WIN)
+                  mxx += u * ddx * ddx, myy += u * ddy * ddy, mxy += u * ddx * ddy;
+              }
+          tr = mxx + myy;
+          det = mxx * myy - mxy * mxy;
+          l1 = tr / 2 + sqrt (tr * tr / 4 - det > 0 ? tr * tr / 4 - det : 0);
+          l2 = tr - l1;
+          if (l2 <= 0 || l1 / l2 > 9)
+            continue;              /* more than three times as long as wide */
+        }
+        /* Refined with a Gaussian window the star's width (SExtractor's
+           XWIN): unbiased by the noise around it, which the plain
+           centre of light is pulled towards its peak pixel by. */
+        {
+          double sg = fw / 2.3548, it;
+          if (sg < 0.7) sg = 0.7;
+          if (sg > 3) sg = 3;
+          for (it = 0; it < 6; it++)
+            {
+              double ww = 0, wx = 0, wy = 0, nx, ny;
+              int jx = (int) lround (cxp), jy = (int) lround (cyp);
+              if (jx < WIN || jy < WIN || jx >= w - WIN || jy >= h - WIN)
+                break;
+              for (dy = -WIN; dy <= WIN; dy++)
+                for (dx = -WIN; dx <= WIN; dx++)
+                  {
+                    double u = p->px[(size_t) (jy + dy) * w + jx + dx] - sky;
+                    double ddx = jx + dx - cxp, ddy = jy + dy - cyp;
+                    double g = exp (-(ddx * ddx + ddy * ddy) / (2 * sg * sg)) * u;
+                    if (u == u)
+                      ww += g, wx += g * ddx, wy += g * ddy;
+                  }
+              if (ww <= 0)
+                break;
+              nx = cxp + 2 * wx / ww;
+              ny = cyp + 2 * wy / ww;
+              if (fabs (nx - x) > WIN || fabs (ny - y) > WIN)
+                break;
+              cxp = nx;
+              cyp = ny;
+            }
+        }
+        if (f->n == MAX_CAND)
+          {
+            /* Too many: keep the brightest half and carry on. */
+            qsort (c, (size_t) f->n, sizeof *c, cmp_flux);
+            f->n /= 2;
+          }
+        c[f->n].x = (float) ((cxp + 0.5) * p->scale - 0.5);
+        c[f->n].y = (float) ((cyp + 0.5) * p->scale - 0.5);
+        c[f->n].flux = (float) sw;
+        c[f->n].peak = v - sky;
+        c[f->n].fwhm = (float) (fw * p->scale);
+        f->n++;
+      }
+    }
+}
+
+int astro_find_step (astro_finder *f, int rows)
+{
+  while (rows-- > 0)
+    switch (f->phase)
+      {
+      case 0:
+        finder_cells (f);
+        if (++f->cy >= f->gh)
+          f->phase = 1;
+        break;
+      case 1:
+        finder_noise (f);
+        f->phase = 2;
+        rows -= 8;                     /* about as much work as a few rows of cells */
+        break;
+      case 2:
+        if (f->y < f->p.h - WIN)
+          finder_row (f, f->y++);
+        if (f->y >= f->p.h - WIN)
+          f->phase = 3;
+        break;
+      default:
+        return 1;
+      }
+  return f->phase == 3;
+}
+
+int astro_find_end (astro_finder *f, astro_star *out, int max, astro_stats *st)
+{
+  int n;
   astro_stats dummy;
   if (!st)
     st = &dummy;
   memset (st, 0, sizeof *st);
-  if (w < 2 * WIN + 3 || h < 2 * WIN + 3)
+  while (!astro_find_step (f, 1 << 20))
+    ;
+  if (!f->c)
     return 0;
-  if (sigma <= 0)
-    sigma = 5;
-  g = sky_model (p, &gw, &gh, &noise);
-  c = malloc (MAX_CAND * sizeof *c);
-  skyrow = malloc ((size_t) w * sizeof *skyrow);
-  if (!g || !c || !skyrow)
-    {
-      free (g); free (c); free (skyrow);
-      return -1;
-    }
-  if (!(noise > 0))
-    noise = 1e-6f;                     /* a picture with no noise at all (a test's) */
-  st->noise = noise;
-  st->sky = sky_at (g, gw, gh, w / 2.0f, h / 2.0f);
-  for (y = WIN; y < h - WIN; y++)
-    {
-      const float *row = p->px + (size_t) y * w;
-      for (x = 0; x < w; x++)
-        skyrow[x] = sky_at (g, gw, gh, (float) x, (float) y);
-      for (x = WIN; x < w - WIN; x++)
-        {
-          float v = row[x], sky = skyrow[x], thr = sky + (float) sigma * noise;
-          int dx, dy, peak = 1, near = 0;
-          double sw = 0, sx = 0, sy = 0, sxx = 0, cxp, cyp;
-          if (!(v > thr))
-            continue;
-          /* The highest in its 5 x 5 (ties: the first). */
-          for (dy = -2; dy <= 2 && peak; dy++)
-            for (dx = -2; dx <= 2; dx++)
-              {
-                float u = p->px[(size_t) (y + dy) * w + x + dx];
-                if ((dy || dx) && (u > v || (u == v && (dy < 0 || (dy == 0 && dx < 0)))))
-                  {
-                    peak = 0;
-                    break;
-                  }
-              }
-          if (!peak)
-            continue;
-          /* A star spreads into its neighbours; a hot pixel or a cosmic
-             ray doesn't. */
-          for (dy = -1; dy <= 1; dy++)
-            for (dx = -1; dx <= 1; dx++)
-              if ((dy || dx) && p->px[(size_t) (y + dy) * w + x + dx] > sky + 2 * noise)
-                near++;
-          if (near < 2)
-            {
-              hot++;
-              continue;
-            }
-          /* The centre of its light, twice (the second time around the first's centre). */
-          cxp = x;
-          cyp = y;
-          for (k = 0; k < 2; k++)
-            {
-              int ix = (int) lround (cxp), iy = (int) lround (cyp);
-              sw = sx = sy = sxx = 0;
-              if (ix < WIN || iy < WIN || ix >= w - WIN || iy >= h - WIN)
-                break;
-              for (dy = -WIN; dy <= WIN; dy++)
-                for (dx = -WIN; dx <= WIN; dx++)
-                  {
-                    double u = p->px[(size_t) (iy + dy) * w + ix + dx] - sky;
-                    if (u > 0 && u == u && dx * dx + dy * dy <= WIN * WIN)
-                      {
-                        sw += u;
-                        sx += u * (ix + dx);
-                        sy += u * (iy + dy);
-                      }
-                  }
-              if (sw <= 0)
-                break;
-              cxp = sx / sw;
-              cyp = sy / sw;
-            }
-          if (sw <= 0 || k < 2)
-            continue;
-          {
-            int ix = (int) lround (cxp), iy = (int) lround (cyp);
-            double fw;
-            for (dy = -WIN; dy <= WIN; dy++)
-              for (dx = -WIN; dx <= WIN; dx++)
-                {
-                  double u = p->px[(size_t) (iy + dy) * w + ix + dx] - sky;
-                  double ddx = ix + dx - cxp, ddy = iy + dy - cyp;
-                  if (u > 0 && u == u && dx * dx + dy * dy <= WIN * WIN)
-                    sxx += u * (ddx * ddx + ddy * ddy);
-                }
-            fw = 2.3548 * sqrt (sxx / sw / 2);
-            if (fw > 2 * WIN)
-              continue;                /* a blob (a galaxy's core, a bit of nebula), not a star */
-            /* Long and thin: a satellite's or a plane's trail, not a star
-               (stars trailed a little by a fixed tripod are kept). */
-            {
-              double mxx = 0, myy = 0, mxy = 0, tr, det, l1, l2;
-              for (dy = -WIN; dy <= WIN; dy++)
-                for (dx = -WIN; dx <= WIN; dx++)
-                  {
-                    double u = p->px[(size_t) (iy + dy) * w + ix + dx] - sky;
-                    double ddx = ix + dx - cxp, ddy = iy + dy - cyp;
-                    if (u > 0 && u == u && dx * dx + dy * dy <= WIN * WIN)
-                      mxx += u * ddx * ddx, myy += u * ddy * ddy, mxy += u * ddx * ddy;
-                  }
-              tr = mxx + myy;
-              det = mxx * myy - mxy * mxy;
-              l1 = tr / 2 + sqrt (tr * tr / 4 - det > 0 ? tr * tr / 4 - det : 0);
-              l2 = tr - l1;
-              if (l2 <= 0 || l1 / l2 > 9)
-                continue;              /* more than three times as long as wide */
-            }
-            /* Refined with a Gaussian window the star's width (SExtractor's
-               XWIN): unbiased by the noise around it, which the plain
-               centre of light is pulled towards its peak pixel by. */
-            {
-              double sg = fw / 2.3548, it;
-              if (sg < 0.7) sg = 0.7;
-              if (sg > 3) sg = 3;
-              for (it = 0; it < 6; it++)
-                {
-                  double ww = 0, wx = 0, wy = 0, nx, ny;
-                  int jx = (int) lround (cxp), jy = (int) lround (cyp);
-                  if (jx < WIN || jy < WIN || jx >= w - WIN || jy >= h - WIN)
-                    break;
-                  for (dy = -WIN; dy <= WIN; dy++)
-                    for (dx = -WIN; dx <= WIN; dx++)
-                      {
-                        double u = p->px[(size_t) (jy + dy) * w + jx + dx] - sky;
-                        double ddx = jx + dx - cxp, ddy = jy + dy - cyp;
-                        double g = exp (-(ddx * ddx + ddy * ddy) / (2 * sg * sg)) * u;
-                        if (u == u)
-                          ww += g, wx += g * ddx, wy += g * ddy;
-                      }
-                  if (ww <= 0)
-                    break;
-                  nx = cxp + 2 * wx / ww;
-                  ny = cyp + 2 * wy / ww;
-                  if (fabs (nx - x) > WIN || fabs (ny - y) > WIN)
-                    break;
-                  cxp = nx;
-                  cyp = ny;
-                }
-            }
-            if (n == MAX_CAND)
-              {
-                /* Too many: keep the brightest half and carry on. */
-                qsort (c, (size_t) n, sizeof *c, cmp_flux);
-                n /= 2;
-              }
-            c[n].x = (float) ((cxp + 0.5) * p->scale - 0.5);
-            c[n].y = (float) ((cyp + 0.5) * p->scale - 0.5);
-            c[n].flux = (float) sw;
-            c[n].peak = v - sky;
-            c[n].fwhm = (float) (fw * p->scale);
-            n++;
-          }
-        }
-    }
-  qsort (c, (size_t) n, sizeof *c, cmp_flux);
-  if (n > max)
-    n = max;
-  memcpy (out, c, (size_t) n * sizeof *c);
+  qsort (f->c, (size_t) f->n, sizeof *f->c, cmp_flux);
+  n = f->n < max ? f->n : max;
+  memcpy (out, f->c, (size_t) n * sizeof *out);
   st->found = n;
-  st->rejected_hot = hot;
-  free (g);
-  free (c);
-  free (skyrow);
+  st->rejected_hot = f->hot;
+  st->noise = f->noise;
+  st->sky = sky_at (f->g2, f->gw, f->gh, f->p.w / 2.0f, f->p.h / 2.0f);
+  return n;
+}
+
+void astro_find_free (astro_finder *f)
+{
+  if (!f)
+    return;
+  free (f->g); free (f->g2); free (f->tmp); free (f->skyrow); free (f->c);
+  free (f);
+}
+
+int astro_find_stars (const astro_plane *p, double sigma, astro_star *out, int max, astro_stats *st)
+{
+  astro_finder *f = astro_find_begin (p, sigma);
+  int n;
+  if (!f)
+    return -1;
+  n = astro_find_end (f, out, max, st);
+  astro_find_free (f);
   return n;
 }
 
@@ -578,18 +675,20 @@ void astro_warp (const astro_img *src, const astro_xform *t, astro_img *dst, int
 {
   int w = src->w, h = src->h, ch = src->ch, x, y, c, i, j;
   size_t stride = (size_t) w * ch;
+  int sy0 = src->rows ? src->y0 : 0, srows = src->rows ? src->rows : h;
   if (t->a == 1 && t->b == 0 && t->tx == 0 && t->ty == 0 && dst->w == w && dst->ch == ch)
     {
       /* The reference itself: as it is. */
       for (y = y0; y < y1; y++)
-        if (y < h)
-          memcpy (dst->px + (size_t) y * stride, src->px + (size_t) y * stride, stride * sizeof (float));
+        if (y >= sy0 && y < sy0 + srows && y < h)
+          memcpy (dst->px + (size_t) (y - (dst->rows ? dst->y0 : 0)) * stride, src->px + (size_t) (y - sy0) * stride,
+                  stride * sizeof (float));
       return;
     }
   for (y = y0; y < y1; y++)
     {
       double sx = -t->b * y + t->tx, sy = t->a * y + t->ty;
-      float *o = dst->px + (size_t) y * dst->w * ch;
+      float *o = dst->px + (size_t) (y - (dst->rows ? dst->y0 : 0)) * dst->w * ch;
       for (x = 0; x < dst->w; x++, sx += t->a, sy += t->b, o += ch)
         {
           int ix, iy;
@@ -610,7 +709,10 @@ void astro_warp (const astro_img *src, const astro_xform *t, astro_img *dst, int
             {
               int xx = ix - 1 + j, yy = iy - 1 + j;
               cols[j] = (size_t) (xx < 0 ? 0 : xx >= w ? w - 1 : xx) * ch;
-              rows[j] = src->px + (size_t) (yy < 0 ? 0 : yy >= h ? h - 1 : yy) * stride;
+              yy = yy < 0 ? 0 : yy >= h ? h - 1 : yy;
+              yy -= sy0;
+              yy = yy < 0 ? 0 : yy >= srows ? srows - 1 : yy;
+              rows[j] = src->px + (size_t) yy * stride;
             }
           if (ch == 3)
             {

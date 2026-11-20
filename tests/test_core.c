@@ -30,6 +30,7 @@
 #include "../src/core/tiffmeta.h"
 #include "../src/core/fits.h"
 #include "../src/core/astro.h"
+#include "../src/core/stack.h"
 #include "../src/core/plugins.h"
 #include "../src/core/prefs.h"
 #include <math.h>
@@ -2512,7 +2513,7 @@ static void test_align (void)
     /* Moving a frame: the moved frame matches the reference */
     {
       astro_xform tt;
-      astro_img src = { w, h, 1, p2 }, dst;
+      astro_img src = { w, h, 1, p2, 0, 0 }, dst = { 0, 0, 0, NULL, 0, 0 };
       double sum = 0, peak = 0;
       int cnt = 0, nan_edge;
       truth moved[100];
@@ -2544,7 +2545,7 @@ static void test_align (void)
       CHECK (nan_edge, "align: what the frame didn't cover is left out (NAN)");
       /* RGB the same as each colour alone */
       {
-        astro_img s3 = { w, h, 3, malloc ((size_t) w * h * 3 * sizeof (float)) }, d3 = { w, h, 3, malloc ((size_t) w * h * 3 * sizeof (float)) };
+        astro_img s3 = { w, h, 3, malloc ((size_t) w * h * 3 * sizeof (float)), 0, 0 }, d3 = { w, h, 3, malloc ((size_t) w * h * 3 * sizeof (float)), 0, 0 };
         int same = 1, i;
         for (i = 0; i < w * h; i++)
           s3.px[3 * i] = p2[i], s3.px[3 * i + 1] = 0.5f * p2[i], s3.px[3 * i + 2] = 1 - p2[i];
@@ -2567,6 +2568,266 @@ static void test_align (void)
     free (p2);
   }
   free (px);
+}
+
+
+/* --- stacking (stack) --- */
+
+#define SW 360
+#define SH 260
+static float *stack_img;               /* the picture write_fits takes values from (mosaic, top row first) */
+static double stack_fn (int x, int y, int plane, void *ctx)
+{
+  (void) plane; (void) ctx;
+  return stack_img[(size_t) (SH - 1 - y) * SW + x];   /* stored bottom-up */
+}
+static int cmp_float_t (const void *a, const void *b)
+{
+  float x = *(const float *) a, y = *(const float *) b;
+  return x < y ? -1 : x > y;
+}
+static unsigned stack_clock;
+static unsigned stack_now (void) { return stack_clock += 1; }
+
+/* A light: the sky's stars moved by t, as an RGGB mosaic in 16-bit units,
+   with the sensor's hot pixels, dark glow, noise, and perhaps a satellite. */
+static void stack_light (const truth *st, int n, const astro_xform *t, int satellite, int cloudy, unsigned seed)
+{
+  int x, y, k;
+  arng = 1234567ull + seed * 7919ull;
+  for (y = 0; y < SH; y++)
+    for (x = 0; x < SW; x++)
+      {
+        int red = !(y & 1) && !(x & 1), blue = (y & 1) && (x & 1);
+        double sky = 3000 + 400.0 * x / SW, v = sky * (red ? 0.6 : blue ? 0.7 : 1.0);
+        stack_img[(size_t) y * SW + x] = (float) (v + 2048 + 40 * agauss ());   /* 2048: the camera's black level */
+      }
+  for (k = 0; k < n && !cloudy; k++)
+    {
+      double fx, fy;
+      int x0, y0;
+      astro_apply (t, st[k].x, st[k].y, &fx, &fy);
+      x0 = (int) fx; y0 = (int) fy;
+      for (y = y0 - 6; y <= y0 + 6; y++)
+        for (x = x0 - 6; x <= x0 + 6; x++)
+          if (x >= 0 && y >= 0 && x < SW && y < SH)
+            {
+              double dx = x - fx, dy = y - fy;
+              stack_img[(size_t) y * SW + x] += (float) (st[k].f * exp (-(dx * dx + dy * dy) / (2 * 1.6 * 1.6)));
+            }
+    }
+  if (satellite)
+    for (x = 0; x < SW; x++)
+      {
+        y = SH / 4 + x / 3;
+        if (y < SH)
+          stack_img[(size_t) y * SW + x] += 20000;
+      }
+  /* The sensor's own: dark glow and hot pixels, the same in every frame. */
+  for (k = 0; k < 60; k++)
+    stack_img[(size_t) (13 + (k * 37) % (SH - 26)) * SW + 11 + (k * 53) % (SW - 22)] += 30000;
+  for (y = 0; y < SH; y++)
+    for (x = 0; x < SW; x++)
+      {
+        float v = stack_img[(size_t) y * SW + x] + (float) (300.0 * y / SH);
+        stack_img[(size_t) y * SW + x] = v > 65535 ? 65535 : v;
+      }
+}
+
+static void stack_dark (unsigned seed)
+{
+  int x, y, k;
+  arng = 99991ull + seed * 104729ull;
+  for (y = 0; y < SH; y++)
+    for (x = 0; x < SW; x++)
+      stack_img[(size_t) y * SW + x] = (float) (2048 + 300.0 * y / SH + 40 * agauss ());
+  for (k = 0; k < 60; k++)
+    stack_img[(size_t) (13 + (k * 37) % (SH - 26)) * SW + 11 + (k * 53) % (SW - 22)] += 30000;
+}
+
+static void test_stack (void)
+{
+  static const char *const rggb[] = { "BAYERPAT= 'RGGB'", "ROWORDER= 'BOTTOM-UP'", "INSTRUME= 'Canon EOS 70D'",
+                                      "EXPTIME =                 30.0", "OBJECT  = 'Test field'", NULL };
+  truth st[80];
+  char lights[7][1024], darks[3][1024], out[1024], err[400], what[200];
+  const char *lp[7], *dp[3];
+  int k, r, guard = 0, nf, pct, last = -1, monotonic = 1;
+  stack_job *j;
+  const stack_frame *fr;
+  stack_img = malloc ((size_t) SW * SH * sizeof *stack_img);
+  arng = 4242;
+  for (k = 0; k < 80; k++)
+    {
+      st[k].x = 20 + aurand () * (SW - 40);
+      st[k].y = 20 + aurand () * (SH - 40);
+      st[k].f = 1500 + 20000 * pow (aurand (), 2);
+    }
+  p (out, "Stack"); mkdir (out, 0777);
+  for (k = 0; k < 7; k++)
+    {
+      astro_xform t;
+      double th = 0.004 * k;
+      t.a = cos (th); t.b = sin (th); t.tx = 1.7 * k - 3; t.ty = -1.1 * k + 2;
+      stack_light (st, 80, &t, k == 2, k == 5, (unsigned) k);
+      snprintf (lights[k], sizeof lights[k], "%s/Stack/Light_%d.fits", work, k + 1);
+      write_fits (lights[k], 16, SW, SH, 1, rggb, stack_fn, NULL, 0, 0);
+      lp[k] = lights[k];
+    }
+  for (k = 0; k < 3; k++)
+    {
+      stack_dark ((unsigned) k);
+      snprintf (darks[k], sizeof darks[k], "%s/Stack/Dark_%d.fits", work, k + 1);
+      write_fits (darks[k], 16, SW, SH, 1, rggb, stack_fn, NULL, 0, 0);
+      dp[k] = darks[k];
+    }
+  snprintf (out, sizeof out, "%s/Stack/Stacked.fits", work);
+  /* Refused at once */
+  CHECK (!stack_start (lp, 1, NULL, 0, out, "Lumen test", err, sizeof err) && strstr (err, "two"), "stack: one frame isn't enough");
+  {
+    char other[1024];
+    const char *mixed[2];
+    p (other, "Fits/rgb.fit");
+    mixed[0] = lp[0]; mixed[1] = other;
+    CHECK (!stack_start (mixed, 2, NULL, 0, out, "Lumen test", err, sizeof err) && strstr (err, "same kind"),
+           "stack: frames of different sizes or kinds refused, saying which");
+    p (other, "Fits/rgb.fit");
+    mixed[0] = lp[0]; mixed[1] = "no such file";
+    CHECK (!stack_start (mixed, 2, NULL, 0, out, "Lumen test", err, sizeof err), "stack: a missing frame refused");
+  }
+  /* The real thing: 7 lights (one with a satellite, one clouded out), 3 darks */
+  j = stack_start (lp, 7, dp, 3, out, "Lumen test", err, sizeof err);
+  CHECK (j != NULL, "stack: started");
+  if (!j)
+    {
+      fprintf (stderr, "stack: %s\n", err);
+      return;
+    }
+  while ((r = stack_step (j, stack_now, stack_clock + 5)) == 0 && guard++ < 1000000)
+    {
+      pct = stack_progress (j, what, sizeof what);
+      if (pct < last)
+        monotonic = 0;
+      last = pct;
+    }
+  CHECK (r == 1, "stack: finished");
+  if (r != 1)
+    fprintf (stderr, "stack: %s\n", stack_error (j));
+  CHECK (guard > 50, "stack: a little at a time");
+  CHECK (monotonic && stack_progress (j, what, sizeof what) == 100, "stack: progress only goes forward, to 100");
+  nf = stack_frames (j, &fr);
+  {
+    int used = 0, cloudy_out = 0, refs = 0, good = 1;
+    for (k = 0; k < nf; k++)
+      {
+        used += fr[k].used;
+        refs += fr[k].reference;
+        if (k == 5)
+          cloudy_out = !fr[k].used && strstr (fr[k].why, "star") != NULL;
+        if (fr[k].used && !fr[k].reference && (fr[k].rms > 0.3 || fr[k].pairs < 20))
+          good = 0;
+      }
+    CHECK (nf == 7 && used == 6 && refs == 1, "stack: six stacked, one the reference");
+    CHECK (cloudy_out, "stack: the clouded-out frame left out, and why");
+    CHECK (good, "stack: each lined up to a fraction of a pixel");
+  }
+  stack_summary (j, what, sizeof what);
+  CHECK (strstr (what, "6 of 7 frames stacked") && strstr (what, "3 darks"), "stack: the summary");
+  stack_free (j);
+  /* The result: as big as a light, RGB, a FITS header saying what it is */
+  {
+    FILE *f = fopen (out, "rb");
+    fits_hdr h;
+    fits_reader *rd;
+    float *row = malloc ((size_t) SW * 3 * sizeof *row), *all = malloc ((size_t) SW * SH * 3 * sizeof *all);
+    int y, x, hot_left = 0;
+    double sky_sd = 0, single_sd = 0;
+    CHECK (f && fits_read_header (f, &h, err, sizeof err) == 0 && h.w == SW && h.h == SH && h.planes == 3 && h.bitpix == -32
+           && h.stacked == 6 && h.exptime == 180 && !strcmp (h.object, "Test field") && !strcmp (h.instrume, "Canon EOS 70D"),
+           "stack: the result: RGB floating point, 6 frames, 180 s, the object and camera");
+    rd = f ? fits_reader_open (f, &h, 0, err, sizeof err) : NULL;
+    for (y = 0; rd && y < SH; y++)
+      {
+        fits_reader_row_linear (rd, y, row);
+        memcpy (all + (size_t) y * SW * 3, row, (size_t) SW * 3 * sizeof *row);
+      }
+    if (rd)
+      {
+        /* The hot pixels (the darks took them away; where the frames
+           moved, sigma clipping would have) */
+        for (k = 0; k < 60; k++)
+          {
+            int hx = 11 + (k * 53) % (SW - 22), hy = 13 + (k * 37) % (SH - 26);
+            const float *q = all + ((size_t) hy * SW + hx) * 3, *nb = all + ((size_t) hy * SW + hx + 3) * 3;
+            if (fabsf (q[1] - nb[1]) > 0.05f)
+              hot_left++;
+          }
+        CHECK (hot_left <= 3, "stack: no hot pixels left");
+        /* The satellite's line: gone */
+        {
+          int trail = 0;
+          for (x = 30; x < SW - 30; x += 10)
+            {
+              int ty = SH / 4 + x / 3;
+              const float *q = all + ((size_t) ty * SW + x) * 3, *nb = all + ((size_t) (ty + 6) * SW + x) * 3;
+              if (q[1] - nb[1] > 0.05f)
+                trail++;
+            }
+          CHECK (trail <= 2, "stack: no satellite trail");
+        }
+        /* Quieter than one frame: the noise (the median difference
+           between pixels four apart, which stars and hot pixels don't
+           move) */
+        {
+          static float d[SW * SH];
+          int n = 0;
+          for (y = 20; y < SH - 20; y += 3)
+            for (x = 20; x < SW - 24; x++)
+              d[n++] = fabsf (all[((size_t) y * SW + x) * 3 + 1] - all[((size_t) y * SW + x + 4) * 3 + 1]);
+          qsort (d, (size_t) n, sizeof *d, cmp_float_t);
+          sky_sd = d[n / 2];
+        }
+        fits_reader_free (rd);
+      }
+    if (f)
+      fclose (f);
+    /* One light alone, read the same way, for comparison */
+    f = fopen (lights[0], "rb");
+    if (f && fits_read_header (f, &h, err, sizeof err) == 0 && (rd = fits_reader_open (f, &h, 0, err, sizeof err)))
+      {
+        static float d[SW * SH];
+        int n = 0;
+        for (y = 20; y < SH - 20; y += 3)
+          {
+            fits_reader_row_linear (rd, y, row);
+            for (x = 20; x < SW - 24; x++)
+              d[n++] = fabsf (row[x * 3 + 1] - row[(x + 4) * 3 + 1]);
+          }
+        qsort (d, (size_t) n, sizeof *d, cmp_float_t);
+        single_sd = d[n / 2];
+        fits_reader_free (rd);
+      }
+    if (f)
+      fclose (f);
+    printf ("test_core: stack: noise %.6f stacked, %.6f in one frame\n", sky_sd, single_sd);
+    CHECK (sky_sd > 0 && sky_sd < 0.6 * single_sd, "stack: the sky quieter than in one frame");
+    /* A star in the reference where the stack has it */
+    free (row);
+    free (all);
+  }
+  /* Stopped half way: nothing left behind */
+  {
+    struct stat sb;
+    char out2[1024];
+    snprintf (out2, sizeof out2, "%s/Stack/Stopped.fits", work);
+    j = stack_start (lp, 7, NULL, 0, out2, "Lumen test", err, sizeof err);
+    guard = 0;
+    while (j && stack_step (j, stack_now, stack_clock + 5) == 0 && stack_progress (j, what, sizeof what) < 70 && guard++ < 1000000)
+      ;
+    stack_free (j);
+    CHECK (j && stat (out2, &sb) != 0, "stack: stopped half way: no part-written file left");
+  }
+  free (stack_img);
 }
 
 /* --- moving photos between libraries (libxfer) */
@@ -4105,6 +4366,7 @@ int main (int argc, char **argv)
   test_tiff_import ();
   test_fits ();
   test_align ();
+  test_stack ();
   test_prefs ();
   rawjob_set_switched_off (1);
   checks++; if (!strstr (rawjob_missing_message (), "switched off")) { fails++; fprintf (stderr, "FAIL: raw plug-in off: says so\n"); }
