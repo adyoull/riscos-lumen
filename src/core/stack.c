@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fits.h"
+#include "fsys.h"
 #include "stack.h"
 
 #define BAND 16                        /* output rows stacked together */
@@ -72,11 +73,7 @@ static void fail (stack_job *j, const char *fmt, const char *a, const char *b)
 
 static const char *leaf (const char *path)
 {
-  const char *p = path, *q;
-  for (q = path; *q; q++)
-    if (*q == '.' || *q == '/' || *q == ':')
-      p = q + 1;
-  return p;
+  return fsys_leaf (path);             /* the filing system's idea of a leafname */
 }
 
 /* The header of a frame, checked against the first. */

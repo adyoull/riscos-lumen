@@ -141,7 +141,8 @@ static void describe (void)
     {
       char dir[1024];
       snprintf (dir, sizeof dir, "%s", lights[0]);
-      *(char *) fsys_leaf (dir) = 0;
+      if (fsys_leaf (dir) > dir)
+        ((char *) fsys_leaf (dir))[-1] = 0;   /* the directory, without its separator */
       snprintf (lines[5], LINE, "Saved in %s, then added to the library.", dir);
     }
 }

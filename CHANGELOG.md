@@ -1,6 +1,16 @@
 # Lumen changelog
 
-## 0.0.40 (not released yet): FITS pictures
+## 0.0.40 (not released yet): FITS pictures, and stacking them
+
+- Selection > Stack frames... stacks FITS frames of the night sky: dark
+  frames (dragged into the window) made into a master dark and taken
+  away; each frame's stars found and matched to the frame with the
+  most (by triangles of stars, RANSAC and least squares: shifts, turns,
+  meridian flips); frames that can't be lined up left out, saying why;
+  then averaged with Winsorized sigma clipping, which leaves out
+  satellites, planes and hot pixels. It runs in the background; the
+  stack (a 32-bit floating-point FITS file) is saved beside the lights
+  and comes into the library.
 
 - Lumen reads FITS pictures (.fits, .fit, .fts), as astronomy cameras,
   capture programs (N.I.N.A., SharpCap...) and stacking programs (Siril,
