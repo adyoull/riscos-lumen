@@ -26,6 +26,7 @@
 #include "presets.h"
 #include "ui.h"
 #include "geodata.h"
+#include "fits.h"
 #include "sqlite3.h"
 
 #define BROWSER 0x2a000
@@ -43,10 +44,12 @@
 #define LIBEW 0x36000
 #define LIBIW 0x37000
 #define LIBCW 0x38000
+#define STACKW 0x39000
 #define FILER 0x9000
 #define TASK 0x1234
 
 static char work[512];
+static unsigned stack_icon_flags[16];
 static int nwindows, browser_block[23], viewer_block[23];
 static int vopened[8], vopen_calls, vclosed, drag_block[10], drag_calls, ptr_x, ptr_y, ptr_buttons, ptr_window = -1, ptr_icon = -1;
 static char *vtitle;
@@ -235,6 +238,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         r[0] = LIBIW;
       else if (nwindows == 14)
         r[0] = LIBCW;
+      else if (nwindows == 15)
+        r[0] = STACKW;
       else
         r[0] = INFO;
       return NULL;
@@ -276,7 +281,7 @@ static const _kernel_oserror *wimp (int swi, int r[10])
     case Wimp_GetWindowState:
       CHECK (b[0] == BROWSER || b[0] == VIEWER || b[0] == EXPORTW || b[0] == MAINW || b[0] == INSP
              || b[0] == PLUGW || b[0] == CHOICEW || b[0] == ACTW || b[0] == PRINTW || b[0] == TAGW || b[0] == SMARTW
-             || b[0] == LIBEW || b[0] == LIBIW || b[0] == LIBCW,
+             || b[0] == LIBEW || b[0] == LIBIW || b[0] == LIBCW || b[0] == STACKW,
              "window state: one of ours");
       if (b[0] == EXPORTW)
         {
@@ -291,6 +296,8 @@ static const _kernel_oserror *wimp (int swi, int r[10])
         choice_icon_flags[b[1]] = (choice_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
       if (b[0] == SMARTW && b[1] >= 0 && b[1] < 32)
         smart_icon_flags[b[1]] = (smart_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
+      if (b[0] == STACKW && b[1] >= 0 && b[1] < 16)
+        stack_icon_flags[b[1]] = (stack_icon_flags[b[1]] & ~(unsigned) b[3]) ^ (unsigned) b[2];
       if ((b[0] == LIBEW || b[0] == LIBIW || b[0] == LIBCW) && b[1] >= 0 && b[1] < 16)
         {
           unsigned *f = &lib_icon_flags[(b[0] - LIBEW) / 0x1000][b[1]];
@@ -311,6 +318,11 @@ static const _kernel_oserror *wimp (int swi, int r[10])
       if (b[0] == LIBEW || b[0] == LIBIW || b[0] == LIBCW)
         {
           b[6] = b[1] >= 0 && b[1] < 16 ? (int) lib_icon_flags[(b[0] - LIBEW) / 0x1000][b[1]] : 0;
+          return NULL;
+        }
+      if (b[0] == STACKW)
+        {
+          b[6] = b[1] >= 0 && b[1] < 16 ? (int) stack_icon_flags[b[1]] : 0;
           return NULL;
         }
       CHECK (b[0] == CHOICEW, "icon state: the Choices window's");
@@ -832,8 +844,8 @@ int main (int argc, char **argv)
   fakes ();
   CHECK (app_init (lib, NULL) == 0, "app_init succeeds");
   CHECK (strcmp ((const char *) &iconbar[6], "!lumen") == 0 && iconbar[0] == -1, "icon bar icon !lumen, on the right");
-  CHECK (nwindows == 15, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity, Print, "
-                        "Caption and keywords, Smart album, Export library, Import library, Check library and Info windows");
+  CHECK (nwindows == 16, "the browser, viewer, Export, main, inspector, Add plug-in, Choices, Activity, Print, "
+                        "Caption and keywords, Smart album, Export library, Import library, Check library, Stack frames and Info windows");
   CHECK (vopen_calls == 0, "the viewer stays shut at start");
   CHECK (((unsigned) browser_block[7] & 0xBF000002u) == 0x90000002u, "browser: a child with only a vertical scroll bar");
   CHECK (open_calls >= 1 && caret_window == MAINW, "the main window opens with the input focus, the browser in it");
@@ -2766,11 +2778,12 @@ int main (int argc, char **argv)
     browser_focus_on (0);
     click (16 + 352 + 60, -16 - 60, Button_Adjust);      /* add the second photo (Large thumbnails) */
     click (5, -5, Button_Menu);
-    CHECK (strstr (item_text (submenu (menu_open, 1), 15), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 13), "Print") != NULL
+    CHECK (strstr (item_text (submenu (menu_open, 1), 16), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 13), "Print") != NULL
+           && strstr (item_text (submenu (menu_open, 1), 15), "Stack frames") != NULL
            && strstr (item_text (submenu (menu_open, 1), 12), "Export as library") != NULL, "Selection > Export as library..., Print..., Remove from library");
     CHECK (!strcmp (item_text (submenu (menu_open, 1), 2), "Flag / unflag \x8BP"), "Selection > Flag / unflag, Shift-P shown");
     asked[0] = '\0';
-    choose (1, 15, -1);
+    choose (1, 16, -1);
     CHECK (strstr (asked, "these 2 photos") != NULL, "it asks about the two");
     CHECK (browser_count () == before - 3 && viewer_item () == 0, "both gone, and the Viewer let its photo go");
 
@@ -3366,6 +3379,87 @@ int main (int argc, char **argv)
     CHECK (history_has ("Checked the library: all is well"), "the check in the history");
     memset (b, 0, sizeof b);
     b[2] = Button_Select; b[3] = LIBCW; b[4] = 6;
+    app_event (Mouse_Click, b, 0);
+    memset (b, 0, sizeof b);
+    b[0] = 1000; b[2] = Button_Menu; b[3] = -2;
+    app_event (Mouse_Click, b, 0);
+  }
+  /* Stack frames...: four lights of a starry sky, and a dark. */
+  {
+    static const char *const cards[] = { "BAYERPAT= 'RGGB'", "INSTRUME= 'Test cam'", "EXPTIME =                 20.0", NULL };
+    char dir[600], pth[700], dark[700], err[300];
+    float row[200];
+    double sx[30], sy[30];
+    int k, x, y, i;
+    unsigned seed = 7;
+    fits_writer *wr;
+    struct stat sb;
+    for (i = 0; i < 30; i++)
+      {
+        seed = seed * 1103515245u + 12345u; sx[i] = 15 + (seed >> 8) % 170;
+        seed = seed * 1103515245u + 12345u; sy[i] = 15 + (seed >> 8) % 120;
+      }
+    snprintf (dir, sizeof dir, "%s/Night", work);
+    mkdir (dir, 0777);
+    for (k = 0; k <= 4; k++)
+      {
+        if (k < 4)
+          snprintf (pth, sizeof pth, "%s/Light%d.fits", dir, k + 1);
+        else
+          snprintf (pth, sizeof pth, "%s/Dark1.fits", work);
+        wr = fits_writer_open (pth, 200, 150, 1, 16, cards, err, sizeof err);
+        CHECK (wr != NULL, "stack: a test frame written");
+        for (y = 0; wr && y < 150; y++)
+          {
+            for (x = 0; x < 200; x++)
+              {
+                double v = 0.05;
+                seed = seed * 1103515245u + 12345u;
+                v += ((seed >> 16) % 100) / 100000.0;
+                for (i = 0; i < 30 && k < 4; i++)
+                  {
+                    double dx = x - (sx[i] + 1.5 * k), dy = y - (sy[i] - 0.7 * k);
+                    v += (0.1 + 0.01 * i) * exp (-(dx * dx + dy * dy) / 4.5);
+                  }
+                row[x] = (float) v;
+              }
+            fits_writer_row (wr, y, row);
+          }
+        fits_writer_close (wr);
+      }
+    lib_import (app_library (), dir);
+    nulls_until_idle ();
+    {
+      cat_source src = { SRC_LAST_IMPORT, 0, 0, "" };
+      browser_set_source (&src);
+    }
+    CHECK (browser_count () == 4, "stack: four lights imported");
+    browser_select_all (1);
+    click (5, -5, Button_Menu);
+    CHECK (strstr (item_text (submenu (menu_open, 1), 15), "Stack frames") != NULL && !(item (submenu (menu_open, 1), 15)[2] & (1 << 22)),
+           "Selection > Stack frames..., there to choose");
+    choose (1, 15, -1);
+    CHECK (strstr (stackbox_line (0), "Lights: 4 FITS frames, Light1") != NULL, "Stack frames: the four lights");
+    CHECK (strstr (stackbox_line (2), "Darks: none") != NULL && (stack_icon_flags[9] & (1u << 22)), "no darks yet; Clear darks shaded");
+    stackbox_drop (dark);
+    snprintf (dark, sizeof dark, "%s/Dark1.fits", work);
+    stackbox_drop (dark);
+    CHECK (strstr (stackbox_line (2), "Darks: 1 frame") != NULL, "a dark dropped in");
+    memset (b, 0, sizeof b);
+    b[2] = Button_Select; b[3] = STACKW; b[4] = 11;
+    app_event (Mouse_Click, b, 0);
+    CHECK (stackbox_busy () && (stack_icon_flags[11] & (1u << 22)), "Stack: it runs, Stack shaded");
+    nulls_until_idle ();
+    CHECK (!stackbox_busy () && strstr (stackbox_line (0), "4 of 4 frames stacked, with a master dark from 1 dark") != NULL,
+           "stacked: what happened");
+    if (!strstr (stackbox_line (0), "4 of 4"))
+      fprintf (stderr, "stack: %s / %s / %s\n", stackbox_line (0), stackbox_line (1), reported);
+    CHECK (history_has ("Stacked into Stacked") && history_has ("Stacking 4 frames"), "stacked: in the Activity history");
+    CHECK (stat (stackbox_output (), &sb) == 0 && strstr (stackbox_output (), "Night/Stacked.fits"), "the stack saved beside the lights");
+    nulls_until_idle ();
+    CHECK (browser_count () == 1 && browser_source ()->kind == SRC_LAST_IMPORT, "the stack in the library, shown as the last import");
+    memset (b, 0, sizeof b);
+    b[2] = Button_Select; b[3] = STACKW; b[4] = 10;
     app_event (Mouse_Click, b, 0);
     memset (b, 0, sizeof b);
     b[0] = 1000; b[2] = Button_Menu; b[3] = -2;

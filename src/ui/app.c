@@ -739,7 +739,7 @@ int app_init (const char *library_path, const char *start_file)
   looks_presets_dir ();
   if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ()
       || plugwin_create () || choicewin_create () || activitywin_create () || printbox_create ()
-      || tagbox_create () || smartbox_create () || libbox_create ())
+      || tagbox_create () || smartbox_create () || libbox_create () || stackbox_create ())
     {
       app_report ("Lumen couldn't create its windows.");
       close_down ();
@@ -764,6 +764,7 @@ void app_quit (void)
 {
   printbox_quit ();                    /* a print being prepared: its scrap files go */
   libbox_quit ();
+  stackbox_quit ();                    /* a stack being made: stopped, its part-written file removed */
   geomap_stop ();
   lib_close (lib);
   lib = NULL;
@@ -776,7 +777,7 @@ static int lens_db_due (void);
 int app_busy (void)
 {
   return pending_open[0] || viewer_busy () || lib_busy (lib) || thumbcache_pending () || exports_busy () || lib_verifying (lib)
-         || rawjob_busy () || printbox_busy () || libbox_busy () || previews_due () || lens_db_due ()
+         || rawjob_busy () || printbox_busy () || libbox_busy () || stackbox_busy () || previews_due () || lens_db_due ()
          || lib_geo_pending (lib) || geomap_busy ();
 }
 
@@ -800,7 +801,7 @@ static int previews_due (void)
 {
   if (!lib)
     return 0;
-  lib_hold_previews (lib, viewer_busy () || exports_busy () || printbox_busy () || libbox_busy ()
+  lib_hold_previews (lib, viewer_busy () || exports_busy () || printbox_busy () || libbox_busy () || stackbox_busy ()
                           || thumbcache_pending ());
   return !lib_busy (lib) && !lib_verifying (lib) && lib_previews_busy (lib);
 }
@@ -862,7 +863,7 @@ int app_has_focus (void)
 int app_background_wait (unsigned *when)
 {
   if (!lib || viewer_busy () || thumbcache_pending () || exports_busy () || rawjob_busy () || printbox_busy ()
-      || libbox_busy () || !(lib_background_only (lib) || previews_due ()) || app_has_focus ())
+      || libbox_busy () || stackbox_busy () || !(lib_background_only (lib) || previews_due ()) || app_has_focus ())
     return 0;
   *when = app_now () + 4;
   return 1;
@@ -907,6 +908,8 @@ static void idle (void)
     printbox_idle (deadline);
   if (libbox_busy ())
     libbox_idle (deadline);
+  if (stackbox_busy ())
+    stackbox_idle (deadline);
   if (exports_busy ())
     {
       exports_idle (deadline);
@@ -970,8 +973,17 @@ static void data_load (int *b)
   int type = b[10];
   if (b[5] != browser_window () && b[5] != mainwin_window () && b[5] != viewer_window ()
       && b[5] != mainwin_inspector () && b[5] != -2 && b[5] != plugwin_window () && b[5] != choicewin_window ()
-      && b[5] != libbox_import_window ())
+      && b[5] != libbox_import_window () && b[5] != stackbox_window ())
     return;
+  /* Dark frames (or their directory), to the Stack frames window. */
+  if (b[5] == stackbox_window ())
+    {
+      b[3] = b[2];
+      b[4] = Message_DataLoadAck;
+      _swix (Wimp_SendMessage, _INR (0, 2), User_Message, b, b[1]);
+      stackbox_drop (path);
+      return;
+    }
   /* A preset file (a copy of one from another Lumen's Choices), anywhere. */
   if (looks_preset_dropped (path, type))
     {
@@ -1136,6 +1148,8 @@ static int app_event_1 (int reason, int *b, int sender)
         mainwin_close ();
       else if (b[0] == libbox_import_window () || b[0] == libbox_check_window ())
         libbox_close_request (b[0]);
+      else if (b[0] == stackbox_window ())
+        stackbox_close_request ();
       else if (b[0] == activitywin_window ())
         {
           activitywin_closed ();
@@ -1180,6 +1194,8 @@ static int app_event_1 (int reason, int *b, int sender)
         printbox_click (b);
       else if (b[3] == libbox_export_window () || b[3] == libbox_import_window () || b[3] == libbox_check_window ())
         libbox_click (b);
+      else if (b[3] == stackbox_window ())
+        stackbox_click (b);
       else if (b[3] == tagbox_window ())
         tagbox_click (b);
       else if (b[3] == smartbox_window ())
@@ -1199,6 +1215,7 @@ static int app_event_1 (int reason, int *b, int sender)
       if (b[0] == exportbox_window () ? !exportbox_key (b[6])
           : b[0] == libbox_export_window () ? !libbox_key (b[0], b[6])
           : b[0] == printbox_window () ? !printbox_key (b[6])
+          : b[0] == stackbox_window () ? !stackbox_key (b[6])
           : b[0] == tagbox_window () ? !tagbox_key (b[6])
           : b[0] == smartbox_window () ? !smartbox_key (b[6])
           : b[0] == choicewin_window () ? !choicewin_key (b[6])

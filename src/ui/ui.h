@@ -441,6 +441,23 @@ int choicewin_tab (void);                  /* 0 Library, 1 Export, 2 Previews an
 void choicewin_show_tab (int tab);
 void choicewin_redraw (int *block);
 
+/* --- stackbox.c: Stack frames (Selection > Stack frames...) */
+int stackbox_create (void);
+int stackbox_window (void);
+void stackbox_open (void);            /* the selected FITS frames as lights */
+void stackbox_drop (const char *path);   /* dark frames, or their directory, dropped in it */
+void stackbox_click (int *block);
+int stackbox_key (int key);
+void stackbox_close_request (void);
+int stackbox_busy (void);
+void stackbox_idle (unsigned deadline);
+int stackbox_percent (void);
+void stackbox_status (char *out, size_t n);
+void stackbox_quit (void);
+const char *stackbox_line (int k);    /* for the tests */
+void stackbox_set_name (const char *s);
+const char *stackbox_output (void);
+
 /* --- libbox.c: Export library, Import library and Check library */
 int libbox_create (void);
 int libbox_export_window (void);

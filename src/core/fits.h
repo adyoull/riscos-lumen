@@ -28,6 +28,7 @@
 #define LUMEN_FITS_H
 #include <stdio.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "exif.h"
 
 typedef struct

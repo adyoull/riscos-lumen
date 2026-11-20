@@ -279,7 +279,7 @@ static void load_groups (void)
 
 /* Selection > ... (the order menus_selection decodes) */
 enum { SEL_RATING, SEL_LABEL, SEL_FLAG, SEL_REJECT, SEL_TAGS, SEL_ALL, SEL_CLEAR, SEL_COPY, SEL_PASTE, SEL_PRESET,
-       SEL_COMPARE, SEL_EXPORT, SEL_EXPORT_LIB, SEL_PRINT, SEL_MAP, SEL_REMOVE, SEL_COUNT };
+       SEL_COMPARE, SEL_EXPORT, SEL_EXPORT_LIB, SEL_PRINT, SEL_MAP, SEL_STACK, SEL_REMOVE, SEL_COUNT };
 
 
 
@@ -407,7 +407,8 @@ static menu *build_window_menu (void)
       set_item (selm, SEL_EXPORT, 0, "Export... ^E", 0, -1, nsel == 0);
       set_item (selm, SEL_EXPORT_LIB, 0, "Export as library...", 0, -1, nsel == 0);
       set_item (selm, SEL_PRINT, 0, "Print... ^P", 0, -1, nsel == 0);
-      set_item (selm, SEL_MAP, 0, "Show on map", MF_DOTTED, -1, nsel == 0);
+      set_item (selm, SEL_MAP, 0, "Show on map", 0, -1, nsel == 0);
+      set_item (selm, SEL_STACK, 0, "Stack frames...", MF_DOTTED, -1, nsel < 2);
       set_item (selm, SEL_REMOVE, 1, "Remove from library... Delete", 0, -1, nsel == 0);
     }
 
@@ -1472,6 +1473,7 @@ static int window_choice (const int *c)
             free (ids);
           }
           break;
+        case SEL_STACK: stackbox_open (); break;
         case SEL_REMOVE: remove_after_menu = 1; break;
         }
       break;
@@ -1853,6 +1855,9 @@ const char *menus_help (int window, int icon)
         if (c[1] == SEL_MAP)
           return "Shows the selected photos on a map in RiscOSM, as pins, from where they were taken (those with a "
                  "Location in Info). Ctrl-click a pin in RiscOSM to open its photo here.";
+        if (c[1] == SEL_STACK)
+          return "Stacks the selected FITS frames of the night sky into one picture: lined up by their stars, dark "
+                 "frames taken away, and averaged, leaving out satellites, planes and hot pixels. Select two or more.";
         if (c[1] == SEL_PRINT)
           return "Prints the selected photos, one to a page, on the printer chosen in !Printers.";
         if (c[1] == SEL_EXPORT)

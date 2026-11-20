@@ -239,6 +239,11 @@ int activity_now (act_job *jobs, int max)
       libbox_status (jobs[n].text, sizeof jobs[n].text);
       jobs[n++].pct = libbox_percent ();
     }
+  if (stackbox_busy () && n < max)
+    {
+      stackbox_status (jobs[n].text, sizeof jobs[n].text);
+      jobs[n++].pct = stackbox_percent ();
+    }
   {
     char leaf[64];
     if (lib_preview_now (lib, leaf, sizeof leaf) && n < max)
