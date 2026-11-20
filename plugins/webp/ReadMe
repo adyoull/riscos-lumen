@@ -1,0 +1,35 @@
+WebP plug-in for Lumen 1.0
+==========================
+
+Lets Lumen import, show, adjust and export WebP pictures (.webp): what
+web pages, many phones and editors, and Google's tools save. Lossy and
+lossless WebP both work, with or without transparency (laid on white).
+For an animated WebP, Lumen shows its first frame.
+
+It is a small program, LumenWebP, which Lumen runs in the background for
+each WebP picture it needs: for a thumbnail and for the Viewer it decodes
+the picture straight to the size wanted, which is quick. Decoding uses
+NEON when the processor has it.
+
+It lives in Lumen's Plugins directory (!Lumen.Plugins.WebP). PackMan
+puts it there. Or drag the WebP directory from the zip into Lumen's
+Plug-ins > Add plug-in window (it works at once), or it is found the
+next time Lumen starts. It is a format plug-in: its Plugin file tells
+Lumen which files are WebP pictures, so it needs Lumen 0.0.38 or later.
+They are imported once it is there.
+
+A WebP picture's EXIF (the camera, the date and where it was taken) is
+read too, so WebP pictures with a position can be shown on a map.
+
+Memory: LumenWebP needs memory only while it works: about 40 MB to
+decode a 12 megapixel lossy picture at full size, and about 90 MB for a
+lossless one. Thumbnails need much less.
+
+The LumenWebP User Guide is in Guide (Guide.index/html): open it in your
+web browser.
+
+libwebp is copyright (C) Google Inc. and used under its BSD licence;
+the licence, and Google's patent grant for WebP, are in Licence.
+LumenWebP itself is copyright (C) 2026 Andrew Youll and released under
+the MIT licence. Its source is in Lumen's source (plugins.webp, with
+deps.build-webp.sh, which builds libwebp for it).

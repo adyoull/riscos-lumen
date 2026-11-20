@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see the LICENSE file. SPDX-License-Identifier: MIT -->
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LumenWebP User Guide</title>
+<style>
+:root { --ink:#1d1d1f; --paper:#fffdf7; --accent:#0a6a8a; --soft:#f1f0ea; --line:#d6d3c7;
+        --tip:#2f7d4f; --rem:#2a5d9f; --warn:#b3261e; --tech:#6b4fa0; --try:#9a6a00; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family: "Homerton", "Helvetica Neue", Arial, sans-serif;
+       line-height:1.55; font-size:17px; }
+main { max-width:860px; margin:0 auto; padding:16px 18px 80px; }
+header.cover { background:#0d2a3a; color:#fff; padding:40px 18px 34px; }
+header.cover div { max-width:860px; margin:0 auto; }
+header.cover h1 { font-size:2.4em; margin:0 0 6px; letter-spacing:-0.5px; }
+header.cover p { margin:4px 0; font-size:1.1em; color:#d2e9f2; }
+header.cover .badge { display:inline-block; background:#7fd3f0; color:#0d2a3a; font-weight:bold; padding:3px 10px;
+                      border-radius:3px; margin-top:12px; }
+h2.part { margin-top:56px; padding:12px 14px; background:#0d2a3a; color:#fff; font-size:1.5em; border-radius:4px; }
+h2.part small { display:block; font-size:0.6em; font-weight:normal; color:#bfe0ec; }
+h3.chapter { margin-top:40px; font-size:1.35em; border-bottom:3px solid var(--accent); padding-bottom:4px; }
+h3.chapter span { color:var(--accent); }
+h4 { margin:26px 0 6px; font-size:1.08em; }
+figure { margin:18px 0; text-align:center; }
+figure img { max-width:100%; height:auto; border:1px solid var(--line); box-shadow:0 2px 6px rgba(0,0,0,0.12); }
+figcaption { font-size:0.88em; color:#555; margin-top:6px; }
+.box { border-left:6px solid; background:var(--soft); padding:10px 14px 10px 14px; margin:18px 0; border-radius:0 4px 4px 0; }
+.box b.label { display:block; font-size:0.85em; letter-spacing:1px; margin-bottom:2px; }
+.tip { border-color:var(--tip); } .tip b.label { color:var(--tip); }
+.rem { border-color:var(--rem); } .rem b.label { color:var(--rem); }
+.warn { border-color:var(--warn); } .warn b.label { color:var(--warn); }
+.tech { border-color:var(--tech); } .tech b.label { color:var(--tech); }
+.try { border-color:var(--try); background:#fbf4e2; } .try b.label { color:var(--try); }
+kbd { font-family:inherit; font-size:0.9em; background:#fff; border:1px solid #aaa; border-bottom-width:2px;
+      border-radius:3px; padding:0 5px; white-space:nowrap; }
+code { font-family: "Corpus", "Courier New", monospace; font-size:0.92em; background:#eceae2; padding:0 3px; }
+table { border-collapse:collapse; width:100%; margin:14px 0; font-size:0.95em; }
+th, td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+th { background:var(--soft); }
+ol.steps li { margin-bottom:6px; }
+nav.toc { background:var(--soft); border:1px solid var(--line); padding:6px 18px 12px; border-radius:4px; }
+nav.toc ul { padding-left:20px; margin:4px 0; }
+nav.toc li { margin:2px 0; }
+.small { font-size:0.88em; color:#555; }
+.pair { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+.pair figure { margin:8px 0; }
+a { color:#1f5fa8; }
+
+.author { border-left:4px solid var(--accent); padding:4px 0 4px 16px; margin:12px 0 20px; font-style:italic; }
+.author p { margin:6px 0; }
+.author .sign { font-style:normal; font-weight:600; text-align:right; }
+p.cams { margin:2px 0 10px; font-size:0.92em; }
+span.count { font-weight:normal; font-size:0.85em; color:#777; }
+</style>
+</head>
+<body>
+<header class="cover">
+<div>
+<h1>LumenWebP User Guide</h1>
+<p>WebP pictures in Lumen, on RISC OS</p>
+<p>The plug-in that lets Lumen open, show, adjust and export WebP pictures (.webp), the format web pages, many phones and editors, and Google's tools save.</p>
+<span class="badge">LumenWebP 1.0 &middot; libwebp 1.6.0</span>
+</div>
+</header>
+<main>
+
+<figure><img src="images/cover.png" alt="A WebP picture of Herdwick sheep in Lumen"><figcaption>A WebP picture open in Lumen's Viewer, decoded by LumenWebP. (Photo by Julian Herzog, CC BY 4.0, saved as WebP for this guide.)</figcaption></figure>
+
+<nav class="toc">
+<h3>Contents</h3>
+<ul>
+<li><a href="#intro">Introduction</a></li>
+<li><a href="#part1">Part I: Getting Started</a>
+<ul><li><a href="#ch1">1. What LumenWebP does</a></li><li><a href="#ch2">2. Installing LumenWebP</a></li></ul></li>
+<li><a href="#part2">Part II: WebP Pictures in Lumen</a>
+<ul><li><a href="#ch3">3. Bringing WebP pictures in</a></li><li><a href="#ch4">4. Looking, adjusting and exporting</a></li><li><a href="#ch5">5. What the Info tab tells you</a></li></ul></li>
+<li><a href="#part3">Part III: Looking After the Plug-in</a>
+<ul><li><a href="#ch6">6. Switching it off and removing it</a></li></ul></li>
+<li><a href="#part4">Part IV: The Part of Tens</a>
+<ul><li><a href="#ch7">7. Ten problems and what to do about them</a></li><li><a href="#ch8">8. Ten things for experienced users</a></li></ul></li>
+<li><a href="#credits">Credits and licences</a></li>
+</ul>
+</nav>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="intro">Introduction</h2>
+
+<p><b>WebP</b> is Google's picture format, in files ending <code>.webp</code>. Web pages use it everywhere, and so do many phones, messaging apps and image editors. A WebP picture is either <b>lossy</b>, compressed as a frame of VP8 video (smaller than a JPEG of the same quality), or <b>lossless</b>, kept exactly (smaller than a PNG). Either kind can have <b>transparency</b>, and a WebP file can also be a short <b>animation</b>.</p>
+<p>Lumen doesn't read WebP itself. It hands WebP pictures to a small separate program, <b>LumenWebP</b>, built on Google's <b>libwebp</b>. LumenWebP is a <b>format plug-in</b>: its description tells Lumen which files are WebP pictures, and Lumen asks it for their pictures and details.</p>
+<p>Once it's installed, WebP pictures sit in Lumen's library beside your JPEGs, HEIF photos and raw files, and you rate, adjust, export, print and map them in the same way.</p>
+
+<h4>About this guide</h4>
+<p>This guide is about the plug-in. Everything else about Lumen is in the <b>Lumen User Guide</b>: choose <b>User guide</b> from the menu on Lumen's icon bar icon.</p>
+<p>The pictures are screenshots of Lumen 0.0.39.2 with LumenWebP 1.0 on RISC OS 5. The four Wasdale photos in them are by Julian Herzog (Wikimedia Commons, CC BY 4.0), the same photos as in the Lumen User Guide, saved as WebP for this guide; the others are test pictures made for the plug-in's tests (see <a href="#credits">Credits</a>).</p>
+
+<h4>What we assume you know</h4>
+<p>That you have Lumen and know your way round it a little: how to import photos and open one in the Viewer, the three mouse buttons (<b>Select</b>, <b>Menu</b> and <b>Adjust</b>), and how to drag a directory from a Filer window.</p>
+
+<h4>The boxes in this guide</h4>
+<div class="box tip"><b class="label">TIP</b>A quicker or easier way to do something.</div>
+<div class="box rem"><b class="label">REMEMBER</b>Worth keeping in mind as you work.</div>
+<div class="box warn"><b class="label">WARNING</b>Get this wrong and you could lose work, or time.</div>
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>How it works underneath. You can skip these.</div>
+<div class="box try"><b class="label">TRY IT</b>A short exercise to do as you read.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part1">Part I: Getting Started<small>What the plug-in is, and installing it</small></h2>
+
+<h3 class="chapter" id="ch1"><span>1</span> What LumenWebP does</h3>
+
+<p>Lumen asks LumenWebP for two things.</p>
+<ul>
+<li><b>A small picture for the thumbnail.</b> LumenWebP decodes the picture straight to thumbnail size, which takes a moment.</li>
+<li><b>The picture itself.</b> When you open a WebP picture in the Viewer, zoom in, or export or print it, LumenWebP decodes it at the size Lumen needs. From then on Lumen treats it like any other photo.</li>
+</ul>
+<p>Each time, LumenWebP also gives Lumen the picture's details from its EXIF, if it has any: the camera, the exposure, the date, which way up it goes, and where the EXIF is in the file, so the Info tab can list all of it and Lumen can find where the picture was taken for <b>Show on map</b>.</p>
+
+<h4>What LumenWebP doesn't do</h4>
+<ul>
+<li>It never changes or writes to your WebP files. Like all of Lumen, it only reads them.</li>
+<li>It doesn't save WebP files. Export makes JPEGs or PNGs, as for any photo.</li>
+<li>It doesn't play animations. For an animated WebP, Lumen shows the first frame.</li>
+</ul>
+
+<div class="box tech"><b class="label">TECHNICAL STUFF</b>LumenWebP is an ordinary RISC OS program that Lumen starts in the background, in a task window, once for each job, and which quits when the job is done, exactly as it runs LumenRaw and LumenHEIF. A damaged file can't take Lumen down with it. The details are in <a href="#ch8">Chapter 8</a>.</div>
+
+<h3 class="chapter" id="ch2"><span>2</span> Installing LumenWebP</h3>
+
+<h4>What you need</h4>
+<ul>
+<li><b>Lumen</b> 0.0.38 or later. LumenWebP lives inside Lumen, in <code>!Lumen.Plugins.WebP</code>.</li>
+<li>The same computer Lumen needs: RISC OS 5.30 or later on an ARMv7 machine with VFPv3, such as a Raspberry Pi 4, 400 or CM4, with the SharedUnixLibrary and ARMEABISupport modules from PackMan. LumenWebP uses NEON where the processor has it, and works without it too.</li>
+<li><b>Memory</b>: LumenWebP needs memory only while it works: about 40 MB to decode a 12 megapixel lossy picture at full size, and about 90 MB for a lossless one or one with transparency. Thumbnails need much less.</li>
+</ul>
+
+<h4>With PackMan</h4>
+<ol class="steps">
+<li>Open PackMan and find the <b>LumenWebP</b> package.</li>
+<li>Install it. PackMan puts it inside Lumen, in <code>!Lumen.Plugins.WebP</code>.</li>
+<li>If Lumen is running, quit it and start it again. Lumen looks for plug-ins when it starts.</li>
+</ol>
+
+<h4>By hand, from the zip file</h4>
+<p>LumenWebP also comes as a zip file, <code>LumenWebP-1.0.zip</code>, laid out as it goes into Lumen: <code>!Lumen.Plugins.WebP</code>.</p>
+<ol class="steps">
+<li>Open the zip file (with SparkFS, or unzip it into a directory).</li>
+<li>Open the <code>!Lumen</code> directory inside it (hold <kbd>Shift</kbd> and double-click it), then <code>Plugins</code>. You'll see a directory called <code>WebP</code>.</li>
+<li>In Lumen, choose <b>Plug-ins &rarr; Add plug-in...</b> from the menu on Lumen's icon bar icon.</li>
+<li>Drag the <code>WebP</code> directory into the Add plug-in window. Lumen copies it into its own Plugins directory and uses it at once, without restarting.</li>
+</ol>
+<p>You can also drag the <code>WebP</code> directory straight onto Lumen's main window.</p>
+
+<h4>Checking it's working</h4>
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon. LumenWebP is listed as <b>LumenWebP 1.0</b>, with a tick when it's on.</p>
+<figure><img src="images/plugins-menu.png" alt="The Plug-ins menu"><figcaption>The Plug-ins menu, with LumenWebP installed and on.</figcaption></figure>
+<p>LumenWebP tells Lumen the MIME type it reads, <code>image/webp</code>. If your MimeMap (<code>InetDBase:MimeMap</code>) gives it a RISC OS filetype, Lumen imports files of that type whatever they're called, and lists it on its <b>File types</b> menu so a double-click can open them in Lumen.</p>
+
+<div class="box try"><b class="label">TRY IT</b>Save a picture from a web page as WebP (its name ends in <code>/webp</code> on RISC OS) and drag it into Lumen's window. A thumbnail appears within a second or two. Double-click it to open it in the Viewer.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part2">Part II: WebP Pictures in Lumen<small>Importing, looking, adjusting and exporting</small></h2>
+
+<h3 class="chapter" id="ch3"><span>3</span> Bringing WebP pictures in</h3>
+
+<p>Import WebP pictures as you would any others: drag a directory or the files into Lumen's window, or use <b>Import</b> on the toolbar. Lumen knows them by their ending, <code>webp</code>, in capitals or not, and by the first bytes of the file, so one with another name is found too.</p>
+<figure><img src="images/browser.png" alt="WebP pictures in the Browser"><figcaption>Four WebP photos and four test pictures just imported: lossy, lossless, with transparency, animated, and one taken on its side.</figcaption></figure>
+<div class="box warn"><b class="label">WARNING</b>Without LumenWebP, Lumen doesn't know WebP pictures at all, so it leaves them out when it imports a directory. Once LumenWebP is installed, import the directory again: Lumen adds the WebP pictures, and the photos already there aren't added twice.</div>
+
+<h3 class="chapter" id="ch4"><span>4</span> Looking, adjusting and exporting</h3>
+
+<p>Double-click a WebP picture, as for any other. Lumen asks LumenWebP for a picture the size of the Viewer, then the full size in the background for <b>100%</b> and the <b>loupe</b>.</p>
+<ul>
+<li><b>Transparency</b>: Lumen has no transparency of its own, so a WebP picture with transparent parts is laid on white.</li>
+<li><b>Animations</b>: Lumen shows the first frame, on the animation's own canvas.</li>
+<li><b>Which way up</b>: if the picture's EXIF says it was taken on its side, Lumen turns it upright, as for a JPEG. Lumen's own turning (<kbd>[</kbd> and <kbd>]</kbd>) works on top.</li>
+</ul>
+<p>A WebP picture is just a photo to the rest of Lumen. Everything in the Adjustments tab works on it, and Export and Print work the same. Exports are JPEG or PNG, with the picture's EXIF, caption and keywords. A WebP picture with a position in its EXIF can be shown on a map with RiscOSM, like any other.</p>
+<div class="box rem"><b class="label">REMEMBER</b>Most WebP pictures from the web have no EXIF, so they have no date taken, and Lumen files them by the date of the file.</div>
+
+<h3 class="chapter" id="ch5"><span>5</span> What the Info tab tells you</h3>
+
+<p>Select a WebP picture and click the <b>Info</b> tab. The <b>Format</b> line says <b>WebP picture, read by the LumenWebP plug-in</b>. Under it, <b>Encoding</b> says how the picture is coded:</p>
+<table>
+<tr><th>Encoding says</th><th>Meaning</th></tr>
+<tr><td>WebP lossy</td><td>Compressed like a JPEG (as VP8 video): most WebP pictures.</td></tr>
+<tr><td>WebP lossless</td><td>Kept exactly, like a PNG: screenshots, drawings and logos, usually.</td></tr>
+<tr><td>..., with transparency</td><td>It has transparent parts, which Lumen lays on white.</td></tr>
+<tr><td>..., animated (8 frames)</td><td>An animation: Lumen shows its first frame.</td></tr>
+</table>
+<figure><img src="images/info-webp.png" alt="The Info tab for a WebP picture"><figcaption>A WebP photo in the Info tab. Its encoding comes from LumenWebP, and the camera, exposure and date from its EXIF.</figcaption></figure>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part3">Part III: Looking After the Plug-in<small>Switching it off and removing it</small></h2>
+
+<h3 class="chapter" id="ch6"><span>6</span> Switching it off and removing it</h3>
+
+<p>Choose <b>Plug-ins</b> from the menu on Lumen's icon bar icon (or from the main menu over the Browser).</p>
+<p>Choose <b>LumenWebP 1.0</b> to switch it off: the tick goes. LumenWebP stays installed, but Lumen doesn't use it, and remembers that next time it starts. Choose it again to switch it back on. While it's off, WebP pictures keep their thumbnails, stars, albums and adjustments, but opening one shows a message instead of the picture.</p>
+<p><b>Remove &rarr; LumenWebP</b> deletes LumenWebP from Lumen, after asking. Your WebP pictures stay in the library, with their stars and adjustments; they just can't be opened until you install it again.</p>
+<div class="box warn"><b class="label">WARNING</b>If PackMan installed LumenWebP, remove it with PackMan, not with Lumen's Remove. Otherwise PackMan still thinks it's there.</div>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="part4">Part IV: The Part of Tens<small>Quick answers</small></h2>
+
+<h3 class="chapter" id="ch7"><span>7</span> Ten problems and what to do about them</h3>
+<table>
+<tr><th>Problem</th><th>What to do</th></tr>
+<tr><td>WebP pictures aren't imported</td><td>LumenWebP isn't installed, or Lumen is older than 0.0.38. Install it (<a href="#ch2">Chapter 2</a>), then import the directory again.</td></tr>
+<tr><td>"...the LumenWebP plug-in that reads them is switched off"</td><td>Tick <b>LumenWebP</b> in <b>Plug-ins</b> on Lumen's icon bar menu, then open the picture again.</td></tr>
+<tr><td>"...The LumenWebP plug-in that reads them needs a newer Lumen"</td><td>This LumenWebP was made for a newer Lumen than yours. Update Lumen.</td></tr>
+<tr><td>"The LumenWebP plug-in couldn't read this photo (...)"</td><td>The file is damaged or cut short (a download that didn't finish, say), or isn't a WebP picture. Try another copy.</td></tr>
+<tr><td>"The LumenWebP plug-in stopped without finishing (perhaps out of memory)"</td><td>Decoding needs memory for a moment (<a href="#ch2">Chapter 2</a>). Quit other big programs and try again.</td></tr>
+<tr><td>"Lumen has no plug-in for this photo's format now"</td><td>LumenWebP was removed. Install it again.</td></tr>
+<tr><td>A picture's transparent parts are white</td><td>Normal: Lumen lays transparency on white.</td></tr>
+<tr><td>An animation doesn't move</td><td>Normal: Lumen shows the first frame only.</td></tr>
+<tr><td>A picture has no date taken</td><td>It has no EXIF (most from the web don't). Lumen uses the file's date.</td></tr>
+<tr><td>Remove says the plug-in was installed by PackMan</td><td>Use PackMan to remove it, so PackMan knows it's gone.</td></tr>
+</table>
+
+<h3 class="chapter" id="ch8"><span>8</span> Ten things for experienced users</h3>
+<ol>
+<li><b>It's a command-line program.</b> <code>LumenWebP thumb SRC IMAGE INFO</code> writes the picture, 512 pixels at most, as a binary PPM; <code>LumenWebP decode SRC IMAGE INFO MAXSIDE</code> decodes it to a PPM no bigger than MAXSIDE (0: full size). Run with no arguments, it prints its version and libwebp's.</li>
+<li><b>INFO</b> is a text file of <code>key=value</code> lines: <code>width</code>, <code>height</code>, <code>orientation</code> (from the EXIF; Lumen turns the picture), <code>make</code>, <code>model</code>, <code>iso</code>, <code>exposure</code>, <code>fnumber</code>, <code>focal</code>, <code>taken</code>, <code>encoding</code>, and <code>exif=OFFSET LENGTH</code>, where the EXIF chunk's TIFF data is in the file; or <code>error=...</code>.</li>
+<li><b>Files appear whole or not at all:</b> written under a temporary name and renamed when complete. With Lumen 0.0.38.7 or later, the picture can instead be handed over in memory, in a dynamic area, without going through the disc.</li>
+<li><b>The plug-in description</b>, <code>!Lumen.Plugins.WebP.Plugin</code>, follows Lumen's format plug-in API 1: <code>Format: WebP picture</code>, <code>Extensions: webp</code>, <code>MIME: image/webp</code> and <code>Signature: 8 WEBP</code> (a RIFF file whose form type is WEBP).</li>
+<li><b>Scaling as it decodes:</b> libwebp makes the picture smaller as it decodes it, row by row, so a thumbnail of a big picture never needs the full size in memory.</li>
+<li><b>NEON:</b> libwebp's NEON code (the VP8 transforms, loop filters and prediction, YUV to RGB, upsampling, the lossless transforms and the scaler) is used when VFPSupport_Features says the processor has NEON, and the plain C code otherwise. <code>*Set Lumen$NEON 0</code> forces the plain code. Full-size pictures are identical either way; scaled ones can differ by a level or two in a few pixels at the edges.</li>
+<li><b>Tested for RISC OS's alignment rules:</b> RISC OS stops a program that reads memory at an unaligned address. The tests run LumenWebP on ARM under QEMU with that rule, with NEON and without, and check every picture against Pillow's decoding.</li>
+<li><b>Transparency</b> is laid on white with each colour as <i>c</i>&times;<i>a</i>/255 + 255&times;(1 &minus; <i>a</i>/255), rounded; <b>animations</b> give their first frame, scaled with the canvas and placed at its offset on white.</li>
+<li><b>How Lumen runs it:</b> in a task window, one job at a time, sharing the queue with LumenRaw and LumenHEIF; job files are in <code>&lt;Wimp$ScrapDir&gt;.LumenRaw</code>.</li>
+<li><b>Source and licences:</b> LumenWebP is &copy; Andrew Youll, 2026, under the MIT licence; its source is part of Lumen's source (<code>plugins.webp</code>, and <code>deps.build-webp.sh</code>, which builds libwebp for it). libwebp is &copy; Google Inc., under its BSD licence, with Google's patent grant for WebP.</li>
+</ol>
+
+<!-- ======================================================================= -->
+<h2 class="part" id="credits">Credits and licences</h2>
+<p>The four Wasdale photos in this guide (Great Gable, Herdwick sheep, Styhead Tarn and Wasdale Head) are by <b>Julian Herzog</b>, from Wikimedia Commons, under the Creative Commons Attribution 4.0 licence (CC BY 4.0), as in the Lumen User Guide. They were saved as WebP for this guide. The test pictures were made for LumenWebP's tests.</p>
+<p class="small">LumenWebP is &copy; Andrew Youll, 2026, and is free software under the MIT licence. It is built on libwebp (&copy; Google Inc., BSD 3-clause licence, with Google's additional patent grant); both texts are in <code>!Lumen.Plugins.WebP.Licence</code>. WebP is a trademark of Google LLC, used here only to say which pictures work.</p>
+
+</main>
+
+</body>
+</html>

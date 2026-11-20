@@ -1,0 +1,12 @@
+LumenWebP changes
+=================
+
+1.0 (20 November 2026): first release
+
+- Reads lossy and lossless WebP pictures, with or without transparency,
+  and the first frame of animated ones, with libwebp 1.6.0.
+- Decodes straight to the size wanted for thumbnails and the Viewer.
+- Uses libwebp's NEON code when the processor has it (Lumen$NEON 0
+  forces the plain code).
+- Reads the picture's EXIF: the camera, the date, the orientation and
+  where it was taken.

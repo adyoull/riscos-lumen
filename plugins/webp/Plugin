@@ -1,0 +1,15 @@
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
+# Lumen plug-in description (Lumen's format plug-in API: docs/plugin-api.md)
+Name: WebP pictures (libwebp)
+Version: 1.0
+Kind: format
+API: 1
+Format: WebP picture
+Extensions: webp
+MIME: image/webp
+Signature: 8 WEBP
+Program: LumenWebP
+Package: LumenWebP
+Description: Reads WebP pictures, lossy and lossless, with libwebp 1.6.0

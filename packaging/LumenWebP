@@ -1,0 +1,27 @@
+# Copyright (c) 2026 Andrew Youll
+# Released under the MIT licence: see the LICENSE file.
+# SPDX-License-Identifier: MIT
+# Spec for tools/riscpkg.py: the WebP plug-in, from LumenWebP-<ver>.zip.
+Package: LumenWebP
+Section: Graphics
+Priority: Optional
+Licence: Free
+Maintainer: Andrew Youll <adyoull@users.noreply.github.com>
+Standards-Version: 0.4.0
+Environment: arm32, vfpv3
+Depends: Lumen (>= 0.0.38), SharedUnixLibrary (>= 1.16), ARMEABISupport
+Description: WebP pictures for Lumen (libwebp)
+ Lets Lumen import, show, adjust and export WebP pictures, lossy and
+ lossless, with or without transparency, and the first frame of animated
+ ones, with Google's libwebp 1.6.0, and reads their EXIF (camera, date
+ and where they were taken). It uses NEON where the computer has it. It
+ needs about 40 MB of memory to decode a 12 megapixel picture. It goes
+ into Lumen's Plugins directory; Lumen finds it the next time it starts.
+Build-Map: !Lumen/Plugins/WebP -> Apps/Graphics/!Lumen/Plugins/WebP
+Build-Notice: The WebP plug-in for Lumen, packaged for PackMan from its
+ release zip.
+ .
+ LumenWebP is copyright (C) 2026 Andrew Youll, under the MIT licence.
+ libwebp is copyright Google Inc., used under its BSD licence, with
+ Google's additional patent grant for WebP. The licences follow.
+Build-Copyright: !Lumen/Plugins/WebP/Licence

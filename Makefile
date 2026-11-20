@@ -190,7 +190,7 @@ $(OUT)/LumenRaw-User-Guide.zip: $(RAW_GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenraw-guide
 $(OUT)/LumenHEIF-User-Guide.zip: $(HEIF_GUIDE)
 	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenheif-guide
-guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip $(OUT)/LumenHEIF-User-Guide.zip $(OUT)/LumenLens-User-Guide.zip
+guide: $(OUT)/Lumen-User-Guide.zip $(OUT)/LumenRaw-User-Guide.zip $(OUT)/LumenHEIF-User-Guide.zip $(OUT)/LumenLens-User-Guide.zip $(OUT)/LumenWebP-User-Guide.zip
 
 # The lens plug-in (LumenLens): only data, the lensfun project's lens
 # database in the form Lumen reads (tools/lensdb.py makes it, from a
@@ -282,6 +282,52 @@ test-heif: $(OUT)/lumenheif-host $(OUT)/lumenheif-arm
 	tests/test_heif.sh $(OUT)/lumenheif-host "" $(OUT)/heif-host
 	LUMEN_NEON=1 tests/test_heif.sh $(OUT)/lumenheif-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/heif-arm-neon $(OUT)/heif-host
 	LUMEN_NEON=0 tests/test_heif.sh $(OUT)/lumenheif-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/heif-arm-plain $(OUT)/heif-host
+
+# --- The WebP plug-in (LumenWebP), a separate program in its own package --
+# libwebp 1.6.0 (deps/build-webp.sh), its NEON code chosen at run time.
+WEBP_SRC := plugins/webp/lumenwebp.c
+WEBP_FLAGS := -O2 -Wall -Wextra
+WEBP_VERSION := 1.0
+WEBP_LIBS = $(1)/lib/libwebp-lumen.a
+$(OUT)/LumenWebP,ff8: $(WEBP_SRC) plugins/handover.h src/core/exif.c src/core/exif.h
+	@mkdir -p $(OUT)
+	$(RO_CC) $(RISCOS_CFLAGS) $(WEBP_FLAGS) -Isrc/core -I$(DEPS)/riscos/include -c $(WEBP_SRC) -o $(OUT)/lumenwebp.o
+	$(RO_CC) $(RISCOS_CFLAGS) $(WEBP_FLAGS) -Isrc/core -c src/core/exif.c -o $(OUT)/lumenwebp-exif.o
+	$(RO_CC) $(RISCOS_CFLAGS) -o $(OUT)/lumenwebp.elf $(OUT)/lumenwebp.o $(OUT)/lumenwebp-exif.o \
+	  $(RISCOS_LDFLAGS) $(call WEBP_LIBS,$(DEPS)/riscos) -lm
+	$(CHECK_ALL) $(OUT)/lumenwebp.elf
+	$(RO_STRIP) -o $(OUT)/lumenwebp.stripped $(OUT)/lumenwebp.elf
+	$(ELF2AIF) -e $(OUT)/lumenwebp.stripped $@ >/dev/null
+$(OUT)/lumenwebp-host: $(WEBP_SRC) plugins/handover.h src/core/exif.c src/core/exif.h
+	@mkdir -p $(OUT)
+	gcc -no-pie $(WEBP_FLAGS) -Isrc/core -I$(DEPS)/host/include -o $@ $(WEBP_SRC) src/core/exif.c $(call WEBP_LIBS,$(DEPS)/host) -lm
+$(OUT)/lumenwebp-arm: $(WEBP_SRC) plugins/handover.h src/core/exif.c src/core/exif.h
+	@mkdir -p $(OUT)
+	arm-linux-gnueabihf-gcc -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard -marm -mno-unaligned-access $(WEBP_FLAGS) \
+	  -no-pie -Isrc/core -I$(DEPS)/linuxarm/include -o $@ $(WEBP_SRC) src/core/exif.c $(call WEBP_LIBS,$(DEPS)/linuxarm) -lm
+WEBP_GUIDE := docs/lumenwebp-guide/index.html $(wildcard docs/lumenwebp-guide/images/*.png)
+$(OUT)/LumenWebP-User-Guide.zip: $(WEBP_GUIDE)
+	rm -f $@ && cd docs && zip -qr $(CURDIR)/$@ lumenwebp-guide
+# The release zip, laid out as it goes into Lumen (PackMan's LumenWebP
+# package maps it into Apps.Graphics.!Lumen.Plugins.WebP).
+$(OUT)/LumenWebP-$(WEBP_VERSION).zip: $(OUT)/LumenWebP,ff8 plugins/webp/ReadMe plugins/webp/Licence plugins/webp/Plugin plugins/webp/Changes $(WEBP_GUIDE)
+	rm -rf $(OUT)/webppkg && mkdir -p $(OUT)/webppkg/!Lumen/Plugins/WebP/Guide
+	cp $(OUT)/LumenWebP,ff8 $(OUT)/webppkg/!Lumen/Plugins/WebP/
+	cp plugins/webp/ReadMe $(OUT)/webppkg/!Lumen/Plugins/WebP/ReadMe,fff
+	cp plugins/webp/Licence $(OUT)/webppkg/!Lumen/Plugins/WebP/Licence,fff
+	cp plugins/webp/Plugin $(OUT)/webppkg/!Lumen/Plugins/WebP/Plugin,fff
+	cp plugins/webp/Changes $(OUT)/webppkg/!Lumen/Plugins/WebP/Changes,fff
+	cp docs/lumenwebp-guide/index.html $(OUT)/webppkg/!Lumen/Plugins/WebP/Guide/index.html,faf
+	if ls docs/lumenwebp-guide/images/*.png >/dev/null 2>&1; then mkdir -p $(OUT)/webppkg/!Lumen/Plugins/WebP/Guide/images; \
+	  for f in docs/lumenwebp-guide/images/*.png; do cp $$f $(OUT)/webppkg/!Lumen/Plugins/WebP/Guide/images/$$(basename $$f),b60; done; fi
+	$(ROZIP) $@ -C $(OUT)/webppkg !Lumen
+webp-plugin: $(OUT)/LumenWebP-$(WEBP_VERSION).zip $(OUT)/LumenWebP-User-Guide.zip
+# The helper on the WebP pictures made for the tests (tests/webp), on Linux,
+# and on ARM with RISC OS's alignment rules with and without NEON.
+test-webp: $(OUT)/lumenwebp-host $(OUT)/lumenwebp-arm
+	tests/test_webp.sh $(OUT)/lumenwebp-host "" $(OUT)/webp-host
+	LUMEN_NEON=1 tests/test_webp.sh $(OUT)/lumenwebp-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/webp-arm-neon $(OUT)/webp-host
+	LUMEN_NEON=0 tests/test_webp.sh $(OUT)/lumenwebp-arm "PATH=$(RISCOS_TOOLCHAIN)/bin:$$PATH $(ALIGNTRAP)" $(OUT)/webp-arm-plain $(OUT)/webp-host
 
 # --- Screenshots: Lumen's own drawing, recorded against the Fake RISC OS ----------
 # out/shots/lumen-*.png. The window frame, menus' frames and icon bar are an

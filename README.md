@@ -23,6 +23,8 @@ brushes, or one of fifteen styles. Then it exports or prints them.
 - **HEIF and AVIF photos** (.heic, as phones take them, and .avif): with
   the LumenHEIF plug-in (libheif, FFmpeg's HEVC decoder and dav1d), also
   on that page.
+- **WebP pictures** (.webp): with the LumenWebP plug-in (libwebp), also on
+  that page.
 
 I've used AI to help with this. The code, build scripts and documentation
 were written with Anthropic's Claude as a coding assistant.
@@ -48,12 +50,14 @@ were written with Anthropic's Claude as a coding assistant.
    `!Lumen.Plugins.HEIF` directory.
 5. For Lens Correction's lens profiles, likewise unzip `LumenLens-1.0.zip`
    and add its `!Lumen.Plugins.Lens` directory.
-6. Double-click `!Lumen`, and drag a folder of photos into its window.
+6. For WebP pictures, likewise unzip `LumenWebP-1.0.zip` and add its
+   `!Lumen.Plugins.WebP` directory.
+7. Double-click `!Lumen`, and drag a folder of photos into its window.
 
 ## What it does
 
 - Imports JPEG, PNG and TIFF photos (raw files with LumenRaw, HEIF and AVIF
-  photos with LumenHEIF), in the
+  photos with LumenHEIF, WebP pictures with LumenWebP), in the
   background, never copying or changing them; finds them again if they
   move; watches folders for new photos.
 - Browses thumbnails in three sizes; a viewer with a 100% view and a
@@ -129,7 +133,9 @@ riscos-crossdev's checks on the RISC OS binary. `make` builds
 zip (LibRaw built by `deps/build-libraw.sh`); `make heif-plugin` the
 LumenHEIF plug-in and its sources zip (FFmpeg, dav1d and libheif built by
 `deps/build-heif.sh`, `make test-heif` testing it on x86-64 and on ARM
-with and without NEON); `make guide` the two user guides as zips.
+with and without NEON); `make webp-plugin` the LumenWebP plug-in
+(libwebp built by `deps/build-webp.sh`; `make test-webp` tests it the same
+way); `make guide` the user guides as zips.
 
 ## Status
 
@@ -157,7 +163,7 @@ Linux (RISC OS 5.31-5 under QEMU); its automated tests run on Linux
 
 Lumen reads JPEG, PNG and TIFF itself. Other formats come from plug-ins in
 `!Lumen.Plugins`: LumenRaw for camera raw files, and format plug-ins
-such as LumenHEIF, whose `Plugin` file says which files they read. The
+such as LumenHEIF and LumenWebP, whose `Plugin` file says which files they read. The
 format plug-in API is in [docs/plugin-api.md](docs/plugin-api.md).
 
 ## Licence
@@ -169,6 +175,7 @@ source ships with each release (`LibRaw-0.22.3-source.zip`). The
 LumenHEIF plug-in's own code is MIT; libheif is under the LGPL 3 and
 FFmpeg's libavcodec and libavutil under the LGPL 2.1 or later, dav1d
 under its BSD licence, and their sources and the patches ship as `LumenHEIF-1.3-sources.zip`. The
+LumenWebP plug-in's own code is MIT; libwebp is under its BSD licence. The
 libraries built into Lumen keep their own licences, collected in
 `app/Licences` (installed as `!Lumen.Licences`): SQLite (public domain),
 libjpeg-turbo, libpng, libtiff, zlib and UnixLib (BSD-style, with LGPL parts:
