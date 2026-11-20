@@ -12,8 +12,9 @@
 /* IMG_PLUGIN: a format Lumen knows nothing of itself, read by a format
    plug-in that claims it (by its extension or first bytes: plugins.h).
    (4 is thumbgen's own: a picture the raw plug-in made.) IMG_TIFF: a
-   TIFF that isn't a camera raw file (read with libtiff: tiffmeta.h). */
-enum { IMG_UNKNOWN = 0, IMG_JPEG = 1, IMG_PNG = 2, IMG_RAW = 3, IMG_PLUGIN = 5, IMG_TIFF = 6 };
+   TIFF that isn't a camera raw file (read with libtiff: tiffmeta.h).
+   IMG_FITS: an astronomer's FITS picture (fits.h). */
+enum { IMG_UNKNOWN = 0, IMG_JPEG = 1, IMG_PNG = 2, IMG_RAW = 3, IMG_PLUGIN = 5, IMG_TIFF = 6, IMG_FITS = 7 };
 
 typedef struct
 {

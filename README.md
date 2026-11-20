@@ -56,7 +56,7 @@ were written with Anthropic's Claude as a coding assistant.
 
 ## What it does
 
-- Imports JPEG, PNG and TIFF photos (raw files with LumenRaw, HEIF and AVIF
+- Imports JPEG, PNG and TIFF photos and FITS astronomy pictures (raw files with LumenRaw, HEIF and AVIF
   photos with LumenHEIF, WebP pictures with LumenWebP), in the
   background, never copying or changing them; finds them again if they
   move; watches folders for new photos.

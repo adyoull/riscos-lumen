@@ -17,6 +17,7 @@
 #include "develop.h"
 #include "rawjob.h"
 #include "tiffmeta.h"
+#include "fits.h"
 
 #define HEAD_BYTES (128 * 1024)       /* enough for EXIF in nearly every camera's files */
 #define PROBE_BYTES 4200              /* enough to tell what a file is (plug-ins' signatures are in the first 4 KB) */
@@ -413,7 +414,7 @@ static int builtin_mime (const char *m)
 
 static int has_photo_extension (const char *path)
 {
-  static const char *const ext[] = { "jpg", "jpeg", "jpe", "png", "tif", "tiff" };
+  static const char *const ext[] = { "jpg", "jpeg", "jpe", "png", "tif", "tiff", "fits", "fit", "fts" };
   const char *dot = NULL, *end, *q;
   size_t n, k;
   if (!path)
@@ -484,8 +485,9 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
   cat_original o;
   cat_id existing, v;
   unsigned long long h = 14695981039346656037ULL;
-  int fmt, have_tiff = 0;
+  int fmt, have_tiff = 0, have_fits = 0;
   tiff_meta tiff_info;
+  img_info fits_info;
   if (!likely_image_type (e->filetype, path))
     return;
   {
@@ -546,6 +548,23 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       rewind (f);
       got = fread (l->head, 1, HEAD_BYTES, f);
     }
+  else if (fmt == IMG_FITS)
+    {
+      /* A FITS picture: everything from its header. */
+      fits_hdr fh;
+      char ferr[160];
+      if (fits_read_header (f, &fh, ferr, sizeof ferr))
+        {
+          snprintf (l->err, sizeof l->err, "%s: %s", fsys_leaf (path), ferr);
+          l->skipped++;
+          fclose (f);
+          return;
+        }
+      fits_to_info (&fh, &fits_info);
+      have_fits = 1;
+      rewind (f);
+      got = fread (l->head, 1, HEAD_BYTES, f);
+    }
   else if (got == PROBE_BYTES && fseek (f, (long) got, SEEK_SET) == 0)
     got += fread (l->head + got, 1, HEAD_BYTES - PROBE_BYTES, f);
   l->found++;
@@ -559,6 +578,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
       info.format = IMG_PLUGIN;
       info.orientation = 1;
     }
+  else if (have_fits)
+    info = fits_info;
   else if (have_tiff)
     {
       memset (&info, 0, sizeof info);
@@ -584,6 +605,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
         xmp_read (tiff_info.xmp, tiff_info.xmp_len, xcap, sizeof xcap, xkw, sizeof xkw);
       tiff_meta_free (&tiff_info);
     }
+  else if (have_fits)
+    xcap[0] = xkw[0] = '\0';
   else
     xmp_read (l->head, got, xcap, sizeof xcap, xkw, sizeof xkw);
   /* Else IPTC's (Photoshop's, and many other programs'). */
@@ -627,6 +650,8 @@ static void import_file (library *l, const char *path, const fsys_entry *e)
         cat_set_caption (l->db, &v, 1, xcap);
       if (xkw[0])
         cat_add_keywords (l->db, &v, 1, xkw);
+      if (info.encoding[0])
+        cat_set_original_info (l->db, v, &info);   /* how it's encoded (a FITS picture) */
       l->added++;
       if (l->thumbs_pending >= 0)
         l->thumbs_pending++;
@@ -1243,6 +1268,17 @@ static int geo_read_file (library *l, const cat_origin *o, img_info *info)
     img_read_info (l->head, got, info);
   else if (fmt == IMG_RAW)
     img_read_raw_info (l->head, got, info);
+  else if (fmt == IMG_FITS)
+    {
+      fits_hdr fh;
+      char ferr[160];
+      if (fits_read_header (f, &fh, ferr, sizeof ferr) == 0)
+        {
+          info->geo = fh.geo;
+          info->lat = fh.lat;
+          info->lon = fh.lon;
+        }
+    }
   else if (fmt == IMG_TIFF)
     {
       tiff_meta m;

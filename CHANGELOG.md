@@ -1,5 +1,30 @@
 # Lumen changelog
 
+## 0.0.40 (not released yet): FITS pictures
+
+- Lumen reads FITS pictures (.fits, .fit, .fts), as astronomy cameras,
+  capture programs (N.I.N.A., SharpCap...) and stacking programs (Siril,
+  DeepSkyStacker) save them: grey, RGB (three planes), or a camera's
+  colour mosaic made into colour when the header gives its Bayer pattern;
+  8, 16 and 32-bit integers and 32 and 64-bit floating point, with BZERO
+  and BSCALE; in the primary HDU or an IMAGE extension. Compressed FITS
+  (fpack) isn't read, and says so.
+- Linear pictures (a nearly black sky) are stretched for the screen as
+  Siril's and PixInsight's auto-stretch does: from each channel's median
+  and MAD, a shadows clip and a midtones balance that puts the sky at a
+  quarter. A colour mosaic's channels are stretched each on its own, so
+  the sky comes out grey. Already-stretched pictures are shown as they
+  are.
+- Rows: bottom up, as FITS has them, unless ROWORDER says TOP-DOWN.
+- The Info tab shows a FITS header's object, frame type, date, exposure,
+  frames stacked, telescope, focal length, camera, filter, ISO or gain,
+  sensor temperature and software; SITELAT and SITELONG give its place on
+  the map. The date taken, camera, exposure, ISO and focal length go into
+  the library, as for a photo.
+- A colour mosaic is read two by two to a pixel for thumbnails and the
+  Viewer (four times quicker), and demosaicked bilinearly for 100%, the
+  loupe and exports.
+
 ## 0.0.39.2 (18 November 2026): fixes from Matthew Phillips
 
 - Hiding the Inspector (I, or its button), or making the window

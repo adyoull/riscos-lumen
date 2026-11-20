@@ -14,6 +14,7 @@
 #include <png.h>
 #include <tiffio.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include "../src/core/catalog.h"
 #include "../src/core/xmp.h"
 #include "../src/core/exif.h"
@@ -27,6 +28,7 @@
 #include "sqlite3.h"
 #include "../src/core/thumbgen.h"
 #include "../src/core/tiffmeta.h"
+#include "../src/core/fits.h"
 #include "../src/core/plugins.h"
 #include "../src/core/prefs.h"
 #include <math.h>
@@ -1973,6 +1975,303 @@ static void test_lazy_thumbs (void)
   lib_close (l);
 }
 
+
+/* --- FITS --- */
+
+/* Writes a FITS file: the cards given (each "KEY     = value" or
+   anything), SIMPLE/BITPIX/NAXIS first, then the samples v(x, file row,
+   plane) (physical values: stored as (v - bzero)), big-endian. */
+typedef double (*fits_fn) (int x, int y, int plane, void *ctx);
+static void card_out (FILE *f, const char *c, int *n)
+{
+  char b[81];
+  snprintf (b, sizeof b, "%-80s", c);
+  fwrite (b, 1, 80, f);
+  (*n)++;
+}
+static void pad_header (FILE *f, int n)
+{
+  card_out (f, "END", &n);
+  while (n % 36)
+    card_out (f, "", &n);
+}
+static void put_sample (FILE *f, int bitpix, double v)
+{
+  unsigned char b[8];
+  int k, nb = (bitpix < 0 ? -bitpix : bitpix) / 8;
+  uint64_t u = 0;
+  if (bitpix == 8)
+    u = (uint64_t) (v < 0 ? 0 : v > 255 ? 255 : (int) (v + 0.5));
+  else if (bitpix == 16)
+    u = (uint16_t) (int16_t) lround (v - 32768);
+  else if (bitpix == 32)
+    u = (uint32_t) (int32_t) lround (v);
+  else if (bitpix == -32)
+    {
+      float fv = (float) v;
+      uint32_t w;
+      memcpy (&w, &fv, 4);
+      u = w;
+    }
+  else
+    memcpy (&u, &v, 8);
+  for (k = 0; k < nb; k++)
+    b[k] = (unsigned char) (u >> (8 * (nb - 1 - k)));
+  fwrite (b, 1, (size_t) nb, f);
+}
+static void write_fits (const char *path, int bitpix, int w, int h, int planes, const char *const *cards,
+                        fits_fn fn, void *ctx, int ext, long cut)
+{
+  FILE *f = fopen (path, "wb");
+  char c[100];
+  int n = 0, x, y, pl;
+  long bytes;
+  if (ext)
+    {
+      card_out (f, "SIMPLE  =                    T", &n);
+      card_out (f, "BITPIX  =                    8", &n);
+      card_out (f, "NAXIS   =                    0", &n);
+      card_out (f, "EXTEND  =                    T", &n);
+      pad_header (f, n);
+      n = 0;
+      card_out (f, ext == 2 ? "XTENSION= 'BINTABLE'" : "XTENSION= 'IMAGE   '", &n);
+    }
+  else
+    card_out (f, "SIMPLE  =                    T", &n);
+  snprintf (c, sizeof c, "BITPIX  = %20d", bitpix); card_out (f, c, &n);
+  snprintf (c, sizeof c, "NAXIS   = %20d", planes > 1 ? 3 : 2); card_out (f, c, &n);
+  snprintf (c, sizeof c, "NAXIS1  = %20d", w); card_out (f, c, &n);
+  snprintf (c, sizeof c, "NAXIS2  = %20d", h); card_out (f, c, &n);
+  if (planes > 1)
+    {
+      snprintf (c, sizeof c, "NAXIS3  = %20d", planes);
+      card_out (f, c, &n);
+    }
+  if (ext == 2)
+    card_out (f, "ZIMAGE  =                    T", &n);
+  if (bitpix == 16)
+    card_out (f, "BZERO   =              32768.0", &n);
+  for (; cards && *cards; cards++)
+    card_out (f, *cards, &n);
+  pad_header (f, n);
+  for (pl = 0; pl < planes; pl++)
+    for (y = 0; y < h; y++)
+      for (x = 0; x < w; x++)
+        put_sample (f, bitpix, fn (x, y, pl, ctx));
+  bytes = ftell (f);
+  while (bytes % 2880)
+    fputc (0, f), bytes++;
+  fclose (f);
+  if (cut > 0 && truncate (path, cut) != 0)
+    fprintf (stderr, "can't cut %s\n", path);
+}
+
+static unsigned fits_noise (int x, int y)
+{
+  unsigned v = (unsigned) x * 2654435761u ^ (unsigned) y * 40503u;
+  v ^= v >> 13;
+  v *= 0x5bd1e995u;
+  return (v ^ (v >> 15)) & 63;
+}
+
+/* A night sky (about 1000 of 65535, noisy) with a bright "star" in the
+   top-left 8 x 8 as shown: file rows at the end when bottom-up. */
+static double sky_fn (int x, int y, int plane, void *ctx)
+{
+  int h = *(int *) ctx, top_down = ((int *) ctx)[1], yy = top_down ? y : h - 1 - y;
+  (void) plane;
+  if (x < 8 && yy < 8)
+    return 60000;
+  return 1000 + fits_noise (x, yy);
+}
+
+/* A colour mosaic (RGGB from the top left as shown, bottom-up file): a
+   grey sky, and an 8 x 8 block at the top left where only the red
+   sites are bright. */
+static double mosaic_fn (int x, int y, int plane, void *ctx)
+{
+  int h = *(int *) ctx, yy = h - 1 - y;
+  int red = !(yy & 1) && !(x & 1), green = (yy & 1) != (x & 1);
+  (void) plane;
+  if (x < 8 && yy < 8 && red)
+    return 50000;
+  return (red ? 1000 : green ? 2000 : 600) + fits_noise (x, yy);
+}
+
+static double rgb_fn (int x, int y, int plane, void *ctx)
+{
+  (void) x; (void) y; (void) ctx;
+  return plane == 0 ? 0.8 : plane == 1 ? 0.5 : 0.2;
+}
+
+static int fits_decode (const char *path, int max_side, rgb_image *img, char *err, size_t en)
+{
+  thumbgen *t = thumbgen_start (path, NULL, max_side, 1, err, en);
+  int r;
+  if (!t)
+    return -1;
+  while ((r = thumbgen_step (t, 64)) == 0)
+    ;
+  if (r < 0)
+    snprintf (err, en, "%s", thumbgen_error (t));
+  r = r == 1 ? thumbgen_take (t, img) : -1;
+  thumbgen_free (t);
+  return r;
+}
+
+static void test_fits (void)
+{
+  char path[1024], path2[1024], err[256], dir[1024], libdir[1024];
+  int ctx[2] = { 64, 0 }, k, bad;
+  rgb_image a, b;
+  fits_hdr h;
+  img_info in;
+  FILE *f;
+  static const char *const meta[] = {
+    "DATE-OBS= '2026-11-19T22:41:07.250'", "INSTRUME= 'Canon EOS 70D'", "TELESCOP= 'Skywatcher 80ED'",
+    "OBJECT  = 'M42     '", "EXPTIME =                 30.0", "ISOSPEED=                  800",
+    "FOCALLEN=                510.0", "CCD-TEMP=                 12.5", "IMAGETYP= 'Light Frame'",
+    "SITELAT = '+51 30 00'", "SITELONG= '-0 07 30'", "STACKCNT=                   20", "CREATOR = 'Siril v1.2.4'", NULL };
+  static const char *const top_down[] = { "ROWORDER= 'TOP-DOWN'", NULL };
+  static const char *const rggb[] = { "BAYERPAT= 'RGGB'", NULL };
+  static const char *const ascii_d[] = { "EXPTIME =               3.0D+1", NULL };
+
+  p (dir, "Fits"); mkdir (dir, 0777);
+  /* The header */
+  p (path, "Fits/sky.fits"); write_fits (path, 16, 64, 48, 1, meta, sky_fn, (ctx[0] = 48, ctx), 0, 0);
+  f = fopen (path, "rb");
+  {
+    unsigned char head[100];
+    size_t got = fread (head, 1, sizeof head, f);
+    CHECK (fits_is (head, got) && img_probe_named (head, got, path) == IMG_FITS, "fits: known by its first card");
+  }
+  CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && h.w == 64 && h.h == 48 && h.planes == 1 && h.bitpix == 16
+         && h.bzero == 32768 && h.bottom_up && h.data == 2880, "fits: size, type and where the data is");
+  CHECK (!strcmp (h.object, "M42") && !strcmp (h.instrume, "Canon EOS 70D") && h.exptime == 30 && h.iso == 800
+         && h.focal == 510 && h.has_temp && h.ccdtemp == 12.5 && h.stacked == 20 && !strcmp (h.imagetyp, "Light Frame"),
+         "fits: object, camera, exposure, ISO, focal length, temperature, frames stacked, frame type");
+  CHECK (h.geo == GEO_POS && h.lat == 515000000 && h.lon == -1250000, "fits: SITELAT and SITELONG as a position");
+  fits_to_info (&h, &in);
+  CHECK (in.format == IMG_FITS && in.width == 64 && in.height == 48 && !strcmp (in.taken, "2026:11:19 22:41:07")
+         && !strcmp (in.model, "Canon EOS 70D") && in.exposure == 30 && in.iso == 800 && in.focal == 510
+         && !strcmp (in.encoding, "FITS, 16-bit integers, mono"), "fits: what the library keeps");
+  fclose (f);
+  CHECK (fits_has_extension ("a.fits") && fits_has_extension ("$.Sky.M42/FIT") && fits_has_extension ("x.fts,fff")
+         && !fits_has_extension ("x.fitz"), "fits: its extensions");
+  /* The stretch */
+  {
+    double c0, m;
+    CHECK (fabs (fits_mtf (fits_mtf (0.25, 0.02), 0.02) - 0.25) < 1e-9, "fits: the midtones balance puts the median at the target");
+    CHECK (fits_stretch_params (0.015, 0.001, &c0, &m) == 0 && c0 > 0.01 && c0 < 0.015 && m < 0.05,
+           "fits: a dark linear picture is stretched");
+    CHECK (fits_stretch_params (0.45, 0.1, &c0, &m) < 0, "fits: a bright one isn't");
+  }
+  /* Mono, bottom-up: the star at the top left as shown, the sky stretched to about a quarter. */
+  CHECK (fits_decode (path, 1 << 30, &a, err, sizeof err) == 0 && a.w == 64 && a.h == 48, "fits: decoded at full size");
+  if (!a.rgb) fprintf (stderr, "fits: %s\n", err);
+  if (a.rgb)
+    {
+      int sky = a.rgb[(20 * 64 + 40) * 3], star = a.rgb[(2 * 64 + 2) * 3], br = a.rgb[(46 * 64 + 2) * 3];
+      CHECK (star == 255 && br < 120, "fits: FITS's first row at the bottom (the star shown at the top)");
+      CHECK (sky > 30 && sky < 110 && a.rgb[(20 * 64 + 40) * 3 + 1] == sky, "fits: the night sky stretched to be seen, grey");
+    }
+  ctx[1] = 1;
+  p (path2, "Fits/topdown.fits"); write_fits (path2, 16, 64, 48, 1, top_down, sky_fn, ctx, 0, 0);
+  CHECK (fits_decode (path2, 1 << 30, &b, err, sizeof err) == 0 && a.rgb && b.rgb
+         && !memcmp (a.rgb, b.rgb, (size_t) a.w * a.h * 3), "fits: ROWORDER TOP-DOWN: the same picture");
+  free (b.rgb);
+  ctx[1] = 0;
+  free (a.rgb);
+  /* RGB floating point, already bright: shown as it is. */
+  p (path, "Fits/rgb.fit"); write_fits (path, -32, 20, 10, 3, NULL, rgb_fn, NULL, 0, 0);
+  CHECK (fits_decode (path, 1 << 30, &a, err, sizeof err) == 0 && a.w == 20 && a.h == 10 && a.rgb[0] == 204 && a.rgb[1] == 128
+         && a.rgb[2] == 51, "fits: an RGB picture of floating point 0-1, bright, as it is");
+  free (a.rgb);
+  /* 64-bit float, 8-bit, 32-bit integers */
+  p (path, "Fits/rgb64.fits"); write_fits (path, -64, 20, 10, 3, NULL, rgb_fn, NULL, 0, 0);
+  CHECK (fits_decode (path, 1 << 30, &a, err, sizeof err) == 0 && a.rgb[0] == 204 && a.rgb[2] == 51, "fits: 64-bit floating point");
+  free (a.rgb);
+  /* The colour mosaic: a neutral sky, and a red star where only red sites are bright. */
+  ctx[0] = 64;
+  p (path, "Fits/mosaic.fits"); write_fits (path, 16, 64, 64, 1, rggb, mosaic_fn, ctx, 0, 0);
+  CHECK (fits_decode (path, 1 << 30, &a, err, sizeof err) == 0 && a.w == 64 && a.h == 64, "fits mosaic: full size, demosaicked");
+  if (a.rgb)
+    {
+      const unsigned char *s = a.rgb + (40 * 64 + 40) * 3, *st = a.rgb + (3 * 64 + 3) * 3;
+      CHECK (abs (s[0] - s[1]) < 20 && abs (s[1] - s[2]) < 20 && s[1] > 30 && s[1] < 110,
+             "fits mosaic: each colour stretched on its own: a neutral sky");
+      CHECK (st[0] > 200 && st[1] < 120 && st[2] < 120, "fits mosaic: RGGB from the top left as shown: the star is red");
+      free (a.rgb);
+    }
+  CHECK (fits_decode (path, 16, &a, err, sizeof err) == 0 && a.w == 16 && a.h == 16 && a.rgb[0] > 150 && a.rgb[1] < 120,
+         "fits mosaic: small, read 2 x 2 to a pixel: still red at the top left");
+  free (a.rgb);
+  /* An IMAGE extension after an empty primary */
+  ctx[0] = 48;
+  p (path, "Fits/ext.fits"); write_fits (path, 16, 64, 48, 1, NULL, sky_fn, ctx, 1, 0);
+  f = fopen (path, "rb");
+  CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && h.hdu == 1 && h.w == 64 && h.data == 2 * 2880,
+         "fits: the picture in an IMAGE extension");
+  fclose (f);
+  /* Tile-compressed (fpack): said so */
+  p (path, "Fits/packed.fz"); write_fits (path, 8, 8, 8, 1, NULL, rgb_fn, NULL, 2, 0);
+  f = fopen (path, "rb");
+  CHECK (fits_read_header (f, &h, err, sizeof err) < 0 && strstr (err, "fpack"), "fits: compressed (fpack): says so");
+  fclose (f);
+  /* Cut short */
+  p (path, "Fits/cut.fits"); write_fits (path, 16, 64, 48, 1, NULL, sky_fn, ctx, 0, 2880 + 1000);
+  f = fopen (path, "rb");
+  CHECK (fits_read_header (f, &h, err, sizeof err) < 0 && strstr (err, "cut short"), "fits: cut short: said so");
+  fclose (f);
+  p (path, "Fits/d.fits"); write_fits (path, 8, 4, 4, 1, ascii_d, rgb_fn, NULL, 0, 0);
+  f = fopen (path, "rb");
+  CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && h.exptime == 30, "fits: a Fortran D exponent");
+  fclose (f);
+  /* Importing: the library knows them */
+  {
+    library *l;
+    cat_item *items;
+    cat_details d;
+    cat_source all = { SRC_ALL, 0, 0, "" };
+    cat_origin o;
+    int n, found = 0;
+    remove (path);                      /* d.fits: 4 x 4 is fine, but keep the count simple */
+    p (path, "Fits/cut.fits"); remove (path);
+    p (path, "Fits/packed.fz"); remove (path);
+    p (libdir, "FitsLibrary");
+    CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "fits: library");
+    lib_import (l, dir);
+    drain (l);
+    cat_list (lib_cat (l), &all, &items, &n);
+    CHECK (n == 6, "fits: all six imported");
+    bad = 0;
+    for (k = 0; k < n; k++)
+      {
+        if (items[k].thumb_state != THUMB_READY)
+          bad++;
+        if (cat_get_details (lib_cat (l), items[k].id, &d) == 0 && strstr (d.path, "sky.fits")
+            && cat_origin_of (lib_cat (l), d.original, &o) == 1)
+          found = o.format == IMG_FITS && d.width == 64 && d.height == 48 && !strcmp (d.taken, "2026:11:19 22:41:07")
+                  && !strcmp (o.encoding, "FITS, 16-bit integers, mono");
+      }
+    CHECK (!bad, "fits: thumbnails made for all");
+    CHECK (found, "fits: its format, size, date and encoding kept");
+    {
+      int guard = 0;
+      cat_geo g;
+      while (lib_geo_pending (l) && guard++ < 1000)
+        lib_geo_step (l, fake_now, clock_cs + 50);
+      found = 0;
+      for (k = 0; k < n; k++)
+        if (cat_get_details (lib_cat (l), items[k].id, &d) == 0 && strstr (d.path, "sky.fits"))
+          found = cat_get_geo (lib_cat (l), items[k].id, &g) == 1 && g.lat == 515000000 && g.lon == -1250000;
+      CHECK (found, "fits: where it was taken, from SITELAT and SITELONG, for maps");
+    }
+    free (items);
+    lib_close (l);
+  }
+}
+
 /* --- moving photos between libraries (libxfer) */
 
 static long long sql1 (library *l, const char *sql)
@@ -3507,6 +3806,7 @@ int main (int argc, char **argv)
   test_raw_names ();
   test_mistyped ();
   test_tiff_import ();
+  test_fits ();
   test_prefs ();
   rawjob_set_switched_off (1);
   checks++; if (!strstr (rawjob_missing_message (), "switched off")) { fails++; fprintf (stderr, "FAIL: raw plug-in off: says so\n"); }

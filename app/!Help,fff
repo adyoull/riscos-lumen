@@ -1,4 +1,4 @@
-Lumen 0.0.39.2 (18 Nov 2026)
+Lumen 0.0.40 (20 Nov 2026, test build)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -25,6 +25,13 @@ library only refers to them. Photos are known by their first bytes, so
 JPEG, PNG and TIFF files typed DOS, Text or Data, or with no extension,
 are found too. TIFFs can be 8 or 16 bits a channel, compressed or not;
 Lumen works on them at 8 bits.
+
+FITS pictures (/fits, /fit, /fts) from astronomy cameras and programs
+such as Siril are read too: grey, RGB, or a camera's colour mosaic (when
+the header gives BAYERPAT), 8 to 32-bit integers or floating point.
+Linear pictures (a dark sky) are stretched for the screen, as Siril's
+auto-stretch does; the Info tab lists the FITS header's object, exposure,
+telescope, camera and so on. Compressed FITS (fpack) isn't read.
 
 The library lives in <Choices$Write>.Lumen.Library (normally inside
 !Boot.Choices). To keep it elsewhere, set Lumen$Library before running

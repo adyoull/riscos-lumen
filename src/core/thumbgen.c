@@ -15,6 +15,7 @@
 #include <tiffio.h>
 #include "exif.h"
 #include "tiffmeta.h"
+#include "fits.h"
 #include "simd.h"
 #include "thumbgen.h"
 #include "colour.h"
@@ -211,6 +212,8 @@ struct thumbgen
   TIFFRGBAImage rgba;
   int rgba_live, band_rows, band_y, band_n;
   uint32_t *raster;
+  /* FITS */
+  fits_reader *fits;
 };
 
 /* Decoding JPEGs at any eighth of their size (not only 1/2, 1/4, 1/8). */
@@ -881,6 +884,53 @@ static void flatten (unsigned char *row, int w)
     }
 }
 
+/* A FITS picture: its header, the stretch for the screen, then a row at
+   a time (a colour mosaic read 2 x 2 to a pixel when it's shown at half
+   size or less). */
+static int start_fits (thumbgen *t, const char *src)
+{
+  fits_hdr h;
+  int w, hh, longer;
+  /* Rows are read one at a time, often from the end back (FITS puts the
+     bottom first): unbuffered, a row is one read. */
+  fclose (t->f);
+  t->f = fopen (src, "rb");
+  if (!t->f)
+    {
+      snprintf (t->err, sizeof t->err, "Can't open %s", src);
+      return -1;
+    }
+  setvbuf (t->f, NULL, _IONBF, 0);
+  if (fits_read_header (t->f, &h, t->err, sizeof t->err))
+    return -1;
+  longer = h.w > h.h ? h.w : h.h;
+  t->fits = fits_reader_open (t->f, &h, t->max_side > 0 && t->max_side <= longer / 2, t->err, sizeof t->err);
+  if (!t->fits)
+    return -1;
+  fits_reader_size (t->fits, &w, &hh);
+  t->row = malloc ((size_t) w * 4);
+  if (!t->row || scaler_init (&t->sc, w, hh, t->max_side))
+    {
+      seterr (t, "Not enough memory for the thumbnail");
+      return -1;
+    }
+  return 0;
+}
+
+static int step_fits (thumbgen *t, int rows)
+{
+  while (rows-- > 0 && t->y < t->sc.sh)
+    {
+      if (fits_reader_row (t->fits, t->y, t->row))
+        {
+          seterr (t, "This FITS file can't be read (cut short?)");
+          return -1;
+        }
+      scaler_row (&t->sc, t->y++, t->row);
+    }
+  return t->y >= t->sc.sh;
+}
+
 static int step_png (thumbgen *t, int rows_in)
 {
   volatile int rows = rows_in;
@@ -926,7 +976,7 @@ static int step_png (thumbgen *t, int rows_in)
 thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
                           int orientation, char *err, size_t errlen)
 {
-  unsigned char head[16];
+  unsigned char head[32];              /* enough for every fingerprint (FITS's is 30 bytes) */
   size_t got;
   thumbgen *t = calloc (1, sizeof *t);
   if (!t)
@@ -971,8 +1021,9 @@ thumbgen *thumbgen_start (const char *src, const char *dst, int max_side,
       return NULL;
     }
   if (t->format == IMG_UNKNOWN)
-    seterr (t, "Not a JPEG, PNG or TIFF file");
-  else if ((t->format == IMG_JPEG ? start_jpeg (t) : t->format == IMG_TIFF ? start_tiff (t, src) : start_png (t)) == 0)
+    seterr (t, "Not a JPEG, PNG, TIFF or FITS file");
+  else if ((t->format == IMG_JPEG ? start_jpeg (t) : t->format == IMG_TIFF ? start_tiff (t, src)
+            : t->format == IMG_FITS ? start_fits (t, src) : start_png (t)) == 0)
     return t;
   snprintf (err, errlen, "%s", t->err);
   thumbgen_free (t);
@@ -1000,7 +1051,7 @@ int thumbgen_step (thumbgen *t, int rows)
       return 0;
     }
   r = t->format == IMG_JPEG ? step_jpeg (t, rows) : t->format == IMG_PPM ? step_ppm (t, rows)
-      : t->format == IMG_TIFF ? step_tiff (t, rows) : step_png (t, rows);
+      : t->format == IMG_TIFF ? step_tiff (t, rows) : t->format == IMG_FITS ? step_fits (t, rows) : step_png (t, rows);
   if (r == 0)
     return 0;
   if (r < 0)
@@ -1075,6 +1126,7 @@ void thumbgen_free (thumbgen *t)
   if (t->tif)
     TIFFClose (t->tif);
   free (t->tif_line);
+  fits_reader_free (t->fits);
   if (t->f)
     fclose (t->f);
   rawjob_free (t->rj);

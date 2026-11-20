@@ -32,6 +32,7 @@
 #include "ui.h"
 #include "exif.h"
 #include "tiffmeta.h"
+#include "fits.h"
 #include "colour.h"
 #include "rawjob.h"
 
@@ -1043,6 +1044,64 @@ static void info_load (int force)
           info_add ("Colour", "sRGB", 0);
         if (tm.exif)
           info_has_exif = exif_list_tiff (tm.exif, tm.exif_len, info_exif_tag, NULL) > 0;
+      }
+    else if (ifmt == IMG_FITS)
+      {
+        /* A FITS picture: how it's stored, and what its header says of
+           the night (the object, the telescope and camera, the exposure). */
+        FILE *ff = fopen (d.path, "rb");
+        fits_hdr fh;
+        char enc[96], ferr[160];
+        info_add ("Format", "FITS (astronomy)", 0);
+        if (ff && fits_read_header (ff, &fh, ferr, sizeof ferr) == 0)
+          {
+            fits_encoding (&fh, enc, sizeof enc);
+            info_add ("Encoding", enc + 6, 0);         /* without "FITS, " */
+            info_add ("Rows", fh.bottom_up ? "Bottom up (as FITS has them)" : "Top down (ROWORDER)", 0);
+            info_add ("FITS HEADER", "", INFO_HEAD);
+            if (fh.object[0]) info_add ("Object", fh.object, 0);
+            if (fh.imagetyp[0]) info_add ("Frame", fh.imagetyp, 0);
+            if (fh.date_obs[0]) info_add ("Observed", fh.date_obs, 0);
+            if (fh.exptime > 0)
+              {
+                snprintf (v, sizeof v, "%g s", fh.exptime);
+                info_add ("Exposure", v, 0);
+              }
+            if (fh.stacked > 0)
+              {
+                snprintf (v, sizeof v, "%d", fh.stacked);
+                info_add ("Frames stacked", v, 0);
+              }
+            if (fh.telescop[0]) info_add ("Telescope", fh.telescop, 0);
+            if (fh.focal > 0)
+              {
+                snprintf (v, sizeof v, "%g mm", fh.focal);
+                info_add ("Focal length", v, 0);
+              }
+            if (fh.instrume[0]) info_add ("Camera", fh.instrume, 0);
+            if (fh.filter[0]) info_add ("Filter", fh.filter, 0);
+            if (fh.iso > 0)
+              {
+                snprintf (v, sizeof v, "%d", fh.iso);
+                info_add ("ISO", v, 0);
+              }
+            if (fh.has_gain)
+              {
+                snprintf (v, sizeof v, "%g", fh.gain);
+                info_add ("Gain", v, 0);
+              }
+            if (fh.has_temp)
+              {
+                snprintf (v, sizeof v, "%.1f\xB0" "C", fh.ccdtemp);
+                info_add ("Sensor temperature", v, 0);
+              }
+            if (fh.creator[0]) info_add ("Software", fh.creator, 0);
+            info_has_exif = 1;                 /* FITS has its header instead */
+          }
+        else if (ff)
+          info_add ("Problem", ferr, 0);
+        if (ff)
+          fclose (ff);
       }
     else if (ifmt == IMG_RAW)
       {

@@ -354,6 +354,8 @@ int img_probe_named (const unsigned char *buf, size_t len, const char *name)
     return IMG_RAW;
   if (tiff)
     return IMG_TIFF;                                 /* a TIFF picture: scanners, editors */
+  if (len >= 30 && memcmp (buf, "SIMPLE  =", 9) == 0 && buf[29] == 'T')
+    return IMG_FITS;                                 /* FITS: astronomers' cameras and programs */
   return IMG_UNKNOWN;
 }
 
