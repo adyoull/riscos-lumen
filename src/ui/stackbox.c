@@ -32,6 +32,7 @@
 #define LINE 120
 #define NLINES 7
 #define MAXF 256
+#define WRAP 88                        /* characters that fit across the window */
 /* The stack's name ends /fits on RISC OS (.fits on other computers'
    discs, as it travels), so other astronomy programs know it. */
 #if defined(__riscos) && !defined(__FAKE_RISCOS)
@@ -523,9 +524,9 @@ static void report (void)
   {
     /* The summary in two lines. */
     size_t len = strlen (sum), cut = len;
-    if (len >= LINE - 1)
+    if (len > WRAP)
       {
-        cut = LINE - 2;
+        cut = WRAP;
         while (cut > 0 && sum[cut] != ' ')
           cut--;
       }
