@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "astro.h"
+#include "simd.h"
 
 #define GRID 32                        /* the sky model's cells, plane pixels */
 #define WIN 4                          /* a star is measured within this many pixels of its peak */
@@ -671,11 +672,46 @@ static inline void cubic_w (float t, float *k)
   k[3] = 0.5f * (t3 - t2);
 }
 
+
+#if defined(__arm__)
+#pragma GCC push_options
+#pragma GCC target ("fpu=neon")
+#include <arm_neon.h>
+/* An RGB pixel from the 4 x 4 around it, all of whose columns are in
+   the frame (cols in order, contiguous): each row's four pixels loaded
+   and split into their colours at once (vld3q). The same sums as the
+   plain code, in another order: within a rounding error. */
+static void cubic_rgb_neon (const float *const *rows, size_t col0, const float *kx, const float *ky, float *out)
+{
+  float32x4_t ar = vdupq_n_f32 (0), ag = ar, ab = ar, k = vld1q_f32 (kx);
+  int j;
+  for (j = 0; j < 4; j++)
+    {
+      float32x4x3_t p = vld3q_f32 (rows[j] + col0);
+      float32x4_t kk = vmulq_n_f32 (k, ky[j]);
+      ar = vmlaq_f32 (ar, p.val[0], kk);
+      ag = vmlaq_f32 (ag, p.val[1], kk);
+      ab = vmlaq_f32 (ab, p.val[2], kk);
+    }
+  {
+    float32x2_t r = vadd_f32 (vget_low_f32 (ar), vget_high_f32 (ar)), g = vadd_f32 (vget_low_f32 (ag), vget_high_f32 (ag));
+    float32x2_t b = vadd_f32 (vget_low_f32 (ab), vget_high_f32 (ab));
+    out[0] = vget_lane_f32 (vpadd_f32 (r, r), 0);
+    out[1] = vget_lane_f32 (vpadd_f32 (g, g), 0);
+    out[2] = vget_lane_f32 (vpadd_f32 (b, b), 0);
+  }
+}
+#pragma GCC pop_options
+#endif
+
 void astro_warp (const astro_img *src, const astro_xform *t, astro_img *dst, int y0, int y1)
 {
   int w = src->w, h = src->h, ch = src->ch, x, y, c, i, j;
   size_t stride = (size_t) w * ch;
   int sy0 = src->rows ? src->y0 : 0, srows = src->rows ? src->rows : h;
+#if defined(__arm__)
+  int neon = ch == 3 && simd_neon ();
+#endif
   if (t->a == 1 && t->b == 0 && t->tx == 0 && t->ty == 0 && dst->w == w && dst->ch == ch)
     {
       /* The reference itself: as it is. */
@@ -719,6 +755,15 @@ void astro_warp (const astro_img *src, const astro_xform *t, astro_img *dst, int
               /* RGB together: the 16 weights once, three sums. */
               float r0 = 0, g0 = 0, b0 = 0, k;
               const float *q;
+#if defined(__arm__)
+              if (neon && ix >= 1 && ix + 2 < w)
+                {
+                  float o3[3];
+                  cubic_rgb_neon (rows, cols[0], kx, ky, o3);
+                  r0 = o3[0]; g0 = o3[1]; b0 = o3[2];
+                }
+              else
+#endif
               for (j = 0; j < 4; j++)
                 for (i = 0; i < 4; i++)
                   {
