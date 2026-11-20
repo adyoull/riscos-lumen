@@ -273,9 +273,9 @@ a { color:#1f5fa8; }
 </ul>
 
 <h4 id="stacking">Stacking frames of the night sky</h4>
-<p>One exposure of the night sky is noisy: faint nebulae and galaxies hide in the grain. Astronomers take many exposures of the same patch of sky (<b>lights</b>) and <b>stack</b> them: lined up by their stars and averaged, the noise falls (twenty frames have about a quarter of one frame's noise) and the faint detail comes through. Lumen stacks FITS frames.</p>
+<p>One exposure of the night sky is noisy: faint nebulae and galaxies hide in the grain. Astronomers take many exposures of the same patch of sky (<b>lights</b>) and <b>stack</b> them: lined up by their stars and averaged, the noise falls (twenty frames have about a quarter of one frame's noise) and the faint detail comes through. Lumen stacks a camera's <b>raw files</b> (with the LumenRaw plug-in, 1.5 or later) and <b>FITS</b> frames.</p>
 <ol class="steps">
-<li>Import the lights (a directory of FITS frames from one night, from one camera).</li>
+<li>Import the lights (a directory of raw files or FITS frames from one night, from one camera).</li>
 <li>Select them in the Browser (<kbd>Ctrl</kbd>-<kbd>A</kbd> selects all).</li>
 <li>Choose <b>Selection &rarr; Stack frames...</b>. The Stack frames window says how many lights there are.</li>
 <li>If you took <b>darks</b>, drag them (or their directory) into the window. They're optional.</li>
@@ -290,7 +290,10 @@ a { color:#1f5fa8; }
 <li>A frame that can't be lined up (cloud, a knocked tripod, a frame out of focus) is <b>left out</b>, and the window and the Activity history say which and why.</li>
 <li><b>Averaging with sigma clipping</b>: for each pixel, a frame's value that is far from the others' is left out of the average. A satellite's or a plane's trail, a cosmic ray, a hot pixel that moved with the frame: each is in one frame only, so none is in the stack. Each frame's sky is first brought to the reference's level, so a sky brightening towards dawn doesn't count against it.</li>
 </ul>
-<div class="box rem"><b class="label">REMEMBER</b>Lumen stacks <b>FITS</b> frames. A camera's raw files (a Canon's CR2s, say) can be converted to FITS by a capture program or by Siril on another computer; reading raw frames for stacking directly is planned.</div>
+<ul>
+<li><b>Raw files</b> (a Canon's CR2s, a Nikon's NEFs...) are read first by LumenRaw, just as they came off the sensor, into FITS frames in a <code>StackWork</code> directory beside them, and stacked from there; the directory goes when the stack is done. It needs room for them: about 40 MB for each 20-megapixel frame, while it works. Darks can be raw files too.</li>
+</ul>
+<div class="box rem"><b class="label">REMEMBER</b>Stacking needs a camera with a <b>Bayer</b> sensor, as nearly all have: Fujifilm's X-Trans cameras and Canon's small raw (sRAW) files can't be stacked, and Lumen says so.</div>
 <div class="box tip"><b class="label">TIP</b>Stacking takes a while on a Raspberry Pi: twenty 20-megapixel frames take some minutes. Try it first with a few frames to see how they line up.</div>
 <div class="box tech"><b class="label">TECHNICAL STUFF</b>Stars are found at half size (a colour mosaic read two by two to a pixel) as peaks five times the sky's noise above a model of the sky, each measured by a Gaussian-windowed centroid. Frames are matched by triangles of their thirty brightest stars, alike by the ratios of their sides, then RANSAC and least squares for a shift, turn and scale. The frames are demosaicked bilinearly, moved with bicubic (Catmull-Rom) interpolation kept within the four nearest pixels, and averaged with Winsorized sigma clipping (3 sigma). The stack is a 32-bit floating-point FITS file, RGB for colour frames, with the frames' total exposure and count in its header (<code>EXPTIME</code>, <code>STACKCNT</code>). The master dark is taken away with a pedestal of 512 (of 65535), so the noise below it isn't cut off at black.</div>
 <p>Other files in the directory are left alone. Applications (directories whose names start with <code>!</code>) are skipped.</p>

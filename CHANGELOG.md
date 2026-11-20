@@ -11,6 +11,10 @@
   satellites, planes and hot pixels. It runs in the background; the
   stack (a 32-bit floating-point FITS file) is saved beside the lights
   and comes into the library.
+- Raw files can be stacked, lights and darks, with LumenRaw 1.5: its
+  new cfa command hands Lumen the sensor's data untouched, as a FITS
+  frame, read into a StackWork directory beside the lights and removed
+  after.
 
 - Lumen reads FITS pictures (.fits, .fit, .fts), as astronomy cameras,
   capture programs (N.I.N.A., SharpCap...) and stacking programs (Siril,

@@ -33,7 +33,8 @@ Linear pictures (a dark sky) are stretched for the screen, as Siril's
 auto-stretch does; the Info tab lists the FITS header's object, exposure,
 telescope, camera and so on. Compressed FITS (fpack) isn't read.
 
-Stacking: select two or more FITS frames of the night sky and choose
+Stacking: select two or more raw files (with LumenRaw 1.5) or FITS frames
+of the night sky and choose
 Selection > Stack frames.... Drag dark frames into the window if you
 have them, and click Stack. Lumen lines the frames up by their stars,
 takes the darks away and averages them, leaving out satellites, planes

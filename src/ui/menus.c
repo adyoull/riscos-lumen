@@ -1856,7 +1856,7 @@ const char *menus_help (int window, int icon)
           return "Shows the selected photos on a map in RiscOSM, as pins, from where they were taken (those with a "
                  "Location in Info). Ctrl-click a pin in RiscOSM to open its photo here.";
         if (c[1] == SEL_STACK)
-          return "Stacks the selected FITS frames of the night sky into one picture: lined up by their stars, dark "
+          return "Stacks the selected raw files or FITS frames of the night sky into one picture: lined up by their stars, dark "
                  "frames taken away, and averaged, leaving out satellites, planes and hot pixels. Select two or more.";
         if (c[1] == SEL_PRINT)
           return "Prints the selected photos, one to a page, on the printer chosen in !Printers.";
