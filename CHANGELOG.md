@@ -1,6 +1,6 @@
 # Lumen changelog
 
-## 0.0.40 (not released yet): FITS pictures, and stacking them
+## 0.0.40 (21 November 2026): FITS pictures, and stacking them
 
 - Selection > Stack frames... stacks FITS frames of the night sky: dark
   frames (dragged into the window) made into a master dark and taken
@@ -38,6 +38,10 @@
 - A colour mosaic is read two by two to a pixel for thumbnails and the
   Viewer (four times quicker), and demosaicked bilinearly for 100%, the
   loupe and exports.
+
+- A new plug-in, LumenWebP 1.0 (libwebp 1.6.0, with NEON where the
+  processor has it), reads WebP pictures (.webp): lossy and lossless,
+  with transparency; an animated one shows its first frame.
 
 ## 0.0.39.2 (18 November 2026): fixes from Matthew Phillips
 

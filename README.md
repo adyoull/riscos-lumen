@@ -40,9 +40,9 @@ were written with Anthropic's Claude as a coding assistant.
 
 1. Install SharedUnixLibrary and ARMEABISupport with PackMan, if you
    haven't already.
-2. Unzip `Lumen-0.0.39.2.zip` and copy `!Lumen` to where you keep your
+2. Unzip `Lumen-0.0.40.zip` and copy `!Lumen` to where you keep your
    applications, for example `$.Apps.Graphics`.
-3. For camera raw files, unzip `LumenRaw-1.4.zip`: it holds
+3. For camera raw files, unzip `LumenRaw-1.5.zip`: it holds
    `!Lumen.Plugins.LibRaw`. Drag that `LibRaw` directory into Lumen's
    Plug-ins > Add plug-in window, or copy it into your
    `!Lumen.Plugins`.
@@ -153,7 +153,9 @@ taken and shows them on a map in RiscOSM (Sine Nomine's OpenStreetMap
 map), which can also search the library by place; 0.0.39.1 selects
 photos as the Filer does (Adjust, Shift-click, and dragging a box),
 and 0.0.39.2 fixes the Browser scrolling sideways when the Inspector is
-hidden.
+hidden. 0.0.40 reads FITS astronomy pictures and stacks frames of the
+night sky (FITS or, with LumenRaw 1.5, raw), lining them up by their
+stars; the LumenWebP plug-in reads WebP pictures.
 Lumen has
 been tested on RISC OS 5.31 on a Raspberry Pi 4, and on RISC OS running on
 Linux (RISC OS 5.31-5 under QEMU); its automated tests run on Linux
