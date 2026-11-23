@@ -2880,28 +2880,13 @@ static void pick_at (double fx, double fy)
   force_image ();
 }
 
-/* A quarter turn of r, its crop turning with the picture. */
-static void turn (recipe *r, int clockwise)
-{
-  float x0 = r->v[P_CROP_X0], y0 = r->v[P_CROP_Y0], x1 = r->v[P_CROP_X1], y1 = r->v[P_CROP_Y1];
-  r->v[P_ROTATE] = (float) (((int) r->v[P_ROTATE] + (clockwise ? 1 : 3)) & 3);
-  if (clockwise)
-    {
-      r->v[P_CROP_X0] = 1 - y1; r->v[P_CROP_Y0] = x0; r->v[P_CROP_X1] = 1 - y0; r->v[P_CROP_Y1] = x1;
-    }
-  else
-    {
-      r->v[P_CROP_X0] = y0; r->v[P_CROP_Y0] = 1 - x1; r->v[P_CROP_X1] = y1; r->v[P_CROP_Y1] = 1 - x0;
-    }
-}
-
 void viewer_rotate (int clockwise)
 {
   if (!src)
     return;
-  turn (&current, clockwise);
+  recipe_turn (&current, clockwise);
   if (crop_mode)
-    turn (&crop_saved, clockwise);     /* so Escape puts back the old crop, turned */
+    recipe_turn (&crop_saved, clockwise);     /* so Escape puts back the old crop, turned */
   else
     commit ();
   changed_everything ();

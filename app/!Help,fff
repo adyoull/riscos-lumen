@@ -1,4 +1,4 @@
-Lumen 0.0.40 (21 Nov 2026)
+Lumen 0.0.41 (23 Nov 2026, test build 1)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -148,6 +148,8 @@ Keys in the Browser
   Ctrl-K        their caption and keywords
   Ctrl-C        copy the adjustments of the (first) selected photo
   Ctrl-V        paste them onto the selected photos
+  [ ]           turn the selected photos 90 degrees anticlockwise,
+                clockwise (also Selection > Rotate)
   Ctrl-D        a duplicate version of each (with its adjustments)
   Ctrl-G        stack the selected photos (the focused one the pick)
   Ctrl-U        unstack them
@@ -356,8 +358,9 @@ Keys in the Viewer and Split View
                 pin it in place, ` or Escape to put it away)
   A             Auto
   C             crop (Return to crop, Escape to cancel)
-  [ ]           turn 90 degrees anticlockwise, clockwise (Retouch or
-                Layers on: the brush smaller, larger; { } its feather)
+  [ ]           turn 90 degrees anticlockwise, clockwise (also Photo >
+                Rotate; Retouch or Layers on: the brush smaller,
+                larger; { } its feather)
   R             Retouch: paint out spots
   B             Layers: adjustments on part of the photo
   O             compare this photo with the next (Return: pin the

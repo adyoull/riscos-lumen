@@ -209,6 +209,8 @@ int recipe_geometry_is_default (const recipe *r);
 /* The tone and colour adjustments of src into dst, keeping dst's geometry
    (presets and pasting carry looks, not crops). */
 void recipe_copy_look (recipe *dst, const recipe *src);
+/* A quarter turn, clockwise or not, the crop turning with the picture. */
+void recipe_turn (recipe *r, int clockwise);
 /* A curve with no effect (no points, or points on the diagonal)? */
 int recipe_curve_is_identity (const recipe_curve *c);
 /* The curve's value at x (monotone cubic through the points). */

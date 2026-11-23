@@ -1591,9 +1591,9 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      CHECK (strcmp (item_text (menu_open, 15), "Adjust") == 0 && strstr (item_text (submenu (menu_open, 15), 1), "Crop shape") != NULL,
+      CHECK (strcmp (item_text (menu_open, 16), "Adjust") == 0 && strstr (item_text (submenu (menu_open, 16), 1), "Crop shape") != NULL,
              "Photo > Adjust > Crop shape");
-      choose4 (15, 1, 2, -1);
+      choose4 (16, 1, 2, -1);
       CHECK (viewer_crop_mode () && fabsf ((viewer_recipe ()->v[P_CROP_X1] - viewer_recipe ()->v[P_CROP_X0]) * 640
                                            - (viewer_recipe ()->v[P_CROP_Y1] - viewer_recipe ()->v[P_CROP_Y0]) * 480) < 2,
              "Square: the crop becomes square");
@@ -1611,6 +1611,17 @@ int main (int argc, char **argv)
       key (']');
       CHECK (viewer_recipe ()->v[P_ROTATE] == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5625f) < 0.01f,
              "and back, with the crop where it was");
+      memset (b, 0, sizeof b);
+      b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
+      app_event (Mouse_Click, b, 0);
+      CHECK (!strcmp (item_text (menu_open, 4), "Rotate") && !strcmp (item_text (submenu (menu_open, 4), 0), "Left")
+             && !strcmp (item_text (submenu (menu_open, 4), 1), "Right"), "Photo > Rotate > Left, Right");
+      choose (4, 1, -1);
+      CHECK (viewer_recipe ()->v[P_ROTATE] == 1, "Photo > Rotate > Right: a quarter turn clockwise");
+      app_event (Mouse_Click, b, 0);
+      choose (4, 0, -1);
+      CHECK (viewer_recipe ()->v[P_ROTATE] == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5625f) < 0.01f,
+             "Photo > Rotate > Left: and back");
 
       /* Grid. */
       key ('g');
@@ -1633,7 +1644,7 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      pm = submenu (menu_open, 4);
+      pm = submenu (menu_open, 5);
       CHECK (pm && strcmp (item_text (pm, 0), "Styles") == 0 && strstr (item_text (pm, 1), "No presets") != NULL,
              "Presets: Styles, then none of your own yet");
       CHECK (submenu (pm, 0) && strcmp (item_text (submenu (pm, 0), 0), "Faded Film") == 0
@@ -1641,7 +1652,7 @@ int main (int argc, char **argv)
              && (item (submenu (pm, 0), styles_count () - 1)[0] & 0x80), "Styles: Faded Film ... Platinum Tone");
       save = submenu (pm, 2);
       strcpy ((char *) item (save, 0)[3], "Bright");
-      choose (4, 2, 0);
+      choose (5, 2, 0);
       {
         cat_preset *ps;
         int np;
@@ -1664,9 +1675,9 @@ int main (int argc, char **argv)
       }
       viewer_reset_all ();
       app_event (Mouse_Click, b, 0);
-      pm = submenu (menu_open, 4);
+      pm = submenu (menu_open, 5);
       CHECK (strcmp (item_text (pm, 1), "Bright") == 0, "Presets lists it");
-      choose (4, 1, -1);
+      choose (5, 1, -1);
       CHECK (fabsf (viewer_recipe ()->v[P_EV] - kept.v[P_EV]) < 0.01f && viewer_recipe ()->v[P_CROP_X0] == 0,
              "applying it brings the look back (not the crop)");
       {
@@ -1683,7 +1694,7 @@ int main (int argc, char **argv)
         presets_write_file (shared, "Show day", bright);
         /* Delete > Bright */
         app_event (Mouse_Click, b, 0);
-        choose (4, 3, 0);
+        choose (5, 3, 0);
         presets_list (&ps, &np);
         CHECK (np == 0, "Delete > Bright: its file goes");
         free (ps);
@@ -1704,7 +1715,7 @@ int main (int argc, char **argv)
         cat_preset_save (lib_cat (app_library ()), "Old one", "exposure ev=0.5\n");
         cat_preset_save (lib_cat (app_library ()), "show DAY", "exposure ev=0.9\n");
         app_event (Mouse_Click, b, 0);
-        pm = submenu (menu_open, 4);
+        pm = submenu (menu_open, 5);
         CHECK (!strcmp (item_text (pm, 1), "Old one") && !strcmp (item_text (pm, 2), "Show day"),
                "the library's old presets join them (one of a name there already doesn't replace it)");
         cat_presets (lib_cat (app_library ()), &ps, &np);
@@ -1722,7 +1733,7 @@ int main (int argc, char **argv)
           if (!strcmp (styles_get (k)->name, "Sepia"))
             sepia = k;
         CHECK (mainwin_mode () != LAYOUT_BROWSER, "(the photo is being adjusted)");
-        choose (4, 0, sepia);
+        choose (5, 0, sepia);
         CHECK (viewer_recipe ()->v[P_SATURATION] == -100 && viewer_recipe ()->v[P_TONE_SH] > 0
                && viewer_recipe ()->v[P_EV] == 0, "Styles > Sepia: black and white, toned (Bright's exposure replaced)");
         CHECK (viewer_can_undo (), "it can be undone");
@@ -1756,20 +1767,20 @@ int main (int argc, char **argv)
           memset (w, 0, sizeof w);
           w[0] = 44; w[4] = Message_MenuWarning;
           w[5] = 0x5151; w[6] = 900; w[7] = 700;
-          w[8] = 4; w[9] = 0; w[10] = -1;          /* Presets > Styles */
+          w[8] = 5; w[9] = 0; w[10] = -1;          /* Presets > Styles */
           app_event (User_Message, w, 0);
           CHECK (submenu_opened == 0x5151 && menus_watching () && app_next_wake (&wake_at),
                  "Styles opened by Lumen (Wimp_CreateSubMenu); now it looks at the pointer every 5 cs");
-          w[8] = 14; w[9] = 2; w[10] = -1;     /* another submenu (Adjust > Grid): opened, not watched */
+          w[8] = 15; w[9] = 2; w[10] = -1;     /* another submenu (Adjust > Grid): opened, not watched */
           submenu_opened = 0;
           menus_closed ();
           app_event (User_Message, w, 0);
           CHECK (submenu_opened == 0x5151 && !menus_watching (), "Grid's submenu: opened, nothing watched");
-          w[8] = 4; w[9] = 0; w[10] = -1;
+          w[8] = 5; w[9] = 0; w[10] = -1;
           app_event (User_Message, w, 0);
         }
         ptr_window = 0x7777; ptr_icon = 3;                  /* a menu's window and item */
-        menu_state[0] = 4; menu_state[1] = 0; menu_state[2] = cyan; menu_state[3] = -1;
+        menu_state[0] = 5; menu_state[1] = 0; menu_state[2] = cyan; menu_state[3] = -1;
         app_event (Null_Reason, b, 0);
         cat_get_recipe (lib_cat (app_library ()), viewer_item (), now_text, sizeof now_text);
         CHECK (viewer_previewing () && viewer_recipe ()->v[P_TONE_SH_HUE] == 212, "pointer over Cyanotype: the photo shows it");
@@ -1787,7 +1798,7 @@ int main (int argc, char **argv)
         app_event (Null_Reason, b, 0);
         CHECK (!viewer_previewing () && fabsf (viewer_recipe ()->v[P_EV] - ev0) < 0.01f
                && viewer_recipe ()->v[P_TONE_SH] == 0, "off the list: the photo's own look again");
-        menu_state[0] = 4; menu_state[1] = 0; menu_state[2] = cyan; menu_state[3] = -1;
+        menu_state[0] = 5; menu_state[1] = 0; menu_state[2] = cyan; menu_state[3] = -1;
         app_event (Null_Reason, b, 0);
         memset (b, 0, sizeof b);
         b[0] = 20; b[4] = Message_MenusDeleted;
@@ -1801,7 +1812,7 @@ int main (int argc, char **argv)
         {
           int w[64];
           memset (w, 0, sizeof w);
-          w[0] = 44; w[4] = Message_MenuWarning; w[5] = 0x5151; w[8] = 4; w[9] = 0; w[10] = -1;
+          w[0] = 44; w[4] = Message_MenuWarning; w[5] = 0x5151; w[8] = 5; w[9] = 0; w[10] = -1;
           app_event (User_Message, w, 0);
         }
         app_event (Null_Reason, b, 0);
@@ -1817,12 +1828,12 @@ int main (int argc, char **argv)
         {
           int w[64];
           memset (w, 0, sizeof w);
-          w[0] = 44; w[4] = Message_MenuWarning; w[5] = 0x5151; w[8] = 4; w[9] = 0; w[10] = -1;
+          w[0] = 44; w[4] = Message_MenuWarning; w[5] = 0x5151; w[8] = 5; w[9] = 0; w[10] = -1;
           app_event (User_Message, w, 0);
         }
         app_event (Null_Reason, b, 0);
         CHECK (viewer_previewing (), "shown again");
-        choose (4, 0, cyan);
+        choose (5, 0, cyan);
         cat_get_recipe (lib_cat (app_library ()), viewer_item (), now_text, sizeof now_text);
         CHECK (!viewer_previewing () && strstr (now_text, "shadow_hue=212") != NULL, "clicking it keeps it");
         viewer_undo ();
@@ -1922,6 +1933,25 @@ int main (int argc, char **argv)
       nulls_until_idle ();
       browser_item (2, &it2);
       CHECK (it2.edited && it2.thumb_state == THUMB_READY, "and a new thumbnail");
+      /* Turning in the Browser: ] and [, and Selection > Rotate. */
+      browser_focus_on (2);
+      key (']');
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "rotate=1") != NULL && strstr (text, "exposure") != NULL, "] in the Browser: turned right, its look kept");
+      key ('[');
+      key ('[');
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "rotate=3") != NULL, "[ twice: turned left");
+      click (16 + 352 + 60, -16 - 60, Button_Menu);
+      CHECK (!strcmp (item_text (submenu (menu_open, 1), 10), "Rotate") && !strcmp (item_text (submenu (submenu (menu_open, 1), 10), 1), "Right"),
+             "Selection > Rotate > Right");
+      choose (1, 10, 1);
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "rotate") == NULL && strstr (text, "exposure") != NULL, "Selection > Rotate > Right: the right way up again");
+      redraw ();
+      nulls_until_idle ();
+      browser_item (2, &it2);
+      CHECK (it2.thumb_state == THUMB_READY, "and a new thumbnail");
       browser_focus_on (0);
     }
 
@@ -2482,18 +2512,18 @@ int main (int argc, char **argv)
     app_event (Mouse_Click, b, 0);
     CHECK (menu_open && strncmp ((const char *) menu_open, "Photo", 5) == 0, "the viewer's menu: Photo");
     CHECK (!strcmp (item_text (menu_open, 0), "Undo ^Z") && !strcmp (item_text (menu_open, 2), "Auto adjust \x8B" "A")
-           && !strcmp (item_text (menu_open, 4), "Presets") && !strcmp (item_text (menu_open, 11), "Export... ^E")
-           && !strcmp (item_text (menu_open, 14), "View") && !strcmp (item_text (menu_open, 16), "Versions")
-           && (item (menu_open, 17)[0] & 0x80), "Photo menu: the common ones first, then View, Adjust, Versions, Remove");
-    CHECK (!strcmp (item_text (menu_open, 6), "Loupe \x8BL") && submenu (menu_open, 6) == submenu (submenu (menu_open, 14), 1),
+           && !strcmp (item_text (menu_open, 5), "Presets") && !strcmp (item_text (menu_open, 12), "Export... ^E")
+           && !strcmp (item_text (menu_open, 15), "View") && !strcmp (item_text (menu_open, 17), "Versions")
+           && (item (menu_open, 18)[0] & 0x80), "Photo menu: the common ones first, then View, Adjust, Versions, Remove");
+    CHECK (!strcmp (item_text (menu_open, 7), "Loupe \x8BL") && submenu (menu_open, 7) == submenu (submenu (menu_open, 15), 1),
            "Photo menu: Loupe on it, as well as under View (the same magnifications)");
-    CHECK (strstr (item_text (menu_open, 9), "Colour label") != NULL, "Photo menu: Colour label");
-    CHECK (!strcmp (item_text (menu_open, 10), "Caption and keywords... ^K"), "Caption and keywords..., its key after one space");
-    CHECK (!strcmp (item_text (menu_open, 5), "Before and after \x8BM"), "Before and after: Shift-M shown");
-    CHECK (strstr (item_text (submenu (menu_open, 14), 2), "Compare") != NULL, "Photo > View > Compare");
-    CHECK (strstr (item_text (submenu (menu_open, 16), 0), "Duplicate version") != NULL, "Photo > Versions > Duplicate version");
-    CHECK (strstr (item_text (submenu (menu_open, 15), 3), "Reset all") != NULL, "Photo > Adjust > Reset all adjustments");
-    CHECK (strstr (item_text (submenu (menu_open, 14), 3), "Back to the Browser") != NULL, "Back to the Browser");
+    CHECK (strstr (item_text (menu_open, 10), "Colour label") != NULL, "Photo menu: Colour label");
+    CHECK (!strcmp (item_text (menu_open, 11), "Caption and keywords... ^K"), "Caption and keywords..., its key after one space");
+    CHECK (!strcmp (item_text (menu_open, 6), "Before and after \x8BM"), "Before and after: Shift-M shown");
+    CHECK (strstr (item_text (submenu (menu_open, 15), 2), "Compare") != NULL, "Photo > View > Compare");
+    CHECK (strstr (item_text (submenu (menu_open, 17), 0), "Duplicate version") != NULL, "Photo > Versions > Duplicate version");
+    CHECK (strstr (item_text (submenu (menu_open, 16), 3), "Reset all") != NULL, "Photo > Adjust > Reset all adjustments");
+    CHECK (strstr (item_text (submenu (menu_open, 15), 3), "Back to the Browser") != NULL, "Back to the Browser");
     {
       /* Loupe from the menu: the toolbar's Loupe button lights up. */
       int r[4];
@@ -2501,7 +2531,7 @@ int main (int argc, char **argv)
       nulls_until_idle ();             /* the photo read */
       mainwin_tick ();
       force_redraws = 0;
-      choose (6, -1, -1);
+      choose (7, -1, -1);
       mainwin_tick ();
       CHECK (viewer_loupe () && force_redraws >= 1, "Loupe from the Photo menu: on, and the toolbar's button redrawn");
       viewer_toggle_loupe ();          /* as L or ` does */
@@ -2510,7 +2540,7 @@ int main (int argc, char **argv)
       CHECK (!viewer_loupe () && force_redraws >= 1, "put away by a key: the button redrawn again");
       app_event (Mouse_Click, b, 0);
     }
-    choose (14, 3, -1);
+    choose (15, 3, -1);
     CHECK (vclosed == 2 && mainwin_mode () == LAYOUT_BROWSER, "Back to the Browser: the viewer goes");
     {
       /* Undo and Redo shaded in the Browser: the toolbar draws them grey and a click does nothing. */
@@ -2778,12 +2808,12 @@ int main (int argc, char **argv)
     browser_focus_on (0);
     click (16 + 352 + 60, -16 - 60, Button_Adjust);      /* add the second photo (Large thumbnails) */
     click (5, -5, Button_Menu);
-    CHECK (strstr (item_text (submenu (menu_open, 1), 16), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 13), "Print") != NULL
-           && strstr (item_text (submenu (menu_open, 1), 15), "Stack frames") != NULL
-           && strstr (item_text (submenu (menu_open, 1), 12), "Export as library") != NULL, "Selection > Export as library..., Print..., Remove from library");
+    CHECK (strstr (item_text (submenu (menu_open, 1), 17), "Remove from library") != NULL && strstr (item_text (submenu (menu_open, 1), 14), "Print") != NULL
+           && strstr (item_text (submenu (menu_open, 1), 16), "Stack frames") != NULL
+           && strstr (item_text (submenu (menu_open, 1), 13), "Export as library") != NULL, "Selection > Export as library..., Print..., Remove from library");
     CHECK (!strcmp (item_text (submenu (menu_open, 1), 2), "Flag / unflag \x8BP"), "Selection > Flag / unflag, Shift-P shown");
     asked[0] = '\0';
-    choose (1, 16, -1);
+    choose (1, 17, -1);
     CHECK (strstr (asked, "these 2 photos") != NULL, "it asks about the two");
     CHECK (browser_count () == before - 3 && viewer_item () == 0, "both gone, and the Viewer let its photo go");
 
@@ -3436,9 +3466,9 @@ int main (int argc, char **argv)
     CHECK (browser_count () == 4, "stack: four lights imported");
     browser_select_all (1);
     click (5, -5, Button_Menu);
-    CHECK (strstr (item_text (submenu (menu_open, 1), 15), "Stack frames") != NULL && !(item (submenu (menu_open, 1), 15)[2] & (1 << 22)),
+    CHECK (strstr (item_text (submenu (menu_open, 1), 16), "Stack frames") != NULL && !(item (submenu (menu_open, 1), 16)[2] & (1 << 22)),
            "Selection > Stack frames..., there to choose");
-    choose (1, 15, -1);
+    choose (1, 16, -1);
     CHECK (strstr (stackbox_line (0), "Lights: 4 FITS frames, Light1") != NULL, "Stack frames: the four lights");
     CHECK (strstr (stackbox_line (2), "Darks: none") != NULL && (stack_icon_flags[9] & (1u << 22)), "no darks yet; Clear darks shaded");
     stackbox_drop (dark);

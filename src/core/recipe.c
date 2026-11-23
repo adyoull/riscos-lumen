@@ -662,6 +662,20 @@ int recipe_geometry_is_default (const recipe *r)
   return !r->lens.on;
 }
 
+void recipe_turn (recipe *r, int clockwise)
+{
+  float x0 = r->v[P_CROP_X0], y0 = r->v[P_CROP_Y0], x1 = r->v[P_CROP_X1], y1 = r->v[P_CROP_Y1];
+  r->v[P_ROTATE] = (float) (((int) r->v[P_ROTATE] + (clockwise ? 1 : 3)) & 3);
+  if (clockwise)
+    {
+      r->v[P_CROP_X0] = 1 - y1; r->v[P_CROP_Y0] = x0; r->v[P_CROP_X1] = 1 - y0; r->v[P_CROP_Y1] = x1;
+    }
+  else
+    {
+      r->v[P_CROP_X0] = y0; r->v[P_CROP_Y0] = 1 - x1; r->v[P_CROP_X1] = y1; r->v[P_CROP_Y1] = 1 - x0;
+    }
+}
+
 void recipe_copy_look (recipe *dst, const recipe *src)
 {
   int i;

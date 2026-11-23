@@ -1144,6 +1144,8 @@ int browser_key (int key)
       if (looks_clip ())
         looks_apply_selection (looks_clip ());
     }
+  else if (key == '[' || key == ']')  /* a quarter turn left or right */
+    looks_turn_selection (key == ']');
   else if (key == KEY_ESCAPE)
     browser_select_all (0);
   else if (key == 0x7F)                /* Delete: out of the library (after asking) */

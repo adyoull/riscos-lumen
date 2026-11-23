@@ -58,6 +58,20 @@ void looks_apply_selection (const char *look)
   free (ids);
 }
 
+void looks_turn_selection (int clockwise)
+{
+  cat_id *ids;
+  int n = browser_selection (&ids), k;
+  if (n > 0 && cat_turn (lib_cat (app_library ()), ids, n, clockwise) == 0)
+    {
+      lib_thumbs_changed (app_library ());
+      browser_after_change ();
+      for (k = 0; k < n; k++)
+        viewer_reload (ids[k]);
+    }
+  free (ids);
+}
+
 void looks_presets_dir (void)
 {
   char d[1024];

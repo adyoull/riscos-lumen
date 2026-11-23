@@ -1,5 +1,14 @@
 # Lumen changelog
 
+## 0.0.41 (not released yet)
+
+- Photos can be turned in the Browser: [ and ] turn the selected photos
+  (or the focused one) a quarter left and right, and so does
+  Selection > Rotate > Left or Right. The crop turns with each photo,
+  its other adjustments are kept, and the thumbnails are made again.
+- The Viewer's Photo menu has Rotate > Left and Right, beside Crop
+  ([ and ] and the Geometry group's -90 and +90 did it before).
+
 ## 0.0.40 (21 November 2026): FITS pictures, and stacking them
 
 - Selection > Stack frames... stacks FITS frames of the night sky: dark

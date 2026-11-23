@@ -1062,6 +1062,25 @@ int cat_apply_look (cat *c, const cat_id *versions, int n, const char *look)
   return rc;
 }
 
+int cat_turn (cat *c, const cat_id *versions, int n, int clockwise)
+{
+  recipe r;
+  int i, rc = 0;
+  exec (c, "SAVEPOINT turn");
+  for (i = 0; i < n && rc == 0; i++)
+    {
+      static char text[RECIPE_TEXT_MAX];
+      if (cat_get_recipe (c, versions[i], text, sizeof text))
+        continue;
+      recipe_parse (&r, text);
+      recipe_turn (&r, clockwise);
+      recipe_format (&r, text, sizeof text);
+      rc = cat_set_recipe (c, versions[i], text);
+    }
+  exec (c, rc ? "ROLLBACK TO turn; RELEASE turn" : "RELEASE turn");
+  return rc;
+}
+
 int cat_count_thumbs_pending (cat *c)
 {
   sqlite3_stmt *s = prep (c, "SELECT COUNT(*) FROM version WHERE thumb = 0");

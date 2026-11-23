@@ -395,6 +395,8 @@ void looks_copy_selection (void);      /* the first selected photo's */
 const char *looks_clip (void);         /* NULL if nothing copied */
 /* Gives the selected photos a look (the viewer follows if it shows one). */
 void looks_apply_selection (const char *look);
+/* Turns the selected photos (or the focused one) a quarter. */
+void looks_turn_selection (int clockwise);
 /* The presets, read again (freed by the next call). */
 int looks_presets (cat_preset **out);
 int looks_save_preset (const char *name);   /* the viewer's look */
