@@ -1,12 +1,12 @@
 # Lumen changelog
 
-## 0.0.41 (not released yet)
+## 0.0.41 (23 November 2026): rotating and flipping, FITS fixes
 
 - Photos can be turned in the Browser: [ and ] turn the selected photos
   (or the focused one) a quarter left and right, and so does
-  Selection > Rotate > Left or Right. The crop turns with each photo,
+  Selection > Rotate and flip > Left or Right. The crop turns with each photo,
   its other adjustments are kept, and the thumbnails are made again.
-- The Viewer's Photo menu has Rotate > Left and Right, beside Crop
+- The Viewer's Photo menu has Rotate and flip > Left and Right, beside Crop
   ([ and ] and the Geometry group's -90 and +90 did it before).
 - Photos can be flipped, left to right or top to bottom: Rotate and flip
   > Flip horizontally or Flip vertically, on the Selection menu and the
