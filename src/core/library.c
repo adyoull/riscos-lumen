@@ -409,7 +409,8 @@ static unsigned long long fnv (unsigned long long h, const unsigned char *p, siz
 static int builtin_mime (const char *m)
 {
   return !strcmp (m, "image/jpeg") || !strcmp (m, "image/pjpeg") || !strcmp (m, "image/png")
-         || !strcmp (m, "image/x-png") || !strcmp (m, "image/tiff");
+         || !strcmp (m, "image/x-png") || !strcmp (m, "image/tiff") || !strcmp (m, "image/fits")
+         || !strcmp (m, "application/fits");
 }
 
 static int has_photo_extension (const char *path)
@@ -448,7 +449,8 @@ static int has_photo_extension (const char *path)
    for HEIF photos that a MimeMap line names image/heic, say). */
 static int claimed_type (int ft)
 {
-  static const char *const builtin[] = { "image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/tiff" };
+  static const char *const builtin[] = { "image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/tiff",
+                                         "image/fits", "application/fits" };
   char mime[128];
   size_t k;
   if (ft < 0 || ft >= FT_DATA)
@@ -466,11 +468,12 @@ static int claimed_type (int ft)
    name. Lumen looks at files typed JPEG or PNG, at those typed in the
    ways copying leaves files (DOS or Text from a card or a network share
    without MimeMap, Data, TIFF, or none), and at any with a photo's
-   extension (/jpg, /png, a raw's, or one a plug-in claims). Files of other
+   extension (/jpg, /png, /fits, a raw's, or one a plug-in claims), and
+   at those typed FITS. Files of other
    types (Sprites, Obey files, BASIC...) are left unopened. */
 static int likely_image_type (int ft, const char *path)
 {
-  return ft == FT_JPEG || ft == FT_PNG || ft == FT_NONE || ft == FT_DATA || ft == FT_TIFF
+  return ft == FT_JPEG || ft == FT_PNG || ft == FT_NONE || ft == FT_DATA || ft == FT_TIFF || ft == FT_FITS
          || ft == FT_TEXT || ft == FT_DOS || claimed_type (ft)
          || has_photo_extension (path) || img_has_raw_extension (path) || rawjob_claims_name (path);
 }

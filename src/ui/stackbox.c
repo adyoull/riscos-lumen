@@ -588,6 +588,7 @@ void stackbox_idle (unsigned deadline)
       return;
     }
   /* Done: the report, and the stack into the library. */
+  fsys_settype (out_path, FT_FITS);
   report ();
   {
     char sum[600];

@@ -322,6 +322,9 @@ void viewer_set (int p, float v);      /* one adjustment, saved */
 void viewer_pick_white (void);         /* the white balance eyedropper, on or off */
 int viewer_picking (void);
 void viewer_rotate (int clockwise);
+/* recipe_transform's op: 0 a quarter left, 1 right, 2 flip left to
+   right, 3 top to bottom. */
+void viewer_transform (int op);
 void viewer_crop_start (void);
 void viewer_crop_finish (int apply);
 void viewer_toggle_crop (void);
@@ -395,8 +398,9 @@ void looks_copy_selection (void);      /* the first selected photo's */
 const char *looks_clip (void);         /* NULL if nothing copied */
 /* Gives the selected photos a look (the viewer follows if it shows one). */
 void looks_apply_selection (const char *look);
-/* Turns the selected photos (or the focused one) a quarter. */
-void looks_turn_selection (int clockwise);
+/* Turns or flips the selected photos (or the focused one): op as
+   recipe_transform's. */
+void looks_turn_selection (int op);
 /* The presets, read again (freed by the next call). */
 int looks_presets (cat_preset **out);
 int looks_save_preset (const char *name);   /* the viewer's look */

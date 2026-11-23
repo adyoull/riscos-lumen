@@ -150,6 +150,8 @@ static void undo_straighten (const geom_plan *g, double X, double Y, double *x, 
 /* Canvas pixel (from its top left) to source pixel, undoing the quarter turns. */
 static void canvas_to_source (const geom_plan *g, double cx, double cy, double *sx, double *sy)
 {
+  if (g->mirror)
+    cx = g->cw - cx;
   switch (g->quarter)
     {
     case 1: *sx = cy; *sy = g->sh - cx; break;            /* 90 clockwise */
@@ -205,7 +207,7 @@ void geom_to_source_rgb (const geom_plan *g, double x, double y, double sx[3], d
 
 int geom_plan_is_simple (const geom_plan *g)
 {
-  return g->quarter == 0 && g->sn == 0 && g->kv == 0 && g->kh == 0 && !g->lens;
+  return g->quarter == 0 && !g->mirror && g->sn == 0 && g->kv == 0 && g->kh == 0 && !g->lens;
 }
 
 /* The other way: where a source pixel ends up in the output (it may be
@@ -249,6 +251,7 @@ void geom_plan_make (geom_plan *g, const recipe *r, int sw, int sh, int with_cro
   g->sw = sw;
   g->sh = sh;
   g->quarter = ((int) r->v[P_ROTATE]) & 3;
+  g->mirror = ((int) r->v[P_FLIP]) & 1;
   g->cw = g->quarter & 1 ? sh : sw;
   g->ch = g->quarter & 1 ? sw : sh;
   g->cs = cos (a);

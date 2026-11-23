@@ -144,6 +144,7 @@ static void find_types (void)
   add (FT_JPEG, "JPEG", 1, "image/jpeg");
   add (FT_PNG, "PNG", 1, "image/png");
   add (FT_TIFF, "TIFF", 1, "image/tiff");
+  add (FT_FITS, "FITS", 1, "image/fits");
   for (k = 0; k < n; k++)
     {
       if (strcmp (pl[k].kind, "format") || !pl[k].enabled)

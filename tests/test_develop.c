@@ -383,6 +383,53 @@ static void test_geometry (void)
   at (dst, g.ow, 0, 0, &fx, &fy);
   CHECK (fx > 0.97 && fy < 0.03, "90 anticlockwise: the top right comes to the top left");
 
+  /* Flipping, as shown: left to right, top to bottom, and turned after. */
+  recipe_default (&r);
+  recipe_transform (&r, 2);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  CHECK (g.ow == w && g.oh == h && !geom_plan_is_simple (&g), "flipped left to right: the same size, not simple");
+  geom_rows (&g, src, dst, 0, g.oh);
+  at (dst, g.ow, 0, 0, &fx, &fy);
+  CHECK (fx > 0.97 && fy < 0.03, "flipped left to right: the top right comes to the top left");
+  recipe_transform (&r, 2);
+  CHECK (recipe_geometry_is_default (&r), "flipped twice: as it was");
+  recipe_transform (&r, 3);
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  geom_rows (&g, src, dst, 0, g.oh);
+  at (dst, g.ow, 0, 0, &fx, &fy);
+  CHECK (fx < 0.03 && fy > 0.97, "flipped top to bottom: the bottom left comes to the top left");
+  recipe_transform (&r, 3);
+  CHECK (recipe_geometry_is_default (&r), "and back");
+  recipe_transform (&r, 2);
+  recipe_transform (&r, 1);           /* flipped, then a quarter right as shown */
+  geom_plan_make (&g, &r, w, h, 1, 0, 0);
+  geom_rows (&g, src, dst, 0, g.oh);
+  CHECK (g.ow == h && g.oh == w, "flipped and turned: width and height swapped");
+  at (dst, g.ow, 0, 0, &fx, &fy);
+  /* Flipped, the top right is at the top left; turned right, the
+     bottom left (the source's bottom right) comes to the top left. */
+  CHECK (fx > 0.97 && fy > 0.97, "flipped then turned right: as shown");
+  recipe_transform (&r, 0);
+  recipe_transform (&r, 2);
+  CHECK (recipe_geometry_is_default (&r), "turned back and flipped back: as it was");
+  recipe_default (&r);
+  recipe_set (&r, P_CROP_X0, 0.1f); recipe_set (&r, P_CROP_X1, 0.5f); recipe_set (&r, P_ANGLE, 3);
+  recipe_set (&r, P_CROP_Y0, 0.2f); recipe_set (&r, P_CROP_Y1, 0.6f); recipe_set (&r, P_PERSP_H, 10);
+  recipe_transform (&r, 2);
+  CHECK (fabsf (r.v[P_CROP_X0] - 0.5f) < 1e-5f && fabsf (r.v[P_CROP_X1] - 0.9f) < 1e-5f && r.v[P_CROP_Y0] == 0.2f
+         && r.v[P_ANGLE] == -3 && r.v[P_PERSP_H] == -10, "flipped: the crop, straightening and perspective flip with it");
+  recipe_transform (&r, 3);
+  CHECK (fabsf (r.v[P_CROP_Y0] - 0.4f) < 1e-5f && fabsf (r.v[P_CROP_Y1] - 0.8f) < 1e-5f && r.v[P_ANGLE] == 3,
+         "flipped top to bottom: the crop too");
+  {
+    char text[RECIPE_TEXT_MAX];
+    recipe back;
+    recipe_transform (&r, 2);
+    recipe_format (&r, text, sizeof text);
+    recipe_parse (&back, text);
+    CHECK (strstr (text, "flip=1") && back.v[P_FLIP] == 1 && back.v[P_ROTATE] == r.v[P_ROTATE], "flip: kept with the recipe");
+  }
+
   recipe_default (&r);
   recipe_set (&r, P_CROP_X0, 0.25f); recipe_set (&r, P_CROP_X1, 0.75f);
   recipe_set (&r, P_CROP_Y0, 0.5f);

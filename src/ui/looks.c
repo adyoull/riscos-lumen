@@ -58,11 +58,11 @@ void looks_apply_selection (const char *look)
   free (ids);
 }
 
-void looks_turn_selection (int clockwise)
+void looks_turn_selection (int op)
 {
   cat_id *ids;
   int n = browser_selection (&ids), k;
-  if (n > 0 && cat_turn (lib_cat (app_library ()), ids, n, clockwise) == 0)
+  if (n > 0 && cat_turn (lib_cat (app_library ()), ids, n, op) == 0)
     {
       lib_thumbs_changed (app_library ());
       browser_after_change ();

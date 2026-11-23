@@ -1062,7 +1062,7 @@ int cat_apply_look (cat *c, const cat_id *versions, int n, const char *look)
   return rc;
 }
 
-int cat_turn (cat *c, const cat_id *versions, int n, int clockwise)
+int cat_turn (cat *c, const cat_id *versions, int n, int op)
 {
   recipe r;
   int i, rc = 0;
@@ -1073,7 +1073,7 @@ int cat_turn (cat *c, const cat_id *versions, int n, int clockwise)
       if (cat_get_recipe (c, versions[i], text, sizeof text))
         continue;
       recipe_parse (&r, text);
-      recipe_turn (&r, clockwise);
+      recipe_transform (&r, op);
       recipe_format (&r, text, sizeof text);
       rc = cat_set_recipe (c, versions[i], text);
     }

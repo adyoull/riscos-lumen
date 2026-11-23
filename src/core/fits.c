@@ -146,8 +146,8 @@ int fits_read_header (FILE *f, fits_hdr *h, char *err, size_t en)
       int naxis = 0, nax[4] = { 0, 0, 0, 0 }, bitpix = 0, simple = 0, ended = 0, nblocks = 0, zimage = 0;
       long pcount = 0, gcount = 1;
       char xtension[24] = "";
-      double lat = 0, lon = 0;
-      int has_lat = 0, has_lon = 0;
+      double lat = 0, lon = 0, cd[4] = { 0, 0, 0, 0 }, pc[4] = { 1, 0, 0, 1 }, cdelt[2] = { 0, 0 };
+      int has_lat = 0, has_lon = 0, has_roworder = 0, has_cd = 0, has_cdelt = 0, dwarf = 0;
       memset (h, 0, sizeof *h);
       h->bscale = 1;
       h->bottom_up = 1;
@@ -179,7 +179,21 @@ int fits_read_header (FILE *f, fits_hdr *h, char *err, size_t en)
               else if (!strcmp (key, "ZIMAGE")) zimage = val[0] == 'T';
               else if (!strcmp (key, "BZERO")) h->bzero = atof (val);
               else if (!strcmp (key, "BSCALE")) h->bscale = atof (val);
-              else if (!strcmp (key, "ROWORDER")) h->bottom_up = strncmp (val, "TOP-DOWN", 8) != 0;
+              else if (!strcmp (key, "ROWORDER")) h->bottom_up = strncmp (val, "TOP-DOWN", 8) != 0, has_roworder = 1;
+              else if (!strncmp (key, "CD", 2) && key[2] >= '1' && key[2] <= '2' && key[3] == '_' && key[4] >= '1'
+                       && key[4] <= '2' && !key[5])
+                cd[(key[2] - '1') * 2 + key[4] - '1'] = atof (val), has_cd = 1;
+              else if (!strncmp (key, "PC", 2) && key[2] >= '1' && key[2] <= '2' && key[3] == '_' && key[4] >= '1'
+                       && key[4] <= '2' && !key[5])
+                pc[(key[2] - '1') * 2 + key[4] - '1'] = atof (val);
+              else if (!strcmp (key, "CDELT1")) cdelt[0] = atof (val), has_cdelt |= 1;
+              else if (!strcmp (key, "CDELT2")) cdelt[1] = atof (val), has_cdelt |= 2;
+              else if (!strcmp (key, "ORIGIN"))
+                {
+                  dwarf = !strncmp (val, "DWARFLAB", 8);
+                  if (!h->creator[0] && dwarf)
+                    copy (h->creator, sizeof h->creator, "DWARFLAB");
+                }
               else if (!strcmp (key, "BAYERPAT") || !strcmp (key, "COLORTYP"))
                 {
                   if (strlen (val) == 4 && strspn (val, "RGB") == 4)
@@ -250,6 +264,24 @@ int fits_read_header (FILE *f, fits_hdr *h, char *err, size_t en)
           h->planes = naxis >= 3 && nax[2] == 3 ? 3 : 1;
           if (h->planes == 3 || h->w < 2 || h->h < 2)
             h->bayer[0] = '\0';
+          /* Which way up, when ROWORDER doesn't say (a colour mosaic
+             keeps the FITS order, as its BAYERPAT is read so). A picture
+             whose sky position (WCS) is known is shown as the sky looks,
+             not mirrored: with north up, east on the left. FITS's bottom
+             first gives that when the CD matrix's determinant is negative;
+             most cameras' programs write the top row first, which gives a
+             positive one (DWARF's, for one). DWARF's pictures without a
+             WCS (mosaics) are top first too. */
+          if (!has_roworder && !h->bayer[0])
+            {
+              double det = 0;
+              if (has_cd)
+                det = cd[0] * cd[3] - cd[1] * cd[2];
+              else if (has_cdelt == 3)
+                det = cdelt[0] * cdelt[1] * (pc[0] * pc[3] - pc[1] * pc[2]);
+              if (det > 0 || (det == 0 && dwarf))
+                h->bottom_up = 0;
+            }
           bytes = (long long) h->w * h->h * h->planes * (bitpix < 0 ? -bitpix : bitpix) / 8;
           if (h->data + bytes > fsize)
             {
@@ -537,6 +569,13 @@ static void hist_stats (const uint32_t *hist, uint32_t total, double *med, doubl
       break;
   *med = m / 65535.0;
   *mad = (i < 65536 ? i : 0) / 65535.0;
+  /* A smooth picture whose values are only a few steps apart (a stack
+     of hundreds of frames saved as 16-bit integers, its stars taken out)
+     has more than half its pixels at the median: a MAD of 0 would leave
+     it unstretched, a flat grey. Take each step as spread over its width
+     (the deviation 0 over half a step), which gives the MAD between. */
+  if (i == 0 && dev[0] > 0)
+    *mad = 0.5 * (total / 2.0) / dev[0] / 65535.0;
 }
 
 /* Samples the picture: its range (for floating point and 32-bit data),

@@ -2159,6 +2159,18 @@ static double mosaic_fn (int x, int y, int plane, void *ctx)
   return (red ? 1000 : green ? 2000 : 600) + fits_noise (x, yy);
 }
 
+/* A stack saved as integers with its stars removed (as DWARF's are): a
+   smooth sky only a few steps either side of a high level, so that more
+   than half the pixels are at the median. Brighter in a block at the top
+   left as stored. */
+static double steps_fn (int x, int y, int plane, void *ctx)
+{
+  (void) plane; (void) ctx;
+  if (x < 8 && y < 8)
+    return 6030;
+  return 6000 + (fits_noise (x, y) < 20 ? 1 : 0) + (fits_noise (y, x) < 10 ? 2 : 0);
+}
+
 static double rgb_fn (int x, int y, int plane, void *ctx)
 {
   (void) x; (void) y; (void) ctx;
@@ -2241,6 +2253,51 @@ static void test_fits (void)
   CHECK (fits_decode (path2, 1 << 30, &b, err, sizeof err) == 0 && a.rgb && b.rgb
          && !memcmp (a.rgb, b.rgb, (size_t) a.w * a.h * 3), "fits: ROWORDER TOP-DOWN: the same picture");
   free (b.rgb);
+  /* Which way up without ROWORDER: as the sky looks, when the WCS says. */
+  {
+    static const char *const wcs_td[] = { "CD1_1   =    -0.00111834224421", "CD1_2   =   -2.66205442267E-06",
+                                          "CD2_1   =    3.43212406814E-06", "CD2_2   =    -0.00111944213785", NULL };
+    static const char *const wcs_bu[] = { "CDELT1  =              -0.0011", "CDELT2  =               0.0011", NULL };
+    static const char *const dwarf[] = { "ORIGIN  = 'DWARFLAB'", NULL };
+    static const char *const dwarf_bu[] = { "ORIGIN  = 'DWARFLAB'", "ROWORDER= 'BOTTOM-UP'", NULL };
+    static const char *const mosaic_wcs[] = { "BAYERPAT= 'RGGB'", "CD1_1   =              -0.0011", "CD2_2   =              -0.0011", NULL };
+    p (path2, "Fits/wcs.fits"); write_fits (path2, 16, 64, 48, 3, wcs_td, sky_fn, ctx, 0, 0);
+    f = fopen (path2, "rb");
+    CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && !h.bottom_up, "fits: a WCS mirrored bottom first (DWARF's): top first");
+    fclose (f);
+    CHECK (fits_decode (path2, 1 << 30, &b, err, sizeof err) == 0 && b.rgb && b.rgb[(2 * 64 + 2) * 3] == 255,
+           "fits: and so shown (the star top left as stored)");
+    free (b.rgb);
+    p (path2, "Fits/wcs2.fits"); write_fits (path2, 16, 64, 48, 1, wcs_bu, sky_fn, ctx, 0, 0);
+    f = fopen (path2, "rb");
+    CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && h.bottom_up, "fits: a WCS the right way round bottom first: bottom first");
+    fclose (f);
+    p (path2, "Fits/dwarf.fits"); write_fits (path2, 16, 64, 48, 3, dwarf, sky_fn, ctx, 0, 0);
+    f = fopen (path2, "rb");
+    CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && !h.bottom_up && !strcmp (h.creator, "DWARFLAB"),
+           "fits: DWARF's without a WCS (a mosaic): top first");
+    fclose (f);
+    p (path2, "Fits/dwarf2.fits"); write_fits (path2, 16, 64, 48, 3, dwarf_bu, sky_fn, ctx, 0, 0);
+    f = fopen (path2, "rb");
+    CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && h.bottom_up, "fits: ROWORDER is believed first");
+    fclose (f);
+    p (path2, "Fits/mosaicwcs.fits"); write_fits (path2, 16, 64, 48, 1, mosaic_wcs, sky_fn, ctx, 0, 0);
+    f = fopen (path2, "rb");
+    CHECK (fits_read_header (f, &h, err, sizeof err) == 0 && h.bottom_up, "fits: a colour mosaic keeps FITS's order (its BAYERPAT)");
+    fclose (f);
+  }
+  /* Only a few steps of a high level, more than half at the median: still stretched. */
+  {
+    static const char *const steps_cards[] = { "ROWORDER= 'TOP-DOWN'", NULL };
+    p (path2, "Fits/steps.fits"); write_fits (path2, 16, 64, 48, 3, steps_cards, steps_fn, NULL, 0, 0);
+    CHECK (fits_decode (path2, 1 << 30, &b, err, sizeof err) == 0 && b.rgb, "fits: steps: decoded");
+    if (b.rgb)
+      {
+        int sky = b.rgb[(30 * 64 + 40) * 3], blk = b.rgb[(2 * 64 + 2) * 3];
+        CHECK (sky > 20 && sky < 120 && blk > 200, "fits: a few steps above the median: stretched, not a flat grey");
+      }
+    free (b.rgb);
+  }
   ctx[1] = 0;
   free (a.rgb);
   /* RGB floating point, already bright: shown as it is. */
@@ -2349,12 +2406,15 @@ static void test_fits (void)
     p (path, "Fits/d.fits"); remove (path);   /* 4 x 4 is fine, but keep the count simple */
     p (path, "Fits/cut.fits"); remove (path);
     p (path, "Fits/packed.fz"); remove (path);
+    /* Typed FITS, without an extension (as a RISC OS file can be) */
+    ctx[0] = 24;
+    p (path, "Fits/M31-mosaic,6a3"); write_fits (path, 16, 32, 24, 1, NULL, sky_fn, ctx, 0, 0);
     p (libdir, "FitsLibrary");
     CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "fits: library");
     lib_import (l, dir);
     drain (l);
     cat_list (lib_cat (l), &all, &items, &n);
-    CHECK (n == 6, "fits: all six imported");
+    CHECK (n == 13, "fits: all thirteen imported, one typed FITS without an extension");
     bad = 0;
     for (k = 0; k < n; k++)
       {

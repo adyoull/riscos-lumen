@@ -52,7 +52,8 @@ enum
   P_SHARPEN, P_SHARP_RADIUS,           /* sharpen (applied after develop, at the output's size) */
   P_VIG_AMOUNT, P_VIG_MID,             /* vignette: darker (or lighter) towards the corners */
   P_GLOW_AMOUNT, P_GLOW_SPREAD, P_GLOW_HIGH, P_GLOW_WARM,   /* glow: light from the bright parts spread round them */
-  P_ROTATE, P_ANGLE, P_PERSP_V, P_PERSP_H,  /* geometry: quarter turns, straighten, perspective */
+  P_ROTATE, P_FLIP,                    /* geometry: quarter turns, then mirrored (left to right) if P_FLIP */
+  P_ANGLE, P_PERSP_V, P_PERSP_H,       /* straighten, perspective */
   P_CROP_X0, P_CROP_Y0, P_CROP_X1, P_CROP_Y1, /* crop, as fractions of the straightened picture */
   P_LENS_DIST, P_LENS_TCA, P_LENS_VIG, /* lens correction: how much of the lens profile's (percent) */
   P_LENS_MANUAL,                       /* and barrel (+) or pincushion (-) distortion corrected by hand */
@@ -211,6 +212,12 @@ int recipe_geometry_is_default (const recipe *r);
 void recipe_copy_look (recipe *dst, const recipe *src);
 /* A quarter turn, clockwise or not, the crop turning with the picture. */
 void recipe_turn (recipe *r, int clockwise);
+/* Flips the picture as shown, left to right (vertical 0) or top to
+   bottom (1); the crop, straightening and perspective flip with it. */
+void recipe_flip (recipe *r, int vertical);
+/* A quarter turn or a flip, as the menus number them: 0 left, 1 right,
+   2 flip horizontally, 3 flip vertically. */
+void recipe_transform (recipe *r, int op);
 /* A curve with no effect (no points, or points on the diagonal)? */
 int recipe_curve_is_identity (const recipe_curve *c);
 /* The curve's value at x (monotone cubic through the points). */

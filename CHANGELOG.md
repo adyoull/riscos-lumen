@@ -8,6 +8,22 @@
   its other adjustments are kept, and the thumbnails are made again.
 - The Viewer's Photo menu has Rotate > Left and Right, beside Crop
   ([ and ] and the Geometry group's -90 and +90 did it before).
+- Photos can be flipped, left to right or top to bottom: Rotate and flip
+  > Flip horizontally or Flip vertically, on the Selection menu and the
+  Viewer's Photo menu. The crop, straightening and perspective flip with
+  the photo.
+- FITS (thanks to Chris Terran's DWARF mini pictures):
+  - A file typed FITS (&6A3) is imported even without a /fits extension
+    (a DWARF mosaic wasn't), and a stack is saved typed FITS. Lumen
+    offers to open FITS files when double-clicked.
+  - Which way up: without ROWORDER, a picture whose header gives its
+    place in the sky (WCS) is shown as the sky looks, not mirrored, and
+    DWARF's pictures are shown top row first. DWARF's stacks came out
+    upside down (mirrored).
+  - A stack saved as integers whose values are only a few steps apart
+    (DWARF's Pleiades, its stars removed) was shown flat grey: more than
+    half its pixels were at the median, so it looked flat. It is now
+    stretched like any other.
 
 ## 0.0.40 (21 November 2026): FITS pictures, and stacking them
 

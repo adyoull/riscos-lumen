@@ -110,9 +110,10 @@ int cat_preset_delete (cat *c, cat_id id);
 /* Gives each version the look in text (a preset or copied adjustments),
    keeping its own geometry; thumbnails are made again. */
 int cat_apply_look (cat *c, const cat_id *versions, int n, const char *look);
-/* Turns each version a quarter, clockwise or not (its crop with it);
+/* Turns or flips each version (recipe_transform's op: 0 a quarter left,
+   1 right, 2 flipped left to right, 3 top to bottom), its crop with it;
    thumbnails are made again. */
-int cat_turn (cat *c, const cat_id *versions, int n, int clockwise);
+int cat_turn (cat *c, const cat_id *versions, int n, int op);
 
 /* Originals whose files have gone (moved, renamed, a disc not there).
    cat_original_next walks them in id order (after 0 for the first): 1 and

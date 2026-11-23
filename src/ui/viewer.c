@@ -2882,11 +2882,16 @@ static void pick_at (double fx, double fy)
 
 void viewer_rotate (int clockwise)
 {
+  viewer_transform (clockwise ? 1 : 0);
+}
+
+void viewer_transform (int op)
+{
   if (!src)
     return;
-  recipe_turn (&current, clockwise);
+  recipe_transform (&current, op);
   if (crop_mode)
-    recipe_turn (&crop_saved, clockwise);     /* so Escape puts back the old crop, turned */
+    recipe_transform (&crop_saved, op);     /* so Escape puts back the old crop, turned */
   else
     commit ();
   changed_everything ();

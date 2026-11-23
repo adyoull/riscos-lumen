@@ -16,6 +16,7 @@
 #define FT_JPEG   0xC85
 #define FT_PNG    0xB60
 #define FT_TIFF   0xFF0
+#define FT_FITS   0x6A3              /* MimeMap's FITS (image/fits) */
 #define FT_DATA   0xFFD
 #define FT_TEXT   0xFFF
 #define FT_DOS    0xFE4

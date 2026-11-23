@@ -6,7 +6,7 @@
 
    Each output pixel is mapped back to the source and sampled bilinearly:
      output -> crop (fractions of the canvas) -> zoom -> perspective
-            -> straighten -> quarter turn -> lens -> source.
+            -> straighten -> mirror -> quarter turn -> lens -> source.
    The lens step (lens correction, recipe.h) undoes the lens's distortion
    (and the Manual barrel or pincushion), scaled so the corrected picture
    fills the frame with as much of the photo as it can; then red and blue
@@ -32,6 +32,7 @@ typedef struct
   int cw, ch;                          /* canvas: after the quarter turns */
   int ow, oh;                          /* output */
   int quarter;
+  int mirror;                          /* the canvas mirrored left to right */
   double cs, sn;                       /* straightening angle */
   double kv, kh;                       /* perspective */
   double zoom;

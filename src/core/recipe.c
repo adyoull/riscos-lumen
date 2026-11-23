@@ -64,6 +64,7 @@ const recipe_param recipe_params[P_COUNT] = {
   { "glow",     "highlights", "Highlights",     0, 100, 60, 1, 0, 0 },
   { "glow",     "warmth",     "Warmth",      -100, 100, 0, 1, 0, 0 },
   { "geometry", "rotate",     "Rotate",         0,   3, 0, 1, 0, 1 },
+  { "geometry", "flip",       "Flip",           0,   1, 0, 1, 0, 1 },
   { "geometry", "angle",      "Straighten",   -15,  15, 0, 0.1f, 1, 0 },
   { "geometry", "vertical",   "Vertical",    -100, 100, 0, 1, 0, 0 },
   { "geometry", "horizontal", "Horizontal",  -100, 100, 0, 1, 0, 0 },
@@ -665,7 +666,9 @@ int recipe_geometry_is_default (const recipe *r)
 void recipe_turn (recipe *r, int clockwise)
 {
   float x0 = r->v[P_CROP_X0], y0 = r->v[P_CROP_Y0], x1 = r->v[P_CROP_X1], y1 = r->v[P_CROP_Y1];
-  r->v[P_ROTATE] = (float) (((int) r->v[P_ROTATE] + (clockwise ? 1 : 3)) & 3);
+  /* Mirrored, the picture's quarter turns go the other way round. */
+  int up = clockwise ^ ((int) r->v[P_FLIP] & 1);
+  r->v[P_ROTATE] = (float) (((int) r->v[P_ROTATE] + (up ? 1 : 3)) & 3);
   if (clockwise)
     {
       r->v[P_CROP_X0] = 1 - y1; r->v[P_CROP_Y0] = x0; r->v[P_CROP_X1] = 1 - y0; r->v[P_CROP_Y1] = x1;
@@ -674,6 +677,34 @@ void recipe_turn (recipe *r, int clockwise)
     {
       r->v[P_CROP_X0] = y0; r->v[P_CROP_Y0] = 1 - x1; r->v[P_CROP_X1] = y1; r->v[P_CROP_Y1] = 1 - x0;
     }
+}
+
+void recipe_flip (recipe *r, int vertical)
+{
+  float a = r->v[P_CROP_X0], b = r->v[P_CROP_Y0], c = r->v[P_CROP_X1], d = r->v[P_CROP_Y1];
+  /* The picture is mirrored left to right after its quarter turns; top
+     to bottom is that and half a turn. */
+  r->v[P_FLIP] = (float) (((int) r->v[P_FLIP] & 1) ^ 1);
+  r->v[P_ANGLE] = -r->v[P_ANGLE];
+  if (vertical)
+    {
+      r->v[P_ROTATE] = (float) (((int) r->v[P_ROTATE] + 2) & 3);
+      r->v[P_CROP_Y0] = 1 - d; r->v[P_CROP_Y1] = 1 - b;
+      r->v[P_PERSP_V] = -r->v[P_PERSP_V];
+    }
+  else
+    {
+      r->v[P_CROP_X0] = 1 - c; r->v[P_CROP_X1] = 1 - a;
+      r->v[P_PERSP_H] = -r->v[P_PERSP_H];
+    }
+}
+
+void recipe_transform (recipe *r, int op)
+{
+  if (op == 0 || op == 1)
+    recipe_turn (r, op);
+  else if (op == 2 || op == 3)
+    recipe_flip (r, op == 3);
 }
 
 void recipe_copy_look (recipe *dst, const recipe *src)

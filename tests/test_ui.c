@@ -1614,14 +1614,28 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      CHECK (!strcmp (item_text (menu_open, 4), "Rotate") && !strcmp (item_text (submenu (menu_open, 4), 0), "Left")
-             && !strcmp (item_text (submenu (menu_open, 4), 1), "Right"), "Photo > Rotate > Left, Right");
+      CHECK (!strcmp (item_text (menu_open, 4), "Rotate and flip") && !strcmp (item_text (submenu (menu_open, 4), 0), "Left")
+             && !strcmp (item_text (submenu (menu_open, 4), 1), "Right"), "Photo > Rotate and flip > Left, Right");
       choose (4, 1, -1);
       CHECK (viewer_recipe ()->v[P_ROTATE] == 1, "Photo > Rotate > Right: a quarter turn clockwise");
       app_event (Mouse_Click, b, 0);
       choose (4, 0, -1);
       CHECK (viewer_recipe ()->v[P_ROTATE] == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5625f) < 0.01f,
              "Photo > Rotate > Left: and back");
+      app_event (Mouse_Click, b, 0);
+      CHECK (!strcmp (item_text (submenu (menu_open, 4), 2), "Flip horizontally")
+             && !strcmp (item_text (submenu (menu_open, 4), 3), "Flip vertically"), "Photo > Rotate and flip > Flip horizontally, vertically");
+      choose (4, 2, -1);
+      CHECK (viewer_recipe ()->v[P_FLIP] == 1 && viewer_recipe ()->v[P_ROTATE] == 0, "Flip horizontally: mirrored");
+      app_event (Mouse_Click, b, 0);
+      choose (4, 3, -1);
+      CHECK (viewer_recipe ()->v[P_FLIP] == 0 && viewer_recipe ()->v[P_ROTATE] == 2, "then Flip vertically: half a turn, as it should");
+      app_event (Mouse_Click, b, 0);
+      choose (4, 1, -1);
+      app_event (Mouse_Click, b, 0);
+      choose (4, 1, -1);
+      CHECK (viewer_recipe ()->v[P_ROTATE] == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5625f) < 0.01f,
+             "and two turns back: as it was, the crop too");
 
       /* Grid. */
       key ('g');
@@ -1943,7 +1957,7 @@ int main (int argc, char **argv)
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "rotate=3") != NULL, "[ twice: turned left");
       click (16 + 352 + 60, -16 - 60, Button_Menu);
-      CHECK (!strcmp (item_text (submenu (menu_open, 1), 10), "Rotate") && !strcmp (item_text (submenu (submenu (menu_open, 1), 10), 1), "Right"),
+      CHECK (!strcmp (item_text (submenu (menu_open, 1), 10), "Rotate and flip") && !strcmp (item_text (submenu (submenu (menu_open, 1), 10), 1), "Right"),
              "Selection > Rotate > Right");
       choose (1, 10, 1);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);

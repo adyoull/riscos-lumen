@@ -390,11 +390,13 @@ static menu *build_window_menu (void)
     set_item (rating, k, k == 5, rating_names[k], 0, -1, nsel == 0);
   npresets = looks_presets (&presets);
   apply = apply_menu (nsel == 0);
-  rotm = new_menu ("Rotate", 2);
+  rotm = new_menu ("Rotate", 4);
   if (rotm)
     {
       set_item (rotm, 0, 0, "Left", 0, -1, nsel == 0);
-      set_item (rotm, 1, 1, "Right", 0, -1, nsel == 0);
+      set_item (rotm, 1, 0, "Right", MF_DOTTED, -1, nsel == 0);
+      set_item (rotm, 2, 0, "Flip horizontally", 0, -1, nsel == 0);
+      set_item (rotm, 3, 1, "Flip vertically", 0, -1, nsel == 0);
     }
   selm = new_menu ("Selection", SEL_COUNT);
   if (selm)
@@ -409,7 +411,7 @@ static menu *build_window_menu (void)
       set_item (selm, SEL_COPY, 0, "Copy adjustments ^C", 0, -1, nsel == 0);
       set_item (selm, SEL_PASTE, 0, "Paste adjustments ^V", 0, -1, nsel == 0 || !looks_clip ());
       set_item (selm, SEL_PRESET, 0, "Apply preset", 0, (int) apply, nsel == 0);
-      set_item (selm, SEL_ROTATE, 0, "Rotate", MF_DOTTED, (int) rotm, nsel == 0);
+      set_item (selm, SEL_ROTATE, 0, "Rotate and flip", MF_DOTTED, (int) rotm, nsel == 0);
       set_item (selm, SEL_COMPARE, 0, "Compare " SH "O", MF_DOTTED, -1, nsel != 2);
       set_item (selm, SEL_EXPORT, 0, "Export... ^E", 0, -1, nsel == 0);
       set_item (selm, SEL_EXPORT_LIB, 0, "Export as library...", 0, -1, nsel == 0);
@@ -486,7 +488,7 @@ static menu *build_window_menu (void)
    (the action's own submenu: loupe, crop shape, grid, presets, labels),
    which is what the rest of this file goes by. */
 enum { VM_BEFORE, VM_ZOOM, VM_LOUPE, VM_UNDO, VM_REDO, VM_RESET, VM_AUTO, VM_PICK, VM_CROP, VM_SHAPE, VM_GRID,
-       VM_PRESETS, VM_COPY, VM_PASTE, VM_LABEL, VM_TAGS, VM_COMPARE, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_MAP, VM_BACK, VM_REMOVE, VM_ROTL, VM_ROTR, VM_COUNT };
+       VM_PRESETS, VM_COPY, VM_PASTE, VM_LABEL, VM_TAGS, VM_COMPARE, VM_DUP, VM_NEW_ORIG, VM_EXPORT, VM_PRINT, VM_MAP, VM_BACK, VM_REMOVE, VM_ROTL, VM_ROTR, VM_FLIPH, VM_FLIPV, VM_COUNT };
 enum { PM_UNDO, PM_REDO, PM_AUTO, PM_CROP, PM_ROTATE, PM_PRESETS, PM_BEFORE, PM_LOUPE, PM_COPY, PM_PASTE, PM_LABEL, PM_TAGS,
        PM_EXPORT, PM_PRINT, PM_MAP, PM_VIEW, PM_ADJUST, PM_VERSIONS, PM_REMOVE, PM_COUNT };
 /* A group itself (the pointer on View, say): -100 - PM_*. */
@@ -495,7 +497,7 @@ enum { PM_UNDO, PM_REDO, PM_AUTO, PM_CROP, PM_ROTATE, PM_PRESETS, PM_BEFORE, PM_
 static const signed char vm_view[] = { VM_ZOOM, VM_LOUPE, VM_COMPARE, VM_BACK, -1 };
 static const signed char vm_adjust[] = { VM_PICK, VM_SHAPE, VM_GRID, VM_RESET, -1 };
 static const signed char vm_versions[] = { VM_DUP, VM_NEW_ORIG, -1 };
-static const signed char vm_rotate[] = { VM_ROTL, VM_ROTR, -1 };
+static const signed char vm_rotate[] = { VM_ROTL, VM_ROTR, VM_FLIPH, VM_FLIPV, -1 };
 static const signed char *const pm_groups[PM_COUNT] = { [PM_VIEW] = vm_view, [PM_ADJUST] = vm_adjust,
                                                          [PM_VERSIONS] = vm_versions, [PM_ROTATE] = vm_rotate };
 /* The ones on the menu itself. */
@@ -626,11 +628,13 @@ static menu *build_viewer_menu (void)
   menu *m, *shape, *grid, *pre, *loupe_m, *view, *adj, *vers, *rotm;
   int k, crop = viewer_crop_mode ();
   used = 0;
-  rotm = new_menu ("Rotate", 2);
+  rotm = new_menu ("Rotate", 4);
   if (rotm)
     {
       set_item (rotm, 0, 0, "Left", 0, -1, 0);
-      set_item (rotm, 1, 1, "Right", 0, -1, 0);
+      set_item (rotm, 1, 0, "Right", MF_DOTTED, -1, 0);
+      set_item (rotm, 2, 0, "Flip horizontally", 0, -1, 0);
+      set_item (rotm, 3, 1, "Flip vertically", 0, -1, 0);
     }
   shape = new_menu ("Crop shape", 6);
   for (k = 0; k < 6 && shape; k++)
@@ -677,7 +681,7 @@ static menu *build_viewer_menu (void)
       set_item (m, PM_REDO, 0, "Redo ^Y", 0, -1, !viewer_can_redo ());
       set_item (m, PM_AUTO, 0, "Auto adjust " SH "A", 0, -1, crop);
       set_item (m, PM_CROP, 0, "Crop " SH "C", crop ? MF_TICK : 0, -1, 0);
-      set_item (m, PM_ROTATE, 0, "Rotate", 0, (int) rotm, 0);
+      set_item (m, PM_ROTATE, 0, "Rotate and flip", 0, (int) rotm, 0);
       set_item (m, PM_PRESETS, 0, "Presets", 0, (int) pre, 0);
       set_item (m, PM_BEFORE, 0, "Before and after " SH "M", viewer_before () ? MF_TICK : 0, -1, crop);
       set_item (m, PM_LOUPE, 0, "Loupe " SH "L", (viewer_loupe () ? MF_TICK : 0) | MF_DOTTED, (int) loupe_m, crop);
@@ -1475,7 +1479,7 @@ static int window_choice (const int *c)
           else if (c[2] >= 1 && c[2] <= npresets && c[2] <= MAX_LIST)
             looks_apply_selection (presets[c[2] - 1].recipe);
           break;
-        case SEL_ROTATE: if (c[2] == 0 || c[2] == 1) looks_turn_selection (c[2]); break;
+        case SEL_ROTATE: if (c[2] >= 0 && c[2] <= 3) looks_turn_selection (c[2]); break;
         case SEL_COMPARE: compare_after_menu = 1; break;
         case SEL_EXPORT: export_after_menu = 1; break;
         case SEL_EXPORT_LIB: libexport_after_menu = 2; break;
@@ -1577,6 +1581,8 @@ int menus_selection (const int *choice)
       case VM_CROP: viewer_toggle_crop (); break;
       case VM_ROTL: viewer_rotate (0); break;
       case VM_ROTR: viewer_rotate (1); break;
+      case VM_FLIPH: viewer_transform (2); break;
+      case VM_FLIPV: viewer_transform (3); break;
       case VM_SHAPE: if (vchoice[1] >= 0) viewer_set_crop_shape (vchoice[1]); break;
       case VM_GRID: if (vchoice[1] >= 0) viewer_set_grid (vchoice[1]); break;
       case VM_PRESETS: if (vchoice[1] >= 0) presets_choice (vchoice + 1); break;
@@ -1892,7 +1898,9 @@ const char *menus_help (int window, int icon)
         if (c[1] == SEL_ROTATE)
           return c[2] == 1 ? "Turns the selected photos a quarter to the right (clockwise). Key: ]"
                  : c[2] == 0 ? "Turns the selected photos a quarter to the left (anticlockwise). Key: ["
-                 : "Turns the selected photos a quarter, left or right: [ and ] do it too.";
+                 : c[2] == 2 ? "Flips the selected photos left to right, as in a mirror."
+                 : c[2] == 3 ? "Flips the selected photos top to bottom (upside down, and mirrored)."
+                 : "Turns the selected photos a quarter, left or right ([ and ] do it too), or flips them.";
         if (c[1] == SEL_COMPARE)
           return "Shows the two selected photos side by side in the Viewer, to choose between them.";
         return "Rate, flag, reject, caption, select, copy and paste adjustments, export or remove the selected photos.";
@@ -1930,7 +1938,9 @@ const char *menus_help (int window, int icon)
         {
         case VM_GROUP (PM_VIEW): return "100%, the loupe, beside the next photo, or back to the Browser.";
         case VM_GROUP (PM_ADJUST): return "White balance from a point, the crop's shape, the grid, or no adjustments at all.";
-        case VM_GROUP (PM_ROTATE): return "Turns the photo a quarter, left or right: [ and ] do it too.";
+        case VM_GROUP (PM_ROTATE): return "Turns the photo a quarter, left or right ([ and ] do it too), or flips it.";
+        case VM_FLIPH: return "Flips the photo left to right, as in a mirror.";
+        case VM_FLIPV: return "Flips the photo top to bottom (upside down, and mirrored).";
         case VM_ROTL: return "Turns the photo a quarter to the left (anticlockwise). Key: [";
         case VM_ROTR: return "Turns the photo a quarter to the right (clockwise). Key: ]";
         case VM_GROUP (PM_VERSIONS): return "Another version of this photo, to try another look.";
