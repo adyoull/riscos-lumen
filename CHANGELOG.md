@@ -1,6 +1,6 @@
 # Lumen changelog
 
-## 0.0.42 (not released yet)
+## 0.0.42 (24 November 2026): controlling the FITS stretch, flip keys
 
 - Rotate and flip shows its keys on the menus ([ and ] to turn, which
   the Wimp doesn't set at the right by itself), and flipping has keys:
