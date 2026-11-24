@@ -96,6 +96,9 @@ void fits_reader_set_dark (fits_reader *r, const uint16_t *dark);
    holds. Set every frame of a stack to the first's, so all are read alike. */
 void fits_reader_range (const fits_reader *r, double *lo, double *hi);
 void fits_reader_set_range (fits_reader *r, double lo, double hi);
+/* How much it is stretched (fits_stretch_params_ex's amount and black):
+   the full auto-stretch until this is called. Before rows are read. */
+void fits_reader_set_stretch (fits_reader *r, double amount, double black);
 /* How it is being shown: 1 stretched (the picture is linear), 0 as it is. */
 int fits_reader_stretched (const fits_reader *r);
 void fits_reader_free (fits_reader *r);
@@ -118,6 +121,11 @@ int fits_writer_close (fits_writer *wr);
    mad: the shadows clip *c0 and the midtones balance *m; 0 if it should
    be stretched, -1 if it shouldn't (already bright, or flat). */
 int fits_stretch_params (double med, double mad, double *c0, double *m);
+/* The same, controlled: amount 0-1 (how far the sky is brought up
+   towards the auto-stretch's level: 1 all the way, 0 not at all, only
+   the black point), black -1 to 1 (the black point lower, the sky
+   lighter; or higher, the sky darker). */
+int fits_stretch_params_ex (double med, double mad, double amount, double black, double *c0, double *m);
 /* The midtones transfer function: x (0-1) with midtones balance m. */
 double fits_mtf (double m, double x);
 

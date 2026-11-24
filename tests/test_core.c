@@ -2171,6 +2171,17 @@ static double steps_fn (int x, int y, int plane, void *ctx)
   return 6000 + (fits_noise (x, y) < 20 ? 1 : 0) + (fits_noise (y, x) < 10 ? 2 : 0);
 }
 
+/* The Moon: a bright disc on a black sky, which the auto-stretch blows
+   out to white. */
+static double moon_fn (int x, int y, int plane, void *ctx)
+{
+  double dx = x - 32, dy = y - 24;
+  (void) plane; (void) ctx;
+  if (dx * dx + dy * dy < 15 * 15)
+    return 20000 + 40 * (x % 5);
+  return 300 + fits_noise (x, y) / 10.0;
+}
+
 static double rgb_fn (int x, int y, int plane, void *ctx)
 {
   (void) x; (void) y; (void) ctx;
@@ -2298,6 +2309,36 @@ static void test_fits (void)
       }
     free (b.rgb);
   }
+  /* How much it's stretched (the recipe's Stretch group). */
+  {
+    static const char *const td[] = { "ROWORDER= 'TOP-DOWN'", NULL };
+    double c0a, ma, c0b, mb;
+    int moon_full, moon_less, sky_full, sky_less, sky_dark;
+    CHECK (fits_stretch_params_ex (0.015, 0.001, 1, 0, &c0a, &ma) == 0 && fits_stretch_params (0.015, 0.001, &c0b, &mb) == 0
+           && c0a == c0b && ma == mb, "fits stretch: all of it, the usual black point: the auto-stretch");
+    CHECK (fits_stretch_params_ex (0.015, 0.001, 0, 0, &c0a, &ma) == 0 && fabs (ma - 0.5) < 1e-9 && c0a > 0.01,
+           "fits stretch: none: no midtones lift, only the black point");
+    CHECK (fits_stretch_params_ex (0.015, 0.001, 1, 1, &c0a, &ma) == 0 && c0a > c0b
+           && fits_mtf (ma, (0.015 - c0a) / (1 - c0a)) < 0.25 * 0.4, "fits stretch: the black point higher: a darker sky");
+    p (path2, "Fits/moon.fits"); write_fits (path2, 16, 64, 48, 1, td, moon_fn, NULL, 0, 0);
+    fits_decode (path2, 1 << 30, &b, err, sizeof err);
+    moon_full = b.rgb ? b.rgb[(24 * 64 + 32) * 3] : -1;
+    sky_full = b.rgb ? b.rgb[(2 * 64 + 2) * 3] : -1;
+    free (b.rgb);
+    thumbgen_set_fits_stretch (10, 0);
+    fits_decode (path2, 1 << 30, &b, err, sizeof err);
+    moon_less = b.rgb ? b.rgb[(24 * 64 + 32) * 3] : -1;
+    sky_less = b.rgb ? b.rgb[(2 * 64 + 2) * 3] : -1;
+    free (b.rgb);
+    thumbgen_set_fits_stretch (100, 100);
+    fits_decode (path2, 1 << 30, &b, err, sizeof err);
+    sky_dark = b.rgb ? b.rgb[(2 * 64 + 2) * 3] : -1;
+    free (b.rgb);
+    thumbgen_set_fits_stretch (100, 0);
+    CHECK (moon_full >= 250 && moon_less < 235 && moon_less > sky_less + 100,
+           "fits stretch: the Moon blown out by the auto-stretch, not with less (Amount 10)");
+    CHECK (sky_less < sky_full && sky_dark < sky_full, "fits stretch: less, or the black point higher: a darker sky");
+  }
   ctx[1] = 0;
   free (a.rgb);
   /* RGB floating point, already bright: shown as it is. */
@@ -2414,7 +2455,7 @@ static void test_fits (void)
     lib_import (l, dir);
     drain (l);
     cat_list (lib_cat (l), &all, &items, &n);
-    CHECK (n == 13, "fits: all thirteen imported, one typed FITS without an extension");
+    CHECK (n == 14, "fits: all fourteen imported, one typed FITS without an extension");
     bad = 0;
     for (k = 0; k < n; k++)
       {

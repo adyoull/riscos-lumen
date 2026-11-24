@@ -5,6 +5,7 @@
    is an original plus a recipe, stored in the catalogue as text, one line
    per adjustment, only the ones that differ from their defaults:
 
+     stretch amount=60 black=20           (a FITS picture's)
      wb temp=12 tint=-3
      exposure ev=0.35
      hs highlights=30 shadows=45
@@ -38,6 +39,7 @@
 
 enum
 {
+  P_FITS_AMOUNT, P_FITS_BLACK,         /* a FITS picture's stretch for the screen: how much, the black point (thumbgen) */
   P_TEMP, P_TINT,                      /* white balance */
   P_EV,                                /* exposure */
   P_HIGHLIGHTS, P_SHADOWS,             /* highlights & shadows (local, see develop.h) */

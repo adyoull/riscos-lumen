@@ -135,7 +135,7 @@ void auto_adjust (const uint16_t *lin, int w, int h, recipe *r)
   double m[3], *lum, chroma = 0, gain, p_lo, p_hi, p5, p95, med, spread;
   long cnt = 0, cap = SAMPLES * 2 + 64;
   int p;
-  for (p = 0; p < P_SHARPEN; p++)       /* start from the original tones (sharpening and geometry stay) */
+  for (p = P_TEMP; p < P_SHARPEN; p++)  /* start from the original tones (a FITS picture's stretch, sharpening and geometry stay) */
     if (p < P_TONE_SH_HUE || p > P_TONE_HI)   /* and so does toning: a choice of look, not a correction */
     r->v[p] = recipe_params[p].def;
   auto_white_balance (lin, w, h, &t, &n);

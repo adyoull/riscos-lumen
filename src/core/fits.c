@@ -365,16 +365,44 @@ double fits_mtf (double m, double x)
 
 int fits_stretch_params (double med, double mad, double *c0, double *m)
 {
-  double madn = 1.4826 * mad;
+  return fits_stretch_params_ex (med, mad, 1, 0, c0, m);
+}
+
+int fits_stretch_params_ex (double med, double mad, double amount, double black, double *c0, double *m)
+{
+  double madn = 1.4826 * mad, x0, target;
   *c0 = 0;
   *m = 0.5;
   if (med > BRIGHT_MEDIAN || madn <= 0)
     return -1;
-  *c0 = med + SHADOWS_MADN * madn;
+  if (amount < 0) amount = 0;
+  if (amount > 1) amount = 1;
+  if (black < -1) black = -1;
+  if (black > 1) black = 1;
+  /* The black point: 2.8 MADs below the sky, 0.8 (darker) to 4.8. */
+  *c0 = med + (SHADOWS_MADN + 2 * black) * madn;
   if (*c0 < 0)
     *c0 = 0;
-  /* The midtones balance that puts the median at TARGET_BG. */
-  *m = fits_mtf (TARGET_BG, med - *c0);
+  /* The midtones balance that puts the median at TARGET_BG; with the
+     black point higher the sky darker too (to a third at most), lower
+     lighter (to half the range at most). */
+  x0 = med - *c0;
+  if (x0 <= 1e-9)
+    x0 = 1e-9;
+  target = TARGET_BG * pow (2, -1.5 * black);
+  if (target > 0.5)
+    target = 0.5;
+  if (target < x0)
+    target = x0;
+  *m = fits_mtf (target, x0);
+  /* Less than all of it: the balance part of the way from none (0.5)
+     to that, evenly to the eye (geometrically), so a bright Moon needn't
+     be blown out. None: only the black point. */
+  if (amount < 1)
+    {
+      double k = sqrt (amount);        /* finer near all of it, where most pictures want it */
+      *m = exp ((1 - k) * log (0.5) + k * log (*m));
+    }
   return 0;
 }
 
@@ -387,6 +415,8 @@ struct fits_reader
   int bpp;                    /* bytes a sample */
   int half, ow, oh;           /* what is read */
   int stretched;
+  int nch;                    /* the channels stretched on their own */
+  double med[3], mad[3];      /* their median and MAD, 0-1 */
   double lo, inv;             /* physical value v: (v - lo) * inv is 0-1 */
   unsigned char *raw;         /* one file row */
   uint16_t *cache[3];         /* normalised display rows (a mosaic's, and RGB's planes) */
@@ -679,13 +709,25 @@ static int measure (fits_reader *r, char *err, size_t en)
   /* Each colour stretched on its own, so the sky comes out grey: a
      camera's colours (a DSLR's are mostly green) or a stack's not yet
      colour-calibrated look natural. */
+  r->nch = nch;
   for (c = 0; c < nch; c++)
-    if (fits_stretch_params (med[c], mad[c], &c0[c], &m[c]))
+    r->med[c] = med[c], r->mad[c] = mad[c];
+  (void) c0; (void) m; (void) stretch;
+  fits_reader_set_stretch (r, 1, 0);
+  return 0;
+}
+
+void fits_reader_set_stretch (fits_reader *r, double amount, double black)
+{
+  double c0[3], m[3];
+  int c, stretch = 1;
+  for (c = 0; c < r->nch; c++)
+    if (fits_stretch_params_ex (r->med[c], r->mad[c], amount, black, &c0[c], &m[c]))
       stretch = 0;
   r->stretched = stretch;
   for (c = 0; c < 3; c++)
     {
-      int cc = c < nch ? c : 0, k;
+      int cc = c < r->nch ? c : 0, k;
       for (k = 0; k < 65536; k++)
         {
           double v = k / 65535.0;
@@ -694,7 +736,6 @@ static int measure (fits_reader *r, char *err, size_t en)
           r->lut[c][k] = (unsigned char) (v * 255 + 0.5);
         }
     }
-  return 0;
 }
 
 fits_reader *fits_reader_open (FILE *f, const fits_hdr *h, int half, char *err, size_t en)

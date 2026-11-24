@@ -826,7 +826,16 @@ static int thumb_step (library *l, lib_thumb_fn *done, void *ctx)
       lib_thumb_path (l, v, dst, sizeof dst);
       snprintf (l->tg_dst, sizeof l->tg_dst, "%s", dst);
       /* With a recipe, take the pixels, develop them, then save. */
+      if (l->tg_recipe[0])
+        {
+          /* A FITS picture's stretch is in its recipe, and is made as
+             it's read. */
+          static recipe rs;
+          recipe_parse (&rs, l->tg_recipe);
+          thumbgen_set_fits_stretch (rs.v[P_FITS_AMOUNT], rs.v[P_FITS_BLACK]);
+        }
       l->tg = thumbgen_start (src, l->tg_recipe[0] ? NULL : dst, THUMB_SIDE, orient, e, sizeof e);
+      thumbgen_set_fits_stretch (100, 0);
       if (!l->tg)
         {
           snprintf (l->err, sizeof l->err, "%s: %s", fsys_leaf (src), e);

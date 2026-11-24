@@ -887,6 +887,14 @@ static void flatten (unsigned char *row, int w)
 /* A FITS picture: its header, the stretch for the screen, then a row at
    a time (a colour mosaic read 2 x 2 to a pixel when it's shown at half
    size or less). */
+static float fits_amount = 100, fits_black = 0;
+
+void thumbgen_set_fits_stretch (float amount, float black)
+{
+  fits_amount = amount;
+  fits_black = black;
+}
+
 static int start_fits (thumbgen *t, const char *src)
 {
   fits_hdr h;
@@ -907,6 +915,7 @@ static int start_fits (thumbgen *t, const char *src)
   t->fits = fits_reader_open (t->f, &h, t->max_side > 0 && t->max_side <= longer / 2, t->err, sizeof t->err);
   if (!t->fits)
     return -1;
+  fits_reader_set_stretch (t->fits, fits_amount / 100.0, fits_black / 100.0);
   fits_reader_size (t->fits, &w, &hh);
   t->row = malloc ((size_t) w * 4);
   if (!t->row || scaler_init (&t->sc, w, hh, t->max_side))

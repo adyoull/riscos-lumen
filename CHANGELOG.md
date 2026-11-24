@@ -1,5 +1,16 @@
 # Lumen changelog
 
+## 0.0.42 (not released yet)
+
+- A FITS picture's auto-stretch can be controlled (asked for by Chris
+  Terran): the Stretch group, at the top of a FITS picture's
+  Adjustments, has Amount (100% the full auto-stretch, down to none) and
+  Black point (a darker or lighter sky). The Moon, which the
+  auto-stretch blew out to a white disc, and a galaxy's over-bright sky
+  can be toned down. The stretch is made as the picture is read, at its
+  full depth, and kept with the photo (copied and pasted like any
+  adjustment; Auto leaves it alone).
+
 ## 0.0.41 (23 November 2026): rotating and flipping, FITS fixes
 
 - Photos can be turned in the Browser: [ and ] turn the selected photos

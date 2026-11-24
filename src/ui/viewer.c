@@ -202,6 +202,8 @@ static int photo_orientation, photo_long;   /* the original's longer side */
 static int photo_raw;                  /* a camera raw file: its full size is read ahead (it is slow) */
 static cat_id photo_original;          /* its original (for its preview, library.h) */
 static int photo_is_raw;               /* the original is read by a plug-in (a camera raw or HEIF photo) */
+static int photo_is_fits;              /* a FITS picture: the Stretch group, which reads it again */
+static float loaded_amount = 100, loaded_black;   /* the stretch it was read with */
 static int photo_kind;                 /* and which (rawjob.h's RAWJOB_*) */
 static int from_kept;                  /* opened from the library's preview, not the file */
 
@@ -411,7 +413,9 @@ static thumbgen *start_full (char *e, size_t en)
   thumbgen *t;
   rawjob_set_raw_noise (loaded_noise);
   rawjob_set_raw_quality (1);
+  thumbgen_set_fits_stretch (loaded_amount, loaded_black);
   t = thumbgen_start (photo_path, NULL, 1 << 30, photo_orientation, e, en);
+  thumbgen_set_fits_stretch (100, 0);
   rawjob_set_raw_quality (0);
   rawjob_set_raw_noise (0);
   return t;
@@ -598,7 +602,12 @@ static int masks_height (void);
 static int groups_top (void) { return masks_top () - masks_height (); }
 
 /* While the Masks tool is on, the panel is the masks' (the groups go). */
-static int group_shown (int g) { return recipe_groups[g].panel && !(retouching && brushing); }
+static int group_shown (int g)
+{
+  if (recipe_groups[g].first == P_FITS_AMOUNT && !photo_is_fits)
+    return 0;
+  return recipe_groups[g].panel && !(retouching && brushing);
+}
 
 /* --- the panel's Masks section: a line for each mask (a tick to switch
    it off and on), and while the Masks tool is on, buttons for new ones,
@@ -633,7 +642,7 @@ static int masks_height (void)
 /* Groups fold away: a click on a group's name. A
    group the person hasn't folded or opened themselves is folded
    automatically, from the bottom, when the panel wouldn't fit. */
-#define MAX_GROUPS 16
+#define MAX_GROUPS 24
 static int folded[MAX_GROUPS], folded_by_hand[MAX_GROUPS];
 
 /* A parameter with no slider: hidden ones, and Raw (noise reduction in
@@ -647,7 +656,19 @@ static int param_hidden (int p)
     return !current.lens.on || !current.lens.tca;
   if (p == P_LENS_VIG)
     return !current.lens.on || !current.lens.vig;
-  return recipe_params[p].hidden || (p == P_NOISE_RAW && !raw_nr_photo ());
+  return recipe_params[p].hidden || (p == P_NOISE_RAW && !raw_nr_photo ())
+         || ((p == P_FITS_AMOUNT || p == P_FITS_BLACK) && !photo_is_fits);
+}
+
+/* The FITS picture's stretch has changed since it was read. */
+static int stretch_changed (void)
+{
+  return photo_is_fits && (current.v[P_FITS_AMOUNT] != loaded_amount || current.v[P_FITS_BLACK] != loaded_black);
+}
+
+static int stretch_default (void)
+{
+  return !photo_is_fits || (loaded_amount == recipe_params[P_FITS_AMOUNT].def && loaded_black == recipe_params[P_FITS_BLACK].def);
 }
 
 /* Lens Correction: two lines (the lens, and what it's for) above its sliders. */
@@ -1961,6 +1982,12 @@ static void refresh (int full)
       redevelop ();
       return;
     }
+  /* A FITS picture's stretch changed: read again, stretched so. */
+  if (stretch_changed () && dragging != P_FITS_AMOUNT && dragging != P_FITS_BLACK)
+    {
+      redevelop ();
+      return;
+    }
   {
     int rs = retouch_sync ();
     if (rs == 1)
@@ -2169,7 +2196,7 @@ static int proxy_ready (void)
     }
   /* Opened from the file: kept as its preview, if previews are made for
      photos like it, so it opens straight away next time. */
-  if (!from_kept && photo_original > 0)
+  if (!from_kept && photo_original > 0 && stretch_default ())
     lib_preview_save_noise (app_library (), photo_original, loaded_noise, &img);
   dev_to_linear (img.rgb, src, (size_t) sw * sh);
   free (img.rgb);
@@ -2208,7 +2235,19 @@ static thumbgen *open_proxy (const cat_details *d, char *e, size_t en)
   photo_original = d->original;
   photo_is_raw = cat_origin_of (lib_cat (app_library ()), d->original, &o) == 1 && img_is_plugin_format (o.format);
   photo_kind = photo_is_raw ? rawjob_kind_for (o.format, o.path, NULL, 0) : 0;
+  photo_is_fits = o.format == IMG_FITS;
+  loaded_amount = photo_is_fits ? current.v[P_FITS_AMOUNT] : 100;
+  loaded_black = photo_is_fits ? current.v[P_FITS_BLACK] : 0;
   from_kept = 0;
+  if (!stretch_default ())
+    {
+      /* Read with its own stretch (previews have the usual one). */
+      thumbgen_set_fits_stretch (loaded_amount, loaded_black);
+      t = thumbgen_start (d->path, NULL, PROXY_SIDE, d->orientation, e, en);
+      thumbgen_set_fits_stretch (100, 0);
+      thumbgen_hurry (t);
+      return t;
+    }
   loaded_noise = photo_is_raw && photo_kind == RAWJOB_RAW ? (int) current.v[P_NOISE_RAW] : 0;
   if (loaded_noise > 0 && !d->missing && lib_preview_find_noise (app_library (), d->original, loaded_noise, kept, sizeof kept)
       && (t = thumbgen_start (kept, NULL, PROXY_SIDE, 1, e, en)))
@@ -3476,9 +3515,9 @@ void viewer_drag_end (void)
         force_image ();                /* the straightening grid goes */
       if (!crop_mode || p < P_FIRST_GEOMETRY)
         commit ();
-      if (p == P_NOISE_RAW)
+      if (p == P_NOISE_RAW || p == P_FITS_AMOUNT || p == P_FITS_BLACK)
         {
-          refresh (1);                 /* developed again with it */
+          refresh (1);                 /* developed (or read) again with it */
           return;
         }
     }
@@ -3696,7 +3735,7 @@ static void draw_slider (int p, int ox, int oy)
   draw_rect (kx - 7, mid - 15, kx + 7, mid + 15, p == dragging ? COL_ACCENT : COL_KNOB);
   snprintf (value, sizeof value, "%s%.*f", current.v[p] > 0 && d->min < 0 ? "+" : "",
             d->decimals, (double) current.v[p]);
-  if (p >= P_LENS_DIST && p <= P_LENS_VIG)
+  if ((p >= P_LENS_DIST && p <= P_LENS_VIG) || p == P_FITS_AMOUNT)
     snprintf (value, sizeof value, "%.0f%%", (double) current.v[p]);
   if (p == P_NOISE_RAW)
     {

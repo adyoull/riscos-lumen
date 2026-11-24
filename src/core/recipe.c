@@ -9,6 +9,8 @@
 #include "recipe.h"
 
 const recipe_param recipe_params[P_COUNT] = {
+  { "stretch",  "amount",     "Amount",         0, 100, 100, 1, 0, 0 },
+  { "stretch",  "black",      "Black point", -100, 100, 0, 1, 0, 0 },
   { "wb",       "temp",       "Temperature", -100, 100, 0, 1, 0, 0 },
   { "wb",       "tint",       "Tint",        -100, 100, 0, 1, 0, 0 },
   { "exposure", "ev",         "Exposure",      -4,   4, 0, 0.05f, 2, 0 },
@@ -79,6 +81,7 @@ const recipe_param recipe_params[P_COUNT] = {
 };
 
 const recipe_group recipe_groups[] = {
+  { "Stretch", P_FITS_AMOUNT, P_FITS_BLACK, 1, 0, 0 },   /* a FITS picture's only */
   { "White Balance", P_TEMP, P_TINT, 1, 0, 0 },
   { "Exposure", P_EV, P_EV, 1, 0, 0 },
   { "Highlights & Shadows", P_HIGHLIGHTS, P_SHADOWS, 1, 0, 0 },

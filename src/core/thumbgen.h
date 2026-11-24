@@ -43,6 +43,10 @@ int thumbgen_raw_developed (const thumbgen *t);
 /* The thumbnail's size, once finished (after orientation). */
 void thumbgen_size (const thumbgen *t, int *w, int *h);
 void thumbgen_free (thumbgen *t);
+/* A FITS picture's stretch for the screen (recipe P_FITS_AMOUNT 0-100,
+   P_FITS_BLACK -100 to 100): set it just before thumbgen_start, and back
+   to 100, 0 after. */
+void thumbgen_set_fits_stretch (float amount, float black);
 /* A camera raw file waiting for the plug-in: its job goes first. */
 void thumbgen_hurry (thumbgen *t);
 /* A camera raw file whose plug-in job hasn't finished yet (waiting or
