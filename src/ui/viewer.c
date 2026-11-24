@@ -3644,6 +3644,14 @@ int viewer_key (int key)
     case ']':
       viewer_rotate (1);
       return 1;
+    case 'h':
+    case 'H':
+      viewer_transform (2);            /* flipped left to right */
+      return 1;
+    case 'u':
+    case 'U':
+      viewer_transform (3);            /* flipped top to bottom (upside down) */
+      return 1;
     case 0x03:                         /* Ctrl-C */
       looks_copy_viewer ();
       return 1;

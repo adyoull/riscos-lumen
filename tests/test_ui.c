@@ -769,6 +769,15 @@ static int history_has (const char *text)
   return 0;
 }
 
+/* A menu item's words and key: "Left" then hard spaces and "[" (a key
+   the Wimp doesn't right-align), or "Flip horizontally \x8BH". */
+static int item_is (const char *t, const char *words, const char *key)
+{
+  size_t n = strlen (words), k = strlen (key), l = t ? strlen (t) : 0;
+  return t && l > n + k && !strncmp (t, words, n) && !strcmp (t + l - k, key)
+         && ((unsigned char) t[n] == 0xA0 || t[n] == ' ');
+}
+
 static int choose4 (int a, int b, int c, int d)
 {
   int blk[64];
@@ -1614,8 +1623,9 @@ int main (int argc, char **argv)
       memset (b, 0, sizeof b);
       b[0] = vopened[1] + 200; b[1] = vopened[4] - 200; b[2] = Button_Menu; b[3] = VIEWER;
       app_event (Mouse_Click, b, 0);
-      CHECK (!strcmp (item_text (menu_open, 4), "Rotate and flip") && !strcmp (item_text (submenu (menu_open, 4), 0), "Left")
-             && !strcmp (item_text (submenu (menu_open, 4), 1), "Right"), "Photo > Rotate and flip > Left, Right");
+      CHECK (!strcmp (item_text (menu_open, 4), "Rotate and flip") && item_is (item_text (submenu (menu_open, 4), 0), "Left", "[")
+             && item_is (item_text (submenu (menu_open, 4), 1), "Right", "]")
+             && (unsigned char) item_text (submenu (menu_open, 4), 0)[4] == 0xA0, "Photo > Rotate and flip > Left [, Right ] (the keys at the right)");
       choose (4, 1, -1);
       CHECK (viewer_recipe ()->v[P_ROTATE] == 1, "Photo > Rotate > Right: a quarter turn clockwise");
       app_event (Mouse_Click, b, 0);
@@ -1623,8 +1633,8 @@ int main (int argc, char **argv)
       CHECK (viewer_recipe ()->v[P_ROTATE] == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5625f) < 0.01f,
              "Photo > Rotate > Left: and back");
       app_event (Mouse_Click, b, 0);
-      CHECK (!strcmp (item_text (submenu (menu_open, 4), 2), "Flip horizontally")
-             && !strcmp (item_text (submenu (menu_open, 4), 3), "Flip vertically"), "Photo > Rotate and flip > Flip horizontally, vertically");
+      CHECK (item_is (item_text (submenu (menu_open, 4), 2), "Flip horizontally", "\x8BH")
+             && item_is (item_text (submenu (menu_open, 4), 3), "Flip vertically", "\x8BU"), "Photo > Rotate and flip > Flip horizontally H, vertically U");
       choose (4, 2, -1);
       CHECK (viewer_recipe ()->v[P_FLIP] == 1 && viewer_recipe ()->v[P_ROTATE] == 0, "Flip horizontally: mirrored");
       app_event (Mouse_Click, b, 0);
@@ -1636,6 +1646,13 @@ int main (int argc, char **argv)
       choose (4, 1, -1);
       CHECK (viewer_recipe ()->v[P_ROTATE] == 0 && fabsf (viewer_recipe ()->v[P_CROP_X0] - 0.5625f) < 0.01f,
              "and two turns back: as it was, the crop too");
+      key ('h');
+      CHECK (viewer_recipe ()->v[P_FLIP] == 1, "H: flipped left to right");
+      key ('H');
+      key ('u');
+      CHECK (viewer_recipe ()->v[P_FLIP] == 1 && viewer_recipe ()->v[P_ROTATE] == 2, "U: flipped top to bottom");
+      key ('U');
+      CHECK (viewer_recipe ()->v[P_FLIP] == 0 && viewer_recipe ()->v[P_ROTATE] == 0, "and back");
 
       /* Grid. */
       key ('g');
@@ -1956,8 +1973,18 @@ int main (int argc, char **argv)
       key ('[');
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
       CHECK (strstr (text, "rotate=3") != NULL, "[ twice: turned left");
+      key ('h');
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "flip=1") != NULL, "H in the Browser: flipped left to right");
+      key ('H');
+      key ('u');
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "flip=1") != NULL && strstr (text, "rotate=1") != NULL, "U in the Browser: flipped top to bottom");
+      key ('U');
+      cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);
+      CHECK (strstr (text, "flip=1") == NULL && strstr (text, "rotate=3") != NULL && strstr (text, "-0") == NULL, "and back (no -0)");
       click (16 + 352 + 60, -16 - 60, Button_Menu);
-      CHECK (!strcmp (item_text (submenu (menu_open, 1), 10), "Rotate and flip") && !strcmp (item_text (submenu (submenu (menu_open, 1), 10), 1), "Right"),
+      CHECK (!strcmp (item_text (submenu (menu_open, 1), 10), "Rotate and flip") && item_is (item_text (submenu (submenu (menu_open, 1), 10), 1), "Right", "]"),
              "Selection > Rotate > Right");
       choose (1, 10, 1);
       cat_get_recipe (lib_cat (app_library ()), it2.id, text, sizeof text);

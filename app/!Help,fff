@@ -1,4 +1,4 @@
-Lumen 0.0.42 (24 Nov 2026, test build 1)
+Lumen 0.0.42 (24 Nov 2026, test build 2)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -151,6 +151,7 @@ Keys in the Browser
   [ ]           turn the selected photos 90 degrees anticlockwise,
                 clockwise (also Selection > Rotate and flip,
                 which flips them too)
+  H U           flip the selected photos horizontally, vertically
   Ctrl-D        a duplicate version of each (with its adjustments)
   Ctrl-G        stack the selected photos (the focused one the pick)
   Ctrl-U        unstack them
@@ -362,6 +363,7 @@ Keys in the Viewer and Split View
   [ ]           turn 90 degrees anticlockwise, clockwise (also Photo >
                 Rotate and flip, which flips too; Retouch or Layers
                 on: the brush smaller, larger; { } its feather)
+  H U           flip horizontally, vertically
   R             Retouch: paint out spots
   B             Layers: adjustments on part of the photo
   O             compare this photo with the next (Return: pin the

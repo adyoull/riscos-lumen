@@ -122,6 +122,41 @@ static void set_item (menu *m, int i, int last, const char *text, int flags, int
     m->width = w;
 }
 
+/* A key the Wimp doesn't right-align ("Left [", after a space): set at
+   the right as it would be, with hard spaces between it and the words.
+   Once the menu's other items are in (its width is final). */
+#define KEY_EDGES 108                  /* the item's text's margins, left and right */
+static void align_key (menu *m, int i)
+{
+  item *it = &m->it[i];
+  const char *t = (const char *) it->data[0], *k;
+  char out[160];
+  int target, sp, used_w, n;
+  if (!t || !(k = strrchr (t, ' ')) || (size_t) (k - t) >= sizeof out - 40)
+    return;
+  memcpy (out, t, (size_t) (k - t));
+  out[k - t] = '\0';
+  sp = draw_text_width ("\xA0");
+  target = m->width - KEY_EDGES;
+  used_w = draw_text_width (out) + draw_text_width (k + 1);
+  n = sp > 0 ? (target - used_w + sp / 2) / sp : 1;
+  if (n < 1)
+    n = 1;
+  if (n > 30)
+    n = 30;
+  {
+    size_t len = strlen (out);
+    memset (out + len, 0xA0, (size_t) n);
+    snprintf (out + len + n, sizeof out - len - (size_t) n, "%s", k + 1);
+  }
+  t = str (out);
+  if (t)
+    {
+      it->data[0] = (int) t;
+      it->data[2] = (int) strlen (t) + 1;
+    }
+}
+
 static menu *writable_menu (const char *title, char *buf, int size)
 {
   menu *m = new_menu (title, 1);
@@ -393,10 +428,12 @@ static menu *build_window_menu (void)
   rotm = new_menu ("Rotate", 4);
   if (rotm)
     {
-      set_item (rotm, 0, 0, "Left", 0, -1, nsel == 0);
-      set_item (rotm, 1, 0, "Right", MF_DOTTED, -1, nsel == 0);
-      set_item (rotm, 2, 0, "Flip horizontally", 0, -1, nsel == 0);
-      set_item (rotm, 3, 1, "Flip vertically", 0, -1, nsel == 0);
+      set_item (rotm, 0, 0, "Left [", 0, -1, nsel == 0);
+      set_item (rotm, 1, 0, "Right ]", MF_DOTTED, -1, nsel == 0);
+      set_item (rotm, 2, 0, "Flip horizontally " SH "H", 0, -1, nsel == 0);
+      set_item (rotm, 3, 1, "Flip vertically " SH "U", 0, -1, nsel == 0);
+      align_key (rotm, 0);
+      align_key (rotm, 1);
     }
   selm = new_menu ("Selection", SEL_COUNT);
   if (selm)
@@ -631,10 +668,12 @@ static menu *build_viewer_menu (void)
   rotm = new_menu ("Rotate", 4);
   if (rotm)
     {
-      set_item (rotm, 0, 0, "Left", 0, -1, 0);
-      set_item (rotm, 1, 0, "Right", MF_DOTTED, -1, 0);
-      set_item (rotm, 2, 0, "Flip horizontally", 0, -1, 0);
-      set_item (rotm, 3, 1, "Flip vertically", 0, -1, 0);
+      set_item (rotm, 0, 0, "Left [", 0, -1, 0);
+      set_item (rotm, 1, 0, "Right ]", MF_DOTTED, -1, 0);
+      set_item (rotm, 2, 0, "Flip horizontally " SH "H", 0, -1, 0);
+      set_item (rotm, 3, 1, "Flip vertically " SH "U", 0, -1, 0);
+      align_key (rotm, 0);
+      align_key (rotm, 1);
     }
   shape = new_menu ("Crop shape", 6);
   for (k = 0; k < 6 && shape; k++)

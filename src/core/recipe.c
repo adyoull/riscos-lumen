@@ -688,17 +688,17 @@ void recipe_flip (recipe *r, int vertical)
   /* The picture is mirrored left to right after its quarter turns; top
      to bottom is that and half a turn. */
   r->v[P_FLIP] = (float) (((int) r->v[P_FLIP] & 1) ^ 1);
-  r->v[P_ANGLE] = -r->v[P_ANGLE];
+  r->v[P_ANGLE] = r->v[P_ANGLE] != 0 ? -r->v[P_ANGLE] : 0;
   if (vertical)
     {
       r->v[P_ROTATE] = (float) (((int) r->v[P_ROTATE] + 2) & 3);
       r->v[P_CROP_Y0] = 1 - d; r->v[P_CROP_Y1] = 1 - b;
-      r->v[P_PERSP_V] = -r->v[P_PERSP_V];
+      r->v[P_PERSP_V] = r->v[P_PERSP_V] != 0 ? -r->v[P_PERSP_V] : 0;
     }
   else
     {
       r->v[P_CROP_X0] = 1 - c; r->v[P_CROP_X1] = 1 - a;
-      r->v[P_PERSP_H] = -r->v[P_PERSP_H];
+      r->v[P_PERSP_H] = r->v[P_PERSP_H] != 0 ? -r->v[P_PERSP_H] : 0;
     }
 }
 

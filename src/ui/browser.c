@@ -1146,6 +1146,10 @@ int browser_key (int key)
     }
   else if (key == '[' || key == ']')  /* a quarter turn left or right */
     looks_turn_selection (key == ']');
+  else if (key == 'h' || key == 'H')  /* flipped left to right */
+    looks_turn_selection (2);
+  else if (key == 'u' || key == 'U')  /* flipped top to bottom (upside down) */
+    looks_turn_selection (3);
   else if (key == KEY_ESCAPE)
     browser_select_all (0);
   else if (key == 0x7F)                /* Delete: out of the library (after asking) */

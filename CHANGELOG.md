@@ -2,6 +2,10 @@
 
 ## 0.0.42 (not released yet)
 
+- Rotate and flip shows its keys on the menus ([ and ] to turn, which
+  the Wimp doesn't set at the right by itself), and flipping has keys:
+  H flips horizontally and U vertically (upside down), in the Browser
+  (the selected photos) and the Viewer.
 - A FITS picture's auto-stretch can be controlled (asked for by Chris
   Terran): the Stretch group, at the top of a FITS picture's
   Adjustments, has Amount (100% the full auto-stretch, down to none) and
