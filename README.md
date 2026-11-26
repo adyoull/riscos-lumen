@@ -40,7 +40,7 @@ were written with Anthropic's Claude as a coding assistant.
 
 1. Install SharedUnixLibrary and ARMEABISupport with PackMan, if you
    haven't already.
-2. Unzip `Lumen-0.0.42.zip` and copy `!Lumen` to where you keep your
+2. Unzip `Lumen-0.0.43.zip` and copy `!Lumen` to where you keep your
    applications, for example `$.Apps.Graphics`.
 3. For camera raw files, unzip `LumenRaw-1.5.zip`: it holds
    `!Lumen.Plugins.LibRaw`. Drag that `LibRaw` directory into Lumen's
@@ -158,7 +158,7 @@ night sky (FITS or, with LumenRaw 1.5, raw), lining them up by their
 stars; the LumenWebP plug-in reads WebP pictures. 0.0.41 turns and flips photos
 in the Browser and the Viewer, and reads DWARF telescopes' FITS
 stacks the right way round. 0.0.42 lets you control how strongly a FITS
-picture is stretched, and adds keys for flipping.
+picture is stretched, and adds keys for flipping. 0.0.43 is built with UnixLib 5.0.3.12.
 Lumen has
 been tested on RISC OS 5.31 on a Raspberry Pi 4, and on RISC OS running on
 Linux (RISC OS 5.31-5 under QEMU); its automated tests run on Linux

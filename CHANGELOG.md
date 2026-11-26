@@ -1,6 +1,6 @@
 # Lumen changelog
 
-## 0.0.43 (not released yet)
+## 0.0.43 (26 November 2026): UnixLib 5.0.3.12
 
 - Built with riscos-crossdev 1.14 and its UnixLib 5.0.3.12
   (riscos-unixlib), which fixes threads, memory and sockets, keeps its
