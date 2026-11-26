@@ -1,5 +1,13 @@
 # Lumen changelog
 
+## 0.0.43 (not released yet)
+
+- Built with UnixLib 5.0.3.12 (riscos-unixlib), which fixes threads,
+  memory and sockets and makes its string, number and thread functions
+  2 to 10 times faster. In Lumen that shows in text work: searching the
+  library's words, and reading and writing photos' adjustments. Editing
+  pictures is Lumen's own code and is unchanged.
+
 ## 0.0.42 (24 November 2026): controlling the FITS stretch, flip keys
 
 - Rotate and flip shows its keys on the menus ([ and ] to turn, which

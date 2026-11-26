@@ -16,8 +16,8 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.42
-DATE := 24 Nov 2026
+VERSION := 0.0.43
+DATE := 26 Nov 2026
 OUT := out
 
 CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/fits.c src/core/astro.c src/core/stack.c src/core/tiffmeta.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/lens.c src/core/geodata.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/presets.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c
@@ -65,6 +65,9 @@ $(OUT)/bench: tests/bench.c $(CORE) $(CORE_H) $(OUT)/riscos/sqlite3.o Makefile
 checks: $(OUT)/lumen $(OUT)/bench
 	$(CHECK_ALL) $(OUT)/bench
 	$(CHECK_ALL) $(OUT)/lumen
+	@# Word-aligned data (UnixLib 5.0.3.10-11's .data could land on any byte: an abort before main on a Pi)
+	@if [ -f $(RCD_DIR)/checks/check-data-align.py ]; then PATH=$(RCD_DIR)/toolchain/env/bin:$$PATH \
+	  python3 $(RCD_DIR)/checks/check-data-align.py $(OUT)/lumen $(OUT)/bench; fi
 	$(CHECK_UNALIGNED) -Isrc/core -Isrc/ui -Ithird_party/sqlite -I$(DEPS)/riscos/include $(CORE) src/core/fsys_riscos.c $(UI)
 
 LABEL_PNGS := $(wildcard app/labels/lumlab*.png)
