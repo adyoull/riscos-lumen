@@ -2,9 +2,11 @@
 
 ## 0.0.43 (not released yet)
 
-- Built with UnixLib 5.0.3.12 (riscos-unixlib), which fixes threads,
-  memory and sockets and makes its string, number and thread functions
-  2 to 10 times faster. In Lumen that shows in text work: searching the
+- Built with riscos-crossdev 1.14 and its UnixLib 5.0.3.12
+  (riscos-unixlib), which fixes threads, memory and sockets, keeps its
+  data word aligned (a program could stop before it started on a Pi),
+  and makes its string, number and thread functions 2 to 10 times
+  faster. In Lumen that shows in text work: searching the
   library's words, and reading and writing photos' adjustments. Editing
   pictures is Lumen's own code and is unchanged.
 

@@ -117,7 +117,7 @@ one `Catalogue-backup`.
 
 ## Building
 
-Needs [riscos-crossdev](https://github.com/adyoull/riscos-crossdev) 1.8.2 (`make prebuilt devkit`) and libjpeg-turbo
+Needs [riscos-crossdev](https://github.com/adyoull/riscos-crossdev) 1.14 (UnixLib 5.0.3.12; `make prebuilt devkit`) and libjpeg-turbo
 3.0.4 and libpng 1.6.44 built for four targets (`deps/build-deps.sh`), and
 libtiff 4.7.1 (`deps/build-tiff.sh`):
 RISC OS, x86-64, ARM Linux and 32-bit x86 (for the Fake RISC OS tests).
