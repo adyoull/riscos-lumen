@@ -1,6 +1,6 @@
 # Lumen changelog
 
-## 0.0.44 (not released yet)
+## 0.0.44 (28 November 2026): Sort by, photos in file-date order
 
 - Photos without a date taken (no EXIF date: scans, pictures saved by
   other programs, a print shop's CD of renamed photos) are put in order
