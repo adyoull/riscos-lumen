@@ -16,8 +16,8 @@ DEPS ?= /build/lumen-deps
 include $(RCD_DIR)/riscos.mk
 .DEFAULT_GOAL := all
 
-VERSION := 0.0.43
-DATE := 26 Nov 2026
+VERSION := 0.0.44
+DATE := 28 Nov 2026
 OUT := out
 
 CORE := src/core/exif.c src/core/exifout.c src/core/colour.c src/core/rawjob.c src/core/plugins.c src/core/prefs.c src/core/thumbgen.c src/core/fits.c src/core/astro.c src/core/stack.c src/core/tiffmeta.c src/core/recipe.c src/core/develop.c src/core/geometry.c src/core/resample.c src/core/sharpen.c src/core/denoise.c src/core/retouch.c src/core/lens.c src/core/geodata.c src/core/export.c src/core/autoadj.c src/core/styles.c src/core/presets.c src/core/naming.c src/core/xmp.c src/core/catalog.c src/core/library.c src/core/libxfer.c src/core/libcheck.c src/core/simd.c src/core/sqlite_vfs.c

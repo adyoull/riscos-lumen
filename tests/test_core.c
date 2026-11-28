@@ -15,6 +15,7 @@
 #include <tiffio.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
 #include "../src/core/catalog.h"
 #include "../src/core/xmp.h"
 #include "../src/core/exif.h"
@@ -1982,6 +1983,71 @@ static void test_tiff_import (void)
         raw = o.format == IMG_RAW;
     CHECK (raw, "tiff: the DNG called camera.tif is a raw file");
   }
+  free (items);
+  lib_close (l);
+}
+
+/* Photos without a date taken (a print shop's CD: CD01/CNV00001.jpg...,
+   no EXIF dates, each CD's files dated when it was made) are put in order
+   by their file's date, then name; among photos with dates. */
+static void set_mtime (const char *path, long long t)
+{
+  struct utimbuf u;
+  u.actime = u.modtime = (time_t) t;
+  utime (path, &u);
+}
+
+static void test_order_by_file_date (void)
+{
+  library *l;
+  char err[256], path[1024], libdir[1024];
+  cat_item *items;
+  cat_details d;
+  int n, k;
+  const char *want[] = { "CD01/CNV00001", "CD01/CNV00002", "Camera/IMG_0001", "CD02/CNV00001", "CD02/CNV00002", "Clockless/DSC00001" };
+  char got[6][64];
+  cat_source all = { SRC_ALL, 0, 0, "" };
+  p (path, "Boots"); mkdir (path, 0777);
+  p (path, "Boots/CD02"); mkdir (path, 0777);
+  p (path, "Boots/CD01"); mkdir (path, 0777);
+  p (path, "Boots/Camera"); mkdir (path, 0777);
+  p (path, "Boots/Clockless"); mkdir (path, 0777);
+  /* CD02 made in 2005, CD01 in 2004: the names alone would mix them. */
+  p (path, "Boots/CD02/CNV00001.jpg"); make_jpeg (path, 40, 30, 1, NULL); set_mtime (path, 1118000000);
+  p (path, "Boots/CD02/CNV00002.jpg"); make_jpeg (path, 42, 30, 1, NULL); set_mtime (path, 1118000000);
+  p (path, "Boots/CD01/CNV00002.jpg"); make_jpeg (path, 44, 30, 1, NULL); set_mtime (path, 1086000000);
+  p (path, "Boots/CD01/CNV00001.jpg"); make_jpeg (path, 46, 30, 1, NULL); set_mtime (path, 1086000000);
+  /* A camera's photo taken between the two CDs (its file dated later). */
+  p (path, "Boots/Camera/IMG_0001.jpg"); make_jpeg (path, 48, 30, 1, "2005:01:15 10:00:00"); set_mtime (path, 1700000000);
+  /* A camera whose clock was never set: no date, so its file's (latest). */
+  p (path, "Boots/Clockless/DSC00001.jpg"); make_jpeg (path, 50, 30, 1, "0000:00:00 00:00:00"); set_mtime (path, 1600000000);
+  p (libdir, "BootsLibrary");
+  CHECK (lib_open (&l, libdir, err, sizeof err) == 0, "order: library");
+  p (path, "Boots");
+  lib_import (l, path);
+  drain (l);
+  cat_list (lib_cat (l), &all, &items, &n);
+  CHECK (n == 6, "order: six photos");
+  for (k = 0; k < n && k < 6; k++)
+    {
+      const char *e;
+      got[k][0] = '\0';
+      if (cat_get_details (lib_cat (l), items[k].id, &d) == 0 && (e = strstr (d.path, "Boots/")))
+        {
+          snprintf (got[k], sizeof got[k], "%s", e + 6);
+          if (strrchr (got[k], '.'))
+            *strrchr (got[k], '.') = '\0';
+        }
+      if (strstr (d.path, "DSC00001"))
+        CHECK (d.taken[0] == '\0', "order: a date of 0000:00:00 isn't kept as when it was taken");
+    }
+  for (k = 0; k < 6 && k < n; k++)
+    if (strcmp (got[k], want[k]))
+      break;
+  CHECK (k == 6, "order: without a date taken, by the file's date then name, among the dated photos");
+  if (k < 6)
+    for (k = 0; k < n && k < 6; k++)
+      printf ("  %d: %s\n", k, got[k]);
   free (items);
   lib_close (l);
 }
@@ -4522,6 +4588,7 @@ int main (int argc, char **argv)
   test_raw_names ();
   test_mistyped ();
   test_tiff_import ();
+  test_order_by_file_date ();
   test_fits ();
   test_align ();
   test_stack ();

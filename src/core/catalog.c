@@ -14,6 +14,15 @@
 #include "fsys.h"
 #include "recipe.h"
 
+/* When a photo was taken, for putting photos in order: its EXIF date
+   ("YYYY:MM:DD hh:mm:ss"), or for one without (a scan, a picture saved
+   by a program, photos from a print shop's CD), its file's date the same
+   way (mtime is centiseconds since 1900), so such photos keep the order
+   they were made in; then '9999' (last). */
+#define TAKEN_KEY_(o, pc) "IFNULL(" o ".taken, IFNULL(strftime('" pc "Y:" pc "m:" pc "d " pc "H:" pc "M:" pc "S', NULLIF(" o ".mtime, 0) / 100 - 2208988800, 'unixepoch'), '9999'))"
+#define TAKEN_KEY(o) TAKEN_KEY_ (o, "%")    /* in SQL as it is */
+#define TAKEN_KEY_F(o) TAKEN_KEY_ (o, "%%") /* in a printf format */
+
 struct cat
 {
   sqlite3 *db;
@@ -824,12 +833,12 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
             " IFNULL((SELECT s.open FROM stack s WHERE s.id = v.stack), 0), v.label"
             " FROM version v JOIN original o ON o.id = v.original WHERE %s%s"
             /* by date, then name: a stack's photos by their pick's, together, the pick first */
-            " ORDER BY IFNULL((SELECT IFNULL(po.taken, '9999') FROM stack s JOIN version pv ON pv.id = s.pick"
-            " JOIN original po ON po.id = pv.original WHERE s.id = v.stack), IFNULL(o.taken, '9999')),"
+            " ORDER BY IFNULL((SELECT " TAKEN_KEY_F ("po") " FROM stack s JOIN version pv ON pv.id = s.pick"
+            " JOIN original po ON po.id = pv.original WHERE s.id = v.stack), " TAKEN_KEY_F ("o") "),"
             " IFNULL((SELECT pv.name FROM stack s JOIN version pv ON pv.id = s.pick WHERE s.id = v.stack), v.name),"
             " IFNULL((SELECT s.pick FROM stack s WHERE s.id = v.stack), v.id),"
             " v.id <> IFNULL((SELECT s.pick FROM stack s WHERE s.id = v.stack), v.id),"
-            " IFNULL(o.taken, '9999'), v.name, v.id", where, match);
+            " " TAKEN_KEY_F ("o") ", v.name, v.id", where, match);
   s = prep (c, sql);
   if (!s)
     return -1;
@@ -894,7 +903,7 @@ int cat_next_thumb (cat *c, cat_id *version, char *path, size_t n, int *orientat
 {
   sqlite3_stmt *s = prep (c, "SELECT v.id, o.path, o.orientation, v.recipe FROM version v"
                              " JOIN original o ON o.id = v.original WHERE v.thumb = 0"
-                             " ORDER BY o.batch DESC, IFNULL(o.taken, '9999'), v.name LIMIT 1");
+                             " ORDER BY o.batch DESC, " TAKEN_KEY ("o") ", v.name LIMIT 1");
   int r = 0;
   if (!s)
     return -1;

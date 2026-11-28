@@ -1,5 +1,15 @@
 # Lumen changelog
 
+## 0.0.44 (not released yet)
+
+- Photos without a date taken (no EXIF date: scans, pictures saved by
+  other programs, a print shop's CD of renamed photos) are put in order
+  by their file's date, then name, among the photos that have one,
+  instead of all coming last by name (asked about by Matthew Phillips:
+  his mother's Boots CDs, CNV00001/JPG... in CD01 to CD14, came out
+  mixed together). A date of 0000:00:00 (a camera whose clock was never
+  set) counts as none. Libraries already made sort this way at once.
+
 ## 0.0.43 (26 November 2026): UnixLib 5.0.3.12
 
 - Built with riscos-crossdev 1.14 and its UnixLib 5.0.3.12

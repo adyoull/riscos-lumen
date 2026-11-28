@@ -268,6 +268,10 @@ static void parse_exif (const unsigned char *p, size_t len, long base, img_info 
     walk_gps (&t, gps_ifd, info);
   if (!info->taken[0])
     memcpy (info->taken, taken0, sizeof taken0);
+  /* A camera whose clock was never set writes "0000:00:00 00:00:00" or
+     spaces: no date (the photo is then put in order by its file's). */
+  if (info->taken[0] && (info->taken[0] < '1' || info->taken[0] > '2' || !strncmp (info->taken, "0000", 4)))
+    info->taken[0] = '\0';
   if (ifd1)
     walk (&t, ifd1, 1, info, &exif_ifd, NULL, base);
   if (info->orientation < 1 || info->orientation > 8)
