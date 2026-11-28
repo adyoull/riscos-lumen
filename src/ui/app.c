@@ -256,6 +256,17 @@ void app_keep_prefs (const prefs *p)
 
 static void scratch_use (void);
 
+/* The Browser's order (the main menu's Sort by): kept in Choices. */
+void app_set_order (int order, int reverse)
+{
+  prefs p = the_prefs;
+  p.sort_order = order;
+  p.sort_reverse = reverse;
+  app_keep_prefs (&p);
+  cat_set_order (lib_cat (lib), order, reverse);
+  browser_reload ();
+}
+
 int app_set_prefs (const prefs *p)
 {
   if (prefs_save (prefs_path, p))
@@ -735,6 +746,7 @@ int app_init (const char *library_path, const char *start_file)
     }
   if (!prefs_path[0])
     app_load_prefs ();
+  cat_set_order (lib_cat (lib), the_prefs.sort_order, the_prefs.sort_reverse);
   activity_init ();
   looks_presets_dir ();
   if (create_iconbar_icon () || browser_create () || viewer_create () || exportbox_create () || mainwin_create ()

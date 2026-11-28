@@ -2049,6 +2049,43 @@ static void test_order_by_file_date (void)
     for (k = 0; k < n && k < 6; k++)
       printf ("  %d: %s\n", k, got[k]);
   free (items);
+  /* The other orders. */
+  {
+    cat_item *it;
+    int m, ok = 1;
+    cat_set_order (lib_cat (l), CAT_ORDER_NAME, 0);
+    cat_list (lib_cat (l), &all, &it, &m);
+    for (k = 1; k < m; k++)
+      ok &= strcasecmp (it[k - 1].name, it[k].name) <= 0;
+    CHECK (m == 6 && ok && !strncmp (it[0].name, "CNV00001", 8) && !strncmp (it[1].name, "CNV00001", 8),
+           "order by name: the two CNV00001s first");
+    {
+      cat_details d0, d1;
+      CHECK (cat_get_details (lib_cat (l), it[0].id, &d0) == 0 && cat_get_details (lib_cat (l), it[1].id, &d1) == 0
+             && strstr (d0.path, "CD01") && strstr (d1.path, "CD02"), "order by name: the same names by date (CD01's first)");
+    }
+    free (it);
+    cat_set_order (lib_cat (l), CAT_ORDER_NAME, 1);
+    cat_list (lib_cat (l), &all, &it, &m);
+    CHECK (m == 6 && !strncmp (it[0].name, "IMG_0001", 8), "order by name, reversed: IMG_0001 first");
+    free (it);
+    cat_set_order (lib_cat (l), CAT_ORDER_FILE, 1);
+    cat_list (lib_cat (l), &all, &it, &m);
+    CHECK (m == 6 && !strncmp (it[0].name, "IMG_0001", 8) && !strncmp (it[1].name, "DSC00001", 8),
+           "order by file date, newest first");
+    free (it);
+    cat_set_order (lib_cat (l), CAT_ORDER_RATING, 0);
+    cat_list (lib_cat (l), &all, &it, &m);
+    if (m == 6)
+      {
+        cat_set_rating (lib_cat (l), &it[4].id, 1, 5);
+        free (it);
+        cat_list (lib_cat (l), &all, &it, &m);
+        CHECK (m == 6 && it[0].rating == 5 && !strncmp (it[1].name, "CNV00001", 8), "order by rating: five stars first, then by date");
+      }
+    free (it);
+    cat_set_order (lib_cat (l), CAT_ORDER_TAKEN, 0);
+  }
   lib_close (l);
 }
 

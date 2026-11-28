@@ -86,6 +86,12 @@ enum { THUMB_NONE = 0, THUMB_READY = 1, THUMB_FAILED = 2 };
    stack's photos together, its pick first. In All photos, a project and
    the last import, without a search, a closed stack shows only its pick. */
 int cat_list (cat *c, const cat_source *src, cat_item **items, int *count);
+/* The order cat_list puts photos in: by date taken (the camera's, else
+   the file's; the usual), name, file date, when imported, or rating
+   (best first); reverse turns it round. Then by date taken and name.
+   A stack's photos stay together. */
+enum { CAT_ORDER_TAKEN, CAT_ORDER_NAME, CAT_ORDER_FILE, CAT_ORDER_IMPORTED, CAT_ORDER_RATING, CAT_ORDERS };
+void cat_set_order (cat *c, int order, int reverse);
 
 /* The next version without a thumbnail: its id, the original's path,
    EXIF orientation and recipe. 1 if found, 0 if none, -1 on error. */

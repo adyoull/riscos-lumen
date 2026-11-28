@@ -9,6 +9,9 @@
   his mother's Boots CDs, CNV00001/JPG... in CD01 to CD14, came out
   mixed together). A date of 0000:00:00 (a camera whose clock was never
   set) counts as none. Libraries already made sort this way at once.
+- Sort by, on the Browser's menu: Date taken (the usual), Name, File
+  date, Date imported or Rating (best first), and Reverse order. Photos
+  in a stack stay together; Lumen remembers the choice.
 
 ## 0.0.43 (26 November 2026): UnixLib 5.0.3.12
 

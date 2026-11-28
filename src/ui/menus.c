@@ -396,7 +396,7 @@ static menu *build_window_menu (void)
   const cat_source *s = browser_source ();
   cat_id *ids;
   int nsel = browser_selection (&ids), k;
-  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *filter, *proj, *alb, *apply, *plugm, *vers, *autos, *rotm;
+  menu *m, *show, *selm, *rating, *album, *newalbum, *addto, *sizem, *sortm = NULL, *filter, *proj, *alb, *apply, *plugm, *vers, *autos, *rotm;
   static const char *const rating_names[6] = { "No stars", "1 star", "2 stars", "3 stars", "4 stars", "5 stars" };
   static const char *const filter_names[6] = { "Any rating", "1 star and up", "2 stars and up", "3 stars and up", "4 stars and up", "5 stars" };
   free (ids);
@@ -505,17 +505,28 @@ static menu *build_window_menu (void)
         set_item (vers, 6, 1, "Auto-stack, seconds apart", 0, (int) autos, browser_count () < 2);
       }
   }
+  {
+    static const char *const names[CAT_ORDERS] = { "Date taken", "Name", "File date", "Date imported", "Rating" };
+    const prefs *pr = app_prefs ();
+    int k;
+    sortm = new_menu ("Sort by", CAT_ORDERS + 1);
+    for (k = 0; sortm && k < CAT_ORDERS; k++)
+      set_item (sortm, k, 0, names[k], (pr->sort_order == k ? MF_TICK : 0) | (k == CAT_ORDERS - 1 ? MF_DOTTED : 0), -1, 0);
+    if (sortm)
+      set_item (sortm, CAT_ORDERS, 1, "Reverse order", pr->sort_reverse ? MF_TICK : 0, -1, 0);
+  }
   plugm = build_plugins_menu ();
-  m = new_menu (APP_NAME, 7);
+  m = new_menu (APP_NAME, 8);
   if (m)
     {
       set_item (m, 0, 0, "Show", 0, (int) show, 0);
       set_item (m, 1, 0, "Selection", 0, (int) selm, 0);
       set_item (m, 2, 0, "Album", 0, (int) album, 0);
       set_item (m, 3, 0, "Versions and stacks", 0, (int) vers, 0);
-      set_item (m, 4, 0, "Thumbnail size", MF_DOTTED, (int) sizem, 0);
-      set_item (m, 5, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
-      set_item (m, 6, 1, "Quit", 0, -1, 0);
+      set_item (m, 4, 0, "Thumbnail size", 0, (int) sizem, 0);
+      set_item (m, 5, 0, "Sort by", MF_DOTTED, (int) sortm, 0);
+      set_item (m, 6, 0, "Plug-ins", MF_DOTTED, (int) plugm, 0);
+      set_item (m, 7, 1, "Quit", 0, -1, 0);
     }
   return m;
 }
@@ -1572,10 +1583,19 @@ static int window_choice (const int *c)
       if (c[1] >= 0 && c[1] <= 2)
         browser_set_size (c[1]);
       break;
-    case 5:                            /* Plug-ins */
+    case 5:                            /* Sort by */
+      {
+        const prefs *pr = app_prefs ();
+        if (c[1] >= 0 && c[1] < CAT_ORDERS)
+          app_set_order (c[1], pr->sort_reverse);
+        else if (c[1] == CAT_ORDERS)
+          app_set_order (pr->sort_order, !pr->sort_reverse);
+      }
+      break;
+    case 6:                            /* Plug-ins */
       plugins_choice (c + 1);
       break;
-    case 6:
+    case 7:
       return 1;
     }
   return 0;
@@ -1858,7 +1878,7 @@ const char *menus_help (int window, int icon)
   if (which == 9)
     return lens_help (c);
   /* The Plug-ins submenu, from the icon bar menu (2) or the window menu (4). */
-  if ((which == 2 && c[0] == 6) || (which == 1 && c[0] == 5))
+  if ((which == 2 && c[0] == 6) || (which == 1 && c[0] == 6))
     {
       if (c[1] < 0)
         return "Lumen's plug-ins: switch them on or off, add or remove them.";
@@ -1965,7 +1985,18 @@ const char *menus_help (int window, int icon)
           }
         return "Versions of a photo, and stacks of photos that belong together.";
       case 4: return "Thumbnail size: Small, Medium or Large.";
-      case 6: return "Leaves Lumen. Everything is saved as you go.";
+      case 5:
+        switch (c[1])
+          {
+          case CAT_ORDER_TAKEN: return "Puts photos in the order they were taken, by the camera's date (or, without one, the file's), then name.";
+          case CAT_ORDER_NAME: return "Puts photos in order of their names (CNV00001, CNV00002...).";
+          case CAT_ORDER_FILE: return "Puts photos in order of their files' dates (when the file was made or last changed), then name.";
+          case CAT_ORDER_IMPORTED: return "Puts photos in the order they were brought into the library.";
+          case CAT_ORDER_RATING: return "Puts the best rated photos first (five stars, then four...), then by date taken.";
+          case CAT_ORDERS: return "Turns the order round: the newest, last or worst rated first.";
+          }
+        return "The order the Browser shows photos in. Lumen remembers it.";
+      case 7: return "Leaves Lumen. Everything is saved as you go.";
       }
   if (which == 4)
     return presets_help (c, 0);

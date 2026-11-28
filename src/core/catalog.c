@@ -27,6 +27,7 @@ struct cat
 {
   sqlite3 *db;
   char err[256];
+  int order, reverse;                  /* how cat_list puts photos in order (cat_set_order) */
 };
 
 #define SCHEMA_VERSION 1
@@ -185,6 +186,29 @@ int cat_open (cat **out, const char *path, char *err, size_t errlen)
     }
   *out = c;
   return 0;
+}
+
+void cat_set_order (cat *c, int order, int reverse)
+{
+  c->order = order >= 0 && order < CAT_ORDERS ? order : CAT_ORDER_TAKEN;
+  c->reverse = reverse != 0;
+}
+
+/* The SQL key photos are put in order by (o and v: an original and its
+   version, as named in the query). */
+static void order_key (const cat *c, const char *o, const char *v, char *out, size_t n)
+{
+  switch (c->order)
+    {
+    case CAT_ORDER_NAME:     snprintf (out, n, "%s.name COLLATE NOCASE", v); break;
+    case CAT_ORDER_FILE:     snprintf (out, n, "IFNULL(NULLIF(%s.mtime, 0), 9e18)", o); break;
+    case CAT_ORDER_IMPORTED: snprintf (out, n, "%s.id", v); break;
+    case CAT_ORDER_RATING:   snprintf (out, n, "-%s.rating", v); break;
+    default:
+      snprintf (out, n, "IFNULL(%s.taken, IFNULL(strftime('%%Y:%%m:%%d %%H:%%M:%%S', NULLIF(%s.mtime, 0) / 100"
+                " - 2208988800, 'unixepoch'), '9999'))", o, o);
+      break;
+    }
 }
 
 void cat_close (cat *c)
@@ -831,14 +855,32 @@ int cat_list (cat *c, const cat_source *src, cat_item **items, int *count)
             " IFNULL(v.stack, 0), (SELECT COUNT(*) FROM version m WHERE m.stack = v.stack),"
             " IFNULL((SELECT s.pick = v.id FROM stack s WHERE s.id = v.stack), 0),"
             " IFNULL((SELECT s.open FROM stack s WHERE s.id = v.stack), 0), v.label"
-            " FROM version v JOIN original o ON o.id = v.original WHERE %s%s"
-            /* by date, then name: a stack's photos by their pick's, together, the pick first */
-            " ORDER BY IFNULL((SELECT " TAKEN_KEY_F ("po") " FROM stack s JOIN version pv ON pv.id = s.pick"
-            " JOIN original po ON po.id = pv.original WHERE s.id = v.stack), " TAKEN_KEY_F ("o") "),"
-            " IFNULL((SELECT pv.name FROM stack s JOIN version pv ON pv.id = s.pick WHERE s.id = v.stack), v.name),"
-            " IFNULL((SELECT s.pick FROM stack s WHERE s.id = v.stack), v.id),"
-            " v.id <> IFNULL((SELECT s.pick FROM stack s WHERE s.id = v.stack), v.id),"
-            " " TAKEN_KEY_F ("o") ", v.name, v.id", where, match);
+            " FROM version v JOIN original o ON o.id = v.original WHERE %s%s", where, match);
+  /* In the order chosen (cat_set_order; by date taken, then name, as
+     usual), then by date taken and name: a stack's photos by their pick's,
+     together, the pick first. */
+  {
+    char kp[400], kv[400], kt[400], ktp[400], tail[3200];
+    const char *dir = c->reverse ? " DESC" : "";
+    cat tmp = *c;
+    order_key (c, "po", "pv", kp, sizeof kp);
+    order_key (c, "o", "v", kv, sizeof kv);
+    tmp.order = CAT_ORDER_TAKEN;
+    order_key (&tmp, "o", "v", kt, sizeof kt);
+    order_key (&tmp, "po", "pv", ktp, sizeof ktp);
+    snprintf (tail, sizeof tail,
+              " ORDER BY IFNULL((SELECT %s FROM stack s JOIN version pv ON pv.id = s.pick"
+              " JOIN original po ON po.id = pv.original WHERE s.id = v.stack), %s)%s,"
+              " IFNULL((SELECT %s FROM stack s JOIN version pv ON pv.id = s.pick"
+              " JOIN original po ON po.id = pv.original WHERE s.id = v.stack), %s)%s,"
+              " IFNULL((SELECT pv.name FROM stack s JOIN version pv ON pv.id = s.pick WHERE s.id = v.stack), v.name)%s,"
+              " IFNULL((SELECT s.pick FROM stack s WHERE s.id = v.stack), v.id),"
+              " v.id <> IFNULL((SELECT s.pick FROM stack s WHERE s.id = v.stack), v.id),"
+              " %s%s, %s%s, v.name%s, v.id", kp, kv, dir, ktp, kt, dir, dir, kv, dir, kt, dir, dir);
+    if (strlen (sql) + strlen (tail) + 1 > sizeof sql)
+      return -1;
+    strcat (sql, tail);
+  }
   s = prep (c, sql);
   if (!s)
     return -1;

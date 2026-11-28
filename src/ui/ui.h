@@ -125,6 +125,8 @@ void app_load_prefs (void);
 /* A file of Lumen's own beside its Choices (<Choices$Write>.Lumen.<leaf>). */
 void app_choices_file (char *out, size_t n, const char *leaf);
 const prefs *app_prefs (void);
+/* The Browser's order: CAT_ORDER_* and reversed (kept in Choices). */
+void app_set_order (int order, int reverse);
 int app_set_prefs (const prefs *p);    /* saves and applies them; 0 on success */
 /* Lumen's plug-ins (plugins.h): the list as last read, sorted by name. */
 int app_plugins (const plugin_info **list);

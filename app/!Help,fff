@@ -1,4 +1,4 @@
-Lumen 0.0.44 (28 Nov 2026, test build 1)
+Lumen 0.0.44 (28 Nov 2026, test build 2)
 ============================
 Copyright (c) 2026 Andrew Youll. Released under the MIT licence: see
 !Lumen.Licences.Lumen.
@@ -545,6 +545,8 @@ The Lumen menu
                   duplicate versions, stack and unstack, the pick,
                   open or close a stack, auto-stack
   Thumbnail size  Small, Medium, Large
+  Sort by         Date taken, Name, File date, Date imported, Rating;
+                  Reverse order
 
 The Photo menu (Menu over the photo in the Viewer)
 --------------

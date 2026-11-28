@@ -18,6 +18,7 @@ typedef struct
   int export_sharpen;                  /* EXPORT_SHARP_* */
   char export_names[128];              /* name pattern for several photos */
   int thumb_size;                      /* 0 small, 1 medium, 2 large */
+  int sort_order, sort_reverse;        /* the Browser's order: CAT_ORDER_* (catalog.h); turned round */
   int verify;                          /* check originals are still there at start */
   int watch_new;                       /* folders imported are watched for new photos */
   int albums_new;                      /* and get albums from the folders inside them */

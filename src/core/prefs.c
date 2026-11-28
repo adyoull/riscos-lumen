@@ -81,6 +81,10 @@ int prefs_load (const char *path, prefs *p)
             p->export_sharpen = clamp ((int) n, 0, 3);
           else if (!strcmp (line, "thumb_size"))
             p->thumb_size = clamp ((int) n, 0, 2);
+          else if (!strcmp (line, "sort_order"))
+            p->sort_order = clamp ((int) n, 0, 4);
+          else if (!strcmp (line, "sort_reverse"))
+            p->sort_reverse = n != 0;
           else if (!strcmp (line, "verify"))
             p->verify = n != 0;
           else if (!strcmp (line, "watch_new"))
@@ -136,6 +140,7 @@ int prefs_save (const char *path, const prefs *p)
     fprintf (f, "scratch %s\n", p->scratch_dir);
   fprintf (f, "scratch_mb %d\n", p->scratch_mb);
   fprintf (f, "map_share %d\n", p->map_share);
+  fprintf (f, "sort_order %d\nsort_reverse %d\n", p->sort_order, p->sort_reverse);
   fprintf (f, "export_box_w %d\nexport_box_h %d\nexport_colour %d\nexport_sharpen %d\n", p->export_box_w,
            p->export_box_h, p->export_colour, p->export_sharpen);
   if (p->export_names[0])

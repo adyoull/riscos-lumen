@@ -1038,10 +1038,40 @@ int main (int argc, char **argv)
   click (5, -5, Button_Menu);
   CHECK (menu_open && strncmp ((const char *) menu_open, "Lumen", 5) == 0, "Menu: the Lumen menu");
   CHECK (strcmp (item_text (menu_open, 0), "Show") == 0 && strcmp (item_text (menu_open, 3), "Versions and stacks") == 0
-         && strcmp (item_text (menu_open, 5), "Plug-ins") == 0 && strcmp (item_text (menu_open, 6), "Quit") == 0,
-         "Show ... Versions and stacks, Plug-ins, Quit");
-  CHECK ((item (menu_open, 6)[0] & 0x80) != 0, "Quit is the last item");
-  CHECK (strcmp (item_text (submenu (menu_open, 5), 0), "LumenRaw 1.0") == 0, "Plug-ins > the LibRaw plug-in, by its package's name");
+         && strcmp (item_text (menu_open, 5), "Sort by") == 0 && strcmp (item_text (menu_open, 6), "Plug-ins") == 0
+         && strcmp (item_text (menu_open, 7), "Quit") == 0,
+         "Show ... Versions and stacks, Thumbnail size, Sort by, Plug-ins, Quit");
+  CHECK ((item (menu_open, 7)[0] & 0x80) != 0, "Quit is the last item");
+  CHECK (strcmp (item_text (submenu (menu_open, 6), 0), "LumenRaw 1.0") == 0, "Plug-ins > the LibRaw plug-in, by its package's name");
+  {
+    const int *sm = submenu (menu_open, 5);
+    CHECK (!strcmp (item_text (sm, 0), "Date taken") && (item (sm, 0)[0] & 1) && !strcmp (item_text (sm, 1), "Name")
+           && !strcmp (item_text (sm, 4), "Rating") && !strcmp (item_text (sm, 5), "Reverse order") && !(item (sm, 5)[0] & 1),
+           "Sort by > Date taken (ticked), Name, File date, Date imported, Rating, Reverse order");
+  }
+  /* Sort by Name, reversed, and back. */
+  {
+    cat_item a, b;
+    int k, sorted = 1, rsorted = 1, cnt = browser_count ();
+    choose (5, 1, -1);
+    for (k = 1; k < cnt; k++)
+      if (browser_item (k - 1, &a) && browser_item (k, &b) && strcasecmp (a.name, b.name) > 0)
+        sorted = 0;
+    CHECK (cnt > 2 && sorted && app_prefs ()->sort_order == 1, "Sort by > Name: in order of name, kept in Choices");
+    click (5, -5, Button_Menu);
+    CHECK (item (submenu (menu_open, 5), 1)[0] & 1, "Name ticked");
+    choose (5, 5, -1);
+    for (k = 1; k < cnt; k++)
+      if (browser_item (k - 1, &a) && browser_item (k, &b) && strcasecmp (a.name, b.name) < 0)
+        rsorted = 0;
+    CHECK (rsorted && app_prefs ()->sort_reverse, "Reverse order: names Z to A");
+    click (5, -5, Button_Menu);
+    choose (5, 5, -1);
+    click (5, -5, Button_Menu);
+    choose (5, 0, -1);
+    CHECK (app_prefs ()->sort_order == 0 && !app_prefs ()->sort_reverse, "and back to Date taken");
+  }
+  click (5, -5, Button_Menu);
   {
     const int *show = submenu (menu_open, 0), *proj = submenu (show, 4);
     CHECK (strcmp (item_text (show, 1), "Flagged") == 0, "Show > Flagged");
